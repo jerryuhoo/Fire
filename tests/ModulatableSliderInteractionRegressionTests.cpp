@@ -574,7 +574,7 @@ TEST_CASE("Hover value labels forward only popup gestures to modulatable sliders
     slider.setBounds(80, 50, 120, 120);
     slider.mouseEnter(makeMouseEvent(
         slider, slider.getLocalBounds().toFloat().getCentre()));
-    REQUIRE(slider.getTextBoxPosition() == juce::Slider::TextBoxAbove);
+    REQUIRE(slider.getTextBoxPosition() == juce::Slider::TextBoxBelow);
 
     juce::Label* valueLabel = nullptr;
     for (auto* child : slider.getChildren())
@@ -1282,7 +1282,7 @@ TEST_CASE("Dismiss resets slider hover, editor and animation presentation exactl
     slider.mouseEnter(makeMouseEvent(slider, handlePosition));
     REQUIRE(slider.isModHandleMouseOver);
     REQUIRE(hoverStarts == 1);
-    REQUIRE(slider.getTextBoxPosition() == juce::Slider::TextBoxAbove);
+    REQUIRE(slider.getTextBoxPosition() == juce::Slider::TextBoxBelow);
 
     slider.mouseExit(makeMouseEvent(slider, handlePosition));
     REQUIRE(slider.isTimerRunning());
@@ -1697,7 +1697,7 @@ TEST_CASE("Slider lifecycle boundaries finish gestures and tolerate synchronous 
         CHECK(slider == nullptr);
     }
 
-    SECTION("title visibility callback may delete during mouse enter")
+    SECTION("mouse enter preserves the parameter title")
     {
         class DeleteOwnerOnVisibility final : public juce::ComponentListener
         {
@@ -1729,7 +1729,9 @@ TEST_CASE("Slider lifecycle boundaries finish gestures and tolerate synchronous 
         auto* const rawSlider = slider.get();
         rawSlider->mouseEnter(makeMouseEvent(
             *rawSlider, rawSlider->getLocalBounds().toFloat().getCentre()));
-        CHECK(slider == nullptr);
+        REQUIRE(slider != nullptr);
+        CHECK(title.isVisible());
+        title.removeComponentListener(&deleteOnHide);
     }
 
     SECTION("presentation reset may delete while restoring its title")
@@ -1760,6 +1762,7 @@ TEST_CASE("Slider lifecycle boundaries finish gestures and tolerate synchronous 
             *slider, slider->getLocalBounds().toFloat().getCentre()));
         auto& title =
             ModulatableSliderInteractionTestAccess::getTitleLabel(*slider);
+        title.setVisible(false);
         REQUIRE_FALSE(title.isVisible());
         int mainEnds = 0;
         slider->onMainDragEnd =

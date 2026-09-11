@@ -235,6 +235,11 @@ TEST_CASE("PrimarySlider focus presentation follows keyboard modality",
         juce::Component::FocusChangeType::focusChangedDirectly);
     CHECK_FALSE(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
 
+    // Directly calling focus callbacks above does not assign JUCE's actual
+    // keyboard focus. Establish the delivery precondition instead of relying
+    // on whichever temporary native window happened to become active.
+    slider.grabKeyboardFocus();
+    REQUIRE(slider.hasKeyboardFocus(true));
     slider.keyPressed(juce::KeyPress { juce::KeyPress::rightKey });
     REQUIRE(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
     slider.focusLost(

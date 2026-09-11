@@ -40,7 +40,7 @@ public:
     ModulatableSlider();
     ~ModulatableSlider() override;
 
-    // void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
     bool hitTest(int x, int y) override;
 
     /** The idle painted badge geometry. Interaction feedback may enlarge this
@@ -48,8 +48,7 @@ public:
     juce::Rectangle<float> getModulationHandleVisualBounds() const;
     /** The pointer target for every modulation-handle input path. */
     juce::Rectangle<float> getModulationHandleHitBounds() const;
-    /** The header area occupied by JUCE's temporary value text box when the
-        pointer enters this control. */
+    /** Stable value row below the dial, also used by the inline editor. */
     juce::Rectangle<int> getValueDisplayBounds() const;
     /** Kept for source compatibility; painting code should request the visual
         bounds and input code should request the hit bounds explicitly. */

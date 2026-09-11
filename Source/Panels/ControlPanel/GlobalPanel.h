@@ -144,10 +144,7 @@ private:
     float chromeCacheDisplayScale = 0.0f;
     bool chromeCacheDirty = true;
 
-    fire::ui::DampedValue selectionY;
-    fire::ui::DampedValue selectionRed;
-    fire::ui::DampedValue selectionGreen;
-    fire::ui::DampedValue selectionBlue;
+    fire::ui::SpringValue selectionY;
     bool selectionAnimationInitialised = false;
 
     Oscilloscope oscilloscope { processor };

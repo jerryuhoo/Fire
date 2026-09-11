@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "FireTheme.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <cmath>
 #include <type_traits>
@@ -584,15 +585,15 @@ private:
         }
 
         const auto enabled = this->isEnabled();
-        auto changed = approach(hoverAnimation, enabled && this->isMouseOver(true) ? 1.0f : 0.0f, 0.22f);
-        changed = approach(pressAnimation, enabled && this->getState() == juce::Button::buttonDown ? 1.0f : 0.0f, 0.32f) || changed;
+        auto changed = approach(hoverAnimation, enabled && this->isMouseOver(true) ? 1.0f : 0.0f, fire::ui::Motion::step(1.0f / 60.0f, fire::ui::Motion::hover));
+        changed = approach(pressAnimation, enabled && this->getState() == juce::Button::buttonDown ? 1.0f : 0.0f, fire::ui::Motion::step(1.0f / 60.0f, fire::ui::Motion::press)) || changed;
         changed = approach(focusAnimation,
                            enabled && focusModality.isKeyboardVisible()
                                && this->hasKeyboardFocus(true)
                            ? 1.0f
                            : 0.0f,
-                           0.20f) || changed;
-        changed = approach(disabledAnimation, enabled ? 0.0f : 1.0f, 0.18f) || changed;
+                           fire::ui::Motion::step(1.0f / 60.0f, fire::ui::Motion::focus)) || changed;
+        changed = approach(disabledAnimation, enabled ? 0.0f : 1.0f, fire::ui::Motion::step(1.0f / 60.0f, fire::ui::Motion::disabled)) || changed;
 
         if (changed)
             this->repaint();

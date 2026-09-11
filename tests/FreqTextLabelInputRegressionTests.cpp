@@ -576,6 +576,7 @@ TEST_CASE("Fire label painting leaves editable text to the active editor",
     juce::Graphics outlinedEditingGraphics(outlinedEditingLayer);
     lookAndFeel.drawLabel(outlinedEditingGraphics, label);
     CHECK(countPaintedPixels(outlinedEditingLayer) > 0);
+    CHECK(outlinedEditingLayer.getPixelAt(45, 12) == fire::ui::colours::raised);
 
     label.hideEditor(true);
     label.setLookAndFeel(nullptr);

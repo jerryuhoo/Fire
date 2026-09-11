@@ -193,10 +193,14 @@ private:
 
     void rebuildGridCache(float physicalScale);
     void rebuildWavePath();
+    void drawWaveform(juce::Graphics& g, juce::Colour accent) const;
     uint64_t getWavePathSignature() const noexcept;
     juce::Colour getCurrentLfoAccent() const noexcept;
     juce::Image gridCache;
     juce::Path cachedWavePath;
+    juce::Image waveCache;
+    juce::Colour cachedWaveColour;
+    float cachedWaveScale = 0.0f;
     uint64_t cachedWavePathSignature = 0;
     float cachedGridScale = 0.0f;
     int cachedGridWidth = 0;
@@ -359,7 +363,6 @@ public:
     ~LfoPanel() override;
 
     void paint(juce::Graphics& g) override;
-    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 
     /** Called by the editor's shared UI clock. */
@@ -469,7 +472,11 @@ private:
     juce::Rectangle<int> leftColumnArea;
     juce::Rectangle<int> centerColumnArea;
     juce::Rectangle<int> rightColumnArea;
-    fire::ui::DampedValue lfoSelectionPosition;
+    void paintChrome(juce::Graphics& g) const;
+    void paintSelection(juce::Graphics& g);
+    juce::Image chromeCache;
+    float chromeCacheDisplayScale = 0.0f;
+    fire::ui::SpringValue lfoSelectionPosition;
     enum class AssignFeedback
     {
         idle,

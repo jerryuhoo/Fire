@@ -5,10 +5,25 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <cmath>
 #include <memory>
 
 struct DistortionGraphSourceEpochTestAccess
 {
+    static void showDrivePreview(FireAudioProcessorEditor& editor)
+    {
+        editor.bandPanel.setGraphVisibilityForDriveDrag(true);
+    }
+
+    static void tickParameterPreview(FireAudioProcessorEditor& editor)
+    {
+        editor.bandPanel.timerCallback();
+    }
+
+    static void expireTelemetry(FireAudioProcessorEditor& editor)
+    {
+        editor.bandPanel.lastGraphTelemetryTimeMs -= 1000.0;
+    }
     static void seedPresentedDrive(FireAudioProcessorEditor& editor,
                                    float drive)
     {
@@ -196,4 +211,75 @@ TEST_CASE("Distortion graph rebuilds a curve resized behind a hidden ancestor",
     CHECK_FALSE(DistortionGraphSourceEpochTestAccess::curveIsDirty(graph));
     CHECK(DistortionGraphSourceEpochTestAccess::curveBounds(graph).getWidth()
           > initialCurveBounds.getWidth());
+}
+
+TEST_CASE("Drive edits cannot alternate the transfer graph between base and LFO values",
+          "[ui][graph-telemetry][lfo][drive][regression]")
+{
+    class PlayHead final : public juce::AudioPlayHead
+    {
+    public:
+        juce::Optional<PositionInfo> getPosition() const override
+        {
+            PositionInfo position;
+            position.setIsPlaying(playing);
+            position.setBpm(120.0);
+            position.setPpqPosition(0.0);
+            return position;
+        }
+        bool playing = false;
+    };
+
+    for (const bool playing : { false, true })
+    {
+        CAPTURE(playing);
+        PlayHead playHead;
+        playHead.playing = playing;
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        processor.setPlayHead(&playHead);
+        const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+        setPlainParameter(processor, driveID, 20.0f);
+        setPlainParameter(processor, ParameterIDAndName::getIDString(SAFE_ID, 0), 0.0f);
+        setPlainParameter(processor, ParameterIDAndName::getIDString(EXTREME_ID, 0), 0.0f);
+        setPlainParameter(processor, ParameterIDAndName::getIDString(DRIVE_BYPASS_ID, 0), 1.0f);
+        LfoData shape;
+        shape.points = { {0.0f, 1.0f}, {1.0f, 1.0f} };
+        processor.getLfoManager().setLfoData(0, shape);
+        processor.assignLfoToTarget(0, driveID);
+        processor.setModulationDepth(driveID, 0.4f);
+        processor.prepareToPlay(sampleRate, blockSize);
+
+        FireAudioProcessorEditor editor(processor);
+        editor.setSize(1000, 500);
+        editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        editor.setVisible(true);
+        DistortionGraphSourceEpochTestAccess::showDrivePreview(editor);
+        for (int block = 0; block < 20; ++block)
+            publishGraphPacket(processor);
+        editor.timerCallback();
+        CHECK(processor.isDawPlaying() == playing);
+
+        for (const float base : { 21.0f, 24.0f, 30.0f, 38.0f })
+        {
+            const auto beforeEdit = DistortionGraphSourceEpochTestAccess::presentedDrive(editor);
+            setPlainParameter(processor, driveID, base);
+            DistortionGraphSourceEpochTestAccess::tickParameterPreview(editor);
+            CHECK(DistortionGraphSourceEpochTestAccess::presentedDrive(editor) == beforeEdit);
+
+            publishGraphPacket(processor);
+            editor.timerCallback();
+            const auto modulated = DistortionGraphSourceEpochTestAccess::presentedDrive(editor);
+            CHECK(modulated == Catch::Approx(std::exp2((base + 20.0f) * 6.5f / 100.0f)).margin(0.001f));
+            DistortionGraphSourceEpochTestAccess::tickParameterPreview(editor);
+            CHECK(DistortionGraphSourceEpochTestAccess::presentedDrive(editor) == modulated);
+        }
+
+        // The pending edit must remain available when audio callbacks stop.
+        setPlainParameter(processor, driveID, 10.0f);
+        DistortionGraphSourceEpochTestAccess::expireTelemetry(editor);
+        DistortionGraphSourceEpochTestAccess::tickParameterPreview(editor);
+        CHECK(DistortionGraphSourceEpochTestAccess::presentedDrive(editor)
+              == Catch::Approx(std::exp2(10.0f * 6.5f / 100.0f)).margin(0.001f));
+    }
 }

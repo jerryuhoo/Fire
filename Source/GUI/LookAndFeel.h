@@ -130,6 +130,8 @@ public:
 
     juce::Font getComboBoxFont(juce::ComboBox& box) override
     {
+        if (box.getComponentID() == "header_preset")
+            return fire::ui::bodyFont(13.0f * scale);
         return fire::ui::bodyFont(juce::jlimit(10.0f, 14.0f * scale,
                                               static_cast<float>(box.getHeight()) * 0.42f));
     }
@@ -237,6 +239,9 @@ public:
 
     juce::Font getLabelFont(juce::Label& label) override
     {
+        if (dynamic_cast<juce::Slider*>(label.getParentComponent()) != nullptr
+            && label.getComponentID() != "parameter_title")
+            return fire::ui::valueFont(12.0f * scale);
         if (label.getFont().getHeight() > 0.0f)
             return label.getFont();
         return fire::ui::bodyFont(13.0f * scale);
@@ -261,63 +266,11 @@ public:
         auto bounds = juce::Rectangle<float>(0.5f, 0.5f,
                                               static_cast<float>(width) - 1.0f,
                                               static_cast<float>(height) - 1.0f);
-        const auto isHeaderPreset = box.getComponentID() == "header_preset";
-
-        if (isHeaderPreset)
-        {
-            // The preset selector lives in a visually dense toolbar.  A flat
-            // hover/focus wash keeps it discoverable without putting another
-            // framed card inside the header.
-            const auto washAmount = juce::jmax(focus, hover * 0.64f) * (1.0f - disabled);
-            if (washAmount > 0.001f)
-            {
-                auto wash = colours::surface2.interpolatedWith(colours::raised, focus)
-                                .darker(0.10f * press);
-                g.setColour(wash
-                                .withAlpha(0.72f * washAmount));
-                g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
-            }
-
-            const auto emphasis = juce::jmax(focus, hover * 0.55f);
-            g.setColour(colours::hairline.interpolatedWith(colours::flame, emphasis)
-                            .withAlpha((0.42f + 0.30f * emphasis) * (1.0f - 0.65f * disabled)));
-            const auto lineWidth = bounds.getWidth() * (0.18f + 0.14f * emphasis);
-            g.fillRoundedRectangle(bounds.getCentreX() - lineWidth * 0.5f,
-                                   bounds.getBottom() - 1.0f,
-                                   lineWidth,
-                                   1.0f,
-                                   0.5f);
-        }
-        else
-        {
-            const auto radius = juce::jmin(bounds.getHeight() * 0.5f, Metrics::radius);
-            auto base = box.findColour(juce::ComboBox::backgroundColourId)
-                            .interpolatedWith(colours::raised, focus * 0.72f);
-            base = base.brighter(0.06f * hover).darker(0.10f * press);
-            base = base.interpolatedWith(colours::surface0, disabled * 0.48f);
-            juce::ColourGradient fill(base.brighter(0.05f), bounds.getX(), bounds.getY(),
-                                      base.darker(0.12f), bounds.getX(), bounds.getBottom(), false);
-            g.setGradientFill(fill);
-            g.fillRoundedRectangle(bounds, radius);
-
-            const auto emphasis = juce::jmax(focus, hover * 0.42f);
-            auto edge = box.findColour(juce::ComboBox::outlineColourId)
-                            .interpolatedWith(box.findColour(juce::ComboBox::focusedOutlineColourId),
-                                              emphasis);
-            g.setColour(edge.withMultipliedAlpha(1.0f - 0.68f * disabled));
-            g.drawRoundedRectangle(bounds.reduced(0.5f), radius, 1.0f + 0.35f * focus);
-
-            if (focus > 0.001f)
-            {
-                g.setColour(box.findColour(juce::ComboBox::focusedOutlineColourId)
-                                .withAlpha(0.92f * focus * (1.0f - disabled)));
-                g.fillRoundedRectangle(bounds.getX() + 1.0f,
-                                       bounds.getY() + bounds.getHeight() * 0.24f,
-                                       2.0f,
-                                       bounds.getHeight() * 0.52f,
-                                       1.0f);
-            }
-        }
+        auto base = box.findColour(juce::ComboBox::backgroundColourId)
+                        .interpolatedWith(colours::raised, juce::jmax(focus * 0.85f, hover * 0.38f));
+        base = base.darker(press * 0.10f).interpolatedWith(colours::surface0, disabled * 0.48f);
+        g.setColour(base);
+        g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
 
         auto arrowArea = bounds.removeFromRight(juce::jmax(18.0f * scale, bounds.getHeight() * 0.82f));
         const auto centre = arrowArea.getCentre();
@@ -339,12 +292,9 @@ public:
         auto bounds = juce::Rectangle<float>(0.5f, 0.5f,
                                               static_cast<float>(width) - 1.0f,
                                               static_cast<float>(height) - 1.0f);
-        juce::ColourGradient fill(colours::surface2, 0.0f, 0.0f,
-                                  colours::surface0, 0.0f, static_cast<float>(height), false);
-        g.setGradientFill(fill);
+        g.setColour(colours::surface1);
         g.fillRoundedRectangle(bounds, Metrics::radius);
-        g.setColour(colours::hairline.withAlpha(0.9f));
-        g.drawRoundedRectangle(bounds, Metrics::radius, 1.0f);
+
     }
 
     void drawPopupMenuItem(juce::Graphics& g,
@@ -419,7 +369,16 @@ public:
             g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
         }
 
-        const auto enabledAlpha = label.isEnabled() ? 1.0f : 0.38f;
+        if (label.isBeingEdited()
+            && ! label.findColour(juce::Label::outlineWhenEditingColourId).isTransparent())
+        {
+            // Editing keeps a clear focus cue through a solid surface, with
+            // the TextEditor remaining the sole owner of the visible glyphs.
+            g.setColour(colours::raised);
+            g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
+        }
+
+        const auto enabledAlpha = label.isEnabled() ? 1.0f : 0.68f;
         // The TextEditor created by Label owns the text while editing. Drawing
         // the backing Label text as well leaves both glyph runs visible when
         // the editor has a transparent background (as the crossover frequency
@@ -435,13 +394,7 @@ public:
                              label.getMinimumHorizontalScale());
         }
 
-        const auto outline = label.findColour(label.isBeingEdited() ? juce::Label::outlineWhenEditingColourId
-                                                                    : juce::Label::outlineColourId);
-        if (! outline.isTransparent())
-        {
-            g.setColour(outline.withMultipliedAlpha(enabledAlpha));
-            g.drawRoundedRectangle(bounds.reduced(0.5f), Metrics::radiusSmall * scale, 1.0f);
-        }
+
     }
 
     juce::Slider::SliderLayout getSliderLayout(juce::Slider& slider) override
@@ -451,13 +404,15 @@ public:
 
         juce::Slider::SliderLayout layout;
         auto bounds = slider.getLocalBounds();
-        const int headerHeight = juce::jmin(bounds.getHeight() / 3,
-                                            juce::roundToInt(TEXTBOX_HEIGHT * scale));
-        auto header = bounds.removeFromTop(headerHeight);
+        const int headerHeight = juce::jmin(bounds.getHeight() / 4,
+            juce::roundToInt(fire::ui::Metrics::knobTitleHeight * scale));
+        bounds.removeFromTop(headerHeight);
+        auto footer = bounds.removeFromBottom(juce::jmin(bounds.getHeight() / 3,
+            juce::roundToInt(fire::ui::Metrics::knobValueHeight * scale)));
         if (slider.getTextBoxPosition() != juce::Slider::NoTextBox)
         {
-            const auto textWidth = juce::jmin(juce::roundToInt(TEXTBOX_WIDTH * scale), header.getWidth());
-            layout.textBoxBounds = header.withSizeKeepingCentre(textWidth, headerHeight);
+            const auto textWidth = juce::jmin(juce::roundToInt(84.0f * scale), footer.getWidth());
+            layout.textBoxBounds = footer.withSizeKeepingCentre(textWidth, footer.getHeight());
         }
         layout.sliderBounds = bounds;
         return layout;
@@ -592,7 +547,7 @@ public:
             {
                 if (visuallySelected)
                 {
-                    g.setColour(accent.withAlpha(id == "workspace_tab" ? 0.075f : 0.11f));
+                    g.setColour(colours::raised);
                     g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
                 }
                 else if (hoverAmount > 0.001f || pressAmount > 0.001f || focusAmount > 0.001f)
@@ -610,18 +565,6 @@ public:
                 }
             }
 
-            if (visuallySelected)
-            {
-                const auto indicatorWidth = juce::jmin(bounds.getWidth() * 0.46f,
-                                                       30.0f * scale);
-                g.setColour(accent.withAlpha(0.92f));
-                g.fillRoundedRectangle(bounds.getCentreX() - indicatorWidth * 0.5f,
-                                       bounds.getBottom() - juce::jmax(1.0f, 1.5f * scale),
-                                       indicatorWidth,
-                                       juce::jmax(1.0f, 1.5f * scale),
-                                       0.75f * scale);
-            }
-
             if (disabledAmount > 0.001f)
             {
                 g.setColour(colours::canvas.withAlpha(0.42f * disabledAmount));
@@ -636,33 +579,18 @@ public:
             return;
         }
 
-        auto base = backgroundColour;
-        if (! base.isTransparent())
-            base = base.brighter(0.06f * hoverAmount).darker(0.10f * pressAmount);
-
+        auto base = visuallySelected ? colours::raised : backgroundColour;
+        const auto emphasis = juce::jmax(hoverAmount * 0.45f, focusAmount * 0.80f);
+        if (base.isTransparent())
+            base = colours::raised.withAlpha(emphasis);
+        else
+            base = base.interpolatedWith(colours::raised.brighter(0.08f), emphasis)
+                       .darker(0.10f * pressAmount);
         const auto radius = juce::jmin(bounds.getHeight() * 0.5f, Metrics::radius);
         if (! base.isTransparent())
         {
             g.setColour(base);
             g.fillRoundedRectangle(bounds, radius);
-        }
-        else if (visuallySelected || hoverAmount > 0.001f || focusAmount > 0.001f)
-        {
-            // Preserve an explicitly transparent button background while still
-            // giving selected/hovered tabs a restrained energy wash.
-            const auto alpha = visuallySelected ? 0.11f
-                                                 : 0.055f * hoverAmount + 0.045f * focusAmount;
-            g.setColour(accent.withAlpha(alpha));
-            g.fillRoundedRectangle(bounds, radius);
-        }
-
-        if (visuallySelected || hoverAmount > 0.001f || focusAmount > 0.001f)
-        {
-            auto outline = visuallySelected
-                               ? accent.withAlpha(0.54f)
-                               : colours::hairline.withAlpha(0.48f * juce::jmax(hoverAmount, focusAmount));
-            g.setColour(outline);
-            g.drawRoundedRectangle(bounds.reduced(0.5f), radius, 1.0f);
         }
 
         if (disabledAmount > 0.001f)
@@ -721,8 +649,14 @@ public:
 
         g.setColour(colour);
         g.setFont(getTextButtonFont(button, button.getHeight()));
-        g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(7, 1),
-                         juce::Justification::centred, 1);
+        auto textBounds = button.getLocalBounds().reduced(juce::roundToInt(7.0f * scale), 1);
+        const bool moduleRail = static_cast<bool>(
+            button.getProperties().getWithDefault("fireModuleRail", false));
+        if (moduleRail)
+            textBounds.removeFromLeft(juce::roundToInt(25.0f * scale));
+        g.drawFittedText(button.getButtonText(), textBounds,
+                         moduleRail ? juce::Justification::centredLeft
+                                    : juce::Justification::centred, 1);
     }
 
     void drawTickBox(juce::Graphics& g,
@@ -783,15 +717,10 @@ public:
             || animation.focus > 0.001f)
         {
             auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
-            auto accent = button.findColour(juce::ToggleButton::tickColourId);
-            g.setColour(accent.withAlpha((0.035f * animation.hover
-                                          + 0.065f * animation.press
-                                          + 0.025f * animation.focus)
-                                         * (1.0f - animation.disabled)));
+            g.setColour(colours::raised.withAlpha(
+                juce::jmax(animation.hover * 0.45f, animation.focus * 0.80f)
+                * (1.0f - animation.disabled)));
             g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
-            g.setColour(accent.withAlpha(0.42f * animation.focus
-                                         * (1.0f - animation.disabled)));
-            g.drawRoundedRectangle(bounds, Metrics::radiusSmall * scale, 1.0f);
         }
 
         if (button.getComponentID() == "flat_toggle")
@@ -960,10 +889,10 @@ private:
             }
 
             updateComboBoxTargets(*iterator);
-            auto changed = iterator->hover.advance(1.0f / 60.0f, 0.10f);
-            changed = iterator->press.advance(1.0f / 60.0f, 0.065f) || changed;
-            changed = iterator->focus.advance(1.0f / 60.0f, 0.11f) || changed;
-            changed = iterator->disabled.advance(1.0f / 60.0f, 0.13f) || changed;
+            auto changed = iterator->hover.advance(1.0f / 60.0f, fire::ui::Motion::hover * 0.5f);
+            changed = iterator->press.advance(1.0f / 60.0f, fire::ui::Motion::press * 0.5f) || changed;
+            changed = iterator->focus.advance(1.0f / 60.0f, fire::ui::Motion::focus * 0.5f) || changed;
+            changed = iterator->disabled.advance(1.0f / 60.0f, fire::ui::Motion::disabled * 0.5f) || changed;
             if (changed)
                 box->repaint();
             anyAnimating = anyAnimating || ! isComboBoxAnimationSettled(*iterator);
@@ -1023,6 +952,8 @@ private:
                  button.hasKeyboardFocus(true) ? 1.0f : 0.0f,
                  button.isEnabled() ? 0.0f : 1.0f };
     }
+
+    static constexpr float dialDiscInsetProportion = 0.27f;
 
     void drawDial(juce::Graphics& g,
                   juce::Rectangle<float> bounds,
@@ -1104,11 +1035,11 @@ private:
             }
         }
 
-        auto disc = bounds.reduced(radius * 0.27f);
-        juce::ColourGradient metal(colours::raised.brighter(hoverAmount * 0.09f),
+        auto disc = bounds.reduced(radius * dialDiscInsetProportion);
+        juce::ColourGradient metal(colours::surface2.brighter(hoverAmount * 0.06f),
                                    centre.x, disc.getY(), colours::surface0,
                                    centre.x, disc.getBottom(), false);
-        metal.addColour(0.42, colours::surface2);
+        metal.addColour(0.42, colours::surface1);
         g.setGradientFill(metal);
         g.fillEllipse(disc);
         g.setColour(colours::textPrimary.withAlpha(0.08f));
@@ -1164,14 +1095,26 @@ private:
             auto high = slider.isBipolar ? base + depth * 0.5 : base + juce::jmax(0.0, slider.lfoAmount);
             low = juce::jlimit(0.0, 1.0, low);
             high = juce::jlimit(0.0, 1.0, high);
-            const auto modRadius = juce::jmax(2.0f, radius - 8.0f * scale);
+            // Follow the pressed dial's inner disc, keeping both the range
+            // stroke and the live marker clear of its rim and the value arc.
+            const auto dialRadius = juce::jmax(
+                2.0f, radius - slider.getPressAnimation() * 0.8f * scale);
+            const auto modStroke = juce::jmax(
+                1.5f, juce::jmin(3.5f * scale, dialRadius * 0.1f));
+            const auto pointDiameter = 3.8f * scale;
+            const auto pointBorder = 0.8f * scale;
+            const auto rimInset = juce::jmax(modStroke * 0.5f,
+                                             pointDiameter * 0.5f + pointBorder)
+                                  + 1.5f * scale;
+            const auto modRadius = juce::jmax(
+                2.0f, dialRadius * (1.0f - dialDiscInsetProportion) - rimInset);
             juce::Path range;
             range.addCentredArc(centre.x, centre.y, modRadius, modRadius, 0.0f,
                                 startAngle + static_cast<float>(low) * (endAngle - startAngle),
                                 startAngle + static_cast<float>(high) * (endAngle - startAngle), true);
             g.setColour(modulationAccent.withAlpha(slider.isBypassed ? 0.48f
-                                                                     : 0.82f));
-            g.strokePath(range, juce::PathStrokeType(juce::jmax(1.0f, 1.7f * scale),
+                                                                     : 0.94f));
+            g.strokePath(range, juce::PathStrokeType(modStroke,
                                                     juce::PathStrokeType::curved,
                                                     juce::PathStrokeType::rounded));
 
@@ -1185,10 +1128,10 @@ private:
                     centre.y - modRadius * std::cos(angle)
                 };
                 const auto pointBounds = juce::Rectangle<float>(
-                                             3.8f * scale, 3.8f * scale)
+                                             pointDiameter, pointDiameter)
                                              .withCentre(point);
                 g.setColour(colours::canvas.withAlpha(0.88f));
-                g.fillEllipse(pointBounds.expanded(0.8f * scale));
+                g.fillEllipse(pointBounds.expanded(pointBorder));
                 g.setColour(bankAccent);
                 g.fillEllipse(pointBounds);
             }

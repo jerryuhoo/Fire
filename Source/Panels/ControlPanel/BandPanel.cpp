@@ -34,20 +34,9 @@ void drawMinimalTitle(juce::Graphics& g,
                       juce::Rectangle<float> bounds,
                       const juce::String& text)
 {
-    g.setFont(fire::ui::labelFont(juce::jlimit(9.0f, 12.0f, bounds.getHeight() * 0.36f)));
+    g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, bounds.getHeight() * 0.46f)));
     g.setColour(fire::ui::colours::textSecondary.withAlpha(0.82f));
     g.drawText(text.toUpperCase(), bounds, juce::Justification::centredLeft);
-}
-
-juce::Colour moduleColourForIndex(int index)
-{
-    switch (index)
-    {
-        case 1:  return fire::ui::colours::shape;
-        case 2:  return fire::ui::colours::compressor;
-        case 3:  return fire::ui::colours::stereo;
-        default: return fire::ui::colours::drive;
-    }
 }
 
 template <typename PanelType>
@@ -136,7 +125,6 @@ BandPanel::BandPanel(FireAudioProcessor& p,
 
     // Set initial visibility
     moduleSelectionPosition.snapTo(0.0f);
-    moduleSelectionColourMix.snapTo(1.0f);
     buttonClicked(&oscSwitch);
     startTimerHz(30);
 }
@@ -189,7 +177,7 @@ void BandPanel::createSliders()
 
     // Compressor Panel
     createAndConfigureSlider(COMP_THRESH_NAME, "Threshold", fire::ui::colours::compressor, " dB");
-    createAndConfigureSlider(COMP_RATIO_NAME, "Ratio", fire::ui::colours::compressor);
+    createAndConfigureSlider(COMP_RATIO_NAME, "Ratio", fire::ui::colours::compressor, ":1");
     createAndConfigureSlider(COMP_ATTACK_NAME, "Attack", fire::ui::colours::compressor, " ms");
     createAndConfigureSlider(COMP_RELEASE_NAME, "Release", fire::ui::colours::compressor, " ms");
     createAndConfigureSlider(COMP_MIX_NAME, "Mix", fire::ui::colours::compressor);
@@ -210,7 +198,8 @@ void BandPanel::createLabels()
         addAndMakeVisible(label);
         label.setText(text, juce::dontSendNotification);
         label.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
-        label.setColour(juce::Label::textColourId, colour);
+        label.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+        juce::ignoreUnused(colour);
         label.setJustificationType(juce::Justification::centred);
     };
 
@@ -238,9 +227,11 @@ void BandPanel::createButtons()
         btn.setClickingTogglesState(true);
         btn.setRadioGroupId(switchButtons);
         btn.getProperties().set("fireAnimatedSelection", true);
+        btn.getProperties().set("fireModuleRail", true);
 
         btn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
-        btn.setColour(juce::TextButton::textColourOffId, colour);
+        btn.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
+        juce::ignoreUnused(colour);
 
         btn.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
         btn.setColour(juce::TextButton::textColourOnId, fire::ui::colours::textPrimary);
@@ -384,14 +375,11 @@ void BandPanel::paint(juce::Graphics& g)
     const auto selectionBounds = getModuleSelectionBounds(moduleSelectionPosition.current);
     if (! selectionBounds.isEmpty())
     {
-        const auto accent = getModuleSelectionColour();
         const auto radius = juce::jmin(selectionBounds.getHeight() * 0.24f,
                                        fire::ui::Metrics::radius * scale);
 
-        g.setColour(accent.withAlpha(0.09f));
+        g.setColour(fire::ui::colours::raised);
         g.fillRoundedRectangle(selectionBounds, radius);
-        g.setColour(accent.withAlpha(0.72f));
-        g.drawRoundedRectangle(selectionBounds.reduced(0.75f), radius, 1.5f * scale);
     }
 }
 
@@ -452,14 +440,17 @@ void BandPanel::resized()
     const int dcReserve = juce::roundToInt(26.0f * uiScale);
     const int buttonAreaHeight = juce::jmin(juce::roundToInt(28.0f * uiScale),
                                             juce::jmax(1, outputColumnArea.getHeight() / 4));
+    const int valueHeight = juce::roundToInt(fire::ui::Metrics::knobValueHeight * uiScale);
     const int secondaryKnobSize = juce::jmax(1, std::min({
-        juce::roundToInt(KNOB_SIZE * 0.82f * uiScale),
+        juce::roundToInt(fire::ui::Metrics::knobWidth * uiScale),
         (knobsColumnArea.getWidth() - controlGap * 2) / 3,
-        (knobsColumnArea.getHeight() - controlGap) / 2,
-        knobsColumnArea.getHeight() - modeHeight - controlGap - dcReserve,
+        (knobsColumnArea.getHeight() - controlGap) / 2 - valueHeight,
+        knobsColumnArea.getHeight() - modeHeight - controlGap - dcReserve - valueHeight,
         (outputColumnArea.getWidth() - controlGap) / 2,
-        outputColumnArea.getHeight() - buttonAreaHeight - controlGap
+        outputColumnArea.getHeight() - buttonAreaHeight - controlGap - valueHeight
     }));
+
+    const int secondaryKnobHeight = secondaryKnobSize + valueHeight;
 
     // --- Module rail ---
     juce::FlexBox switchColumnBox;
@@ -509,8 +500,8 @@ void BandPanel::resized()
 
         knobsColumnArea.removeFromTop(juce::jmin(controlGap, knobsColumnArea.getHeight()));
         auto knobRow = knobsColumnArea.withSizeKeepingCentre(secondaryKnobSize * 3 + controlGap * 2,
-                                                             secondaryKnobSize + dcReserve);
-        knobRow = knobRow.removeFromTop(secondaryKnobSize);
+                                                             secondaryKnobHeight + dcReserve);
+        knobRow = knobRow.removeFromTop(secondaryKnobHeight);
         auto tempKnobRow = knobRow;
         modulatableSliderComponents.at(REC_NAME)->setBounds(tempKnobRow.removeFromLeft(secondaryKnobSize));
         tempKnobRow.removeFromLeft(controlGap);
@@ -532,10 +523,10 @@ void BandPanel::resized()
     else if (compressorSwitch.getToggleState())
     {
         auto centeredArea = knobsColumnArea.withSizeKeepingCentre(secondaryKnobSize * 3 + controlGap * 2,
-                                                                  secondaryKnobSize * 2 + controlGap);
-        auto topRow = centeredArea.removeFromTop(secondaryKnobSize);
+                                                                  secondaryKnobHeight * 2 + controlGap);
+        auto topRow = centeredArea.removeFromTop(secondaryKnobHeight);
         centeredArea.removeFromTop(controlGap);
-        auto bottomRow = centeredArea.removeFromTop(secondaryKnobSize);
+        auto bottomRow = centeredArea.removeFromTop(secondaryKnobHeight);
 
         modulatableSliderComponents.at(COMP_THRESH_NAME)->setBounds(topRow.removeFromLeft(secondaryKnobSize));
         modulatableSliderComponents.at(COMP_RATIO_NAME)->setBounds(topRow.removeFromRight(secondaryKnobSize));
@@ -549,7 +540,7 @@ void BandPanel::resized()
     else if (widthSwitch.getToggleState())
     {
         auto knobRow = knobsColumnArea.withSizeKeepingCentre(secondaryKnobSize * 3 + controlGap * 2,
-                                                             secondaryKnobSize);
+                                                             secondaryKnobHeight);
         modulatableSliderComponents.at(WIDTH_NAME)->setBounds(knobRow.removeFromLeft(secondaryKnobSize));
         knobRow.removeFromLeft(controlGap);
         modulatableSliderComponents.at(PAN_NAME)->setBounds(knobRow.removeFromLeft(secondaryKnobSize));
@@ -573,7 +564,7 @@ void BandPanel::resized()
     auto buttonArea = outputColumnArea.removeFromBottom(buttonAreaHeight);
     outputColumnArea.removeFromBottom(juce::jmin(controlGap, outputColumnArea.getHeight()));
     auto twoKnobsBounds = outputColumnArea.withSizeKeepingCentre(secondaryKnobSize * 2 + controlGap,
-                                                                 secondaryKnobSize);
+                                                                 secondaryKnobHeight);
     modulatableSliderComponents.at(OUTPUT_NAME)->setBounds(twoKnobsBounds.removeFromLeft(secondaryKnobSize));
     modulatableSliderComponents.at(MIX_NAME)->setBounds(twoKnobsBounds.removeFromRight(secondaryKnobSize));
 
@@ -809,18 +800,14 @@ void BandPanel::restoreDriveGraphPreviewNow() noexcept
 void BandPanel::setAnimatedModuleTarget(int moduleIndex)
 {
     moduleIndex = juce::jlimit(0, 3, moduleIndex);
-    const auto targetColour = moduleColourForIndex(moduleIndex);
     const auto targetPosition = static_cast<float>(moduleIndex);
-
-    if (juce::approximatelyEqual(moduleSelectionPosition.target, targetPosition)
-        && moduleSelectionColourTarget == targetColour)
+    if (juce::approximatelyEqual(moduleSelectionPosition.target, targetPosition))
         return;
-
-    moduleSelectionColourStart = getModuleSelectionColour();
-    moduleSelectionColourTarget = targetColour;
-    moduleSelectionColourMix.snapTo(0.0f);
-    moduleSelectionColourMix.setTarget(1.0f);
-    moduleSelectionPosition.setTarget(targetPosition);
+    if (isShowing())
+        moduleSelectionPosition.setTarget(targetPosition);
+    else
+        moduleSelectionPosition.snapTo(targetPosition);
+    startContentTransition(knobsAreaRect.getUnion(graphAreaRect));
 }
 
 juce::Rectangle<float> BandPanel::getModuleSelectionBounds(float modulePosition) const
@@ -829,8 +816,8 @@ juce::Rectangle<float> BandPanel::getModuleSelectionBounds(float modulePosition)
         &oscSwitch, &shapeSwitch, &compressorSwitch, &widthSwitch
     };
 
-    modulePosition = juce::jlimit(0.0f, 3.0f, modulePosition);
-    const auto lowerIndex = juce::jlimit(0, 3, static_cast<int>(std::floor(modulePosition)));
+    modulePosition = juce::jlimit(-0.2f, 3.2f, modulePosition);
+    const auto lowerIndex = juce::jlimit(0, 2, static_cast<int>(std::floor(modulePosition)));
     const auto upperIndex = juce::jmin(3, lowerIndex + 1);
     const auto mix = modulePosition - static_cast<float>(lowerIndex);
     const auto lower = switches[static_cast<size_t>(lowerIndex)]->getBounds().toFloat();
@@ -845,28 +832,20 @@ juce::Rectangle<float> BandPanel::getModuleSelectionBounds(float modulePosition)
              juce::jmap(mix, lower.getHeight(), upper.getHeight()) };
 }
 
-juce::Colour BandPanel::getModuleSelectionColour() const
-{
-    return moduleSelectionColourStart.interpolatedWith(
-        moduleSelectionColourTarget,
-        juce::jlimit(0.0f, 1.0f, moduleSelectionColourMix.current));
-}
-
 void BandPanel::animationTick(float deltaSeconds)
 {
+    advanceContentTransition(deltaSeconds);
     if (! isShowing())
     {
         moduleSelectionPosition.snapTo(moduleSelectionPosition.target);
-        moduleSelectionColourMix.snapTo(moduleSelectionColourMix.target);
         return;
     }
 
-    if (moduleSelectionPosition.isSettled() && moduleSelectionColourMix.isSettled())
+    if (moduleSelectionPosition.isSettled())
         return;
 
     const auto oldBounds = getModuleSelectionBounds(moduleSelectionPosition.current);
-    moduleSelectionPosition.advance(deltaSeconds, 0.07f);
-    moduleSelectionColourMix.advance(deltaSeconds, 0.07f);
+    moduleSelectionPosition.advance(deltaSeconds);
     const auto newBounds = getModuleSelectionBounds(moduleSelectionPosition.current);
 
     repaint(oldBounds.getUnion(newBounds).expanded(3.0f * scale)
@@ -1272,6 +1251,7 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
         return;
 
     focusBandNum = num;
+    lastGraphTelemetryTimeMs = -1.0;
     updateAttachments();
     if (safeThis == nullptr)
         return;
@@ -1562,10 +1542,31 @@ void BandPanel::timerCallback()
     if (! isShowing() || ! distortionGraph.isShowing())
         return;
 
+    // A stopped DAW can still process audio and run free LFOs. While DSP
+    // packets are arriving, never interleave their modulated transfer curve
+    // with an unmodulated APVTS preview. Keep dirty edits pending for when
+    // audio processing actually stops, rather than using transport state.
+    if (lastGraphTelemetryTimeMs >= 0.0
+        && juce::Time::getMillisecondCounterHiRes() - lastGraphTelemetryTimeMs
+               < graphTelemetryTimeoutMs)
+        return;
+
     const auto graphDirtyMask = distortionGraphDirtyMask.exchange(0, std::memory_order_acq_rel);
     if (juce::isPositiveAndBelow(focusBandNum, 4)
         && (graphDirtyMask & (1u << static_cast<unsigned int>(focusBandNum))) != 0)
         updateDistortionGraphFromParameters();
+}
+
+void BandPanel::presentDistortionGraphValues(const DistortionGraphValues& values)
+{
+    // The processor has already rejected stale source generations. This
+    // additional band check covers a deferred UI attachment rebind.
+    if (static_cast<int>(values.sourceToken & 0x3u) != focusBandNum)
+        return;
+
+    lastGraphTelemetryTimeMs = juce::Time::getMillisecondCounterHiRes();
+    distortionGraph.setState(values.mode, values.rec, values.mix, values.bias,
+                             values.drive, values.rateDivide);
 }
 
 void BandPanel::setMenu(juce::ComboBox* combobox)

@@ -362,16 +362,16 @@ void SpectrumComponent::paint(juce::Graphics& g)
                                  presentedSpectrumAlpha(0.94f)));
         g.setGradientFill(heat);
         g.strokePath(spectrumLinePath,
-                     juce::PathStrokeType(1.45f, juce::PathStrokeType::curved,
+                     juce::PathStrokeType(1.8f, juce::PathStrokeType::curved,
                                           juce::PathStrokeType::rounded));
     }
     else
     {
-        g.setColour(fire::ui::colours::signalCool.withAlpha(
-            presentedSpectrumAlpha(0.055f)));
+        g.setColour(fire::ui::colours::textSecondary.withAlpha(
+            presentedSpectrumAlpha(0.035f)));
         g.fillPath(spectrumFillPath);
-        g.setColour(fire::ui::colours::signalCool.withAlpha(
-            presentedSpectrumAlpha(0.52f)));
+        g.setColour(fire::ui::colours::textSecondary.withAlpha(
+            presentedSpectrumAlpha(0.42f)));
         g.strokePath(spectrumLinePath,
                      juce::PathStrokeType(1.0f, juce::PathStrokeType::curved,
                                           juce::PathStrokeType::rounded));

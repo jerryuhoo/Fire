@@ -34,6 +34,7 @@ ModulatableSlider::ModulatableSlider()
     isDraggingMainSlider = false;
 
     addAndMakeVisible(label);
+    label.setComponentID("parameter_title");
     // The title is presentation only. The slider deliberately counts the
     // header as part of its hit target, so allowing this child to intercept
     // events makes the visible title strip a dead zone.
@@ -147,7 +148,8 @@ void ModulatableSlider::detachValueLabelPopupForwarder()
 bool ModulatableSlider::hitTest(int x, int y)
 {
     const auto point = juce::Point<float>(static_cast<float>(x), static_cast<float>(y));
-    if (getHeaderBounds().toFloat().contains(point))
+    if (getHeaderBounds().toFloat().contains(point)
+        || getValueDisplayBounds().toFloat().contains(point))
         return true;
 
     auto outerBounds = getRotarySliderBounds().reduced(juce::jmax(5.0f, 7.0f * getUiScale()));
@@ -235,14 +237,28 @@ juce::Rectangle<int> ModulatableSlider::getHeaderBounds() const
 
 juce::Rectangle<int> ModulatableSlider::getValueDisplayBounds() const
 {
-    const auto header = getHeaderBounds();
-    if (header.isEmpty())
+    auto footer = getLocalBounds();
+    footer.setTop(juce::jlimit(0, getHeight(),
+                              juce::roundToInt(getRotarySliderBounds().getBottom())));
+    if (footer.isEmpty())
         return {};
 
     const auto valueWidth = juce::jmin(
-        header.getWidth(),
-        juce::jmax(1, juce::roundToInt(TEXTBOX_WIDTH * getUiScale())));
-    return header.withSizeKeepingCentre(valueWidth, header.getHeight());
+        footer.getWidth(),
+        juce::jmax(1, juce::roundToInt(84.0f * getUiScale())));
+    return footer.withSizeKeepingCentre(valueWidth, footer.getHeight());
+}
+
+void ModulatableSlider::paintOverChildren(juce::Graphics& g)
+{
+    if (getTextBoxPosition() != juce::Slider::NoTextBox)
+        return;
+
+    g.setColour(isEnabled() ? fire::ui::colours::textSecondary
+                            : fire::ui::colours::textMuted);
+    g.setFont(fire::ui::valueFont(12.0f * getUiScale()));
+    g.drawFittedText(getTextFromValue(getValue()), getValueDisplayBounds(),
+                     juce::Justification::centred, 1, 0.85f);
 }
 
 // New helper function
@@ -275,11 +291,11 @@ bool ModulatableSlider::advanceAnimation(float deltaSeconds) noexcept
                                        && isEnabled()
                                    ? 1.0f
                                    : 0.0f;
-    const auto hoverStep = juce::jmin(1.0f, deltaSeconds * 10.0f);
-    const auto pressStep = juce::jmin(1.0f, deltaSeconds * 16.0f);
-    const auto focusStep = juce::jmin(1.0f, deltaSeconds * 10.0f);
-    const auto handleHoverStep = juce::jmin(1.0f, deltaSeconds * 12.0f);
-    const auto handlePressStep = juce::jmin(1.0f, deltaSeconds * 18.0f);
+    const auto hoverStep = fire::ui::Motion::step(deltaSeconds, fire::ui::Motion::hover);
+    const auto pressStep = fire::ui::Motion::step(deltaSeconds, fire::ui::Motion::press);
+    const auto focusStep = fire::ui::Motion::step(deltaSeconds, fire::ui::Motion::focus);
+    const auto handleHoverStep = hoverStep;
+    const auto handlePressStep = pressStep;
     hoverAnimation += (hoverTarget - hoverAnimation) * hoverStep;
     pressAnimation += (pressTarget - pressAnimation) * pressStep;
     focusAnimation += (focusTarget - focusAnimation) * focusStep;
@@ -345,14 +361,10 @@ void ModulatableSlider::mouseEnter(const juce::MouseEvent& event)
     if (! safeThis)
         return;
 
-    label.setVisible(false);
-    if (! safeThis)
-        return;
-
     const auto uiScale = getUiScale();
-    setTextBoxStyle(juce::Slider::TextBoxAbove, false,
-                    juce::roundToInt(TEXTBOX_WIDTH * uiScale),
-                    juce::roundToInt(TEXTBOX_HEIGHT * uiScale));
+    setTextBoxStyle(juce::Slider::TextBoxBelow, false,
+                    juce::roundToInt(84.0f * uiScale),
+                    juce::roundToInt(fire::ui::Metrics::knobValueHeight * uiScale));
 }
 
 void ModulatableSlider::mouseExit(const juce::MouseEvent& event)
@@ -1051,7 +1063,8 @@ void ModulatableSlider::executeModulationMenuCommand(
 void ModulatableSlider::setLabel(const juce::String& text, juce::Colour colour)
 {
     label.setText(text, juce::dontSendNotification);
-    label.setColour(juce::Label::textColourId, colour);
+    label.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    juce::ignoreUnused(colour);
     setTitle(text);
 }
 
@@ -1077,6 +1090,12 @@ void ModulatableSlider::timerCallback()
 {
     const auto safeThis =
         juce::Component::SafePointer<ModulatableSlider>(this);
+    // Leaving the value row must not destroy an unfinished keyboard edit.
+    // Keep the exit timer alive until JUCE commits or cancels that editor.
+    if (auto* valueLabel = forwardedValueLabel.getComponent();
+        valueLabel != nullptr && valueLabel->isBeingEdited())
+        return;
+
     // This function is called when the timer finishes.
     stopTimer();
 

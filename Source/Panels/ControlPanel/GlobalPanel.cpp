@@ -34,7 +34,7 @@ void drawMinimalTitle(juce::Graphics& g,
                       juce::Rectangle<float> bounds,
                       const juce::String& text)
 {
-    g.setFont(fire::ui::labelFont(juce::jlimit(9.0f, 12.0f, bounds.getHeight() * 0.36f)));
+    g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, bounds.getHeight() * 0.46f)));
     g.setColour(fire::ui::colours::textSecondary.withAlpha(0.82f));
     g.drawText(text.toUpperCase(), bounds, juce::Justification::centredLeft);
 }
@@ -243,21 +243,21 @@ void GlobalPanel::createSliders()
     // Lo-fi section sliders
     const auto lofiColour = fire::ui::colours::loFi;
     createAndConfigureSlider(DOWNSAMPLE_NAME, "Rate", lofiColour);
-    createAndConfigureSlider(BIT_DEPTH_NAME, "Bits", lofiColour);
+    createAndConfigureSlider(BIT_DEPTH_NAME, "Bits", lofiColour, " bit");
     createAndConfigureSlider(JITTER_NAME, "Jitter", lofiColour);
     createAndConfigureSlider(DOWNSAMPLE_MIX_NAME, "Mix", lofiColour);
 
     // Filter Knobs
     const auto filterColour = fire::ui::colours::filter;
-    createAndConfigureSlider(LOWCUT_FREQ_NAME, "Frequency", filterColour);
+    createAndConfigureSlider(LOWCUT_FREQ_NAME, "Frequency", filterColour, " Hz");
     createAndConfigureSlider(LOWCUT_Q_NAME, "Q", filterColour);
-    createAndConfigureSlider(LOWCUT_GAIN_NAME, "Gain", filterColour);
-    createAndConfigureSlider(HIGHCUT_FREQ_NAME, "Frequency", filterColour);
+    createAndConfigureSlider(LOWCUT_GAIN_NAME, "Gain", filterColour, " dB");
+    createAndConfigureSlider(HIGHCUT_FREQ_NAME, "Frequency", filterColour, " Hz");
     createAndConfigureSlider(HIGHCUT_Q_NAME, "Q", filterColour);
-    createAndConfigureSlider(HIGHCUT_GAIN_NAME, "Gain", filterColour);
-    createAndConfigureSlider(PEAK_FREQ_NAME, "Frequency", filterColour);
+    createAndConfigureSlider(HIGHCUT_GAIN_NAME, "Gain", filterColour, " dB");
+    createAndConfigureSlider(PEAK_FREQ_NAME, "Frequency", filterColour, " Hz");
     createAndConfigureSlider(PEAK_Q_NAME, "Q", filterColour);
-    createAndConfigureSlider(PEAK_GAIN_NAME, "Gain", filterColour);
+    createAndConfigureSlider(PEAK_GAIN_NAME, "Gain", filterColour, " dB");
 }
 
 void GlobalPanel::createLabels()
@@ -270,7 +270,8 @@ void GlobalPanel::createLabels()
         addAndMakeVisible(label);
         label.setText(text, juce::dontSendNotification);
         label.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
-        label.setColour(juce::Label::textColourId, colour);
+        label.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+        juce::ignoreUnused(colour);
         label.setJustificationType(juce::Justification::centred);
     };
 
@@ -290,11 +291,13 @@ void GlobalPanel::createButtons()
         btn.setRadioGroupId(switchButtonsGlobal);
 
         btn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
-        btn.setColour(juce::TextButton::textColourOffId, colour);
+        btn.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
+        juce::ignoreUnused(colour);
         btn.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
         btn.setColour(juce::TextButton::textColourOnId, fire::ui::colours::textPrimary);
         btn.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
         btn.getProperties().set("fireAnimatedSelection", true);
+        btn.getProperties().set("fireModuleRail", true);
 
         btn.addListener(this);
     };
@@ -525,19 +528,12 @@ void GlobalPanel::paint(juce::Graphics& g)
                 juce::jmax(0.5f, 1.0f * scale));
             selectionBounds.setY(selectionY.current);
 
-            const auto selectionColour = juce::Colour::fromFloatRGBA(
-                juce::jlimit(0.0f, 1.0f, selectionRed.current),
-                juce::jlimit(0.0f, 1.0f, selectionGreen.current),
-                juce::jlimit(0.0f, 1.0f, selectionBlue.current),
-                1.0f);
             const auto radius = juce::jmin(selectionBounds.getHeight() * 0.5f,
                                            fire::ui::Metrics::radius * scale);
 
-            g.setColour(selectionColour.withAlpha(0.075f));
+            g.setColour(fire::ui::colours::raised);
             g.fillRoundedRectangle(selectionBounds, radius);
-            g.setColour(selectionColour.withAlpha(0.78f));
-            g.drawRoundedRectangle(selectionBounds, radius,
-                                   juce::jmax(1.0f, 1.15f * scale));
+
         }
     }
 }
@@ -547,7 +543,7 @@ void GlobalPanel::resized()
     const float uiScale = scale;
     // Drive is the sole hero control; every other rotary in the editor uses
     // this quieter common diameter.
-    const int scaledKnobSize = juce::roundToInt(KNOB_SIZE * 0.82f * uiScale);
+    const int scaledKnobSize = juce::roundToInt(fire::ui::Metrics::knobWidth * uiScale);
     const int outerPadding = juce::roundToInt(10.0f * uiScale);
     const int gap = juce::roundToInt(juce::jlimit(7.0f * uiScale,
                                                  14.0f * uiScale,
@@ -566,9 +562,9 @@ void GlobalPanel::resized()
     const int navWidth = juce::roundToInt(juce::jlimit(120.0f * uiScale,
                                                        165.0f * uiScale,
                                                        static_cast<float>(getWidth()) * 0.14f));
-    const int outputWidth = juce::roundToInt(juce::jlimit(170.0f * uiScale,
-                                                          215.0f * uiScale,
-                                                          static_cast<float>(getWidth()) * 0.19f));
+    const int outputWidth = juce::roundToInt(juce::jlimit(205.0f * uiScale,
+                                                          240.0f * uiScale,
+                                                          static_cast<float>(getWidth()) * 0.22f));
 
     tabAreaRect = layoutArea.removeFromLeft(juce::jmin(navWidth, layoutArea.getWidth()));
     layoutArea.removeFromLeft(juce::jmin(gap, layoutArea.getWidth()));
@@ -594,13 +590,15 @@ void GlobalPanel::resized()
         knobsColumnArea.getWidth() - juce::jmin(filterUtilityWidth, knobsColumnArea.getWidth()) - controlGap);
     const int filterKnobLimit = juce::jmax(1, (filterKnobWidth - controlGap * 2) / 3);
     const int lofiKnobLimit = juce::jmax(1, (knobsColumnArea.getWidth() - controlGap * 3) / 4);
-    const int masterKnobLimit = juce::jmax(1, juce::jmin(outputColumnArea.getWidth(),
-        (outputColumnArea.getHeight() - controlGap) / 2));
+    const int valueHeight = juce::roundToInt(fire::ui::Metrics::knobValueHeight * uiScale);
+    const int masterKnobLimit = juce::jmax(1,
+        (outputColumnArea.getWidth() - controlGap) / 2);
     const int ordinaryKnobSize = juce::jmax(1, std::min({ scaledKnobSize,
                                                           filterKnobLimit,
                                                           lofiKnobLimit,
                                                           masterKnobLimit,
-                                                          knobsColumnArea.getHeight() }));
+                                                          knobsColumnArea.getHeight() - valueHeight }));
+    const int ordinaryKnobHeight = ordinaryKnobSize + valueHeight;
 
     // --- Process rail ---
     juce::FlexBox switchColumnBox;
@@ -633,11 +631,13 @@ void GlobalPanel::resized()
     updateSelectionTarget(! selectionAnimationInitialised);
 
     // --- Master output card ---
-    auto masterKnobs = outputColumnArea.withSizeKeepingCentre(ordinaryKnobSize,
-                                                              ordinaryKnobSize * 2 + controlGap);
-    modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setBounds(masterKnobs.removeFromTop(ordinaryKnobSize));
-    masterKnobs.removeFromTop(controlGap);
-    modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setBounds(masterKnobs.removeFromTop(ordinaryKnobSize));
+    const int footerReserve = juce::roundToInt(36.0f * uiScale);
+    outputColumnArea.removeFromBottom(juce::jmin(footerReserve, outputColumnArea.getHeight()));
+    auto masterKnobs = outputColumnArea.withSizeKeepingCentre(ordinaryKnobSize * 2 + controlGap,
+                                                              ordinaryKnobHeight);
+    modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setBounds(masterKnobs.removeFromLeft(ordinaryKnobSize));
+    masterKnobs.removeFromLeft(controlGap);
+    modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setBounds(masterKnobs);
 
     // --- Main reactor card ---
     if (filterSwitch.getToggleState())
@@ -663,7 +663,7 @@ void GlobalPanel::resized()
             const int blockHeight = labelHeight * 2 + controlHeight * 4
                                   + itemGap * 4 + sectionGap;
             const auto utilityLabelFont = fire::ui::labelFont(
-                juce::jmax(6.0f, labelHeight * 0.78f));
+                juce::jmax(10.0f * uiScale, labelHeight * 0.78f));
             filterTypeLabel.setFont(utilityLabelFont);
             lowcutSlopeLabel.setFont(utilityLabelFont);
             highcutSlopeLabel.setFont(utilityLabelFont);
@@ -691,7 +691,7 @@ void GlobalPanel::resized()
 
         {
             auto knobsArea = controlArea.withSizeKeepingCentre(ordinaryKnobSize * 3 + controlGap * 2,
-                                                               ordinaryKnobSize);
+                                                               ordinaryKnobHeight);
 
             auto freqBounds = knobsArea.removeFromLeft(ordinaryKnobSize);
             knobsArea.removeFromLeft(controlGap);
@@ -715,7 +715,7 @@ void GlobalPanel::resized()
     else if (downsampleSwitch.getToggleState())
     {
         auto knobRow = knobsColumnArea.withSizeKeepingCentre(ordinaryKnobSize * 4 + controlGap * 3,
-                                                             ordinaryKnobSize);
+                                                             ordinaryKnobHeight);
         modulatableSliderComponents.at(DOWNSAMPLE_NAME)->setBounds(knobRow.removeFromLeft(ordinaryKnobSize));
         knobRow.removeFromLeft(controlGap);
         modulatableSliderComponents.at(BIT_DEPTH_NAME)->setBounds(knobRow.removeFromLeft(ordinaryKnobSize));
@@ -752,22 +752,17 @@ void GlobalPanel::resized()
 
 void GlobalPanel::animationTick(float deltaSeconds)
 {
+    advanceContentTransition(deltaSeconds);
     if (! selectionAnimationInitialised)
         return;
 
     if (! isShowing())
     {
         selectionY.snapTo(selectionY.target);
-        selectionRed.snapTo(selectionRed.target);
-        selectionGreen.snapTo(selectionGreen.target);
-        selectionBlue.snapTo(selectionBlue.target);
         return;
     }
 
-    bool changed = selectionY.advance(deltaSeconds, 0.07f);
-    changed = selectionRed.advance(deltaSeconds, 0.07f) || changed;
-    changed = selectionGreen.advance(deltaSeconds, 0.07f) || changed;
-    changed = selectionBlue.advance(deltaSeconds, 0.07f) || changed;
+    bool changed = selectionY.advance(deltaSeconds);
 
     if (changed)
         repaint(tabAreaRect.expanded(juce::jmax(2, juce::roundToInt(3.0f * scale))));
@@ -804,32 +799,16 @@ void GlobalPanel::updateSelectionTarget(bool snap)
     if (selectedSwitch == nullptr || selectedSwitch->getBounds().isEmpty())
         return;
 
-    auto targetColour = fire::ui::colours::filter;
-    if (selectedSwitch == &downsampleSwitch)
-        targetColour = fire::ui::colours::loFi;
-    else if (selectedSwitch == &graphSwitch)
-        targetColour = fire::ui::colours::signalCool;
-
     const auto selectionInset = juce::jmax(0.5f, 1.0f * scale);
     const auto targetY = static_cast<float>(selectedSwitch->getY()) + selectionInset;
-    const auto targetRed = targetColour.getFloatRed();
-    const auto targetGreen = targetColour.getFloatGreen();
-    const auto targetBlue = targetColour.getFloatBlue();
-
-    if (snap || ! selectionAnimationInitialised)
+    if (snap || ! selectionAnimationInitialised || ! isShowing())
     {
         selectionY.snapTo(targetY);
-        selectionRed.snapTo(targetRed);
-        selectionGreen.snapTo(targetGreen);
-        selectionBlue.snapTo(targetBlue);
         selectionAnimationInitialised = true;
         return;
     }
 
     selectionY.setTarget(targetY);
-    selectionRed.setTarget(targetRed);
-    selectionGreen.setTarget(targetGreen);
-    selectionBlue.setTarget(targetBlue);
 }
 
 void GlobalPanel::rebuildChromeCache(float displayScale)
@@ -1070,6 +1049,7 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
 
     if (isSwitch)
     {
+        startContentTransition(controlsAreaRect);
         resized();
         if (safeThis == nullptr)
             return;

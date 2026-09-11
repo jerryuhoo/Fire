@@ -520,6 +520,18 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     zoomButton.setTitle("Toggle spectrum zoom");
     zoomButton.setTooltip("Toggle spectrum zoom");
 
+    addChildComponent(spectrumCollapseButton);
+    spectrumCollapseButton.setButtonText("Hide spectrum");
+    spectrumCollapseButton.setClickingTogglesState(true);
+    spectrumCollapseButton.setComponentID("spectrum_collapse");
+    spectrumCollapseButton.setTitle("Collapse spectrum in modulation workspace");
+    spectrumCollapseButton.setTooltip("Give the LFO editor more space by hiding the spectrum");
+    spectrumCollapseButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
+    spectrumCollapseButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
+    spectrumCollapseButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
+    spectrumCollapseButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::textPrimary);
+    spectrumCollapseButton.addListener(this);
+
     initialiseHeaderEmbers();
     lastAnimationTimeSeconds = juce::Time::getMillisecondCounterHiRes() * 0.001;
 
@@ -592,6 +604,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
 
     // Other Button Listeners
     zoomButton.removeListener(this);
+    spectrumCollapseButton.removeListener(this);
 
     for (int i = 0; i < 4; ++i)
     {
@@ -642,6 +655,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
 
 void FireAudioProcessorEditor::paintOverChildren(juce::Graphics& g)
 {
+    if (workspaceReveal < 0.999f && ! contentArea.isEmpty())
+    {
+        g.setColour(fire::ui::colours::surface0.withAlpha(1.0f - workspaceReveal));
+        g.fillRect(contentArea);
+    }
     const auto opacity = juce::jlimit(0.0f,
                                       1.0f,
                                       hostBypassIndicatorOpacity.current);
@@ -725,6 +743,9 @@ void FireAudioProcessorEditor::resized()
     bounds.reduce(gap, gap);
     contentArea = {};
     navigationArea = {};
+    const bool spectrumCollapsed = activeWorkspace == 1
+                                   && spectrumCollapseButton.getToggleState()
+                                   && ! zoomButton.getToggleState();
 
     if (zoomButton.getToggleState())
     {
@@ -732,9 +753,11 @@ void FireAudioProcessorEditor::resized()
     }
     else
     {
-        const auto spectrumHeight = juce::roundToInt(static_cast<float>(bounds.getHeight()) * 0.36f);
+        const auto spectrumHeight = spectrumCollapsed ? 0
+            : juce::roundToInt(static_cast<float>(bounds.getHeight()) * 0.28f);
         spectrumCardArea = bounds.removeFromTop(spectrumHeight);
-        bounds.removeFromTop(gap);
+        if (! spectrumCollapsed)
+            bounds.removeFromTop(gap);
 
         navigationArea = bounds.removeFromTop(juce::roundToInt(34.0f * scale));
         bounds.removeFromTop(gap);
@@ -750,18 +773,31 @@ void FireAudioProcessorEditor::resized()
         windowLfoButton.setBounds(tabs.removeFromLeft(tabWidth));
         tabs.removeFromLeft(tabGap);
         windowRightButton.setBounds(tabs);
+        auto collapseBounds = navigationArea.withWidth(juce::roundToInt(126.0f * scale))
+                                  .withRightX(navigationArea.getRight());
+        spectrumCollapseButton.setBounds(collapseBounds.reduced(0, juce::roundToInt(3.0f * scale)));
 
         bandPanel.setBounds(contentArea);
         globalPanel.setBounds(contentArea);
         lfoPanel.setBounds(contentArea);
     }
 
-    const auto spectrumBounds = spectrumCardArea.reduced(1);
+    const auto spectrumBounds = spectrumCardArea.isEmpty()
+                                    ? juce::Rectangle<int>() : spectrumCardArea.reduced(1);
     specBackground.setBounds(spectrumBounds);
     processedSpectrum.setBounds(spectrumBounds);
     originalSpectrum.setBounds(spectrumBounds);
     multiband.setBounds(spectrumBounds);
     filterControl.setBounds(spectrumBounds);
+
+    specBackground.setVisible(! spectrumCollapsed);
+    processedSpectrum.setVisible(! spectrumCollapsed);
+    originalSpectrum.setVisible(! spectrumCollapsed);
+    multiband.setVisible(! spectrumCollapsed && activeWorkspace != 2);
+    filterControl.setVisible(! spectrumCollapsed && activeWorkspace == 2);
+    zoomButton.setVisible(! spectrumCollapsed);
+    spectrumCollapseButton.setVisible(activeWorkspace == 1 && ! zoomButton.getToggleState());
+    spectrumCollapseButton.setButtonText(spectrumCollapsed ? "Show spectrum" : "Hide spectrum");
 
     const auto zoomSize = juce::jmax(22, juce::roundToInt(27.0f * scale));
     zoomButton.setBounds(spectrumCardArea.getRight() - zoomSize - gap,
@@ -901,6 +937,10 @@ void FireAudioProcessorEditor::visibilityChanged()
             return;
 
         zoomButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        spectrumCollapseButton.dismissPointerGesture();
         if (safeThis == nullptr)
             return;
 
@@ -1111,8 +1151,17 @@ void FireAudioProcessorEditor::advanceAnimations(float deltaSeconds)
             ember.x -= 1.0f;
     }
 
-    if (workspaceSelection.advance(deltaSeconds, 0.07f))
+    if (workspaceSelection.advance(deltaSeconds))
         repaint(navigationArea);
+
+    if (workspaceReveal < 1.0f)
+    {
+        workspaceReveal += (1.0f - workspaceReveal)
+                           * fire::ui::Motion::step(deltaSeconds, fire::ui::Motion::page);
+        if (workspaceReveal > 0.998f)
+            workspaceReveal = 1.0f;
+        repaint(contentArea);
+    }
 
     if (hostBypassIndicatorOpacity.advance(deltaSeconds, 0.10f))
         repaint(spectrumCardArea);
@@ -1199,7 +1248,7 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
     const auto particleArea = headerArea.toFloat();
     for (const auto& ember : headerEmbers)
     {
-        const auto alpha = (0.07f + 0.18f * headerEnergy)
+        const auto alpha = (0.012f + 0.055f * headerEnergy)
                            * (0.45f + 0.55f * std::sin(ember.phase + animationSeconds * 1.3f)
                                              * std::sin(ember.phase + animationSeconds * 1.3f));
         const juce::Point<float> point {
@@ -1214,8 +1263,8 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
     const auto hotSpot = static_cast<float>(headerArea.getWidth())
                          * (0.18f + 0.64f * (0.5f + 0.5f * std::sin(animationSeconds * 0.42f)));
     juce::ColourGradient seam(fire::ui::colours::ember.withAlpha(0.0f), 0.0f, seamY,
-                              fire::ui::colours::whiteHot.withAlpha(0.45f * headerEnergy), hotSpot, seamY, false);
-    seam.addColour(0.55, fire::ui::colours::flame.withAlpha(0.36f * headerEnergy));
+                              fire::ui::colours::whiteHot.withAlpha(0.18f * headerEnergy), hotSpot, seamY, false);
+    seam.addColour(0.55, fire::ui::colours::flame.withAlpha(0.14f * headerEnergy));
     seam.addColour(1.0, fire::ui::colours::ember.withAlpha(0.0f));
     g.setGradientFill(seam);
     g.fillRect(0.0f, seamY, static_cast<float>(headerArea.getWidth()), 1.0f);
@@ -1228,7 +1277,7 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
     g.setFont(fire::ui::displayFont(18.0f * fireLookAndFeel.scale));
     g.setColour(fire::ui::colours::textPrimary);
     g.drawText("FIRE", title, juce::Justification::centredLeft);
-    g.setFont(fire::ui::labelFont(8.5f * fireLookAndFeel.scale));
+    g.setFont(fire::ui::labelFont(9.0f * fireLookAndFeel.scale));
     g.setColour(fire::ui::colours::textMuted);
     g.drawText("MULTIBAND REACTOR", brand, juce::Justification::centredLeft);
 
@@ -1248,7 +1297,7 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
     g.setColour(fire::ui::colours::textSecondary);
     g.drawText("BLUE WINGS", signature.removeFromTop(signature.getHeight() * 0.55f),
                juce::Justification::centredLeft);
-    g.setFont(fire::ui::bodyFont(7.5f * fireLookAndFeel.scale));
+    g.setFont(fire::ui::bodyFont(9.0f * fireLookAndFeel.scale));
     g.setColour(fire::ui::colours::textMuted);
     g.drawText("v" VERSION, signature, juce::Justification::centredLeft);
 }
@@ -1263,14 +1312,8 @@ void FireAudioProcessorEditor::drawWorkspaceSelection(juce::Graphics& g)
         windowLfoButton.getBounds().toFloat(),
         windowRightButton.getBounds().toFloat()
     };
-    const std::array<juce::Colour, 3> tabColours {
-        fire::ui::colours::flame,
-        fire::ui::colours::modulation,
-        fire::ui::colours::flame
-    };
-
-    const auto position = juce::jlimit(0.0f, 2.0f, workspaceSelection.current);
-    const auto lower = juce::jlimit(0, 2, static_cast<int>(std::floor(position)));
+    const auto position = juce::jlimit(-0.15f, 2.15f, workspaceSelection.current);
+    const auto lower = juce::jlimit(0, 1, static_cast<int>(std::floor(position)));
     const auto upper = juce::jmin(2, lower + 1);
     const auto amount = position - static_cast<float>(lower);
 
@@ -1281,22 +1324,9 @@ void FireAudioProcessorEditor::drawWorkspaceSelection(juce::Graphics& g)
         juce::jmap(amount, from.getY(), to.getY()),
         juce::jmap(amount, from.getWidth(), to.getWidth()),
         juce::jmap(amount, from.getHeight(), to.getHeight()));
-    const auto accent = tabColours[static_cast<size_t>(lower)]
-                            .interpolatedWith(tabColours[static_cast<size_t>(upper)], amount);
-
     selector = selector.reduced(0.5f);
-    g.setColour(accent.withAlpha(0.075f));
+    g.setColour(fire::ui::colours::raised);
     g.fillRoundedRectangle(selector, fire::ui::Metrics::radiusSmall * fireLookAndFeel.scale);
-
-    const auto railWidth = juce::jmin(selector.getWidth() * 0.34f,
-                                      30.0f * fireLookAndFeel.scale);
-    const auto railHeight = juce::jmax(1.0f, 1.5f * fireLookAndFeel.scale);
-    g.setColour(accent.withAlpha(0.94f));
-    g.fillRoundedRectangle(selector.getCentreX() - railWidth * 0.5f,
-                           selector.getBottom() - railHeight,
-                           railWidth,
-                           railHeight,
-                           railHeight * 0.5f);
 }
 
 void FireAudioProcessorEditor::timerCallback()
@@ -1469,6 +1499,10 @@ void FireAudioProcessorEditor::timerCallback()
         if (safeThis == nullptr)
             return;
 
+        spectrumCollapseButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
         stateComponent.dismissPointerGestures();
         if (safeThis == nullptr)
             return;
@@ -1489,13 +1523,7 @@ void FireAudioProcessorEditor::timerCallback()
 
     if (hasLatestDistortionGraphValues)
     {
-        bandPanel.getDistortionGraph()->setState(
-            latestDistortionGraphValues.mode,
-            latestDistortionGraphValues.rec,
-            latestDistortionGraphValues.mix,
-            latestDistortionGraphValues.bias,
-            latestDistortionGraphValues.drive,
-            latestDistortionGraphValues.rateDivide);
+        bandPanel.presentDistortionGraphValues(latestDistortionGraphValues);
     }
 
     if (hasCachedMeterValues)
@@ -1625,6 +1653,8 @@ void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animate
             return;
     }
 
+    const bool workspaceChanged = activeWorkspace != targetWorkspace;
+    workspaceReveal = workspaceChanged && animateSelection && isShowing() ? 0.15f : 1.0f;
     activeWorkspace = targetWorkspace;
     // Publish the target before any graph-bearing panel becomes visible.
     // Graph visibility callbacks can synchronously repaint, so changing the
@@ -1655,12 +1685,20 @@ void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animate
     if (safeThis == nullptr)
         return;
 
+    resized();
     repaint(navigationArea.getUnion(contentArea));
 }
 
 void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
 {
     const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
+
+    if (clickedButton == &spectrumCollapseButton)
+    {
+        resized();
+        repaint();
+        return;
+    }
 
     if (clickedButton == stateComponent.getToggleABButton())
     {
@@ -2344,7 +2382,8 @@ bool FireAudioProcessorEditor::updateValuePopupContentAndBounds(
     const auto popupX = juce::jlimit(safeBounds.getX(),
                                     safeBounds.getRight() - popupWidth,
                                     preferredX);
-    const auto popupY = valueDisplayBoundsInEditor.getY()
+    const auto sliderTop = getLocalPoint(slider, juce::Point<int>()).y;
+    const auto popupY = juce::jmin(valueDisplayBoundsInEditor.getY(), sliderTop)
                         - popupGap - popupHeight;
 
     // Falling back below the header puts the endpoint directly over the dial,

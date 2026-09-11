@@ -93,27 +93,6 @@ juce::Image renderIdleComboBox(FireLookAndFeel& lookAndFeel,
     return image;
 }
 
-juce::Colour expectedIdleComboInterior(juce::Colour background,
-                                       int sampleY,
-                                       int height)
-{
-    const auto top = 0.5f;
-    const auto bottom = static_cast<float>(height) - 0.5f;
-    const auto sampleCentreY = static_cast<float>(sampleY) + 0.5f;
-    const auto position = juce::jlimit(
-        0.0,
-        1.0,
-        static_cast<double>((sampleCentreY - top) / (bottom - top)));
-    const juce::ColourGradient gradient(background.brighter(0.05f),
-                                         0.0f,
-                                         top,
-                                         background.darker(0.12f),
-                                         0.0f,
-                                         bottom,
-                                         false);
-    return gradient.getColourAtPosition(position);
-}
-
 int colourChannelError(juce::Colour actual, juce::Colour expected)
 {
     return std::abs(static_cast<int>(actual.getRed())
@@ -148,27 +127,23 @@ TEST_CASE("Fire ComboBoxes honour their configured idle background colour",
     CHECK(imageFingerprint(firstImage) != imageFingerprint(secondImage));
     CHECK(colourChannelError(
               firstInterior,
-              expectedIdleComboInterior(firstBackground,
-                                        sampleY,
-                                        firstImage.getHeight()))
+              firstBackground)
           <= 4);
     CHECK(colourChannelError(
               secondInterior,
-              expectedIdleComboInterior(secondBackground,
-                                        sampleY,
-                                        secondImage.getHeight()))
+              secondBackground)
           <= 4);
 
-    // The compact preset selector intentionally uses its separate flat header
-    // treatment. Its output must remain independent of the regular control's
-    // backgroundColourId.
+    // The preset selector follows the same flat, configurable surface.
     const auto firstHeader = renderIdleComboBox(lookAndFeel,
                                                  firstBackground,
                                                  "header_preset");
     const auto secondHeader = renderIdleComboBox(lookAndFeel,
                                                   secondBackground,
                                                   "header_preset");
-    CHECK(imageFingerprint(firstHeader) == imageFingerprint(secondHeader));
+    CHECK(imageFingerprint(firstHeader) != imageFingerprint(secondHeader));
+    CHECK(colourChannelError(firstHeader.getPixelAt(sampleX, sampleY), firstBackground) <= 4);
+    CHECK(colourChannelError(secondHeader.getPixelAt(sampleX, sampleY), secondBackground) <= 4);
 }
 
 TEST_CASE("Fire ComboBox animation cache discards expired idle controls",

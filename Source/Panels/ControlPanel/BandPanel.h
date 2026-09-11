@@ -50,6 +50,7 @@ public:
     void dismissTransientInteraction() noexcept;
 
     void parameterChanged(const juce::String& parameterID, float newValue) override;
+    void presentDistortionGraphValues(const DistortionGraphValues& values);
 
     void setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass);
 
@@ -76,6 +77,7 @@ public:
 private:
     friend struct BandPanelGraphTestAccess;
     friend struct BandPanelModeTestAccess;
+    friend struct DistortionGraphSourceEpochTestAccess;
 
     void updateAttachments();
     void dismissButtonInteractions() noexcept;
@@ -102,7 +104,6 @@ private:
     void restoreDriveGraphPreviewNow() noexcept;
     void setAnimatedModuleTarget(int moduleIndex);
     juce::Rectangle<float> getModuleSelectionBounds(float modulePosition) const;
-    juce::Colour getModuleSelectionColour() const;
 
     void createSliders();
     void createLabels();
@@ -116,6 +117,8 @@ private:
     void timerCallback() override;
     void visibilityChanged() override;
     std::atomic<unsigned int> distortionGraphDirtyMask { 0 };
+    double lastGraphTelemetryTimeMs = -1.0;
+    static constexpr double graphTelemetryTimeoutMs = 250.0;
     static constexpr size_t distortionGraphParameterCount = 9;
     std::array<juce::String, 4> driveParameterIds;
     std::array<std::array<juce::String, 4>, distortionGraphParameterCount> distortionGraphParameterIds;
@@ -163,10 +166,7 @@ private:
     float chromeCacheDisplayScale = 0.0f;
     bool chromeCacheDirty = true;
 
-    fire::ui::DampedValue moduleSelectionPosition;
-    fire::ui::DampedValue moduleSelectionColourMix;
-    juce::Colour moduleSelectionColourStart { fire::ui::colours::drive };
-    juce::Colour moduleSelectionColourTarget { fire::ui::colours::drive };
+    fire::ui::SpringValue moduleSelectionPosition;
 
     // Graphs moved from GraphPanel
     Oscilloscope oscilloscope { processor };

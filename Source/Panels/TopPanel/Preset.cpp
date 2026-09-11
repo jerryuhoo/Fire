@@ -2363,9 +2363,11 @@ namespace state
 #endif
     }
 
-    void StateComponent::paint(juce::Graphics& /*g*/)
+    void StateComponent::paint(juce::Graphics& g)
     {
-        //g.fillAll (Colours::lightgrey);
+        g.setColour(fire::ui::colours::hairline.withAlpha(0.5f));
+        for (const auto x : { copyABButton.getRight() + 3, savePresetButton.getX() - 3 })
+            g.drawVerticalLine(x, getHeight() * 0.32f, getHeight() * 0.68f);
     }
 
     void StateComponent::resized()
@@ -2395,7 +2397,7 @@ namespace state
         placeRight(savePresetButton, actionWidth);
         placeRight(nextButton, compactWidth);
         placeRight(previousButton, compactWidth);
-        presetBox.setBounds(r.reduced(0, juce::jmax(1, getHeight() / 12)));
+        presetBox.setBounds(r);
     }
 
     void StateComponent::visibilityChanged()

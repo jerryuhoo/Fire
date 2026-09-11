@@ -92,13 +92,10 @@ void GraphTemplate::paint(juce::Graphics& g)
                                      juce::jmax(hover * 0.52f, focus * 0.78f));
     if (emphasis > 0.001f)
     {
-        const auto accent = getGraphAccent();
-        auto outline = getLocalBounds().toFloat().reduced(1.0f + press * scale);
-        g.setColour(accent.withAlpha((0.24f + emphasis * 0.54f)
-                                     * (1.0f - disabled * 0.72f)));
-        g.drawRoundedRectangle(outline,
-                               fire::ui::Metrics::radius,
-                               1.0f + emphasis * 0.5f);
+        auto bounds = getLocalBounds().toFloat().reduced(1.0f + press * scale);
+        g.setColour(fire::ui::colours::raised.withAlpha(emphasis * 0.24f
+                                                      * (1.0f - disabled * 0.72f)));
+        g.fillRoundedRectangle(bounds, fire::ui::Metrics::radius);
     }
 }
 
@@ -472,10 +469,10 @@ void GraphTemplate::updateAnimationTargets() noexcept
 
 bool GraphTemplate::advanceAnimation(float deltaSeconds) noexcept
 {
-    auto changed = hoverAnimation.advance(deltaSeconds, 0.10f);
-    changed = pressAnimation.advance(deltaSeconds, 0.065f) || changed;
-    changed = focusAnimation.advance(deltaSeconds, 0.11f) || changed;
-    changed = disabledAnimation.advance(deltaSeconds, 0.13f) || changed;
+    auto changed = hoverAnimation.advance(deltaSeconds, fire::ui::Motion::hover * 0.5f);
+    changed = pressAnimation.advance(deltaSeconds, fire::ui::Motion::press * 0.5f) || changed;
+    changed = focusAnimation.advance(deltaSeconds, fire::ui::Motion::focus * 0.5f) || changed;
+    changed = disabledAnimation.advance(deltaSeconds, fire::ui::Motion::disabled * 0.5f) || changed;
     return changed;
 }
 
@@ -531,9 +528,9 @@ void GraphTemplate::rebuildStaticLayer(float displayScale)
     fire::ui::drawTechGrid(cacheGraphics,
                            plotBounds,
                            juce::jmax(12.0f, 20.0f * scale),
-                           0.16f);
+                           0.08f);
 
-    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.48f));
+    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.27f));
     cacheGraphics.drawHorizontalLine(juce::roundToInt(plotBounds.getCentreY()),
                                      plotBounds.getX(),
                                      plotBounds.getRight());

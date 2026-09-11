@@ -96,7 +96,7 @@ void SpectrumBackground::createBackgroundImage()
     g.setGradientFill(headerShade);
     g.fillRect(area.withHeight(headerHeight));
 
-    g.setColour(fire::ui::colours::hairline.withAlpha(0.42f));
+    g.setColour(fire::ui::colours::hairline.withAlpha(0.26f));
     for (int division = 1; division < 5; ++division)
     {
         const float y = fire::ui::pixelAligned(area.getY() + area.getHeight() * division / 5.0f,
@@ -110,12 +110,12 @@ void SpectrumBackground::createBackgroundImage()
                                                    lastDisplayScale);
         const bool major = freq == 20 || freq == 100 || freq == 200 || freq == 1000
                         || freq == 2000 || freq == 10000 || freq == 20000;
-        g.setColour(fire::ui::colours::hairline.withAlpha(major ? 0.48f : 0.22f));
+        g.setColour(fire::ui::colours::hairline.withAlpha(major ? 0.30f : 0.12f));
         g.drawVerticalLine(juce::roundToInt(xPos), headerHeight, area.getBottom());
     }
 
-    g.setFont(fire::ui::bodyFont(juce::jlimit(9.0f, 12.0f, 11.0f * scale)));
-    g.setColour(fire::ui::colours::textMuted.withAlpha(0.94f));
+    g.setFont(fire::ui::bodyFont(11.0f * scale));
+    g.setColour(fire::ui::colours::textSecondary.withAlpha(0.84f));
     for (const auto freq : frequenciesForTextLabels)
     {
         const float xPos = transformToLog(freq) * area.getWidth();

@@ -405,10 +405,10 @@ private:
 
     bool advanceAnimation(float deltaSeconds) noexcept
     {
-        auto changed = hoverAnimation.advance(deltaSeconds, 0.10f);
-        changed = pressAnimation.advance(deltaSeconds, 0.065f) || changed;
-        changed = focusAnimation.advance(deltaSeconds, 0.11f) || changed;
-        changed = disabledAnimation.advance(deltaSeconds, 0.13f) || changed;
+        auto changed = hoverAnimation.advance(deltaSeconds, fire::ui::Motion::hover * 0.5f);
+        changed = pressAnimation.advance(deltaSeconds, fire::ui::Motion::press * 0.5f) || changed;
+        changed = focusAnimation.advance(deltaSeconds, fire::ui::Motion::focus * 0.5f) || changed;
+        changed = disabledAnimation.advance(deltaSeconds, fire::ui::Motion::disabled * 0.5f) || changed;
         return changed;
     }
 

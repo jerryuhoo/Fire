@@ -203,7 +203,7 @@ private:
     std::uint64_t meterPacketGeneration = 0;
     bool hasCachedMeterValues = false;
 
-    fire::ui::DampedValue workspaceSelection;
+    fire::ui::SpringValue workspaceSelection;
     int activeWorkspace = 0;
 
     std::array<float, 2 * SpectrumProcessor::fftSize> processedFftFrame {};
@@ -213,6 +213,7 @@ private:
     juce::Rectangle<int> spectrumCardArea;
     juce::Rectangle<int> navigationArea;
     juce::Rectangle<int> contentArea;
+    float workspaceReveal = 1.0f;
 
     // create own knob style
     FireLookAndFeel fireLookAndFeel;
@@ -274,7 +275,8 @@ private:
         windowLeftButton,
         windowRightButton,
         windowLfoButton,
-        zoomButton;
+        zoomButton,
+        spectrumCollapseButton;
 
     // group toggle buttons
     enum RadioButtonIds

@@ -32,7 +32,7 @@ inline const juce::Colour edgeHot { 0xff5a2a22 };
 
 inline const juce::Colour textPrimary { 0xfff3f6fa };
 inline const juce::Colour textSecondary { 0xffa8b2c1 };
-inline const juce::Colour textMuted { 0xff687386 };
+inline const juce::Colour textMuted { 0xff8590a1 };
 inline const juce::Colour disabled { 0xff414b59 };
 
 inline const juce::Colour ember { 0xffff4d2e };
@@ -94,6 +94,9 @@ inline juce::Colour lfoBankColourForSource(int oneBasedSource) noexcept
 
 struct Metrics
 {
+    static constexpr float knobTitleHeight = 20.0f;
+    static constexpr float knobValueHeight = 20.0f;
+    static constexpr float knobWidth = 76.0f;
     static constexpr float space2 = 2.0f;
     static constexpr float space4 = 4.0f;
     static constexpr float space8 = 8.0f;
@@ -103,6 +106,23 @@ struct Metrics
     static constexpr float radiusSmall = 4.0f;
     static constexpr float radius = 8.0f;
     static constexpr float radiusLarge = 12.0f;
+};
+
+struct Motion
+{
+    static constexpr float hover = 0.12f;
+    static constexpr float press = 0.075f;
+    static constexpr float focus = 0.12f;
+    static constexpr float disabled = 0.16f;
+    static constexpr float selection = 0.08f;
+    static constexpr float page = 0.16f;
+
+    // Reach 95% within the specified duration, independent of timer jitter.
+    static float step(float deltaSeconds, float duration) noexcept
+    {
+        return 1.0f - std::exp(-3.0f * juce::jlimit(0.0f, 0.05f, deltaSeconds)
+                              / juce::jmax(0.01f, duration));
+    }
 };
 
 inline juce::PopupMenu::Options prepareContextMenu(
@@ -198,6 +218,45 @@ struct DampedValue
     }
 };
 
+// A lightly underdamped spring for selection surfaces only. Parameter values
+// continue to follow the pointer directly; the animated surface is not a hit target.
+struct SpringValue
+{
+    float current = 0.0f;
+    float target = 0.0f;
+    float velocity = 0.0f;
+
+    void snapTo(float value) noexcept { current = target = value; velocity = 0.0f; }
+    void setTarget(float value) noexcept { target = value; }
+    bool isSettled() const noexcept
+    {
+        return std::abs(target - current) < 0.001f && std::abs(velocity) < 0.01f;
+    }
+    bool advance(float deltaSeconds) noexcept
+    {
+        if (! std::isfinite(deltaSeconds) || deltaSeconds <= 0.0f)
+            return ! isSettled();
+        const auto dt = juce::jmin(0.05f, deltaSeconds);
+        constexpr float omega = juce::MathConstants<float>::twoPi / 0.30f;
+        constexpr float damping = 0.68f;
+        const auto dampedOmega = omega * std::sqrt(1.0f - damping * damping);
+        const auto displacement = current - target;
+        const auto b = (velocity + damping * omega * displacement) / dampedOmega;
+        const auto decay = std::exp(-damping * omega * dt);
+        const auto sine = std::sin(dampedOmega * dt);
+        const auto cosine = std::cos(dampedOmega * dt);
+        current = target + decay * (displacement * cosine + b * sine);
+        velocity = decay * ((b * dampedOmega - damping * omega * displacement) * cosine
+                            - (displacement * dampedOmega + damping * omega * b) * sine);
+        if (isSettled())
+        {
+            snapTo(target);
+            return false;
+        }
+        return true;
+    }
+};
+
 // Geometry shared by the Drive renderer and its regression tests.  The DSP
 // publishes reduction as actual/requested Drive, so the effective point on the
 // knob is the requested position multiplied by that ratio.  Treating the
@@ -237,7 +296,7 @@ inline float dialArcStroke(float radius, float scale, bool isDrive) noexcept
     scale = std::isfinite(scale) ? juce::jmax(0.1f, scale) : 1.0f;
 
     const auto desired = isDrive
-                             ? juce::jlimit(5.0f * scale, 12.0f * scale, radius * 0.18f)
+                             ? juce::jlimit(4.0f * scale, 10.0f * scale, radius * 0.145f)
                              : juce::jlimit(1.5f, 3.4f * scale, radius * 0.09f);
     return juce::jmin(desired, juce::jmax(1.0f, radius * 0.45f));
 }
@@ -288,6 +347,13 @@ inline juce::Font displayFont(float height = 15.0f)
     return juce::Font { juce::FontOptions().withHeight(height).withStyle("Bold") };
 }
 
+inline juce::Font valueFont(float height = 12.0f)
+{
+    return juce::Font { juce::FontOptions()
+                           .withName(juce::Font::getDefaultMonospacedFontName())
+                           .withHeight(height) };
+}
+
 inline float pixelAligned(float value, float physicalScale = 1.0f)
 {
     physicalScale = juce::jmax(1.0f, physicalScale);
@@ -335,16 +401,9 @@ inline void drawPanel(juce::Graphics& g,
         return;
 
     bounds = bounds.reduced(0.5f);
-    juce::ColourGradient fill(colours::surface1.withAlpha(0.94f), bounds.getX(), bounds.getY(),
-                              colours::surface0.withAlpha(0.98f), bounds.getX(), bounds.getBottom(), false);
-    fill.addColour(0.38, colours::surface1.darker(0.06f));
-    g.setGradientFill(fill);
+    g.setColour(colours::surface1);
     g.fillRoundedRectangle(bounds, radius);
-
-    // A card has one quiet neutral edge.  Module colour belongs to controls
-    // and selection state, not to decorative corner rails.
-    g.setColour(colours::hairline.withAlpha(active ? 0.48f : 0.30f));
-    g.drawRoundedRectangle(bounds, radius, 1.0f);
+    juce::ignoreUnused(active);
 
     juce::ignoreUnused(accent);
 }
@@ -366,23 +425,9 @@ inline void drawGlassPill(juce::Graphics& g,
     if (pressed)
         base = base.darker(0.10f);
 
-    juce::ColourGradient fill(base.brighter(0.05f), bounds.getX(), bounds.getY(),
-                              base.darker(0.12f), bounds.getX(), bounds.getBottom(), false);
-    g.setGradientFill(fill);
+    g.setColour(base);
     g.fillRoundedRectangle(bounds, radius);
-
-    g.setColour((active ? accent : colours::hairline).withAlpha(active ? 0.72f : 0.75f));
-    g.drawRoundedRectangle(bounds.reduced(0.5f), radius, 1.0f);
-
-    if (active)
-    {
-        g.setColour(accent.withAlpha(0.95f));
-        g.fillRoundedRectangle(bounds.getX() + 1.0f,
-                               bounds.getY() + bounds.getHeight() * 0.24f,
-                               2.0f,
-                               bounds.getHeight() * 0.52f,
-                               1.0f);
-    }
+    juce::ignoreUnused(accent);
 }
 
 inline void drawSectionTitle(juce::Graphics& g,
@@ -390,7 +435,7 @@ inline void drawSectionTitle(juce::Graphics& g,
                              const juce::String& text,
                              juce::Colour accent)
 {
-    g.setFont(labelFont(juce::jlimit(9.0f, 13.0f, bounds.getHeight() * 0.36f)));
+    g.setFont(labelFont(juce::jlimit(10.0f, 22.0f, bounds.getHeight() * 0.46f)));
     g.setColour(colours::textSecondary);
     g.drawText(text.toUpperCase(), bounds.withTrimmedLeft(Metrics::space8), juce::Justification::centredLeft);
     juce::ignoreUnused(accent);

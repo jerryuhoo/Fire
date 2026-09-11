@@ -586,33 +586,31 @@ void LfoEditor::paint(juce::Graphics& g)
     }
 
     const auto signature = getWavePathSignature();
-    if (signature != cachedWavePathSignature)
+    const bool shapeChanged = signature != cachedWavePathSignature;
+    if (shapeChanged)
     {
         rebuildWavePath();
         cachedWavePathSignature = signature;
     }
 
-    auto fillPath = cachedWavePath;
-    fillPath.lineTo(static_cast<float>(getWidth()), static_cast<float>(getHeight()));
-    fillPath.lineTo(0.0f, static_cast<float>(getHeight()));
-    fillPath.closeSubPath();
-    juce::ColourGradient fill(accent.withAlpha(0.16f),
-                              0.0f, 0.0f,
-                              accent.withAlpha(0.015f),
-                              0.0f, static_cast<float>(getHeight()), false);
-    g.setGradientFill(fill);
-    g.fillPath(fillPath);
-
-    g.setColour(accent.withAlpha(0.13f));
-    g.strokePath(cachedWavePath,
-                 juce::PathStrokeType(5.5f,
-                                      juce::PathStrokeType::curved,
-                                      juce::PathStrokeType::rounded));
-    g.setColour(accent);
-    g.strokePath(cachedWavePath,
-                 juce::PathStrokeType(2.0f,
-                                      juce::PathStrokeType::curved,
-                                      juce::PathStrokeType::rounded));
+    // The waveform is independent of the playhead and point hover state.
+    // Cache its rasterisation so those 60 Hz overlays do not stroke and fill
+    // the same curve repeatedly, especially on large HiDPI editors.
+    const auto imageScale = juce::jmax(1.0f, physicalScale);
+    if (waveCache.isNull() || shapeChanged || cachedWaveColour != accent
+        || ! juce::approximatelyEqual(cachedWaveScale, imageScale))
+    {
+        cachedWaveScale = imageScale;
+        cachedWaveColour = accent;
+        waveCache = juce::Image(juce::Image::ARGB,
+            juce::jmax(1, juce::roundToInt(getWidth() * imageScale)),
+            juce::jmax(1, juce::roundToInt(getHeight() * imageScale)), true);
+        juce::Graphics cacheGraphics(waveCache);
+        cacheGraphics.addTransform(juce::AffineTransform::scale(imageScale));
+        drawWaveform(cacheGraphics, accent);
+    }
+    g.setOpacity(1.0f);
+    g.drawImage(waveCache, getLocalBounds().toFloat());
 
     // Draw control points, with visual feedback for selection.
     for (int i = 0; i < activeLfoData.points.size(); ++i)
@@ -694,7 +692,25 @@ void LfoEditor::paint(juce::Graphics& g)
 void LfoEditor::resized()
 {
     gridCache = {};
+    waveCache = {};
     cachedWavePathSignature = 0;
+}
+
+void LfoEditor::drawWaveform(juce::Graphics& g, juce::Colour accent) const
+{
+    auto fillPath = cachedWavePath;
+    fillPath.lineTo(static_cast<float>(getWidth()), static_cast<float>(getHeight()));
+    fillPath.lineTo(0.0f, static_cast<float>(getHeight()));
+    fillPath.closeSubPath();
+    g.setGradientFill(juce::ColourGradient(accent.withAlpha(0.16f), 0.0f, 0.0f,
+        accent.withAlpha(0.015f), 0.0f, static_cast<float>(getHeight()), false));
+    g.fillPath(fillPath);
+    g.setColour(accent.withAlpha(0.13f));
+    g.strokePath(cachedWavePath, juce::PathStrokeType(5.5f,
+        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour(accent);
+    g.strokePath(cachedWavePath, juce::PathStrokeType(2.0f,
+        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
 void LfoEditor::rebuildGridCache(float physicalScale)
@@ -721,7 +737,7 @@ void LfoEditor::rebuildGridCache(float physicalScale)
     fire::ui::drawTechGrid(cacheGraphics, getLocalBounds().toFloat(),
                            juce::jmax(12.0f, 20.0f), 0.075f);
 
-    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.58f));
+    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.32f));
     for (int i = 1; i < hGridDivs; ++i)
         cacheGraphics.drawVerticalLine(juce::roundToInt(getWidth() * i / static_cast<float>(hGridDivs)),
                                        0.0f, static_cast<float>(getHeight()));
@@ -729,7 +745,7 @@ void LfoEditor::rebuildGridCache(float physicalScale)
         cacheGraphics.drawHorizontalLine(juce::roundToInt(getHeight() * i / static_cast<float>(vGridDivs)),
                                          0.0f, static_cast<float>(getWidth()));
 
-    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.92f));
+    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.48f));
     cacheGraphics.drawRect(getLocalBounds(), 1);
 }
 
@@ -2869,6 +2885,28 @@ LfoPanel::~LfoPanel()
 
 void LfoPanel::paint(juce::Graphics& g)
 {
+    if (getWidth() <= 0 || getHeight() <= 0)
+        return;
+
+    const auto displayScale = juce::jmax(1.0f,
+        g.getInternalContext().getPhysicalPixelScaleFactor());
+    if (chromeCache.isNull()
+        || ! juce::approximatelyEqual(chromeCacheDisplayScale, displayScale))
+    {
+        chromeCacheDisplayScale = displayScale;
+        chromeCache = juce::Image(juce::Image::RGB,
+            juce::jmax(1, juce::roundToInt(getWidth() * displayScale)),
+            juce::jmax(1, juce::roundToInt(getHeight() * displayScale)), true);
+        juce::Graphics cacheGraphics(chromeCache);
+        cacheGraphics.addTransform(juce::AffineTransform::scale(displayScale));
+        paintChrome(cacheGraphics);
+    }
+    g.drawImage(chromeCache, getLocalBounds().toFloat());
+    paintSelection(g);
+}
+
+void LfoPanel::paintChrome(juce::Graphics& g) const
+{
     fire::ui::drawCanvas(g, getLocalBounds().toFloat());
     fire::ui::drawPanel(g, leftColumnArea.toFloat(), fire::ui::colours::modulation, false);
     fire::ui::drawPanel(g, centerColumnArea.toFloat(), fire::ui::colours::modulation, false);
@@ -2881,7 +2919,7 @@ void LfoPanel::paint(juce::Graphics& g)
         auto titleArea = area.toFloat().removeFromTop(titleHeight)
                              .withTrimmedLeft(juce::jmax(7.0f, 10.0f * scale));
         g.setColour(fire::ui::colours::textSecondary);
-        g.setFont(fire::ui::labelFont(juce::jlimit(9.0f, 13.0f, titleHeight * 0.36f)));
+        g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, titleHeight * 0.46f)));
         g.drawText(title, titleArea, juce::Justification::centredLeft);
     };
     drawPlainTitle(leftColumnArea, "LFO BANK");
@@ -2895,13 +2933,13 @@ void LfoPanel::paint(juce::Graphics& g)
     }
 }
 
-void LfoPanel::paintOverChildren(juce::Graphics& g)
+void LfoPanel::paintSelection(juce::Graphics& g)
 {
     if (lfoSelectButtons.empty() || lfoSelectButtons.front() == nullptr)
         return;
 
-    const auto position = juce::jlimit(0.0f, 3.0f, lfoSelectionPosition.current);
-    const auto lowerIndex = juce::jlimit(0, 3, static_cast<int>(std::floor(position)));
+    const auto position = juce::jlimit(-0.2f, 3.2f, lfoSelectionPosition.current);
+    const auto lowerIndex = juce::jlimit(0, 2, static_cast<int>(std::floor(position)));
     const auto upperIndex = juce::jmin(3, lowerIndex + 1);
     const auto blend = position - static_cast<float>(lowerIndex);
     const auto lowerBounds = lfoSelectButtons[static_cast<size_t>(lowerIndex)]->getBounds().toFloat();
@@ -2913,21 +2951,16 @@ void LfoPanel::paintOverChildren(juce::Graphics& g)
         juce::jmap(blend, lowerBounds.getWidth(), upperBounds.getWidth()),
         juce::jmap(blend, lowerBounds.getHeight(), upperBounds.getHeight()))
                                .reduced(0.75f);
-    const auto colour = fire::ui::lfoBankColour(lowerIndex).interpolatedWith(
-        fire::ui::lfoBankColour(upperIndex), blend);
     const auto radius = juce::jmin(selectionBounds.getHeight() * 0.5f,
                                    fire::ui::Metrics::radius * scale);
 
-    // The moving outline is painted above the buttons so it cannot be hidden by
-    // their hover surfaces.  A very light wash keeps the text fully legible.
-    g.setColour(colour.withAlpha(0.055f));
+    g.setColour(fire::ui::colours::raised);
     g.fillRoundedRectangle(selectionBounds, radius);
-    g.setColour(colour.withAlpha(0.82f));
-    g.drawRoundedRectangle(selectionBounds, radius, juce::jmax(1.0f, 1.25f * scale));
 }
 
 void LfoPanel::resized()
 {
+    chromeCache = {};
     const auto uiScale = scale;
     const auto outer = juce::jmax(2, juce::roundToInt(7.0f * uiScale));
     const auto gap = juce::jmax(2, juce::roundToInt(7.0f * uiScale));
@@ -2948,7 +2981,7 @@ void LfoPanel::resized()
     auto leftWidth = juce::jlimit(leftMinimum, leftMaximum,
                                   juce::roundToInt(mainArea.getWidth() * 0.14f));
     auto rightWidth = juce::jlimit(rightMinimum, rightMaximum,
-                                   juce::roundToInt(mainArea.getWidth() * 0.33f));
+                                   juce::roundToInt(mainArea.getWidth() * 0.29f));
 
     // A host may briefly report dimensions below the editor's resize limits
     // while restoring or changing display scale. Preserve a useful shape
@@ -3056,7 +3089,7 @@ void LfoPanel::resized()
 
     const auto knobGap = juce::jmax(1, juce::roundToInt(3.0f * uiScale));
     const auto desiredKnobSize =
-        juce::jmax(1, juce::roundToInt(KNOB_SIZE * 0.82f * uiScale));
+        juce::jmax(1, juce::roundToInt(fire::ui::Metrics::knobWidth * uiScale));
     const auto widthLimitedKnobSize =
         juce::jmax(1, (knobsArea.getWidth() - knobGap * 2) / 3);
     const auto scaledKnobSize = juce::jmax(
@@ -3068,7 +3101,7 @@ void LfoPanel::resized()
         juce::jmax(12, juce::roundToInt(TEXTBOX_WIDTH * uiScale)));
     const auto textBoxHeight = juce::jmin(
         juce::jmax(1, scaledKnobSize / 2),
-        juce::jmax(8, juce::roundToInt(TEXTBOX_HEIGHT * uiScale)));
+        juce::jmax(8, juce::roundToInt(fire::ui::Metrics::knobValueHeight * uiScale)));
     const auto updateTextBoxLayout = [textBoxWidth, textBoxHeight](
                                          PrimarySlider& slider)
     {
@@ -3100,7 +3133,7 @@ void LfoPanel::resized()
         Track(juce::Grid::Px(scaledKnobSize))
     };
 
-    knobGrid.templateRows = { Track(juce::Grid::Px(scaledKnobSize)) };
+    knobGrid.templateRows = { Track(juce::Grid::Px(scaledKnobSize + juce::roundToInt(12.0f * uiScale))) };
 
     knobGrid.items.add(juce::GridItem(&rateSlider));
     knobGrid.items.add(juce::GridItem());
@@ -3143,7 +3176,7 @@ void LfoPanel::animationTick(float deltaSeconds)
     }
 
     const auto previousSelectionPosition = lfoSelectionPosition.current;
-    lfoSelectionPosition.advance(deltaSeconds, 0.07f);
+    lfoSelectionPosition.advance(deltaSeconds);
     if (! juce::approximatelyEqual(previousSelectionPosition, lfoSelectionPosition.current))
         repaint(leftColumnArea);
 

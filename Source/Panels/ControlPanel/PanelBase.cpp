@@ -29,6 +29,34 @@ PanelBase::~PanelBase()
             slider->dismissTransientInteraction();
 }
 
+void PanelBase::startContentTransition(juce::Rectangle<int> bounds)
+{
+    transitioningContent = bounds;
+    contentReveal = isShowing() ? 0.35f : 1.0f;
+    repaint(bounds);
+}
+
+void PanelBase::advanceContentTransition(float deltaSeconds)
+{
+    if (! isShowing())
+        contentReveal = 1.0f;
+    if (contentReveal >= 1.0f)
+        return;
+    contentReveal += (1.0f - contentReveal) * fire::ui::Motion::step(deltaSeconds, 0.14f);
+    if (contentReveal > 0.998f)
+        contentReveal = 1.0f;
+    repaint(transitioningContent);
+}
+
+void PanelBase::paintOverChildren(juce::Graphics& g)
+{
+    if (contentReveal < 1.0f)
+    {
+        g.setColour(fire::ui::colours::surface0.withAlpha(1.0f - contentReveal));
+        g.fillRect(transitioningContent);
+    }
+}
+
 void PanelBase::createAndConfigureSlider(const juce::String& paramName,
                                          const juce::String& labelText,
                                          juce::Colour sliderColour,
@@ -63,8 +91,9 @@ void PanelBase::initRotarySlider(juce::Slider& slider, juce::Colour colour)
     slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     slider.setColour(juce::Slider::rotarySliderFillColourId, colour);
     slider.setColour(juce::Slider::backgroundColourId, fire::ui::colours::surface1);
-    slider.setColour(juce::Slider::textBoxBackgroundColourId, fire::ui::colours::surface0);
+    slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
     slider.setColour(juce::Slider::textBoxTextColourId, fire::ui::colours::textPrimary);
+    slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
 }
 
 void PanelBase::setupModulationCallbacks(ModulatableSlider& slider)

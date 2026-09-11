@@ -77,6 +77,8 @@ struct MeterValues
     std::array<float, 4> bandInputPeak_L { 0.0f }, bandInputPeak_R { 0.0f };
     std::array<float, 4> bandOutputRMS_L { 0.0f }, bandOutputRMS_R { 0.0f };
     std::array<float, 4> bandOutputPeak_L { 0.0f }, bandOutputPeak_R { 0.0f };
+    std::array<float, 4> ottInputLevelDb { -120.0f, -120.0f, -120.0f, -120.0f };
+    std::array<float, 4> ottGainChangeDb {};
 
     // Global-only packets retain the last band payload for lock-free copying,
     // but consumers must not treat those historical values as a new reading.
@@ -121,6 +123,22 @@ struct ModulatedFilterValues
 
 namespace ParameterIDAndName
 {
+    inline constexpr std::array<const char*, 6> ottControlIDs {
+        OTT_DEPTH_ID, OTT_TIME_ID, OTT_UPWARD_ID, OTT_DOWNWARD_ID, OTT_OUTPUT_ID, OTT_MIX_ID
+    };
+    inline constexpr std::array<const char*, 6> ottControlNames {
+        OTT_DEPTH_NAME, OTT_TIME_NAME, OTT_UPWARD_NAME, OTT_DOWNWARD_NAME, OTT_OUTPUT_NAME, OTT_MIX_NAME
+    };
+    inline bool isOttParameterID(const juce::String& id)
+    {
+        for (int band = 1; band <= 4; ++band)
+        {
+            if (id == juce::String(OTT_ENABLED_ID) + juce::String(band)) return true;
+            for (auto* base : ottControlIDs)
+                if (id == juce::String(base) + juce::String(band)) return true;
+        }
+        return false;
+    }
     // Namespace for all raw parameter ID strings.
     inline constexpr int versionNum = 1;
 
@@ -213,6 +231,7 @@ namespace ParameterIDAndName
             BIAS_NAME,
             REC_NAME,
             SHAPE_MIX_NAME,
+            OTT_DEPTH_NAME, OTT_TIME_NAME, OTT_UPWARD_NAME, OTT_DOWNWARD_NAME, OTT_OUTPUT_NAME, OTT_MIX_NAME,
         };
         return modulatableNames;
     }
@@ -225,6 +244,9 @@ namespace ParameterIDAndName
     {
         // This static vector is initialized only once.
         static const std::vector<ModulatableParameterInfo> parameters = {
+            { OTT_DEPTH_NAME, OTT_DEPTH_ID }, { OTT_TIME_NAME, OTT_TIME_ID },
+            { OTT_UPWARD_NAME, OTT_UPWARD_ID }, { OTT_DOWNWARD_NAME, OTT_DOWNWARD_ID },
+            { OTT_OUTPUT_NAME, OTT_OUTPUT_ID }, { OTT_MIX_NAME, OTT_MIX_ID },
             { DRIVE_NAME, DRIVE_ID },
             { SHAPE_MIX_NAME, SHAPE_MIX_ID },
             { COMP_RATIO_NAME, COMP_RATIO_ID },
@@ -305,6 +327,10 @@ namespace ParameterIDAndName
     {
         // This static vector is initialized only once.
         static const std::vector<ModulatableParameterInfo> params = {
+            { OTT_DEPTH_NAME, OTT_DEPTH_ID }, { OTT_TIME_NAME, OTT_TIME_ID },
+            { OTT_UPWARD_NAME, OTT_UPWARD_ID }, { OTT_DOWNWARD_NAME, OTT_DOWNWARD_ID },
+            { OTT_OUTPUT_NAME, OTT_OUTPUT_ID }, { OTT_MIX_NAME, OTT_MIX_ID },
+            { OTT_ENABLED_NAME, OTT_ENABLED_ID },
             { MODE_NAME, MODE_ID },
             { LINKED_NAME, LINKED_ID },
             { SAFE_NAME, SAFE_ID },

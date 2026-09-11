@@ -174,10 +174,44 @@ bool isValidRoutingState(const juce::XmlElement& routingState,
     return true;
 }
 
+bool validateOttParameterFamily(const juce::XmlElement& xml,
+                                const juce::AudioProcessor& processor,
+                                bool& legacyWithoutOtt)
+{
+    int present = 0;
+    int expected = 0;
+    for (const auto* parameter : processor.getParameters())
+        if (const auto* identified = dynamic_cast<const juce::AudioProcessorParameterWithID*>(parameter);
+            identified != nullptr && ParameterIDAndName::isOttParameterID(identified->paramID))
+        {
+            ++expected;
+            if (xml.hasAttribute(identified->paramID))
+            {
+                if (! isStrictNumberInRange(xml, identified->paramID, 0.0, 1.0))
+                    return false;
+                ++present;
+            }
+        }
+    legacyWithoutOtt = ! xml.hasAttribute("ottSchemaVersion") && present == 0;
+    if (legacyWithoutOtt)
+        return true;
+    if (xml.hasAttribute("ottSchemaVersion"))
+    {
+        int version = 0;
+        if (! readStrictIntegerAttribute(xml, "ottSchemaVersion", version) || version != 1)
+            return false;
+    }
+    return present == expected;
+}
+
 bool isValidABSnapshot(const juce::XmlElement& snapshot,
                        const juce::AudioProcessor& processor) noexcept
 {
     if (! snapshot.hasTagName("AB_STATE") || snapshot.getNumChildElements() > 2)
+        return false;
+
+    bool legacyWithoutOtt = false;
+    if (! validateOttParameterFamily(snapshot, processor, legacyWithoutOtt))
         return false;
 
     int expectedParameterCount = 0;
@@ -187,6 +221,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (parameterWithID == nullptr)
             continue;
 
+        if (legacyWithoutOtt && ParameterIDAndName::isOttParameterID(parameterWithID->paramID))
+            continue;
         ++expectedParameterCount;
         if (! snapshot.hasAttribute(parameterWithID->paramID))
             return false;
@@ -226,6 +262,9 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
 bool isLoadablePresetState(const juce::XmlElement& xml,
                            const juce::AudioProcessor& processor) noexcept
 {
+    bool legacyWithoutOtt = false;
+    if (! validateOttParameterFamily(xml, processor, legacyWithoutOtt))
+        return false;
     // Unversioned and v1 files predate complete model snapshots. Preserve
     // their historical default/migration behaviour. A v2 document is an
     // explicit complete snapshot, so accepting a sparse or truncated one
@@ -250,6 +289,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         if (parameterWithID == nullptr)
             continue;
 
+        if (legacyWithoutOtt && ParameterIDAndName::isOttParameterID(parameterWithID->paramID))
+            continue;
         ++parameterCount;
         if (! isStrictNumberInRange(xml, parameterWithID->paramID, 0.0, 1.0))
             return false;
@@ -295,6 +336,7 @@ void writeSerializablePresetSnapshotToXml(
 {
     xml.deleteAllChildElements();
     xml.setAttribute("presetFormatVersion", 2);
+    xml.setAttribute("ottSchemaVersion", 1);
     xml.setAttribute("pluginVersion", VERSION);
 
     for (const auto& param : processor.getParameters())

@@ -13,6 +13,7 @@
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "DSP/WidthProcessor.h"
 #include "DSP/SampleAccurateCompressor.h"
+#include "DSP/OttProcessor.h"
 #include "Panels/TopPanel/Preset.h"
 #include "Panels/SpectrogramPanel/FFTProcessor.h"
 #include "GUI/InterfaceDefines.h"
@@ -56,6 +57,7 @@ struct BandProcessingParameters
     float compMixVal { 1.0f };
     ModulatedValueProvider compMixValProvider;
     bool isCompEnabled { false };
+    OttProcessor::Parameters ott;
     float width { 0.5f };
     ModulatedValueProvider widthValProvider;
     float pan { 0.0f };
@@ -221,6 +223,7 @@ struct BandProcessor
 
     // Each band has its own set of processors.
     CompressorProcessor compressor;
+    OttProcessor ott;
     WidthProcessor widthProcessor;
     DCFilter dcFilter;
     GainProcessor gain;
@@ -283,6 +286,8 @@ struct BandProcessor
     // Per-band state for Safe Mode
     std::atomic<float> mReductionPercent { 1.0f };
     std::atomic<float> mSampleMaxValue { 0.0f };
+    std::atomic<float> mOttInputLevelDb { -120.0f };
+    std::atomic<float> mOttGainChangeDb { 0.0f };
 
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();
@@ -644,6 +649,8 @@ private:
         CachedParameter driveEnabled;
         CachedParameter shapeEnabled;
         CachedParameter compressorEnabled;
+        CachedParameter ottEnabled;
+        std::array<CachedParameter, OttProcessor::controlCount> ottControls;
         CachedParameter widthEnabled;
         CachedParameter dcFilterEnabled;
         CachedParameter drive;

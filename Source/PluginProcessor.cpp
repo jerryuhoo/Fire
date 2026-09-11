@@ -1248,6 +1248,9 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
 {
     // Prepare all the DSP modules with the sample rate and block size.
     compressor.prepare(spec);
+    ott.prepare(spec);
+    mOttInputLevelDb.store(-120.0f, std::memory_order_relaxed);
+    mOttGainChangeDb.store(0.0f, std::memory_order_relaxed);
     widthProcessor.prepare(spec.sampleRate);
     gain.setRampDurationSeconds(0.05);
     gain.prepare(spec);
@@ -1342,6 +1345,9 @@ void BandProcessor::reset()
     bandEnableMixPrimed = false;
     dcFilterMixPrimed = false;
     compressor.reset();
+    ott.reset();
+    mOttInputLevelDb.store(-120.0f, std::memory_order_relaxed);
+    mOttGainChangeDb.store(0.0f, std::memory_order_relaxed);
     widthProcessor.reset();
     gain.reset();
     outputGainTransition.reset();
@@ -1592,6 +1598,9 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                            params.compReleaseLfoSourceIndex);
     bindCompressorProvider(paramsForProcessing.compMixValProvider,
                            params.compMixLfoSourceIndex);
+
+    for (size_t i = 0; i < paramsForProcessing.ott.controls.size(); ++i)
+        bindCompressorProvider(paramsForProcessing.ott.controls[i], params.ott.sources[i]);
 
     // Band Enable bypasses the complete processed band, including the user's
     // own Band Mix. Align the shared dry path to the oversampled wet path once
@@ -1962,6 +1971,9 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         params.compMixVal,
         params.compMixLfoSourceIndex,
         params.isCompEnabled);
+    ott.process(postDistortionContext.getOutputBlock(), paramsForProcessing.ott);
+    mOttInputLevelDb.store(params.isBandEnabled ? ott.getInputLevelDb() : -120.0f, std::memory_order_relaxed);
+    mOttGainChangeDb.store(params.isBandEnabled ? ott.getGainChangeDb() : 0.0f, std::memory_order_relaxed);
     if (buffer.getNumChannels() == 2)
     {
         // Keep the width path warm and use the mixer's existing 50 ms ramp for
@@ -2743,6 +2755,9 @@ void FireAudioProcessor::initialiseParameterCache()
         parameters.driveEnabled = indexed(DRIVE_BYPASS_ID, i);
         parameters.shapeEnabled = indexed(SHAPE_BYPASS_ID, i);
         parameters.compressorEnabled = indexed(COMP_BYPASS_ID, i);
+        parameters.ottEnabled = indexed(OTT_ENABLED_ID, i);
+        for (size_t control = 0; control < parameters.ottControls.size(); ++control)
+            parameters.ottControls[control] = indexed(ParameterIDAndName::ottControlIDs[control], i);
         parameters.widthEnabled = indexed(WIDTH_BYPASS_ID, i);
         parameters.dcFilterEnabled = indexed(DC_FILTER_ID, i);
         parameters.drive = indexed(DRIVE_ID, i);
@@ -4781,6 +4796,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     // Therefore every section below belongs to one valid state generation.
     auto mainState = captureCoherentSerializableMainStateSnapshot();
     xmlState.setAttribute("stateFormatVersion", hostStateFormatVersion);
+    xmlState.setAttribute("ottSchemaVersion", 1);
     xmlState.setAttribute("savedParameterCount",
                           mainState.parameterState.getNumChildren());
 
@@ -4887,6 +4903,18 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 
     const bool hasStateFormatVersion =
         xmlState->hasAttribute("stateFormatVersion");
+    int ottParameterCount = 0;
+    for (const auto& id : incomingParameterIDs)
+        if (ParameterIDAndName::isOttParameterID(id))
+            ++ottParameterCount;
+    if (xmlState->hasAttribute("ottSchemaVersion") || ottParameterCount > 0)
+    {
+        int version = 1;
+        if ((xmlState->hasAttribute("ottSchemaVersion")
+             && (! parseStrictNonNegativeIntegerAttribute(*xmlState, "ottSchemaVersion", version) || version != 1))
+            || ottParameterCount != 4 * (OttProcessor::controlCount + 1))
+            return;
+    }
     const bool hasSavedParameterCount =
         xmlState->hasAttribute("savedParameterCount");
     if (hasStateFormatVersion != hasSavedParameterCount)
@@ -6100,6 +6128,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
             0.0f));
     }
 
+    // Append new parameters and use a newer AU version hint so every existing
+    // automation index and ID keeps its original meaning.
+    for (int band = 0; band < 4; ++band)
+    {
+        parameters.push_back(std::make_unique<PBool>(
+            juce::ParameterID { ParameterIDAndName::getIDString(OTT_ENABLED_ID, band), 2 },
+            "OTT Enable " + juce::String(band + 1), false));
+        for (size_t control = 0; control < OttProcessor::defaults.size(); ++control)
+            parameters.push_back(std::make_unique<PFloat>(
+                juce::ParameterID { ParameterIDAndName::getIDString(ParameterIDAndName::ottControlIDs[control], band), 2 },
+                juce::String(ParameterIDAndName::ottControlNames[control]) + " " + juce::String(band + 1),
+                juce::NormalisableRange<float>(OttProcessor::minimums[control], OttProcessor::maximums[control],
+                    control == OttProcessor::depth || control == OttProcessor::mix ? 0.01f : 0.1f),
+                OttProcessor::defaults[control]));
+    }
+
     return { parameters.begin(), parameters.end() };
 }
 
@@ -6218,6 +6262,7 @@ void FireAudioProcessor::prepareHqCallbackContext(
         params.isDriveEnabled = loadCachedParameter(parameters.driveEnabled) > 0.5f;
         params.isShapeEnabled = loadCachedParameter(parameters.shapeEnabled) > 0.5f;
         params.isCompEnabled = loadCachedParameter(parameters.compressorEnabled) > 0.5f;
+        params.ott.enabled = loadCachedParameter(parameters.ottEnabled) > 0.5f;
         params.isWidthEnabled = loadCachedParameter(parameters.widthEnabled) > 0.5f;
         params.isSafeModeOn = loadCachedParameter(parameters.safe) > 0.5f;
         params.isExtremeModeOn = loadCachedParameter(parameters.extreme) > 0.5f;
@@ -6243,6 +6288,9 @@ void FireAudioProcessor::prepareHqCallbackContext(
                 lfoIndex = routingInfo.sourceLfoIndex;
             }
         };
+
+        for (size_t control = 0; control < params.ott.controls.size(); ++control)
+            setupProvider(params.ott.controls[control], params.ott.sources[control], parameters.ottControls[control]);
 
         setupProvider(params.driveVal, params.driveLfoSourceIndex, parameters.drive);
         setupProvider(params.biasVal, params.biasLfoSourceIndex, parameters.bias);
@@ -8205,6 +8253,8 @@ void FireAudioProcessor::publishMeterValues(bool refreshBandMeters)
                 values.bandOutputRMS_R[static_cast<size_t>(i)] = band->mOutputRightRMS.load();
                 values.bandOutputPeak_L[static_cast<size_t>(i)] = band->mOutputLeftPeak.load();
                 values.bandOutputPeak_R[static_cast<size_t>(i)] = band->mOutputRightPeak.load();
+                values.ottInputLevelDb[static_cast<size_t>(i)] = band->mOttInputLevelDb.load(std::memory_order_relaxed);
+                values.ottGainChangeDb[static_cast<size_t>(i)] = band->mOttGainChangeDb.load(std::memory_order_relaxed);
             }
         }
     }

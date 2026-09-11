@@ -989,7 +989,10 @@ void BandPanel::updateAttachments()
 
     for (const auto& paramInfo : ParameterIDAndName::getModulatableParameterInfo())
     {
-        auto* slider = modulatableSliderComponents.at(paramInfo.name).get();
+        const auto found = modulatableSliderComponents.find(paramInfo.name);
+        if (found == modulatableSliderComponents.end())
+            continue;
+        auto* slider = found->second.get();
         auto paramID = ParameterIDAndName::getIDString(paramInfo.idBase, focusBandNum);
         sliderAttachments[paramInfo.name].reset();
         slider->parameterID = paramID;

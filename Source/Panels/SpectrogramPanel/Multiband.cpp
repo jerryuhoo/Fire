@@ -286,14 +286,51 @@ void Multiband::animationTick(float deltaSeconds)
 
     const juce::Component::SafePointer<Multiband> safeThis(this);
     if (ottMode)
-        for (auto& band : bandUIs)
+    {
+        if (lastOttSpectrumTimeMs < 0.0 || juce::Time::getMillisecondCounterHiRes() - lastOttSpectrumTimeMs > 250.0)
+            ottSpectrumTargets.fill(0.0f);
+        for (size_t bin = 0; bin < ottSpectrumDisplay.size(); ++bin)
         {
-            if (band.ott && lastOttMeterTimeMs >= 0.0
-                && juce::Time::getMillisecondCounterHiRes() - lastOttMeterTimeMs > 250.0)
-                band.ott->setMeter(0.0f);
-            if (band.ott) band.ott->refresh();
+            const auto target = ottSpectrumTargets[bin];
+            auto& value = ottSpectrumDisplay[bin];
+            value += (target - value) * fire::ui::Motion::step(deltaSeconds, target > value ? 0.055f : 0.14f);
+            if (value < 0.0005f && target == 0.0f) value = 0.0f;
+        }
+        for (size_t index = 0; index < bandUIs.size(); ++index)
+        {
+            auto* ott = bandUIs[index].ott.get();
+            if (! ott) continue;
+            if (lastOttMeterTimeMs >= 0.0 && juce::Time::getMillisecondCounterHiRes() - lastOttMeterTimeMs > 250.0)
+                ott->setMeter(0.0f);
+            const auto band = getBandBounds(static_cast<int>(index));
+            fire::ui::OttSpectrumProfile profile {};
+            float weightedPosition = 0.0f, energy = 0.0f;
+            for (size_t column = 0; column < profile.size(); ++column)
+            {
+                const auto fraction = static_cast<float>(column) / static_cast<float>(profile.size() - 1);
+                const auto position = juce::jlimit(0.0f, 1.0f,
+                    (band.getX() + fraction * band.getWidth()) / juce::jmax(1.0f, static_cast<float>(getWidth())));
+                const auto indexF = position * static_cast<float>(ottSpectrumDisplay.size() - 1);
+                const auto left = static_cast<size_t>(indexF);
+                const auto right = juce::jmin(left + 1, ottSpectrumDisplay.size() - 1);
+                profile[column] = juce::jmap(indexF - static_cast<float>(left), ottSpectrumDisplay[left], ottSpectrumDisplay[right]);
+                // Preserve narrow tones when a wide band downsamples the
+                // global profile: point sampling alone can miss a peak.
+                const auto halfCell = 0.5f * band.getWidth() / juce::jmax(1.0f, static_cast<float>(getWidth()))
+                                      * static_cast<float>(ottSpectrumDisplay.size() - 1) / static_cast<float>(profile.size() - 1);
+                const auto first = juce::jlimit(0, 95, static_cast<int>(std::ceil(indexF - halfCell)));
+                const auto last = juce::jlimit(0, 95, static_cast<int>(std::floor(indexF + halfCell)));
+                for (int source = first; source <= last; ++source)
+                    profile[column] = juce::jmax(profile[column], ottSpectrumDisplay[static_cast<size_t>(source)]);
+                weightedPosition += position * profile[column];
+                energy += profile[column];
+            }
+            ott->setSpectrum(profile, energy > 0.0001f ? weightedPosition / energy
+                : band.getCentreX() / juce::jmax(1.0f, static_cast<float>(getWidth())));
+            ott->refresh(deltaSeconds);
             if (! safeThis) return;
         }
+    }
 
     for (const auto& dividerGroup : freqDividerGroup)
     {
@@ -380,8 +417,70 @@ void Multiband::setOttMode(bool enabled)
     if (ottMode == enabled) return;
     if (! dismissOttGestures()) return;
     ottMode = enabled;
+    clearOttSpectrum();
     setLineRelatedBoundsByX();
     if (safeThis) repaint();
+}
+
+void Multiband::updateOttSpectrum(const float* magnitudes, int bins, float binWidth, const float* reference)
+{
+    if (! ottMode) return;
+    ottSpectrumTargets.fill(0.0f);
+    if (magnitudes == nullptr || bins < 2 || ! std::isfinite(binWidth) || binWidth <= 0.0f)
+    {
+        lastOttSpectrumTimeMs = -1.0;
+        return;
+    }
+    bins = juce::jmin(1024, bins);
+    std::array<float, 96> peaks {};
+    for (int bin = 1; bin < bins; ++bin)
+    {
+        const auto frequency = static_cast<float>(bin) * binWidth;
+        if (frequency < 20.0f || frequency > 20000.0f) continue;
+        auto magnitude = magnitudes[bin];
+        if (reference != nullptr && std::isfinite(reference[bin])) magnitude = juce::jmax(magnitude, reference[bin]);
+        if (! std::isfinite(magnitude) || magnitude <= 0.0f) continue;
+        const auto position = std::log(frequency / 20.0f) / std::log(1000.0f);
+        const auto column = static_cast<size_t>(juce::jlimit(0, 95, juce::roundToInt(position * 95.0f)));
+        const auto db = juce::Decibels::gainToDecibels(magnitude / static_cast<float>(bins), -100.0f);
+        peaks[column] = juce::jmax(peaks[column], juce::jlimit(0.0f, 1.0f, (db + 84.0f) / 72.0f));
+    }
+    for (size_t i = 0; i < peaks.size(); ++i)
+        ottSpectrumTargets[i] = 0.5f * peaks[i] + 0.25f * peaks[i == 0 ? 0 : i - 1]
+                             + 0.25f * peaks[juce::jmin(i + 1, peaks.size() - 1)];
+    lastOttSpectrumTimeMs = juce::Time::getMillisecondCounterHiRes();
+}
+
+void Multiband::clearOttSpectrum()
+{
+    ottSpectrumTargets.fill(0.0f); ottSpectrumDisplay.fill(0.0f);
+    lastOttSpectrumTimeMs = -1.0;
+    for (auto& band : bandUIs)
+        if (band.ott) band.ott->setSpectrum({}, 0.5f);
+}
+
+fire::ui::OttSpectrumProfile Multiband::getOttSpectrum(int band) const
+{
+    return juce::isPositiveAndBelow(band, static_cast<int>(bandUIs.size())) && bandUIs[static_cast<size_t>(band)].ott
+        ? bandUIs[static_cast<size_t>(band)].ott->getSpectrum() : fire::ui::OttSpectrumProfile {};
+}
+float Multiband::getOttCentroid(int band) const
+{
+    return juce::isPositiveAndBelow(band, static_cast<int>(bandUIs.size())) && bandUIs[static_cast<size_t>(band)].ott
+        ? bandUIs[static_cast<size_t>(band)].ott->getCentroid() : 0.5f;
+}
+int Multiband::getOttInteractionDirection(int band) const
+{
+    return ottMode && juce::isPositiveAndBelow(band, static_cast<int>(bandUIs.size()))
+        && bandUIs[static_cast<size_t>(band)].ott
+        ? bandUIs[static_cast<size_t>(band)].ott->getInteractionDirection() : 0;
+}
+void Multiband::setOttKnobInteraction(int band, int direction)
+{
+    for (size_t i = 0; i < bandUIs.size(); ++i)
+        if (bandUIs[i].ott)
+            bandUIs[i].ott->setExternalInteraction(ottMode && static_cast<int>(i) == band && (direction & 1) != 0,
+                                                  ottMode && static_cast<int>(i) == band && (direction & 2) != 0);
 }
 
 void Multiband::presentOttMeters(const MeterValues& values, std::uint64_t generation)
@@ -391,11 +490,12 @@ void Multiband::presentOttMeters(const MeterValues& values, std::uint64_t genera
     lastOttMeterTimeMs = juce::Time::getMillisecondCounterHiRes();
     for (size_t i = 0; i < bandUIs.size(); ++i)
         if (bandUIs[i].ott)
-            bandUIs[i].ott->setMeter(values.bandLevelsAreFresh ? values.ottGainChangeDb[i] : 0.0f);
+            bandUIs[i].ott->setMeter(values.bandLevelsAreFresh ? values.ottDynamicsActivityDb[i] : 0.0f);
 }
 
 void Multiband::dismissTransientUi()
 {
+    clearOttSpectrum();
     if (! dismissOttGestures()) return;
     clearPrimaryPointerState();
     hoveredBandIndex = -1;

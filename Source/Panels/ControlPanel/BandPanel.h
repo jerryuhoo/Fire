@@ -53,6 +53,12 @@ public:
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     void presentDistortionGraphValues(const DistortionGraphValues& values);
     bool isOttSelected() const { return ottSwitch.getToggleState(); }
+    int getOttPreviewDirection() const;
+    void setOttSpectrumVisuals(const fire::ui::OttSpectrumProfile& profile, float centroid, int interactionDirection)
+    {
+        ottGraph.setSpectrum(profile, centroid);
+        spectrumOttInteraction = interactionDirection;
+    }
     std::function<void()> onModuleChanged;
 
     void setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass);
@@ -179,6 +185,7 @@ private:
     OttGraph ottGraph;
     std::uint64_t lastOttMeterGeneration = 0;
     double lastOttMeterTimeMs = -1.0;
+    int spectrumOttInteraction = 0;
     VUPanel vuPanel { processor };
     WidthGraph widthGraph { processor };
     GraphTemplate* zoomedGraph = nullptr;

@@ -422,7 +422,7 @@ OTT is an independent upward/downward dynamics module in **Band Lab**. It uses F
 
 1. Add or move crossover points in the spectrum using the existing band controls.
 2. Select **OTT** in Band Lab, choose a band, and enable that band's OTT power button.
-3. Drag the spectrum's **U** (upward) and **D** (downward) threshold lines vertically. Dragging another band's line selects that band. The lines share the spectrum's dB scale; double-click resets a threshold, and arrow keys allow precise changes.
+3. Drag the spectrum's lower (upward) and upper (downward) threshold lines vertically. Dragging another band's line selects that band. A fading **Up** or **Down** readout identifies the threshold during editing. The lines share the spectrum's dB scale; double-click resets a threshold, and arrow keys allow precise changes.
 
 | Control | Function |
 | --- | --- |
@@ -433,6 +433,10 @@ OTT is an independent upward/downward dynamics module in **Band Lab**. It uses F
 | Gain | OTT output trim, −24 to +24 dB. |
 | Mix | Blends this band's OTT signal with its input; zero is transparent. |
 
-The stage uses 4:1 upward and 8:1 downward ratios with soft knees. Upward boost is limited to 24 dB and tapers off near the noise floor. Both channels share the detector and gain, preserving the stereo image. The dynamics panel shows detector level and applied gain; each spectrum band also displays its gain change. Parameters can be configured while OTT is bypassed, and all six continuous controls support LFO routing and host automation.
+The stage uses 4:1 upward and 8:1 downward ratios with soft knees. Upward boost is limited to 24 dB and tapers off near the noise floor. Both channels share the detector and gain, preserving the stereo image. Parameters can be configured while OTT is bypassed, and all six continuous controls support LFO routing and host automation.
+
+OTT uses a blue-violet palette distinct from Compressor. Threshold lines have no circular handles or permanent numeric labels. OTT knob values and the band's Output/Mix values fade in during a drag, keyboard focus or text editing, then fade out when the interaction ends. The dynamics panel retains slim input/gain meters and reveals exact readings during OTT edits.
+
+Ribbons rise for upward compression and sink for downward compression. Their shape, local opacity and saturation follow the live logarithmic spectrum; motion strength follows wet-weighted dynamics activity, excluding output trim. Higher-frequency energy produces faster ripples. Dragging a threshold previews its direction even without audio, and the preview fades away on release. Stale audio telemetry settles back to idle.
 
 OTT settings participate in presets, A/B comparisons and band copying. Older projects load with OTT disabled, preserving their existing processing. Existing parameter IDs and automation indices are retained.

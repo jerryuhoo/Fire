@@ -82,6 +82,9 @@ public:
     float getHoverAnimation() const noexcept { return hoverAnimation; }
     float getPressAnimation() const noexcept { return pressAnimation; }
     float getFocusAnimation() const noexcept { return focusAnimation; }
+    void setInteractionOnlyReadout(bool enabled);
+    bool isValueReadoutRequested() const;
+    float getValueReadoutOpacity() const noexcept { return readoutOpacity; }
     float getModulationHandleHoverAnimation() const noexcept
     {
         return modulationHandleHoverAnimation;
@@ -150,6 +153,8 @@ public:
     void enablementChanged() override;
 
 private:
+    bool interactionOnlyReadout = false;
+    float readoutOpacity = 1.0f;
     void valueChanged() override;
     friend struct ModulatableSliderTestAccess;
     friend struct ModulatableSliderInteractionTestAccess;

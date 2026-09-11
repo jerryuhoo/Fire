@@ -196,7 +196,9 @@ void BandPanel::createSliders()
     const std::array<const char*, 6> labels { "Depth", "Time", "Up Thresh", "Down Thresh", "Gain", "Mix" };
     const std::array<const char*, 6> units { "", " %", " dB", " dB", " dB", "" };
     for (size_t i = 0; i < labels.size(); ++i)
-        createAndConfigureSlider(ParameterIDAndName::ottControlNames[i], labels[i], fire::ui::colours::positive, units[i]);
+        createAndConfigureSlider(ParameterIDAndName::ottControlNames[i], labels[i], fire::ui::colours::ott, units[i]);
+    for (auto* name : ParameterIDAndName::ottControlNames)
+        modulatableSliderComponents.at(name)->setInteractionOnlyReadout(true);
     modulatableSliderComponents.at(OTT_DEPTH_NAME)->setTooltip("OTT strength: raises quiet detail and compresses loud peaks");
     modulatableSliderComponents.at(OTT_TIME_NAME)->setTooltip("Scales OTT attack and release times. 100% uses 5 ms / 100 ms");
     modulatableSliderComponents.at(OTT_UPWARD_NAME)->setTooltip("Below this threshold, OTT raises quiet signals. Kept at least 6 dB below Down");
@@ -242,7 +244,7 @@ void BandPanel::createButtons()
     initBypassButton(shapeBypassButton, fire::ui::colours::shape);
     initBypassButton(compressorBypassButton, fire::ui::colours::compressor);
     initBypassButton(widthBypassButton, fire::ui::colours::stereo);
-    initBypassButton(ottBypassButton, fire::ui::colours::positive);
+    initBypassButton(ottBypassButton, fire::ui::colours::ott);
 
     initBypassButton(dcFilterButton, fire::ui::colours::shape);
 
@@ -271,8 +273,8 @@ void BandPanel::createButtons()
     setupSwitch(shapeSwitch, "Shape", fire::ui::colours::shape);
     setupSwitch(compressorSwitch, "Compressor", fire::ui::colours::compressor);
     setupSwitch(widthSwitch, "Stereo", fire::ui::colours::stereo);
-    setupSwitch(ottSwitch, "OTT", fire::ui::colours::positive);
-    ottSwitch.setTooltip("Upward/downward compression. Drag U and D lines in the spectrum to set thresholds.");
+    setupSwitch(ottSwitch, "OTT", fire::ui::colours::ott);
+    ottSwitch.setTooltip("Upward/downward compression. Drag the lower or upper spectrum line to set thresholds.");
     oscSwitch.setToggleState(true, juce::dontSendNotification);
 
     driveBypassButton.toFront(false);
@@ -888,6 +890,14 @@ juce::Rectangle<float> BandPanel::getModuleSelectionBounds(float modulePosition)
              juce::jmap(mix, lower.getHeight(), upper.getHeight()) };
 }
 
+int BandPanel::getOttPreviewDirection() const
+{
+    if (! ottSwitch.getToggleState() || ! isShowing()) return 0;
+    const bool up = modulatableSliderComponents.at(OTT_UPWARD_NAME)->isValueReadoutRequested();
+    const bool down = modulatableSliderComponents.at(OTT_DOWNWARD_NAME)->isValueReadoutRequested();
+    return (up ? 1 : 0) | (down ? 2 : 0);
+}
+
 void BandPanel::animationTick(float deltaSeconds)
 {
     if (ottSwitch.getToggleState())
@@ -905,6 +915,14 @@ void BandPanel::animationTick(float deltaSeconds)
     }
     if (lastOttMeterTimeMs >= 0.0 && juce::Time::getMillisecondCounterHiRes() - lastOttMeterTimeMs > 250.0)
         ottGraph.setLevels(-120.0f, 0.0f);
+    if (isShowing() && ottSwitch.getToggleState())
+    {
+        bool reading = spectrumOttInteraction != 0;
+        for (auto* name : ParameterIDAndName::ottControlNames)
+            reading = reading || modulatableSliderComponents.at(name)->isValueReadoutRequested();
+        ottGraph.advanceVisuals(deltaSeconds, reading, getOttPreviewDirection() | spectrumOttInteraction);
+    }
+    else ottGraph.resetVisuals();
     advanceContentTransition(deltaSeconds);
     if (! isShowing())
     {
@@ -1287,6 +1305,8 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
 
     if (isSwitch)
     {
+        modulatableSliderComponents.at(OUTPUT_NAME)->setInteractionOnlyReadout(ottSwitch.getToggleState());
+        modulatableSliderComponents.at(MIX_NAME)->setInteractionOnlyReadout(ottSwitch.getToggleState());
         resized();
         if (safeThis == nullptr)
             return;
@@ -1354,6 +1374,7 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
     focusBandNum = num;
     lastGraphTelemetryTimeMs = -1.0;
     ottGraph.setLevels(-120.0f, 0.0f);
+    ottGraph.resetVisuals();
     lastOttMeterTimeMs = -1.0;
     updateAttachments();
     if (safeThis == nullptr)
@@ -1739,7 +1760,7 @@ void BandPanel::presentMeterValues(const MeterValues& values,
     {
         lastOttMeterGeneration = generation;
         lastOttMeterTimeMs = juce::Time::getMillisecondCounterHiRes();
-        ottGraph.setLevels(values.bandLevelsAreFresh ? values.ottInputLevelDb[index] : -120.0f, values.bandLevelsAreFresh ? values.ottGainChangeDb[index] : 0.0f);
+        ottGraph.setLevels(values.bandLevelsAreFresh ? values.ottInputLevelDb[index] : -120.0f, values.bandLevelsAreFresh ? values.ottGainChangeDb[index] : 0.0f, values.bandLevelsAreFresh ? values.ottDynamicsActivityDb[index] : 0.0f);
     }
     ottGraph.setThresholds(static_cast<float>(modulatableSliderComponents.at(OTT_UPWARD_NAME)->getValue()), static_cast<float>(modulatableSliderComponents.at(OTT_DOWNWARD_NAME)->getValue()));
 }

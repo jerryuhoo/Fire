@@ -45,6 +45,12 @@ public:
     void dismissTransientUi();
     void setOttMode(bool enabled);
     void presentOttMeters(const MeterValues& values, std::uint64_t generation);
+    void updateOttSpectrum(const float* magnitudes, int bins, float binWidth, const float* reference = nullptr);
+    void clearOttSpectrum();
+    fire::ui::OttSpectrumProfile getOttSpectrum(int band) const;
+    float getOttCentroid(int band) const;
+    int getOttInteractionDirection(int band) const;
+    void setOttKnobInteraction(int band, int direction);
     void mouseEnter(const juce::MouseEvent& event) override;
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
@@ -88,6 +94,8 @@ private:
     bool ottMode = false;
     std::uint64_t lastOttMeterGeneration = 0;
     double lastOttMeterTimeMs = -1.0;
+    std::array<float, 96> ottSpectrumTargets {}, ottSpectrumDisplay {};
+    double lastOttSpectrumTimeMs = -1.0;
     bool dismissOttGestures();
     FireAudioProcessor& processor;
     state::StateComponent& stateComponent;

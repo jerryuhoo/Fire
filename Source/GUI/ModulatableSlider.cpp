@@ -10,6 +10,7 @@
 
 #include "ModulatableSlider.h"
 #include "LookAndFeel.h"
+#include "OttVisuals.h"
 #include <cmath>
 
 namespace
@@ -142,6 +143,7 @@ void ModulatableSlider::attachValueLabelPopupForwarder()
             continue;
 
         forwardedValueLabel = candidate;
+        candidate->setAlpha(readoutOpacity);
         candidate->addMouseListener(&valueLabelPopupForwarder, false);
         break;
     }
@@ -264,11 +266,28 @@ void ModulatableSlider::paintOverChildren(juce::Graphics& g)
     if (getTextBoxPosition() != juce::Slider::NoTextBox)
         return;
 
-    g.setColour(isEnabled() ? fire::ui::colours::textSecondary
-                            : fire::ui::colours::textMuted);
+    g.setColour((isEnabled() ? fire::ui::colours::textSecondary
+                            : fire::ui::colours::textMuted).withAlpha(readoutOpacity));
     g.setFont(fire::ui::valueFont(12.0f * getUiScale()));
     g.drawFittedText(getTextFromValue(getValue()), getValueDisplayBounds(),
                      juce::Justification::centred, 1, 0.85f);
+}
+
+void ModulatableSlider::setInteractionOnlyReadout(bool enabled)
+{
+    if (interactionOnlyReadout == enabled) return;
+    interactionOnlyReadout = enabled;
+    readoutOpacity = enabled ? 0.0f : 1.0f;
+    if (auto* valueLabel = forwardedValueLabel.getComponent())
+        valueLabel->setAlpha(valueLabel->isBeingEdited() ? 1.0f : readoutOpacity);
+    repaint();
+}
+
+bool ModulatableSlider::isValueReadoutRequested() const
+{
+    const auto* valueLabel = forwardedValueLabel.getComponent();
+    return hasActiveInteraction() || shouldShowKeyboardFocus()
+           || (valueLabel != nullptr && valueLabel->isBeingEdited());
 }
 
 // New helper function
@@ -281,6 +300,10 @@ bool ModulatableSlider::isMouseOverMainSlider() const
 
 bool ModulatableSlider::advanceAnimation(float deltaSeconds) noexcept
 {
+    const bool readoutChanged = fire::ui::advanceReadout(readoutOpacity,
+        ! interactionOnlyReadout || isValueReadoutRequested(), deltaSeconds);
+    if (auto* valueLabel = forwardedValueLabel.getComponent())
+        valueLabel->setAlpha(valueLabel->isBeingEdited() ? 1.0f : readoutOpacity);
     deltaSeconds = juce::jlimit(0.0f, 0.05f, deltaSeconds);
     const auto oldHover = hoverAnimation;
     const auto oldPress = pressAnimation;
@@ -327,7 +350,7 @@ bool ModulatableSlider::advanceAnimation(float deltaSeconds) noexcept
     if (std::abs(modulationHandlePressAnimation - handlePressTarget) < 0.002f)
         modulationHandlePressAnimation = handlePressTarget;
 
-    return std::abs(oldHover - hoverAnimation) > 0.001f
+    return readoutChanged || std::abs(oldHover - hoverAnimation) > 0.001f
            || std::abs(oldPress - pressAnimation) > 0.001f
            || std::abs(oldFocus - focusAnimation) > 0.001f
            || std::abs(oldHandleHover - modulationHandleHoverAnimation) > 0.001f
@@ -876,6 +899,7 @@ bool ModulatableSlider::resetTransientPresentation()
         stopTimer();
     isModHandleMouseOver = false;
     hoverAnimation = 0.0f;
+    readoutOpacity = interactionOnlyReadout ? 0.0f : 1.0f;
     pressAnimation = 0.0f;
     focusAnimation = 0.0f;
     modulationHandleHoverAnimation = 0.0f;

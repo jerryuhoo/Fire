@@ -48,6 +48,9 @@ inline const juce::Colour danger { 0xffff3d55 };
 inline const juce::Colour drive = ember;
 inline const juce::Colour shape = gold;
 inline const juce::Colour compressor = positive;
+inline const juce::Colour ott { 0xff96a7ee };
+inline const juce::Colour ottLift { 0xffa3c4ff };
+inline const juce::Colour ottPress { 0xffb29ae8 };
 inline const juce::Colour stereo = signalCool;
 inline const juce::Colour filter { 0xffff5da8 };
 inline const juce::Colour loFi { 0xff9b6cff };
@@ -116,6 +119,8 @@ struct Motion
     static constexpr float disabled = 0.16f;
     static constexpr float selection = 0.08f;
     static constexpr float page = 0.16f;
+    static constexpr float readoutIn = 0.075f;
+    static constexpr float readoutOut = 0.12f;
 
     // Reach 95% within the specified duration, independent of timer jitter.
     static float step(float deltaSeconds, float duration) noexcept
@@ -311,7 +316,8 @@ enum class ModuleRole
     filter,
     loFi,
     limiter,
-    modulation
+    modulation,
+    ott
 };
 
 inline juce::Colour colourForRole(ModuleRole role)
@@ -321,6 +327,7 @@ inline juce::Colour colourForRole(ModuleRole role)
         case ModuleRole::drive: return colours::drive;
         case ModuleRole::shape: return colours::shape;
         case ModuleRole::compressor: return colours::compressor;
+        case ModuleRole::ott: return colours::ott;
         case ModuleRole::stereo: return colours::stereo;
         case ModuleRole::filter: return colours::filter;
         case ModuleRole::loFi: return colours::loFi;

@@ -1,6 +1,7 @@
 #pragma once
 #include "../../GUI/PrimarySlider.h"
 #include "../../GUI/LookAndFeel.h"
+#include "../../GUI/OttVisuals.h"
 #include "../../PluginProcessor.h"
 
 // Overlay sliders reuse the plugin's guarded pointer, keyboard, accessibility
@@ -24,6 +25,7 @@ public:
             setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
             setSliderSnapsToMousePosition(false);
             setScrollWheelEnabled(false);
+            setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
             setTextValueSuffix(" dB");
             attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, id, *this);
         }
@@ -38,27 +40,51 @@ public:
         {
             return x >= 10 * uiScale() && x < getWidth() - 10 * uiScale() && std::abs(static_cast<float>(y) - lineY()) <= 7.0f * uiScale();
         }
+        bool isInteracting() const { return hasActivePointerGesture() || getFocusAnimation() > 0.01f; }
+        float getReadoutOpacity() const noexcept { return readout; }
+        void resetReadout() noexcept { readout = 0.0f; }
+        void advanceVisuals(float dt, bool processingEnabled, bool externalDrag,
+                            const fire::ui::OttSpectrumProfile& profile, float dynamics)
+        {
+            processing = processingEnabled;
+            spectrum = profile;
+            activity = dynamics;
+            fire::ui::advanceReadout(readout, isInteracting() || externalDrag, dt);
+        }
         void paint(juce::Graphics& g) override
         {
+            if (getLocalBounds().isEmpty()) return;
             const auto y = lineY();
             const auto scale = uiScale();
-            const auto colour = isEnabled() ? fire::ui::colours::positive : fire::ui::colours::disabled;
-            g.setColour(colour.withAlpha(0.65f + 0.30f * getHoverAnimation()));
-            g.drawLine(10.0f * scale, y, getWidth() - 10.0f * scale, y, 1.8f * scale);
-            const auto x = getWidth() * (upper ? 0.73f : 0.27f);
-            g.fillEllipse(x - 4 * scale, y - 4 * scale, 8 * scale, 8 * scale);
-            const auto separation = opposite ? std::abs(getValue() - opposite->load()) * getHeight() / 100.0 : 100.0;
-            if (getWidth() > 180 * scale && separation > 18 * scale)
+            const auto base = isEnabled() ? fire::ui::colours::ott : fire::ui::colours::disabled;
+            const auto colourAt = [&](float energy) {
+                const auto alpha = juce::jlimit(0.0f, 0.9f,
+                    (processing ? 0.24f : 0.10f) + 0.18f * getHoverAnimation()
+                    + 0.40f * readout + energy * activity * 0.20f);
+                return base.withMultipliedSaturation(0.35f + 0.9f * energy + readout * 0.3f).withAlpha(alpha);
+            };
+            juce::ColourGradient ink(colourAt(spectrum.front()), 10 * scale, y,
+                                      colourAt(spectrum.back()), getWidth() - 10 * scale, y, false);
+            for (size_t i = 1; i + 1 < spectrum.size(); ++i)
             {
-                g.setFont(fire::ui::valueFont(10.0f * scale));
-                g.drawText((upper ? "D " : "U ") + juce::String(getValue(), 1),
-                    juce::Rectangle<float>(juce::jmin(x + 8 * scale, getWidth() - 82 * scale), y + 4 * scale, 72 * scale, 14 * scale), juce::Justification::centredLeft);
+                ink.addColour(static_cast<double>(i) / static_cast<double>(spectrum.size() - 1),
+                               colourAt(spectrum[i]));
             }
-            if (getFocusAnimation() > 0.01f)
-            {
-                g.setColour(fire::ui::colours::textPrimary.withAlpha(getFocusAnimation()));
-                g.drawLine(10.0f * scale, y, getWidth() - 10.0f * scale, y, 3.0f * scale);
-            }
+            g.setGradientFill(ink);
+            g.drawLine(10.0f * scale, y, getWidth() - 10.0f * scale, y,
+                       (1.05f + 0.7f * getFocusAnimation()) * scale);
+            auto area = getLocalBounds().toFloat().reduced(4.0f * scale);
+            if (readout < 0.003f || area.isEmpty()) return;
+            auto label = juce::Rectangle<float>(juce::jmin(112.0f * scale, area.getWidth()),
+                                                juce::jmin(19.0f * scale, area.getHeight()))
+                .withCentre({area.getCentreX(), juce::jmax(32.0f * scale, y + 15.0f * scale)})
+                .constrainedWithin(area);
+            g.setColour(fire::ui::colours::surface1.withAlpha(readout * 0.94f));
+            g.fillRoundedRectangle(label, 4.0f * scale);
+            g.setColour(fire::ui::colours::textPrimary.withAlpha(readout));
+            g.setFont(fire::ui::valueFont(11.0f * scale));
+            g.drawFittedText((upper ? "Down " : "Up ") + juce::String(getValue(), 1) + " dB",
+                             label.toNearestInt(), juce::Justification::centred, 1);
         }
         void valueChanged() override
         {
@@ -76,6 +102,9 @@ public:
             return 1.0f;
         }
         bool upper;
+        bool processing = false;
+        float readout = 0.0f, activity = 0.0f;
+        fire::ui::OttSpectrumProfile spectrum {};
         std::atomic<float>* opposite = nullptr;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     };
@@ -96,7 +125,7 @@ public:
     void resized() override { up.setBounds(getLocalBounds()); down.setBounds(getLocalBounds()); }
     void visibilityChanged() override { if (! isShowing()) dismiss(); }
     void enablementChanged() override { if (! isEnabled()) dismiss(); }
-    void refresh()
+    void refresh(float deltaSeconds = 1.0f / 60.0f)
     {
         const juce::Component::SafePointer<OttBandControls> safeThis(this);
         const bool active = bandEnabled != nullptr && bandEnabled->load() > 0.5f;
@@ -111,25 +140,44 @@ public:
             up.setValue(juce::jmin(rawUp->load(), rawDown->load() - 6.0f), juce::dontSendNotification);
             down.setValue(rawDown->load(), juce::dontSendNotification);
         }
+        const bool on = active && enabled != nullptr && enabled->load() > 0.5f;
+        const bool liftPreview = up.isInteracting() || externalUp;
+        const bool pressPreview = down.isInteracting() || externalDown;
+        motion.advance(deltaSeconds, on ? dynamicsActivity : 0.0f, liftPreview, pressPreview, centroid);
+        up.advanceVisuals(deltaSeconds, on, externalUp, spectrum, motion.lift);
+        down.advanceVisuals(deltaSeconds, on, externalDown, spectrum, motion.press);
         repaint();
     }
     void dismiss()
     {
         const juce::Component::SafePointer<OttBandControls> safeThis(this);
         up.dismissTransientInteraction();
-        if (safeThis) down.dismissTransientInteraction();
+        if (! safeThis) return;
+        down.dismissTransientInteraction();
+        if (! safeThis) return;
+        up.resetReadout(); down.resetReadout();
+        motion.reset(); dynamicsActivity = 0.0f;
+        externalUp = externalDown = false;
     }
-    void setMeter(float value) { gain = std::isfinite(value) ? value : 0.0f; }
+    void setMeter(float dynamicsDb) { dynamicsActivity = std::isfinite(dynamicsDb) ? dynamicsDb : 0.0f; }
+    void setSpectrum(const fire::ui::OttSpectrumProfile& profile, float frequencyCentroid)
+    {
+        spectrum = profile;
+        centroid = frequencyCentroid;
+    }
+    const fire::ui::OttSpectrumProfile& getSpectrum() const noexcept { return spectrum; }
+    float getCentroid() const noexcept { return centroid; }
+    int getInteractionDirection() const { return (up.isInteracting() ? 1 : 0) | (down.isInteracting() ? 2 : 0); }
+    void setExternalInteraction(bool upward, bool downward) { externalUp = upward; externalDown = downward; }
     void paint(juce::Graphics& g) override
     {
-        if (getWidth() < 85) return;
-        const bool on = enabled != nullptr && enabled->load() > 0.5f;
-        g.setColour(on ? fire::ui::colours::textSecondary : fire::ui::colours::textMuted);
         const auto* look = dynamic_cast<const FireLookAndFeel*>(&getLookAndFeel());
         const auto scale = look ? look->scale : 1.0f;
-        g.setFont(fire::ui::valueFont(10 * scale));
-        g.drawText(on ? "OTT " + juce::String(gain, 1) + " dB" : "OTT OFF",
-                   getLocalBounds().removeFromBottom(juce::roundToInt(16 * scale)), juce::Justification::centred);
+        const auto area = getLocalBounds().toFloat().reduced(10.0f * scale, 0.0f).withTrimmedTop(24.0f * scale);
+        fire::ui::drawOttRipples(g, area, up.lineY(), spectrum, motion.lift, false, motion.phase, scale,
+                                 motion.liftPreview);
+        fire::ui::drawOttRipples(g, area, down.lineY(), spectrum, motion.press, true, motion.phase, scale,
+                                 motion.pressPreview);
     }
     ThresholdSlider up, down;
 private:
@@ -137,5 +185,8 @@ private:
     std::atomic<float>* bandEnabled = nullptr;
     std::atomic<float>* rawUp = nullptr;
     std::atomic<float>* rawDown = nullptr;
-    float gain = 0.0f;
+    float dynamicsActivity = 0.0f, centroid = 0.5f;
+    bool externalUp = false, externalDown = false;
+    fire::ui::OttSpectrumProfile spectrum {};
+    fire::ui::OttRippleMotion motion;
 };

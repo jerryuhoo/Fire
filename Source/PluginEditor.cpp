@@ -1229,6 +1229,7 @@ void FireAudioProcessorEditor::synchroniseSpectrumHostBypassState(
 
 void FireAudioProcessorEditor::suspendSpectrumPresentation()
 {
+    multiband.clearOttSpectrum();
     // Hidden editors do not animate. Clear immediately and require a frame
     // published after reattachment before either spectrum can reappear.
     processedSpectrum.setHostBypassed(true, false);
@@ -1580,6 +1581,7 @@ void FireAudioProcessorEditor::timerCallback()
 
     synchroniseSpectrumHostBypassState(true);
     const bool isBypassed = lastBypassedState;
+    if (isBypassed) multiband.clearOttSpectrum();
 
     if (! isBypassed && spectrumCardArea.intersects(getLocalBounds()))
     {
@@ -1600,6 +1602,7 @@ void FireAudioProcessorEditor::timerCallback()
             originalSpectrum.setSpecAlpha(1.0f - specAlpha);
             const float binWidth = static_cast<float>(processor.getSampleRate())
                                    / static_cast<float>(processor.getFFTSize());
+            multiband.updateOttSpectrum(processedFftFrame.data(), processor.getNumBins(), binWidth, originalFftFrame.data());
             processedSpectrum.updateSpectrum(processedFftFrame.data(), processor.getNumBins(), binWidth);
             originalSpectrum.updateSpectrum(originalFftFrame.data(), processor.getNumBins(), binWidth);
         }
@@ -1607,7 +1610,9 @@ void FireAudioProcessorEditor::timerCallback()
 
     if ((animationFrame & 1) == 0)
         filterControl.animationTick();
+    multiband.setOttKnobInteraction(bandPanel.getFocusBandNum(), bandPanel.getOttPreviewDirection());
     multiband.animationTick(deltaSeconds);
+    bandPanel.setOttSpectrumVisuals(multiband.getOttSpectrum(currentBand), multiband.getOttCentroid(currentBand), multiband.getOttInteractionDirection(currentBand));
     bandPanel.animationTick(deltaSeconds);
     globalPanel.animationTick(deltaSeconds);
     lfoPanel.animationTick(deltaSeconds);

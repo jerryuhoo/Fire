@@ -370,7 +370,7 @@ TEST_CASE("Control-panel buttons reject popup and auxiliary pointer gestures",
     {
         BandPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
-        checkPanelButtons(panel, 12);
+        checkPanelButtons(panel, 14);
     }
 
     SECTION("global controls")
@@ -2094,25 +2094,28 @@ TEST_CASE("Control-panel icon buttons expose complete accessibility semantics",
         panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
         panel.setVisible(true);
 
-        const std::array<juce::Button*, 5> buttons {
+        const std::array<juce::Button*, 6> buttons {
             &panel.driveBypassButton,
             &panel.shapeBypassButton,
             &panel.compressorBypassButton,
             &panel.widthBypassButton,
+            &panel.ottBypassButton,
             &panel.dcFilterButton
         };
-        const std::array<juce::String, 5> functions {
+        const std::array<juce::String, 6> functions {
             "Drive power",
             "Shape power",
             "Compressor power",
             "Stereo power",
+            "OTT power",
             "DC filter"
         };
-        const std::array<juce::String, 5> helpPrefixes {
+        const std::array<juce::String, 6> helpPrefixes {
             "Enable or bypass Drive processing",
             "Enable or bypass Shape processing",
             "Enable or bypass Compressor processing",
             "Enable or bypass Stereo processing",
+            "Enable or bypass OTT processing",
             "Enable or disable the DC filter"
         };
 

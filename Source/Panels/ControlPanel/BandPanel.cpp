@@ -96,6 +96,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     addAndMakeVisible(distortionGraph);
     addAndMakeVisible(vuPanel);
     addAndMakeVisible(widthGraph);
+    addAndMakeVisible(ottGraph);
     configureGraphInteractions();
 
     // Group components for visibility management after they've been created
@@ -132,7 +133,10 @@ BandPanel::BandPanel(FireAudioProcessor& p,
 BandPanel::~BandPanel()
 {
     for (auto& sliderPair : modulatableSliderComponents)
+    {
         sliderPair.second->onInteractionEnded = nullptr;
+        sliderPair.second->valueConstraint = nullptr;
+    }
 
     dismissTransientInteraction();
 
@@ -150,6 +154,8 @@ BandPanel::~BandPanel()
     shapeSwitch.removeListener(this);
     compressorSwitch.removeListener(this);
     widthSwitch.removeListener(this);
+    ottSwitch.removeListener(this);
+    ottBypassButton.removeListener(this);
 
     // Also remove listeners from any other buttons if they were added in their init functions.
     // Assuming initFlatButton and initBypassButton also add 'this' as a listener.
@@ -187,6 +193,25 @@ void BandPanel::createSliders()
     createAndConfigureSlider(PAN_NAME, "Pan", fire::ui::colours::stereo);
     createAndConfigureSlider(WIDTH_MIX_NAME, "Mix", fire::ui::colours::stereo);
 
+    const std::array<const char*, 6> labels { "Depth", "Time", "Up Thresh", "Down Thresh", "Gain", "Mix" };
+    const std::array<const char*, 6> units { "", " %", " dB", " dB", " dB", "" };
+    for (size_t i = 0; i < labels.size(); ++i)
+        createAndConfigureSlider(ParameterIDAndName::ottControlNames[i], labels[i], fire::ui::colours::positive, units[i]);
+    modulatableSliderComponents.at(OTT_DEPTH_NAME)->setTooltip("OTT strength: raises quiet detail and compresses loud peaks");
+    modulatableSliderComponents.at(OTT_TIME_NAME)->setTooltip("Scales OTT attack and release times. 100% uses 5 ms / 100 ms");
+    modulatableSliderComponents.at(OTT_UPWARD_NAME)->setTooltip("Below this threshold, OTT raises quiet signals. Kept at least 6 dB below Down");
+    modulatableSliderComponents.at(OTT_DOWNWARD_NAME)->setTooltip("Above this threshold, OTT compresses loud signals");
+
+    modulatableSliderComponents.at(OTT_UPWARD_NAME)->valueConstraint = [this](double value)
+    {
+        auto* other = processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(OTT_DOWNWARD_ID, focusBandNum));
+        return other ? juce::jmin(value, static_cast<double>(other->load()) - 6.0) : value;
+    };
+    modulatableSliderComponents.at(OTT_DOWNWARD_NAME)->valueConstraint = [this](double value)
+    {
+        return juce::jmax(value, modulatableSliderComponents.at(OTT_UPWARD_NAME)->getValue() + 6.0);
+    };
+
     // === Final specific configurations ===
     modulatableSliderComponents.at(DRIVE_NAME)->setComponentID("drive");
 }
@@ -217,6 +242,7 @@ void BandPanel::createButtons()
     initBypassButton(shapeBypassButton, fire::ui::colours::shape);
     initBypassButton(compressorBypassButton, fire::ui::colours::compressor);
     initBypassButton(widthBypassButton, fire::ui::colours::stereo);
+    initBypassButton(ottBypassButton, fire::ui::colours::positive);
 
     initBypassButton(dcFilterButton, fire::ui::colours::shape);
 
@@ -245,6 +271,8 @@ void BandPanel::createButtons()
     setupSwitch(shapeSwitch, "Shape", fire::ui::colours::shape);
     setupSwitch(compressorSwitch, "Compressor", fire::ui::colours::compressor);
     setupSwitch(widthSwitch, "Stereo", fire::ui::colours::stereo);
+    setupSwitch(ottSwitch, "OTT", fire::ui::colours::positive);
+    ottSwitch.setTooltip("Upward/downward compression. Drag U and D lines in the spectrum to set thresholds.");
     oscSwitch.setToggleState(true, juce::dontSendNotification);
 
     driveBypassButton.toFront(false);
@@ -276,6 +304,7 @@ void BandPanel::updateIconButtonSemantics()
     setSemantics(widthBypassButton,
                  "Stereo power",
                  "Enable or bypass Stereo processing");
+    setSemantics(ottBypassButton, "OTT power", "Enable or bypass OTT processing");
     setSemantics(dcFilterButton,
                  "DC filter",
                  "Enable or disable the DC filter");
@@ -349,6 +378,9 @@ void BandPanel::setupComponentGroups()
         &widthPanelLabel
     };
 
+    for (auto* name : ParameterIDAndName::ottControlNames)
+        ottComponents.add(modulatableSliderComponents.at(name).get());
+
     // A single master list of all components for disabling the entire band
     allControls.addArray(driveComponents);
     allControls.add(modulatableSliderComponents.at(OUTPUT_NAME).get());
@@ -357,6 +389,7 @@ void BandPanel::setupComponentGroups()
     allControls.addArray(shapeComponents);
     allControls.addArray(compressorComponents);
     allControls.addArray(widthComponents);
+    allControls.addArray(ottComponents);
     for (auto& modeBox : distortionModes)
         allControls.add(&modeBox);
 }
@@ -461,6 +494,7 @@ void BandPanel::resized()
     switchColumnBox.items.add(juce::FlexItem(shapeSwitch).withFlex(1.0f).withMargin(rowMargin));
     switchColumnBox.items.add(juce::FlexItem(compressorSwitch).withFlex(1.0f).withMargin(rowMargin));
     switchColumnBox.items.add(juce::FlexItem(widthSwitch).withFlex(1.0f).withMargin(rowMargin));
+    switchColumnBox.items.add(juce::FlexItem(ottSwitch).withFlex(1.0f).withMargin(rowMargin));
     switchColumnBox.performLayout(switchColumnArea);
 
     auto layoutBypassButton = [&](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
@@ -481,6 +515,7 @@ void BandPanel::resized()
     layoutBypassButton(shapeBypassButton, shapeSwitch);
     layoutBypassButton(compressorBypassButton, compressorSwitch);
     layoutBypassButton(widthBypassButton, widthSwitch);
+    layoutBypassButton(ottBypassButton, ottSwitch);
 
     // --- Active module controls ---
     if (oscSwitch.getToggleState())
@@ -548,11 +583,29 @@ void BandPanel::resized()
         modulatableSliderComponents.at(WIDTH_MIX_NAME)->setBounds(knobRow);
     }
 
+    if (ottSwitch.getToggleState())
+    {
+        auto rows = knobsColumnArea.withSizeKeepingCentre(secondaryKnobSize * 3 + controlGap * 2,
+                                                          secondaryKnobHeight * 2 + controlGap);
+        constexpr std::array<size_t, 6> order { 0, 1, 5, 2, 3, 4 };
+        for (size_t row = 0; row < 2; ++row)
+        {
+            auto strip = rows.removeFromTop(secondaryKnobHeight);
+            rows.removeFromTop(controlGap);
+            for (size_t column = 0; column < 3; ++column)
+            {
+                modulatableSliderComponents.at(ParameterIDAndName::ottControlNames[order[row * 3 + column]])->setBounds(strip.removeFromLeft(secondaryKnobSize));
+                strip.removeFromLeft(controlGap);
+            }
+        }
+    }
+
     // --- Live visualiser card ---
     oscilloscope.setBounds(graphColumnArea);
     distortionGraph.setBounds(graphColumnArea);
     vuPanel.setBounds(graphColumnArea);
     widthGraph.setBounds(graphColumnArea);
+    ottGraph.setBounds(graphColumnArea);
 
     if (zoomedGraph != nullptr && zoomedGraph->isVisible())
     {
@@ -625,6 +678,8 @@ void BandPanel::rebuildChromeCache(float displayScale)
         graphTitle = "WIDTH";
     }
 
+    if (ottSwitch.getToggleState()) { moduleTitle = "OTT"; graphTitle = "DYNAMICS"; }
+
     drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "MODULE");
     drawMinimalTitle(cacheGraphics, titleFor(knobsAreaRect), moduleTitle);
     drawMinimalTitle(cacheGraphics, titleFor(graphAreaRect), graphTitle);
@@ -644,8 +699,8 @@ void BandPanel::invalidateChromeCache()
 void BandPanel::configureGraphInteractions()
 {
     const juce::Component::SafePointer<BandPanel> safeThis(this);
-    const std::array<GraphTemplate*, 4> graphs {
-        &oscilloscope, &distortionGraph, &vuPanel, &widthGraph
+    const std::array<GraphTemplate*, 5> graphs {
+        &oscilloscope, &distortionGraph, &vuPanel, &widthGraph, &ottGraph
     };
 
     for (auto* graph : graphs)
@@ -661,8 +716,8 @@ void BandPanel::configureGraphInteractions()
 void BandPanel::toggleGraphZoom(GraphTemplate* graph)
 {
     const juce::Component::SafePointer<BandPanel> safeThis(this);
-    const std::array<GraphTemplate*, 4> graphs {
-        &oscilloscope, &distortionGraph, &vuPanel, &widthGraph
+    const std::array<GraphTemplate*, 5> graphs {
+        &oscilloscope, &distortionGraph, &vuPanel, &widthGraph, &ottGraph
     };
     if (graph == nullptr
         || std::find(graphs.begin(), graphs.end(), graph) == graphs.end()
@@ -767,6 +822,7 @@ void BandPanel::restoreComponentsObscuredByZoom() noexcept
 
 GraphTemplate* BandPanel::getSelectedModuleGraph() noexcept
 {
+    if (ottSwitch.getToggleState()) return &ottGraph;
     if (shapeSwitch.getToggleState())
         return &distortionGraph;
     if (compressorSwitch.getToggleState())
@@ -799,7 +855,7 @@ void BandPanel::restoreDriveGraphPreviewNow() noexcept
 
 void BandPanel::setAnimatedModuleTarget(int moduleIndex)
 {
-    moduleIndex = juce::jlimit(0, 3, moduleIndex);
+    moduleIndex = juce::jlimit(0, 4, moduleIndex);
     const auto targetPosition = static_cast<float>(moduleIndex);
     if (juce::approximatelyEqual(moduleSelectionPosition.target, targetPosition))
         return;
@@ -812,13 +868,13 @@ void BandPanel::setAnimatedModuleTarget(int moduleIndex)
 
 juce::Rectangle<float> BandPanel::getModuleSelectionBounds(float modulePosition) const
 {
-    const std::array<const juce::TextButton*, 4> switches {
-        &oscSwitch, &shapeSwitch, &compressorSwitch, &widthSwitch
+    const std::array<const juce::TextButton*, 5> switches {
+        &oscSwitch, &shapeSwitch, &compressorSwitch, &widthSwitch, &ottSwitch
     };
 
-    modulePosition = juce::jlimit(-0.2f, 3.2f, modulePosition);
-    const auto lowerIndex = juce::jlimit(0, 2, static_cast<int>(std::floor(modulePosition)));
-    const auto upperIndex = juce::jmin(3, lowerIndex + 1);
+    modulePosition = juce::jlimit(-0.2f, 4.2f, modulePosition);
+    const auto lowerIndex = juce::jlimit(0, 3, static_cast<int>(std::floor(modulePosition)));
+    const auto upperIndex = juce::jmin(4, lowerIndex + 1);
     const auto mix = modulePosition - static_cast<float>(lowerIndex);
     const auto lower = switches[static_cast<size_t>(lowerIndex)]->getBounds().toFloat();
     const auto upper = switches[static_cast<size_t>(upperIndex)]->getBounds().toFloat();
@@ -834,6 +890,21 @@ juce::Rectangle<float> BandPanel::getModuleSelectionBounds(float modulePosition)
 
 void BandPanel::animationTick(float deltaSeconds)
 {
+    if (ottSwitch.getToggleState())
+    {
+        auto* rawUp = processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(OTT_UPWARD_ID, focusBandNum));
+        auto* rawDown = processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(OTT_DOWNWARD_ID, focusBandNum));
+        auto& up = *modulatableSliderComponents.at(OTT_UPWARD_NAME);
+        auto& down = *modulatableSliderComponents.at(OTT_DOWNWARD_NAME);
+        if (rawUp && rawDown && ! up.hasActiveInteraction() && ! down.hasActiveInteraction())
+        {
+            up.setValue(juce::jmin(rawUp->load(), rawDown->load() - 6.0f), juce::dontSendNotification);
+            down.setValue(rawDown->load(), juce::dontSendNotification);
+        }
+        ottGraph.setThresholds(static_cast<float>(up.getValue()), static_cast<float>(down.getValue()));
+    }
+    if (lastOttMeterTimeMs >= 0.0 && juce::Time::getMillisecondCounterHiRes() - lastOttMeterTimeMs > 250.0)
+        ottGraph.setLevels(-120.0f, 0.0f);
     advanceContentTransition(deltaSeconds);
     if (! isShowing())
     {
@@ -859,8 +930,8 @@ void BandPanel::setScale(float newScale)
         return;
 
     scale = newScale;
-    const std::array<GraphTemplate*, 4> graphs {
-        &oscilloscope, &distortionGraph, &vuPanel, &widthGraph
+    const std::array<GraphTemplate*, 5> graphs {
+        &oscilloscope, &distortionGraph, &vuPanel, &widthGraph, &ottGraph
     };
     for (auto* graph : graphs)
         graph->setScale(newScale);
@@ -889,6 +960,8 @@ void BandPanel::dismissButtonInteractions() noexcept
         return;
     if (! dismiss(compressorSwitch))
         return;
+    if (! dismiss(ottSwitch)) return;
+    if (! dismiss(ottBypassButton)) return;
     if (! dismiss(widthSwitch))
         return;
     if (! dismiss(driveBypassButton))
@@ -1018,6 +1091,7 @@ void BandPanel::updateAttachments()
     compressorBypassAttachment.reset();
     widthBypassAttachment.reset();
     dcFilterAttachment.reset();
+    ottAttachment.reset();
 
     linkedAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(LINKED_ID, focusBandNum), linkedButton);
     safeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(SAFE_ID, focusBandNum), safeButton);
@@ -1027,6 +1101,8 @@ void BandPanel::updateAttachments()
     shapeBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, focusBandNum), shapeBypassButton);
     compressorBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum), compressorBypassButton);
     widthBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, focusBandNum), widthBypassButton);
+
+    ottAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(OTT_ENABLED_ID, focusBandNum), ottBypassButton);
 
     dcFilterAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(DC_FILTER_ID, focusBandNum), dcFilterButton);
 
@@ -1077,7 +1153,8 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     if ((clickedButton == &oscSwitch && oscSwitch.getToggleState())
         || (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
         || (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
-        || (clickedButton == &widthSwitch && widthSwitch.getToggleState()))
+        || (clickedButton == &widthSwitch && widthSwitch.getToggleState())
+        || (clickedButton == &ottSwitch && ottSwitch.getToggleState()))
     {
         clearGraphZoom();
         if (safeThis == nullptr)
@@ -1174,12 +1251,31 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
         isSwitch = true;
     }
 
+    else if (clickedButton == &ottSwitch && ottSwitch.getToggleState())
+    {
+        setAnimatedModuleTarget(4);
+        if (! setGroupVisibility(driveComponents, false)
+            || ! setGroupVisibility(shapeComponents, false)
+            || ! setGroupVisibility(compressorComponents, false)
+            || ! setGroupVisibility(widthComponents, false)) return;
+        if (! setComponentVisibility(oscilloscope, false)
+            || ! setComponentVisibility(distortionGraph, false)
+            || ! setComponentVisibility(vuPanel, false)
+            || ! setComponentVisibility(widthGraph, false)) return;
+        isSwitch = true;
+    }
+    if (isSwitch)
+    {
+        if (! setGroupVisibility(ottComponents, ottSwitch.getToggleState())
+            || ! setComponentVisibility(ottGraph, ottSwitch.getToggleState())) return;
+    }
+
     updateDistortionModeVisibility();
     if (safeThis == nullptr)
         return;
 
     // Handle clicks from any of the bypass buttons.
-    if (clickedButton == &driveBypassButton || clickedButton == &shapeBypassButton || clickedButton == &compressorBypassButton || clickedButton == &widthBypassButton)
+    if (clickedButton == &driveBypassButton || clickedButton == &shapeBypassButton || clickedButton == &compressorBypassButton || clickedButton == &widthBypassButton || clickedButton == &ottBypassButton)
     {
         const auto* bandEnabledParameter = processor.treeState.getRawParameterValue(
             ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
@@ -1196,6 +1292,8 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
             return;
 
         invalidateChromeCache();
+        auto callback = onModuleChanged;
+        if (callback) callback();
     }
 }
 
@@ -1255,6 +1353,8 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
 
     focusBandNum = num;
     lastGraphTelemetryTimeMs = -1.0;
+    ottGraph.setLevels(-120.0f, 0.0f);
+    lastOttMeterTimeMs = -1.0;
     updateAttachments();
     if (safeThis == nullptr)
         return;
@@ -1407,7 +1507,7 @@ bool BandPanel::canEnableSubKnob(juce::Component& component)
     if (widthComponents.contains(&component) && widthBypassButton.getToggleState())
         return true;
 
-    return false;
+    return ottComponents.contains(&component);
 }
 
 void BandPanel::setBandKnobsStates(bool isBandEnabled, bool /*callFromSubBypass*/)
@@ -1484,6 +1584,8 @@ void BandPanel::setSwitch(const int index, bool state)
         compressorSwitch.setToggleState(state, juce::sendNotificationSync);
     else if (index == 3)
         widthSwitch.setToggleState(state, juce::sendNotificationSync);
+    else if (index == 4)
+        ottSwitch.setToggleState(state, juce::sendNotificationSync);
 }
 
 void BandPanel::updateWhenChangingFocus()
@@ -1508,6 +1610,9 @@ void BandPanel::updateWhenChangingFocus()
     buttonClicked(&widthSwitch);
     if (safeThis == nullptr)
         return;
+
+    buttonClicked(&ottSwitch);
+    if (safeThis == nullptr) return;
 
     updateDistortionModeVisibility();
     if (safeThis == nullptr)
@@ -1629,6 +1734,14 @@ void BandPanel::presentMeterValues(const MeterValues& values,
                                    std::uint64_t generation)
 {
     vuPanel.presentMeterValues(values, generation);
+    const auto index = static_cast<size_t>(juce::jlimit(0, 3, focusBandNum));
+    if (generation != lastOttMeterGeneration)
+    {
+        lastOttMeterGeneration = generation;
+        lastOttMeterTimeMs = juce::Time::getMillisecondCounterHiRes();
+        ottGraph.setLevels(values.bandLevelsAreFresh ? values.ottInputLevelDb[index] : -120.0f, values.bandLevelsAreFresh ? values.ottGainChangeDb[index] : 0.0f);
+    }
+    ottGraph.setThresholds(static_cast<float>(modulatableSliderComponents.at(OTT_UPWARD_NAME)->getValue()), static_cast<float>(modulatableSliderComponents.at(OTT_DOWNWARD_NAME)->getValue()));
 }
 
 void BandPanel::setGraphVisibilityForDriveDrag(bool isDragging)

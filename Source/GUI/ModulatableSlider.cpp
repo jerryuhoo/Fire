@@ -53,6 +53,16 @@ ModulatableSlider::~ModulatableSlider()
     detachValueLabelPopupForwarder();
 }
 
+void ModulatableSlider::valueChanged()
+{
+    if (valueConstraint)
+    {
+        const auto legal = valueConstraint(getValue());
+        if (std::isfinite(legal) && ! juce::approximatelyEqual(legal, getValue()))
+            setValue(legal, juce::dontSendNotification);
+    }
+}
+
 std::unique_ptr<juce::AccessibilityHandler>
 ModulatableSlider::createAccessibilityHandler()
 {

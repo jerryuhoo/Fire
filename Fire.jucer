@@ -20,6 +20,7 @@
     <GROUP id="{F8056AAA-6B52-67D3-66EB-F3C43B781008}" name="Source">
       <GROUP id="{67559B1C-145F-DD2D-9DA6-CB95F2E0FD4E}" name="Panels">
         <GROUP id="{43790AD2-FCF5-17E2-2CA5-275101E55D0C}" name="SpectrogramPanel">
+          <FILE id="ottUI1" name="OttBandControls.h" compile="0" resource="0" file="Source/Panels/SpectrogramPanel/OttBandControls.h"/>
           <FILE id="Ql023g" name="CloseButton.cpp" compile="1" resource="0" file="Source/Panels/SpectrogramPanel/CloseButton.cpp"/>
           <FILE id="RLvWtL" name="CloseButton.h" compile="0" resource="0" file="Source/Panels/SpectrogramPanel/CloseButton.h"/>
           <FILE id="CZ02Ep" name="DraggableButton.cpp" compile="1" resource="0"
@@ -58,6 +59,7 @@
         </GROUP>
         <GROUP id="{8E104F8A-5C4E-21F7-0357-DF30B3EC704D}" name="ControlPanel">
           <GROUP id="{73C0DD74-3F41-42AE-EE70-095B104040A5}" name="Graph Components">
+            <FILE id="ottUI2" name="OttGraph.h" compile="0" resource="0" file="Source/Panels/ControlPanel/Graph Components/OttGraph.h"/>
             <FILE id="ibtYpl" name="DistortionGraph.cpp" compile="1" resource="0"
                   file="Source/Panels/ControlPanel/Graph Components/DistortionGraph.cpp"/>
             <FILE id="yedz54" name="DistortionGraph.h" compile="0" resource="0"

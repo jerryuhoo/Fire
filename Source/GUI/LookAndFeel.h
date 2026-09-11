@@ -399,6 +399,15 @@ public:
 
     juce::Slider::SliderLayout getSliderLayout(juce::Slider& slider) override
     {
+        if (static_cast<bool>(slider.getProperties().getWithDefault("ottThreshold", false)))
+        {
+            juce::Slider::SliderLayout layout;
+            const auto height = static_cast<float>(slider.getHeight());
+            const auto top = juce::roundToInt(-slider.getMaximum() * height / 100.0);
+            const auto bottom = juce::roundToInt(-slider.getMinimum() * height / 100.0);
+            layout.sliderBounds = { 0, top, slider.getWidth(), juce::jmax(1, bottom - top) };
+            return layout;
+        }
         if (dynamic_cast<ModulatableSlider*>(&slider) == nullptr)
             return juce::LookAndFeel_V4::getSliderLayout(slider);
 

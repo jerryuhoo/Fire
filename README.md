@@ -415,3 +415,24 @@ From v.0.9.4, I changed the license to AGPL-3.0.
 ## 8. Acknowledgement
 
 @[IcyLeaves](https://github.com/IcyLeaves)
+
+### Per-band OTT
+
+OTT is an independent upward/downward dynamics module in **Band Lab**. It uses Fire's existing one-to-four frequency bands and runs after Compressor and before Stereo, with no additional latency. The dynamics concept is described in the [Ableton Multiband Dynamics reference](https://www.ableton.com/en/manual/live-audio-effect-reference/#multiband-dynamics).
+
+1. Add or move crossover points in the spectrum using the existing band controls.
+2. Select **OTT** in Band Lab, choose a band, and enable that band's OTT power button.
+3. Drag the spectrum's **U** (upward) and **D** (downward) threshold lines vertically. Dragging another band's line selects that band. The lines share the spectrum's dB scale; double-click resets a threshold, and arrow keys allow precise changes.
+
+| Control | Function |
+| --- | --- |
+| Depth | Strength of both upward and downward compression, from 0 to 1. |
+| Time | Attack/release scale, 10–400%. At 100%, the linked peak detector uses 5 ms attack and 100 ms release. |
+| Up Thresh | Raises detail below this level. Remains at least 6 dB below Down Thresh when edited. |
+| Down Thresh | Compresses signals above this level. |
+| Gain | OTT output trim, −24 to +24 dB. |
+| Mix | Blends this band's OTT signal with its input; zero is transparent. |
+
+The stage uses 4:1 upward and 8:1 downward ratios with soft knees. Upward boost is limited to 24 dB and tapers off near the noise floor. Both channels share the detector and gain, preserving the stereo image. The dynamics panel shows detector level and applied gain; each spectrum band also displays its gain change. Parameters can be configured while OTT is bypassed, and all six continuous controls support LFO routing and host automation.
+
+OTT settings participate in presets, A/B comparisons and band copying. Older projects load with OTT disabled, preserving their existing processing. Existing parameter IDs and automation indices are retained.

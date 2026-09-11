@@ -19,6 +19,7 @@
 #include "FreqDividerGroup.h"
 #include "SoloButton.h"
 #include "SpectrumComponent.h"
+#include "OttBandControls.h"
 #include <array>
 #include <functional>
 #include <memory>
@@ -42,6 +43,8 @@ public:
     void resized() override;
     void animationTick(float deltaSeconds);
     void dismissTransientUi();
+    void setOttMode(bool enabled);
+    void presentOttMeters(const MeterValues& values, std::uint64_t generation);
     void mouseEnter(const juce::MouseEvent& event) override;
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
@@ -79,8 +82,13 @@ private:
         std::unique_ptr<SoloButton> soloButton;
         std::unique_ptr<EnableButton> enableButton;
         std::unique_ptr<CloseButton> closeButton;
+        std::unique_ptr<OttBandControls> ott;
     };
     std::vector<BandUIs> bandUIs;
+    bool ottMode = false;
+    std::uint64_t lastOttMeterGeneration = 0;
+    double lastOttMeterTimeMs = -1.0;
+    bool dismissOttGestures();
     FireAudioProcessor& processor;
     state::StateComponent& stateComponent;
     float margin = 0.0f;

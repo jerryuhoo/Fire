@@ -91,6 +91,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     MeterValues staleMeterValues;
     processor.getLatestMeterValues(staleMeterValues);
 
+    bandPanel.onModuleChanged = [this]
+    {
+        multiband.setOttMode(activeWorkspace == 0 && bandPanel.isOttSelected());
+    };
+
     addAndMakeVisible(valuePopup);
     valuePopup.setAlwaysOnTop(true);
     valuePopup.setVisible(false);
@@ -1529,6 +1534,7 @@ void FireAudioProcessorEditor::timerCallback()
     if (hasCachedMeterValues)
     {
         bandPanel.presentMeterValues(cachedMeterValues, meterPacketGeneration);
+        multiband.presentOttMeters(cachedMeterValues, meterPacketGeneration);
         globalPanel.presentMeterValues(cachedMeterValues, meterPacketGeneration);
     }
 
@@ -1656,6 +1662,8 @@ void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animate
     const bool workspaceChanged = activeWorkspace != targetWorkspace;
     workspaceReveal = workspaceChanged && animateSelection && isShowing() ? 0.15f : 1.0f;
     activeWorkspace = targetWorkspace;
+    multiband.setOttMode(activeWorkspace == 0 && bandPanel.isOttSelected());
+    if (safeThis == nullptr) return;
     // Publish the target before any graph-bearing panel becomes visible.
     // Graph visibility callbacks can synchronously repaint, so changing the
     // source afterwards exposes one frame from the previous workspace.

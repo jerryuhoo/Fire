@@ -13,6 +13,7 @@
 #include "../../GUI/ContextAwareComboBox.h"
 #include "../../GUI/LookAndFeel.h"
 #include "../ControlPanel/Graph Components/DistortionGraph.h"
+#include "Graph Components/OttGraph.h"
 #include "../ControlPanel/Graph Components/Oscilloscope.h"
 #include "../ControlPanel/Graph Components/VUPanel.h"
 #include "../ControlPanel/Graph Components/WidthGraph.h"
@@ -51,11 +52,13 @@ public:
 
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     void presentDistortionGraphValues(const DistortionGraphValues& values);
+    bool isOttSelected() const { return ottSwitch.getToggleState(); }
+    std::function<void()> onModuleChanged;
 
     void setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass);
 
     PrimaryToggleButton shapeBypassButton, compressorBypassButton,
-        widthBypassButton, driveBypassButton;
+        widthBypassButton, driveBypassButton, ottBypassButton;
     PrimaryToggleButton dcFilterButton;
 
     int getFocusBandNum() const { return focusBandNum; }
@@ -136,7 +139,8 @@ private:
     std::unique_ptr<ButtonAttachment> linkedAttachment, safeAttachment, extremeAttachment,
         shapeBypassAttachment, compressorBypassAttachment, widthBypassAttachment, dcFilterAttachment, driveBypassAttachment;
 
-    PrimaryTextButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch;
+    PrimaryTextButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch, ottSwitch;
+    std::unique_ptr<ButtonAttachment> ottAttachment;
     enum RadioButtonIds
     {
         switchButtons = 1004
@@ -147,6 +151,7 @@ private:
     juce::Array<juce::Component*> widthComponents;
     juce::Array<juce::Component*> compressorComponents;
     juce::Array<juce::Component*> driveComponents; // New group for drive
+    juce::Array<juce::Component*> ottComponents;
     juce::Array<juce::Component*> allControls;
 
     // Groups for enable/disable logic
@@ -171,6 +176,9 @@ private:
     // Graphs moved from GraphPanel
     Oscilloscope oscilloscope { processor };
     DistortionGraph distortionGraph { processor };
+    OttGraph ottGraph;
+    std::uint64_t lastOttMeterGeneration = 0;
+    double lastOttMeterTimeMs = -1.0;
     VUPanel vuPanel { processor };
     WidthGraph widthGraph { processor };
     GraphTemplate* zoomedGraph = nullptr;

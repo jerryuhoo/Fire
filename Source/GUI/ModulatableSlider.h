@@ -134,6 +134,8 @@ public:
     // Used by a shared panel to apply a parameter rebind only after Slider's
     // own drag listeners have closed their current host gesture.
     std::function<void()> onInteractionEnded;
+    // A pure value constraint for controls whose legal limits depend on a peer.
+    std::function<double(double)> valueConstraint;
 
     const juce::String& getParamID() const { return parameterID; }
     double getLfoValue() const { return lfoValue; }
@@ -148,6 +150,7 @@ public:
     void enablementChanged() override;
 
 private:
+    void valueChanged() override;
     friend struct ModulatableSliderTestAccess;
     friend struct ModulatableSliderInteractionTestAccess;
 

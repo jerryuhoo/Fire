@@ -109,6 +109,12 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
         bandUIs[i].closeButton->setPresented(false, false);
         bandUIs[i].closeButton->addListener(this);
         bandUIs[i].closeButton->addMouseListener(this, false);
+        bandUIs[i].ott = std::make_unique<OttBandControls>(processor, i);
+        addChildComponent(*bandUIs[i].ott);
+        const juce::Component::SafePointer<Multiband> safeThis(this);
+        auto focusBand = [safeThis, i] { if (safeThis) safeThis->setFocusIndex(i); };
+        bandUIs[i].ott->up.onDragStart = focusBand;
+        bandUIs[i].ott->down.onDragStart = focusBand;
     }
 
     // Init Vertical Lines
@@ -279,6 +285,16 @@ void Multiband::animationTick(float deltaSeconds)
         return;
 
     const juce::Component::SafePointer<Multiband> safeThis(this);
+    if (ottMode)
+        for (auto& band : bandUIs)
+        {
+            if (band.ott && lastOttMeterTimeMs >= 0.0
+                && juce::Time::getMillisecondCounterHiRes() - lastOttMeterTimeMs > 250.0)
+                band.ott->setMeter(0.0f);
+            if (band.ott) band.ott->refresh();
+            if (! safeThis) return;
+        }
+
     for (const auto& dividerGroup : freqDividerGroup)
     {
         if (dividerGroup == nullptr)
@@ -347,8 +363,40 @@ void Multiband::animationTick(float deltaSeconds)
         repaint();
 }
 
+bool Multiband::dismissOttGestures()
+{
+    const juce::Component::SafePointer<Multiband> safeThis(this);
+    for (auto& band : bandUIs)
+    {
+        if (band.ott) band.ott->dismiss();
+        if (! safeThis) return false;
+    }
+    return true;
+}
+
+void Multiband::setOttMode(bool enabled)
+{
+    const juce::Component::SafePointer<Multiband> safeThis(this);
+    if (ottMode == enabled) return;
+    if (! dismissOttGestures()) return;
+    ottMode = enabled;
+    setLineRelatedBoundsByX();
+    if (safeThis) repaint();
+}
+
+void Multiband::presentOttMeters(const MeterValues& values, std::uint64_t generation)
+{
+    if (generation == lastOttMeterGeneration) return;
+    lastOttMeterGeneration = generation;
+    lastOttMeterTimeMs = juce::Time::getMillisecondCounterHiRes();
+    for (size_t i = 0; i < bandUIs.size(); ++i)
+        if (bandUIs[i].ott)
+            bandUIs[i].ott->setMeter(values.bandLevelsAreFresh ? values.ottGainChangeDb[i] : 0.0f);
+}
+
 void Multiband::dismissTransientUi()
 {
+    if (! dismissOttGestures()) return;
     clearPrimaryPointerState();
     hoveredBandIndex = -1;
     for (auto& hover : bandHoverAnimations)
@@ -557,6 +605,7 @@ void Multiband::applyAuthoritativeBandCount(int requestedBandCount,
                                             bool publishCanonicalParameters,
                                             const DividerVisualSnapshot* previousVisuals)
 {
+    if (requestedBandCount != lineNum + 1 && ! dismissOttGestures()) return;
     const int newBandCount = juce::jlimit(1, 4, requestedBandCount);
     const int newLineCount = newBandCount - 1;
     const auto frequencies = getCanonicalCrossoverFrequencies(newBandCount);
@@ -809,6 +858,7 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
 
 bool Multiband::addBandAtX(float localX)
 {
+    if (! dismissOttGestures()) return false;
     if (getWidth() <= 0 || lineNum >= 3 || ! std::isfinite(localX))
         return false;
 
@@ -877,6 +927,7 @@ bool Multiband::addBandAtX(float localX)
 
 bool Multiband::deleteBandAtIndex(int bandIndex)
 {
+    if (! dismissOttGestures()) return false;
     if (lineNum <= 0 || ! juce::isPositiveAndBelow(bandIndex, lineNum + 1))
         return false;
 
@@ -1077,6 +1128,19 @@ void Multiband::setLineRelatedBoundsByX()
                                            getHeight());
         }
     }
+
+    const juce::Component::SafePointer<Multiband> safeThis(this);
+    for (size_t i = 0; i < bandUIs.size(); ++i)
+        if (auto* ott = bandUIs[i].ott.get())
+        {
+            ott->setBounds(getBandBounds(static_cast<int>(i)).toNearestInt());
+            if (! safeThis) return;
+            ott->setVisible(ottMode && static_cast<int>(i) <= lineNum);
+            if (! safeThis) return;
+            ott->refresh();
+            if (! safeThis) return;
+            ott->toFront(false);
+        }
 
     // Divider groups deliberately overlap neighbouring bands to provide a
     // generous drag target.  Keep the compact band controls above those

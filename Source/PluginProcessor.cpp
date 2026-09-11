@@ -1251,6 +1251,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     ott.prepare(spec);
     mOttInputLevelDb.store(-120.0f, std::memory_order_relaxed);
     mOttGainChangeDb.store(0.0f, std::memory_order_relaxed);
+    mOttDynamicsActivityDb.store(0.0f, std::memory_order_relaxed);
     widthProcessor.prepare(spec.sampleRate);
     gain.setRampDurationSeconds(0.05);
     gain.prepare(spec);
@@ -1348,6 +1349,7 @@ void BandProcessor::reset()
     ott.reset();
     mOttInputLevelDb.store(-120.0f, std::memory_order_relaxed);
     mOttGainChangeDb.store(0.0f, std::memory_order_relaxed);
+    mOttDynamicsActivityDb.store(0.0f, std::memory_order_relaxed);
     widthProcessor.reset();
     gain.reset();
     outputGainTransition.reset();
@@ -1974,6 +1976,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
     ott.process(postDistortionContext.getOutputBlock(), paramsForProcessing.ott);
     mOttInputLevelDb.store(params.isBandEnabled ? ott.getInputLevelDb() : -120.0f, std::memory_order_relaxed);
     mOttGainChangeDb.store(params.isBandEnabled ? ott.getGainChangeDb() : 0.0f, std::memory_order_relaxed);
+    mOttDynamicsActivityDb.store(params.isBandEnabled ? ott.getDynamicsActivityDb() : 0.0f, std::memory_order_relaxed);
     if (buffer.getNumChannels() == 2)
     {
         // Keep the width path warm and use the mixer's existing 50 ms ramp for
@@ -8255,6 +8258,7 @@ void FireAudioProcessor::publishMeterValues(bool refreshBandMeters)
                 values.bandOutputPeak_R[static_cast<size_t>(i)] = band->mOutputRightPeak.load();
                 values.ottInputLevelDb[static_cast<size_t>(i)] = band->mOttInputLevelDb.load(std::memory_order_relaxed);
                 values.ottGainChangeDb[static_cast<size_t>(i)] = band->mOttGainChangeDb.load(std::memory_order_relaxed);
+                values.ottDynamicsActivityDb[static_cast<size_t>(i)] = band->mOttDynamicsActivityDb.load(std::memory_order_relaxed);
             }
         }
     }

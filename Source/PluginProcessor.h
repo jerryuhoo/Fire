@@ -288,6 +288,7 @@ struct BandProcessor
     std::atomic<float> mSampleMaxValue { 0.0f };
     std::atomic<float> mOttInputLevelDb { -120.0f };
     std::atomic<float> mOttGainChangeDb { 0.0f };
+    std::atomic<float> mOttDynamicsActivityDb { 0.0f };
 
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();

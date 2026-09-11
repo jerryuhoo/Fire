@@ -54,6 +54,7 @@ public:
         envelope = 0.0f;
         levelDb = -120.0f;
         gainChangeDb = 0.0f;
+        dynamicsActivityDb = 0.0f;
         lastTime = -1.0f;
         initialised = false;
     }
@@ -144,10 +145,14 @@ public:
             if (wet <= 0.0f)
             {
                 gainChangeDb = 0.0f;
+                dynamicsActivityDb = 0.0f;
                 continue; // Stable bypass and zero mix are exactly transparent.
             }
             const auto db = juce::Decibels::gainToDecibels(envelope, -120.0f);
             const auto dynamics = gainForLevel(db, values[upward], values[downward], values[depth]);
+            // A wet-weighted activity signal for UI direction/intensity. It
+            // deliberately excludes output trim and is not a gain recipe.
+            dynamicsActivityDb = dynamics * wet;
             const auto wetGain = juce::Decibels::decibelsToGain(dynamics + values[output]);
             const auto gain = 1.0f + wet * (wetGain - 1.0f);
             gainChangeDb = juce::Decibels::gainToDecibels(gain, -120.0f);
@@ -163,6 +168,7 @@ public:
 
     float getInputLevelDb() const noexcept { return levelDb; }
     float getGainChangeDb() const noexcept { return gainChangeDb; }
+    float getDynamicsActivityDb() const noexcept { return dynamicsActivityDb; }
 
 private:
     static float sanitise(size_t control, float value) noexcept
@@ -197,6 +203,7 @@ private:
     std::array<juce::SmoothedValue<float>, controlCount> baseSmoothers;
     juce::SmoothedValue<float> enableSmoother;
     float envelope = 0.0f, levelDb = -120.0f, gainChangeDb = 0.0f;
+    float dynamicsActivityDb = 0.0f;
     float attack = 0.0f, release = 0.0f, lastTime = -1.0f;
     bool initialised = false;
 };

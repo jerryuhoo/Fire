@@ -162,3 +162,34 @@ TEST_CASE("OTT routing changes bridge from the last applied control value", "[ot
     process();
     CHECK(std::abs(buffer.getSample(0, 0) - routed) < 0.00001f);
 }
+
+TEST_CASE("OTT activity distinguishes dynamics from output trim and wet balance", "[ott][dsp][telemetry]")
+{
+    OttProcessor processor;
+    processor.prepare({sampleRate, 64, 2});
+    OttProcessor::Parameters parameters;
+    parameters.enabled = true;
+    parameters.controls[OttProcessor::depth].baseValue = 0.0f;
+    parameters.controls[OttProcessor::output].baseValue = 24.0f;
+    juce::AudioBuffer<float> audio(2, 64);
+    const auto settle = [&] {
+        for (int block = 0; block < 800; ++block)
+        {
+            for (int channel = 0; channel < 2; ++channel)
+                juce::FloatVectorOperations::fill(audio.getWritePointer(channel), 0.5f, 64);
+            processor.process(juce::dsp::AudioBlock<float>(audio), parameters);
+        }
+    };
+    settle();
+    CHECK(processor.getGainChangeDb() > 23.9f);
+    CHECK(processor.getDynamicsActivityDb() == 0.0f);
+    parameters.controls[OttProcessor::depth].baseValue = 1.0f;
+    settle();
+    CHECK(processor.getGainChangeDb() > 0.0f);
+    CHECK(processor.getDynamicsActivityDb() < -10.0f);
+    parameters.controls[OttProcessor::mix].baseValue = 0.0f;
+    settle();
+    CHECK(processor.getDynamicsActivityDb() == 0.0f);
+    processor.reset();
+    CHECK(processor.getDynamicsActivityDb() == 0.0f);
+}

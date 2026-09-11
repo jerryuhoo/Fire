@@ -79,6 +79,7 @@ TEST_CASE("OTT is connected to the band signal path and supports live LFO routin
     CHECK(meters.bandLevelsAreFresh);
     CHECK(meters.ottInputLevelDb[0] == Catch::Approx(-60.0f).margin(0.1f));
     CHECK(meters.ottGainChangeDb[0] > 8.0f);
+    CHECK(meters.ottDynamicsActivityDb[0] > 8.0f);
     set(p, bandId(OTT_MIX_ID), 0);
     CHECK(processSteady(p) == Catch::Approx(dry).margin(1.0e-6f));
     set(p, bandId(OTT_MIX_ID), 1);

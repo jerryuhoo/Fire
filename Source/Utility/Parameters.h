@@ -79,6 +79,7 @@ struct MeterValues
     std::array<float, 4> bandOutputPeak_L { 0.0f }, bandOutputPeak_R { 0.0f };
     std::array<float, 4> ottInputLevelDb { -120.0f, -120.0f, -120.0f, -120.0f };
     std::array<float, 4> ottGainChangeDb {};
+    std::array<float, 4> ottDynamicsActivityDb {};
 
     // Global-only packets retain the last band payload for lock-free copying,
     // but consumers must not treat those historical values as a new reading.

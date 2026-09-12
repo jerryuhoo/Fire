@@ -8896,6 +8896,12 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
                 }
         }
 
+        // setValueNotifyingHost applies each parameter's legal step size.
+        // Older presets can contain intermediate values (e.g. peak gain before
+        // its 0.1 dB step), so compare the value the loader actually produces.
+        if (const auto* ranged = treeState.getParameter(parameterWithID->paramID))
+            presetValue = ranged->convertTo0to1(ranged->convertFrom0to1(presetValue));
+
         if (std::abs(parameterWithID->getValue() - presetValue) > comparisonTolerance)
             return false;
     }

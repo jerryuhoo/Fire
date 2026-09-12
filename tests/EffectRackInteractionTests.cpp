@@ -1,4 +1,6 @@
 #include <GUI/EffectRackNavigation.h>
+#include <PluginEditor.h>
+#include <Panels/TopPanel/Preset.h>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
@@ -27,7 +29,7 @@ struct Fixture
 {
     FireAudioProcessor processor;
     FireLookAndFeel look;
-    PrimaryTextButton builtin {"Filter"};
+    fire::ui::ModuleDragButton builtin {"Filter"};
     fire::ui::EffectRackNavigation nav {processor, 0};
     int selections = 0;
     explicit Fixture(int count = 4)
@@ -190,4 +192,105 @@ TEST_CASE("Rack drag auto-scrolls to offscreen effects and keeps the five-row pi
     static_cast<juce::Component&>(row).mouseUp(event(row, f.inRow(row, edge), origin, juce::ModifierKeys::leftButtonModifier, true));
     CHECK(f.order() == std::vector<int>{1, 2, 3, 4, 5, 6, 7, 0});
     CHECK(f.selections == 0);
+}
+
+TEST_CASE("Real module rails freely interleave builtin modules and inserts and restore their saved order", "[module-order][ui][rack-interaction][preset]")
+{
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    processor.addInsertEffect(0, fire::effects::Type::delay);
+    processor.addInsertEffect(1, fire::effects::Type::chorus);
+    FireAudioProcessorEditor editor(processor);
+    editor.setSize(1000, 500);
+    editor.addToDesktop(juce::ComponentPeer::windowIsTemporary); editor.setVisible(true);
+    std::vector<fire::ui::EffectRackNavigation*> rails;
+    std::function<void(juce::Component&)> collect = [&](auto& root) {
+        if (auto* rail = dynamic_cast<fire::ui::EffectRackNavigation*>(&root)) rails.push_back(rail);
+        for (auto* child : root.getChildren()) collect(*child);
+    };
+    collect(editor);
+    REQUIRE(rails.size() == 2);
+    const auto buttonNamed = [](juce::Component& root, const juce::String& name) {
+        std::function<juce::Button*(juce::Component&)> find = [&](auto& c) -> juce::Button* {
+            if (auto* b = dynamic_cast<juce::Button*>(&c); b && b->getButtonText() == name) return b;
+            for (auto* child : c.getChildren()) if (auto* b = find(*child)) return b;
+            return nullptr;
+        };
+        return find(root);
+    };
+    for (const auto scope : {0, 1})
+    {
+        CAPTURE(scope);
+        auto* workspace = buttonNamed(editor, scope == 0 ? "MASTER LAB" : "BAND LAB");
+        REQUIRE(workspace != nullptr); workspace->triggerClick();
+        auto* nav = *std::find_if(rails.begin(), rails.end(), [scope](auto* rail) { return rail->getScope() == scope; });
+        nav->refresh();
+        REQUIRE(nav->isShowing());
+        const std::vector<juce::String> names = scope == 0
+            ? std::vector<juce::String>{"Filter", "Lo-Fi", "Analysis", "Delay"}
+            : std::vector<juce::String>{"Drive", "Shape", "Compressor", "Stereo", "OTT", "Chorus"};
+        std::vector<fire::ui::ModuleDragButton*> rows;
+        for (const auto& name : names)
+        {
+            auto* row = dynamic_cast<fire::ui::ModuleDragButton*>(buttonNamed(*nav, name));
+            REQUIRE(row != nullptr); rows.push_back(row);
+        }
+        // Move each real builtin and inserted row to the front, then to the end.
+        // Native JUCE mouseUp carries the released left-button flag.
+        for (size_t index = 0; index < rows.size(); ++index)
+        {
+            const int node = index + 1 == rows.size() ? fire::module_order::firstInsert : static_cast<int>(index);
+            CAPTURE(node);
+            auto& row = *rows[index];
+            for (const bool toEnd : {false, true})
+            {
+                auto& viewport = nav->getViewport();
+                viewport.setViewPosition(0, row.getY());
+                const auto origin = row.getLocalBounds().toFloat().getCentre();
+                row.mouseDown(event(row, origin, origin, juce::ModifierKeys::leftButtonModifier));
+                const juce::Point<float> destination(70, toEnd ? viewport.getHeight() - 2.0f : 2.0f);
+                row.mouseDrag(event(row, row.getLocalPoint(&viewport, destination), origin, juce::ModifierKeys::leftButtonModifier, true));
+                for (int frame = 0; frame < 100; ++frame) nav->animationTick(1.0f / 60.0f);
+                row.mouseUp(event(row, row.getLocalPoint(&viewport, destination), origin, juce::ModifierKeys::leftButtonModifier, true));
+                const auto order = processor.getModuleOrder(scope);
+                CHECK(order[toEnd ? rows.size() - 1 : 0] == node);
+                if (toEnd)
+                    for (auto* other : rows) CHECK(row.getY() >= other->getY());
+                else
+                    for (auto* other : rows) CHECK(row.getY() <= other->getY());
+                CHECK(row.getToggleState());
+                CHECK(row.getAlpha() == Catch::Approx(1));
+            }
+        }
+        processor.moveModuleBefore(scope, scope == 0 ? 1 : 2, 0);
+        processor.moveModuleBefore(scope, fire::module_order::firstInsert, 0);
+        nav->refresh();
+        const auto expected = processor.getModuleOrder(scope);
+        juce::XmlElement preset("WINGSFIRE"); state::saveStateToXml(processor, preset);
+        processor.moveModuleBefore(scope, expected[1], expected[0]);
+        nav->refresh();
+        auto& row = *rows.front();
+        const auto origin = row.getLocalBounds().toFloat().getCentre();
+        row.mouseDown(event(row, origin, origin, juce::ModifierKeys::leftButtonModifier));
+        row.mouseDrag(event(row, origin.translated(0, 30), origin, juce::ModifierKeys::leftButtonModifier, true));
+        REQUIRE(state::loadStateFromXml(preset, processor));
+        row.mouseUp(event(row, origin.translated(0, 30), origin, juce::ModifierKeys::leftButtonModifier, true));
+        CHECK(processor.getModuleOrder(scope) == expected);
+        nav->refresh();
+        for (size_t i = 1; i < rows.size(); ++i)
+        {
+            const auto byNode = [&](int node) { return rows[node >= fire::module_order::firstInsert ? rows.size() - 1 : static_cast<size_t>(node)]; };
+            CHECK(byNode(expected[i - 1])->getY() < byNode(expected[i])->getY());
+        }
+        const auto directory = juce::SystemStats::getEnvironmentVariable("FIRE_UI_SNAPSHOT_DIR", {});
+        if (directory.isNotEmpty())
+        {
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(400);
+            nav->getViewport().setViewPosition(0, 0);
+            for (int frame = 0; frame < 60; ++frame) nav->animationTick(1.0f / 60.0f);
+            auto stream = juce::File(directory).getChildFile(scope == 0 ? "master-module-order.png" : "band-module-order.png").createOutputStream();
+            REQUIRE(stream != nullptr); stream->setPosition(0); stream->truncate();
+            CHECK(juce::PNGImageFormat().writeImageToStream(editor.createComponentSnapshot(editor.getLocalBounds()), *stream));
+        }
+    }
 }

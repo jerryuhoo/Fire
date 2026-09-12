@@ -108,6 +108,7 @@
       </GROUP>
       <GROUP id="{A397A229-19FD-F110-6940-6CC5C037D4D0}" name="GUI">
         <FILE id="ottVis1" name="OttVisuals.h" compile="0" resource="0" file="Source/GUI/OttVisuals.h"/>
+        <FILE id="moduleDrag" name="ModuleDragButton.h" compile="0" resource="0" file="Source/GUI/ModuleDragButton.h"/>
         <FILE id="insertUi1" name="EffectRackNavigation.h" compile="0" resource="0" file="Source/GUI/EffectRackNavigation.h"/>
         <FILE id="insertUi2" name="InsertEffectControls.h" compile="0" resource="0" file="Source/GUI/InsertEffectControls.h"/>
         <FILE id="cACb01" name="ContextAwareComboBox.cpp" compile="1" resource="0"

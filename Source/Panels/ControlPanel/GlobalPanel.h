@@ -117,7 +117,7 @@ private:
     // --- Buttons ---
     PrimaryTextButton filterLowCutButton, filterPeakButton, filterHighCutButton;
     // Changed ToggleButton to TextButton for tab-like functionality
-    PrimaryTextButton filterSwitch, downsampleSwitch, graphSwitch;
+    fire::ui::ModuleDragButton filterSwitch, downsampleSwitch, graphSwitch;
     std::unique_ptr<PrimaryToggleButton> filterBypassButton,
         downsampleBypassButton;
 

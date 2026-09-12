@@ -1,6 +1,7 @@
 #pragma once
 #include "../PluginProcessor.h"
 #include "LookAndFeel.h"
+#include "ModuleDragButton.h"
 #include "../Panels/SpectrogramPanel/CloseButton.h"
 
 namespace fire::ui
@@ -55,12 +56,9 @@ public:
             button.setColour(juce::TextButton::textColourOffId, colours::textSecondary);
             button.setColour(juce::TextButton::textColourOnId, colours::textPrimary);
             button.onClick = [this, slot] { if (onSelectEffect) onSelectEffect(slot); };
-            button.onContext = [this, slot] { showSlotMenu(slot); };
-            button.onRowDrag = [this, slot](const juce::MouseEvent& e) { updateDrag(slot, e); };
-            button.onRowDrop = [this](const juce::MouseEvent& e) { finishDrag(e); };
-            button.onRowCancel = [this] { cancelDrag(); };
+            configureDragButton(button, module_order::firstInsert + slot);
             remove.onClick = [this, slot] {
-                if (dragSlot >= 0 || ! isShowing() || ! isEnabled()) return;
+                if (dragNode >= 0 || ! isShowing() || ! isEnabled()) return;
                 const juce::Component::SafePointer<EffectRackNavigation> safe(this);
                 processor.removeInsertEffect(scope, slot);
                 if (safe) refresh();
@@ -75,8 +73,11 @@ public:
     void setBuiltins(std::vector<Row> rows)
     {
         builtins = std::move(rows);
-        for (auto row : builtins)
+        for (size_t node = 0; node < builtins.size(); ++node)
         {
+            auto row = builtins[node];
+            if (auto* button = dynamic_cast<ModuleDragButton*>(row.button))
+                configureDragButton(*button, static_cast<int>(node));
             content.addAndMakeVisible(*row.button);
             if (row.power) content.addAndMakeVisible(*row.power);
         }
@@ -89,7 +90,7 @@ public:
         dismiss();
         if (! safe) return;
         scope = nextScope; selectedSlot = -1;
-        cachedTypes.fill(-1); cachedOrders.fill(-1);
+        cachedTypes.fill(-1); cachedModuleOrder.fill(-2);
         addButton.setComponentID(scope == 0 ? "addMasterEffect" : "addBandEffect");
         for (int slot = 0; slot < effects::slotCount; ++slot)
         {
@@ -125,18 +126,19 @@ public:
             if (previous != visibleRows.end())
             {
                 for (auto row = previous + 1; row != visibleRows.end() && replacement < 0; ++row)
-                    replacement = liveSlotForButton(row->button);
+                    replacement = nodeForButton(row->button);
                 for (auto row = previous; row != visibleRows.begin() && replacement < 0;)
-                    replacement = liveSlotForButton((--row)->button);
+                    replacement = nodeForButton((--row)->button);
             }
         }
-        bool changed = false;
+        const auto order = processor.getModuleOrder(scope);
+        bool changed = cachedModuleOrder != order;
+        cachedModuleOrder = order;
         for (int slot = 0; slot < effects::slotCount; ++slot)
         {
             const auto i = static_cast<size_t>(slot);
             const auto type = processor.getInsertEffectType(scope, slot);
-            const auto order = processor.getInsertEffectOrder(scope, slot);
-            if (cachedTypes[i] != static_cast<int>(type) || cachedOrders[i] != order) changed = true;
+            if (cachedTypes[i] != static_cast<int>(type)) changed = true;
             if (cachedTypes[i] != static_cast<int>(type))
             {
                 insertButtons[i].setButtonText(effects::name(type));
@@ -152,7 +154,7 @@ public:
                 removeButtons[i].setDescription(description);
                 removeButtons[i].setHelpText(description);
             }
-            cachedTypes[i] = static_cast<int>(type); cachedOrders[i] = order;
+            cachedTypes[i] = static_cast<int>(type);
         }
         if (! changed) return;
         cancelRowInteractions();
@@ -163,7 +165,7 @@ public:
         if (selectionRemoved)
         {
             selectedSlot = -1;
-            if (onSelectEffect) onSelectEffect(replacement);
+            selectNode(replacement);
         }
     }
     void setScale(float value) { scale = value; resized(); }
@@ -187,7 +189,7 @@ public:
         if (! safe) return;
         updateSelection(false);
         if (selectionY.advance(dt)) content.repaint();
-        if (dragSlot >= 0)
+        if (dragNode >= 0)
         {
             const auto edge = juce::jmin(26.0f * scale, viewport.getHeight() * 0.2f);
             float speed = 0;
@@ -208,7 +210,7 @@ public:
             auto& remove = removeButtons[i];
             if (remove.advanceAnimation(dt)) remove.repaint();
             if (! safe) return;
-            const bool reveal = dragSlot < 0 && cachedTypes[i] > 0 && isShowing() && isEnabled()
+            const bool reveal = dragNode < 0 && cachedTypes[i] > 0 && isShowing() && isEnabled()
                 && (hoveredSlot == static_cast<int>(i) || insertButtons[i].getFocusAnimation() > 0.01f
                     || powerButtons[i].getFocusAnimation() > 0.01f || remove.getFocusAnimation() > 0.01f);
             if (remove.isPresented() != reveal) remove.setPresented(reveal);
@@ -252,125 +254,6 @@ public:
             });
     }
 private:
-    class SlotButton final : public PrimaryTextButton
-    {
-    public:
-        std::function<void()> onContext;
-        std::function<void(const juce::MouseEvent&)> onRowDrag, onRowDrop;
-        std::function<void()> onRowCancel;
-        float dragThreshold = 6;
-        void cancelRowPointer(bool notify = true)
-        {
-            const bool wasDragging = dragging;
-            pointerIndex = -1; dragging = false;
-            setMouseCursor(juce::MouseCursor::NormalCursor);
-            const juce::Component::SafePointer<SlotButton> safe(this);
-            dismissPointerGesture();
-            if (safe && wasDragging && notify && onRowCancel) onRowCancel();
-        }
-        void mouseDown(const juce::MouseEvent& event) override
-        {
-            if (pointerIndex >= 0 && ! owns(event)) return;
-            const juce::Component::SafePointer<SlotButton> safe(this);
-            cancelRowPointer();
-            if (! safe) return;
-            if (event.mods.isPopupMenu() && ! event.mods.isMiddleButtonDown()
-                && ! (event.mods.isLeftButtonDown() && event.mods.isRightButtonDown()))
-            { if (onContext) onContext(); return; }
-            PrimaryTextButton::mouseDown(event);
-            if (safe && primary(event) && isEnabled() && isShowing())
-            {
-                pointerIndex = event.source.getIndex(); pointerType = event.source.getType();
-                origin = event.position;
-            }
-        }
-        void mouseDrag(const juce::MouseEvent& event) override
-        {
-            if (! owns(event)) return;
-            if (! primary(event) || ! isShowing() || ! isEnabled()) { cancelRowPointer(); return; }
-            if (! dragging && event.position.getDistanceFrom(origin) < dragThreshold)
-            { PrimaryTextButton::mouseDrag(event); return; }
-            dragging = true;
-            const juce::Component::SafePointer<SlotButton> safe(this);
-            dismissPointerGesture(); // A reorder must never become a click on release.
-            if (! safe) return;
-            setMouseCursor(juce::MouseCursor::DraggingHandCursor);
-            if (onRowDrag) onRowDrag(event);
-        }
-        void mouseUp(const juce::MouseEvent& event) override
-        {
-            if (pointerIndex >= 0 && ! owns(event)) return;
-            if (dragging)
-            {
-                const juce::Component::SafePointer<SlotButton> safe(this);
-                cancelRowPointer(false);
-                if (! safe) return;
-                // JUCE delivers mouseUp with the modifiers from before the
-                // release, including the released left button itself.
-                if (! event.mods.isRightButtonDown() && ! event.mods.isMiddleButtonDown()
-                    && ! event.mods.isPopupMenu() && isShowing() && isEnabled())
-                { if (onRowDrop) onRowDrop(event); }
-                else if (onRowCancel) onRowCancel();
-                return;
-            }
-            pointerIndex = -1;
-            PrimaryTextButton::mouseUp(event);
-        }
-        void mouseMove(const juce::MouseEvent& event) override
-        {
-            const juce::Component::SafePointer<SlotButton> safe(this);
-            if (owns(event) && ! event.mods.isAnyMouseButtonDown()) cancelRowPointer();
-            if (safe) PrimaryTextButton::mouseMove(event);
-        }
-        void mouseEnter(const juce::MouseEvent& event) override
-        {
-            const juce::Component::SafePointer<SlotButton> safe(this);
-            if (owns(event) && ! event.mods.isAnyMouseButtonDown()) cancelRowPointer();
-            if (safe) PrimaryTextButton::mouseEnter(event);
-        }
-        void mouseExit(const juce::MouseEvent& event) override
-        {
-            const juce::Component::SafePointer<SlotButton> safe(this);
-            if (owns(event) && ! event.mods.isAnyMouseButtonDown()) cancelRowPointer();
-            if (safe) PrimaryTextButton::mouseExit(event);
-        }
-        bool keyPressed(const juce::KeyPress& key) override
-        {
-            if (key.isKeyCode(juce::KeyPress::escapeKey) && pointerIndex >= 0)
-            { cancelRowPointer(); return true; }
-            return PrimaryTextButton::keyPressed(key);
-        }
-        void focusLost(FocusChangeType cause) override
-        {
-            const juce::Component::SafePointer<SlotButton> safe(this);
-            cancelRowPointer();
-            if (safe) PrimaryTextButton::focusLost(cause);
-        }
-        void visibilityChanged() override
-        {
-            const juce::Component::SafePointer<SlotButton> safe(this);
-            PrimaryTextButton::visibilityChanged();
-            if (safe && ! isShowing()) cancelRowPointer();
-        }
-        void enablementChanged() override
-        {
-            const juce::Component::SafePointer<SlotButton> safe(this);
-            PrimaryTextButton::enablementChanged();
-            if (safe && ! isEnabled()) cancelRowPointer();
-        }
-    private:
-        static bool primary(const juce::MouseEvent& event)
-        {
-            return event.mods.isLeftButtonDown() && ! event.mods.isRightButtonDown()
-                && ! event.mods.isMiddleButtonDown() && ! event.mods.isPopupMenu();
-        }
-        bool owns(const juce::MouseEvent& event) const
-        { return pointerIndex >= 0 && pointerIndex == event.source.getIndex() && pointerType == event.source.getType(); }
-        int pointerIndex = -1;
-        juce::MouseInputSource::InputSourceType pointerType = juce::MouseInputSource::mouse;
-        juce::Point<float> origin;
-        bool dragging = false;
-    };
     class Content final : public juce::Component
     {
     public:
@@ -388,6 +271,38 @@ private:
     private:
         EffectRackNavigation& owner;
     };
+    void configureDragButton(ModuleDragButton& button, int node)
+    {
+        button.onContext = [this, node] { showModuleMenu(node); };
+        button.onRowDrag = [this, node](const juce::MouseEvent& e) { updateDrag(node, e); };
+        button.onRowDrop = [this](const juce::MouseEvent& e) { finishDrag(e); };
+        button.onRowCancel = [this] { cancelDrag(); };
+    }
+    Row rowForNode(int node)
+    {
+        if (node >= 0 && node < static_cast<int>(builtins.size())) return builtins[static_cast<size_t>(node)];
+        if (node >= module_order::firstInsert && node < module_order::capacity)
+        {
+            const auto slot = static_cast<size_t>(node - module_order::firstInsert);
+            return {&insertButtons[slot], &powerButtons[slot]};
+        }
+        return {nullptr, nullptr};
+    }
+    int nodeForButton(const juce::TextButton* button) const
+    {
+        for (size_t node = 0; node < builtins.size(); ++node)
+            if (builtins[node].button == button) return static_cast<int>(node);
+        const auto slot = liveSlotForButton(button);
+        return slot < 0 ? -1 : module_order::firstInsert + slot;
+    }
+    void selectNode(int node)
+    {
+        auto row = rowForNode(node);
+        if (! row.button) { if (onSelectEffect) onSelectEffect(-1); return; }
+        if (row.button->getToggleState()) updateSelection(true);
+        else if (node >= module_order::firstInsert) { if (onSelectEffect) onSelectEffect(node - module_order::firstInsert); }
+        else row.button->triggerClick();
+    }
     int liveSlotForButton(const juce::TextButton* button) const
     {
         for (size_t i = 0; i < insertButtons.size(); ++i)
@@ -397,7 +312,7 @@ private:
     }
     void noteHover(const juce::MouseEvent& event)
     {
-        if (dragSlot >= 0) return;
+        if (dragNode >= 0) return;
         const auto point = event.getEventRelativeTo(&viewport).position;
         hoveredSlot = -1;
         if (viewport.getLocalBounds().toFloat().contains(point))
@@ -414,51 +329,57 @@ private:
     void mouseDown(const juce::MouseEvent& event) override { noteHover(event); }
     void cancelDrag()
     {
-        if (dragSlot >= 0)
+        if (dragNode >= 0)
         {
-            insertButtons[static_cast<size_t>(dragSlot)].setAlpha(1);
-            powerButtons[static_cast<size_t>(dragSlot)].setAlpha(1);
+            const auto row = rowForNode(dragNode);
+            if (row.button) row.button->setAlpha(1);
+            if (row.power) row.power->setAlpha(1);
         }
-        dragSlot = -1; dragTarget = -1; scrollRemainder = 0;
+        dragNode = -1; dragTarget = -1; scrollRemainder = 0;
         content.repaint();
     }
     void cancelRowInteractions()
     {
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
         cancelDrag(); hoveredSlot = -1;
+        for (auto row : builtins)
+            if (auto* button = dynamic_cast<ModuleDragButton*>(row.button))
+            {button->cancelRowPointer(false); if (! safe) return;}
         for (auto& button : insertButtons) {button.cancelRowPointer(false); if (! safe) return;}
         for (auto& button : removeButtons) {button.setPresented(false, false); if (! safe) return;}
     }
-    void updateDrag(int slot, const juce::MouseEvent& event)
+    void updateDrag(int node, const juce::MouseEvent& event)
     {
-        if (! isShowing() || ! isEnabled() || processor.getInsertEffectType(scope, slot) == effects::Type::none) return;
+        const auto row = rowForNode(node);
+        if (! isShowing() || ! isEnabled() || ! row.button || nodeForButton(row.button) != node) return;
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
-        if (dragSlot < 0)
+        if (dragNode < 0)
         {
-            if (visibleRows.size() < builtins.size() + 2) return;
-            dragSlot = slot; dragGeneration = generation;
+            if (visibleRows.size() < 2) return;
+            dragNode = node; dragGeneration = generation;
             dragOffset = juce::jlimit(0.0f, static_cast<float>(rowPitch), static_cast<float>(event.getMouseDownY()));
-            insertButtons[static_cast<size_t>(slot)].setAlpha(0.32f);
-            powerButtons[static_cast<size_t>(slot)].setAlpha(0.32f);
+            row.button->setAlpha(0.32f);
+            if (row.power) row.power->setAlpha(0.32f);
             for (auto& button : removeButtons) {button.setPresented(false, false); if (! safe) return;}
         }
-        if (dragSlot != slot || dragGeneration != generation) return;
+        if (dragNode != node || dragGeneration != generation) return;
         dragViewPoint = event.getEventRelativeTo(&viewport).position;
         updateDropTarget(); content.repaint();
     }
     void updateDropTarget()
     {
         dragTarget = -1;
-        if (dragSlot < 0 || ! viewport.getLocalBounds().toFloat().contains(dragViewPoint)) return;
+        if (dragNode < 0 || ! viewport.getLocalBounds().toFloat().contains(dragViewPoint)) return;
         const auto y = dragViewPoint.y + viewport.getViewPositionY();
         int position = 0;
         dropLineY = 0;
+        dropBeforeNode = -1;
         for (auto row : visibleRows)
         {
-            const auto slot = liveSlotForButton(row.button);
-            if (slot < 0 || slot == dragSlot) continue;
+            const auto node = nodeForButton(row.button);
+            if (node < 0 || node == dragNode) continue;
             if (y < row.button->getBounds().getCentreY())
-            { dropLineY = static_cast<float>(row.button->getY()) - 2.0f * scale; break; }
+            { dropBeforeNode = node; dropLineY = static_cast<float>(row.button->getY()) - 2.0f * scale; break; }
             ++position;
             dropLineY = static_cast<float>(row.button->getBottom()) + 2.0f * scale;
         }
@@ -468,22 +389,21 @@ private:
     {
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
         refresh(); // An intervening preset/order edit invalidates this gesture.
-        if (! safe || dragSlot < 0 || dragGeneration != generation) return;
+        if (! safe || dragNode < 0 || dragGeneration != generation) return;
         dragViewPoint = event.getEventRelativeTo(&viewport).position;
         updateDropTarget();
-        const auto slot = dragSlot, target = dragTarget;
+        const auto node = dragNode, target = dragTarget, anchor = dropBeforeNode;
         cancelDrag();
         if (target < 0) return;
-        processor.moveInsertEffectToPosition(scope, slot, target);
+        processor.moveModuleBefore(scope, node, anchor);
         if (! safe) return;
         refresh();
         if (! safe) return;
-        if (selectedSlot == slot) updateSelection(true);
-        else if (onSelectEffect) onSelectEffect(slot);
+        selectNode(node);
     }
     void paintDrag(juce::Graphics& g)
     {
-        if (dragSlot < 0) return;
+        if (dragNode < 0) return;
         const auto view = viewport.getViewArea().toFloat();
         const auto margin = 4.0f * scale;
         const auto height = static_cast<float>(rowPitch) - margin;
@@ -493,7 +413,7 @@ private:
         g.fillRoundedRectangle(bounds.translated(0, 3 * scale), Metrics::radius * scale);
         g.setColour(colours::raised.brighter(0.08f));
         g.fillRoundedRectangle(bounds, Metrics::radius * scale);
-        auto& button = insertButtons[static_cast<size_t>(dragSlot)];
+        auto& button = *rowForNode(dragNode).button;
         g.setFont(getLookAndFeel().getTextButtonFont(button, rowPitch));
         g.setColour(colours::textPrimary);
         g.drawFittedText(button.getButtonText(), bounds.reduced(12 * scale, 0).toNearestInt(), juce::Justification::centredLeft, 1);
@@ -511,18 +431,18 @@ private:
     }
     void rebuildRows()
     {
-        visibleRows = builtins;
-        std::vector<int> active;
-        for (int slot = 0; slot < effects::slotCount; ++slot)
-            if (processor.getInsertEffectType(scope, slot) != effects::Type::none) active.push_back(slot);
-        std::stable_sort(active.begin(), active.end(), [&](int a, int b) {return processor.getInsertEffectOrder(scope, a) < processor.getInsertEffectOrder(scope, b);});
+        visibleRows.clear();
         for (int slot = 0; slot < effects::slotCount; ++slot)
         {
-            const bool visible = std::find(active.begin(), active.end(), slot) != active.end();
+            const bool visible = processor.getInsertEffectType(scope, slot) != effects::Type::none;
             insertButtons[static_cast<size_t>(slot)].setVisible(visible);
             powerButtons[static_cast<size_t>(slot)].setVisible(visible);
         }
-        for (int slot : active) visibleRows.push_back({&insertButtons[static_cast<size_t>(slot)], &powerButtons[static_cast<size_t>(slot)]});
+        for (const auto node : processor.getModuleOrder(scope))
+        {
+            const auto row = rowForNode(node);
+            if (row.button && nodeForButton(row.button) == node) visibleRows.push_back(row);
+        }
         layoutRows();
     }
     void layoutRows()
@@ -535,11 +455,11 @@ private:
         {
             const auto row = juce::Rectangle<int>(0, static_cast<int>(i) * rowPitch, width, rowPitch).reduced(margin);
             visibleRows[i].button->setBounds(row);
+            if (auto* button = dynamic_cast<ModuleDragButton*>(visibleRows[i].button)) button->dragThreshold = 6.0f * scale;
             const auto slot = liveSlotForButton(visibleRows[i].button);
             if (slot >= 0)
             {
                 auto& button = insertButtons[static_cast<size_t>(slot)];
-                button.dragThreshold = 6.0f * scale;
                 const auto side = juce::jmin(row.getHeight(), juce::roundToInt(24.0f * scale));
                 button.getProperties().set("fireModuleTrailingSpace", side + 5.0f * scale);
                 auto& remove = removeButtons[static_cast<size_t>(slot)];
@@ -570,26 +490,25 @@ private:
                 viewport.setViewPosition(0, selected->getBottom() - viewport.getHeight());
         }
     }
-    void showSlotMenu(int slot)
+    void showModuleMenu(int node)
     {
-        if (! isShowing() || ! isEnabled() || ! insertButtons[static_cast<size_t>(slot)].isShowing()
-            || processor.getInsertEffectType(scope, slot) == effects::Type::none) return;
+        const auto row = rowForNode(node);
+        if (! isShowing() || ! isEnabled() || ! row.button || ! row.button->isShowing()
+            || nodeForButton(row.button) != node) return;
         if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr) return;
         juce::PopupMenu menu;
-        const auto* selected = &insertButtons[static_cast<size_t>(slot)];
-        const bool canMoveUp = visibleRows.size() > builtins.size() && visibleRows[builtins.size()].button != selected;
-        const bool canMoveDown = ! visibleRows.empty() && visibleRows.back().button != selected;
+        const bool canMoveUp = ! visibleRows.empty() && visibleRows.front().button != row.button;
+        const bool canMoveDown = ! visibleRows.empty() && visibleRows.back().button != row.button;
         menu.addItem(1, "Move up", canMoveUp); menu.addItem(2, "Move down", canMoveDown);
-        menu.addSeparator(); menu.addItem(3, "Remove effect");
+        if (node >= module_order::firstInsert) {menu.addSeparator(); menu.addItem(3, "Remove effect");}
         const auto epoch = generation;
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
-        auto& button = insertButtons[static_cast<size_t>(slot)];
-        menu.showMenuAsync(prepareContextMenu(menu, button, juce::Desktop::getMousePosition())
+        menu.showMenuAsync(prepareContextMenu(menu, *row.button, juce::Desktop::getMousePosition())
                               .withMinimumWidth(juce::roundToInt(170.0f * scale))
-                              .withStandardItemHeight(juce::roundToInt(29.0f * scale)), [safe, epoch, slot](int result) {
+                              .withStandardItemHeight(juce::roundToInt(29.0f * scale)), [safe, epoch, node](int result) {
             if (! safe || safe->generation != epoch || ! safe->isShowing() || ! safe->isEnabled()) return;
-            if (result == 3) safe->processor.removeInsertEffect(safe->scope, slot);
-            else if (result == 1 || result == 2) safe->processor.moveInsertEffect(safe->scope, slot, result == 1 ? -1 : 1);
+            if (result == 3 && node >= module_order::firstInsert) safe->processor.removeInsertEffect(safe->scope, node - module_order::firstInsert);
+            else if (result == 1 || result == 2) safe->processor.moveModuleBy(safe->scope, node, result == 1 ? -1 : 1);
             if (safe) safe->refresh();
         });
     }
@@ -599,18 +518,19 @@ private:
     juce::Viewport viewport;
     Content content;
     PrimaryTextButton addButton;
-    std::array<SlotButton, effects::slotCount> insertButtons;
+    std::array<ModuleDragButton, effects::slotCount> insertButtons;
     std::array<PrimaryToggleButton, effects::slotCount> powerButtons;
     std::array<CloseButton, effects::slotCount> removeButtons;
     std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>, effects::slotCount> attachments;
     std::vector<Row> builtins, visibleRows;
-    std::array<int, effects::slotCount> cachedTypes {}, cachedOrders {};
+    std::array<int, effects::slotCount> cachedTypes {};
+    module_order::Order cachedModuleOrder {};
     SpringValue selectionY;
     int scope = -1, selectedSlot = -1, rowPitch = 1;
     bool selectionInitialised = false;
     float scale = 1;
     std::uint64_t generation = 0;
-    int hoveredSlot = -1, dragSlot = -1, dragTarget = -1;
+    int hoveredSlot = -1, dragNode = -1, dragTarget = -1, dropBeforeNode = -1;
     std::uint64_t dragGeneration = 0;
     juce::Point<float> dragViewPoint;
     float dragOffset = 0, dropLineY = 0, scrollRemainder = 0;

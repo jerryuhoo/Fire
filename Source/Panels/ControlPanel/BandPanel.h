@@ -147,7 +147,7 @@ private:
     std::unique_ptr<ButtonAttachment> linkedAttachment, safeAttachment, extremeAttachment,
         shapeBypassAttachment, compressorBypassAttachment, widthBypassAttachment, dcFilterAttachment, driveBypassAttachment;
 
-    PrimaryTextButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch, ottSwitch;
+    fire::ui::ModuleDragButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch, ottSwitch;
     std::unique_ptr<ButtonAttachment> ottAttachment;
     enum RadioButtonIds
     {

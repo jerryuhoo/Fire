@@ -1,6 +1,7 @@
 #pragma once
 #include "../PluginProcessor.h"
 #include "LookAndFeel.h"
+#include "../Panels/SpectrogramPanel/CloseButton.h"
 
 namespace fire::ui
 {
@@ -29,6 +30,7 @@ public:
     {
         setInterceptsMouseClicks(false, true);
         viewport.setViewedComponent(&content, false);
+        content.addMouseListener(this, true);
         viewport.setScrollBarsShown(true, false);
         viewport.setScrollOnDragMode(juce::Viewport::ScrollOnDragMode::never);
         viewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, colours::textMuted.withAlpha(0.25f));
@@ -43,7 +45,9 @@ public:
         {
             auto& button = insertButtons[static_cast<size_t>(slot)];
             auto& power = powerButtons[static_cast<size_t>(slot)];
+            auto& remove = removeButtons[static_cast<size_t>(slot)];
             content.addChildComponent(button); content.addChildComponent(power);
+            content.addChildComponent(remove);
             button.getProperties().set("fireAnimatedSelection", true);
             button.getProperties().set("fireModuleRail", true);
             button.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
@@ -52,11 +56,20 @@ public:
             button.setColour(juce::TextButton::textColourOnId, colours::textPrimary);
             button.onClick = [this, slot] { if (onSelectEffect) onSelectEffect(slot); };
             button.onContext = [this, slot] { showSlotMenu(slot); };
+            button.onRowDrag = [this, slot](const juce::MouseEvent& e) { updateDrag(slot, e); };
+            button.onRowDrop = [this](const juce::MouseEvent& e) { finishDrag(e); };
+            button.onRowCancel = [this] { cancelDrag(); };
+            remove.onClick = [this, slot] {
+                if (dragSlot >= 0 || ! isShowing() || ! isEnabled()) return;
+                const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+                processor.removeInsertEffect(scope, slot);
+                if (safe) refresh();
+            };
             power.getProperties().set("iconType", "power");
         }
         setScope(initialScope);
     }
-    ~EffectRackNavigation() override { dismiss(); viewport.setViewedComponent(nullptr, false); }
+    ~EffectRackNavigation() override { dismiss(); content.removeMouseListener(this); viewport.setViewedComponent(nullptr, false); }
     std::function<void(int)> onSelectEffect;
 
     void setBuiltins(std::vector<Row> rows)
@@ -87,6 +100,7 @@ public:
             powerButtons[i].setTitle((scope == 0 ? "Master" : "Band " + juce::String(scope)) + " FX " + juce::String(slot + 1) + " power");
             attachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, id, powerButtons[i]);
             insertButtons[i].setComponentID(effects::parameterID(scope, slot, effects::typeField));
+            removeButtons[i].setComponentID(effects::parameterID(scope, slot, effects::typeField) + "Remove");
         }
         refresh();
     }
@@ -100,6 +114,22 @@ public:
     }
     void refresh()
     {
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        int replacement = -1;
+        const bool selectionRemoved = selectedSlot >= 0 && processor.getInsertEffectType(scope, selectedSlot) == effects::Type::none;
+        if (selectionRemoved)
+        {
+            const auto previous = std::find_if(visibleRows.begin(), visibleRows.end(), [&](const auto& row) {
+                return row.button == &insertButtons[static_cast<size_t>(selectedSlot)];
+            });
+            if (previous != visibleRows.end())
+            {
+                for (auto row = previous + 1; row != visibleRows.end() && replacement < 0; ++row)
+                    replacement = liveSlotForButton(row->button);
+                for (auto row = previous; row != visibleRows.begin() && replacement < 0;)
+                    replacement = liveSlotForButton((--row)->button);
+            }
+        }
         bool changed = false;
         for (int slot = 0; slot < effects::slotCount; ++slot)
         {
@@ -110,25 +140,38 @@ public:
             if (cachedTypes[i] != static_cast<int>(type))
             {
                 insertButtons[i].setButtonText(effects::name(type));
-                insertButtons[i].setTooltip(juce::String(effects::name(type)) + " · slot " + juce::String(slot + 1) + ". Right-click to move or remove.");
+                insertButtons[i].setTooltip(juce::String(effects::name(type)) + " · slot " + juce::String(slot + 1) + ". Drag to reorder. Hover to remove.");
                 powerButtons[i].setColour(juce::ToggleButton::tickColourId, effectColour(type));
                 powerButtons[i].setColour(juce::ToggleButton::tickDisabledColourId, colours::disabled);
                 powerButtons[i].setTooltip("Enable or bypass " + juce::String(effects::name(type)) + " in this chain");
+                const auto description = "Remove " + juce::String(effects::name(type))
+                    + (scope == 0 ? " from Master" : " from Band " + juce::String(scope));
+                removeButtons[i].setButtonText("Remove");
+                removeButtons[i].setTitle(description);
+                removeButtons[i].setTooltip(description);
+                removeButtons[i].setDescription(description);
+                removeButtons[i].setHelpText(description);
             }
             cachedTypes[i] = static_cast<int>(type); cachedOrders[i] = order;
         }
         if (! changed) return;
+        cancelRowInteractions();
+        if (! safe) return;
         ++generation;
         rebuildRows();
-        if (selectedSlot >= 0 && processor.getInsertEffectType(scope, selectedSlot) == effects::Type::none)
+        if (! safe) return;
+        if (selectionRemoved)
         {
             selectedSlot = -1;
-            if (onSelectEffect) onSelectEffect(-1);
+            if (onSelectEffect) onSelectEffect(replacement);
         }
     }
     void setScale(float value) { scale = value; resized(); }
     void resized() override
     {
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        cancelRowInteractions();
+        if (! safe) return;
         auto area = getLocalBounds().reduced(juce::roundToInt(8.0f * scale));
         const auto title = area.removeFromTop(juce::jmin(area.getHeight(), juce::roundToInt(22.0f * scale)));
         const auto side = juce::jmin(title.getHeight(), juce::roundToInt(21.0f * scale));
@@ -144,11 +187,41 @@ public:
         if (! safe) return;
         updateSelection(false);
         if (selectionY.advance(dt)) content.repaint();
+        if (dragSlot >= 0)
+        {
+            const auto edge = juce::jmin(26.0f * scale, viewport.getHeight() * 0.2f);
+            float speed = 0;
+            if (viewport.getLocalBounds().toFloat().contains(dragViewPoint))
+            {
+                if (dragViewPoint.y < edge) speed = -(edge - dragViewPoint.y) / edge;
+                else if (dragViewPoint.y > viewport.getHeight() - edge) speed = (dragViewPoint.y - viewport.getHeight() + edge) / edge;
+            }
+            scrollRemainder += speed * rowPitch * 7.0f * juce::jlimit(0.0f, 0.05f, dt);
+            const auto pixels = static_cast<int>(scrollRemainder);
+            scrollRemainder -= static_cast<float>(pixels);
+            if (pixels != 0) viewport.setViewPosition(0, viewport.getViewPositionY() + pixels);
+            updateDropTarget();
+            content.repaint();
+        }
+        for (size_t i = 0; i < removeButtons.size(); ++i)
+        {
+            auto& remove = removeButtons[i];
+            if (remove.advanceAnimation(dt)) remove.repaint();
+            if (! safe) return;
+            const bool reveal = dragSlot < 0 && cachedTypes[i] > 0 && isShowing() && isEnabled()
+                && (hoveredSlot == static_cast<int>(i) || insertButtons[i].getFocusAnimation() > 0.01f
+                    || powerButtons[i].getFocusAnimation() > 0.01f || remove.getFocusAnimation() > 0.01f);
+            if (remove.isPresented() != reveal) remove.setPresented(reveal);
+            if (! safe) return;
+        }
     }
     void dismiss()
     {
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
-        ++generation; addButton.dismissPointerGesture();
+        ++generation;
+        cancelRowInteractions();
+        if (! safe) return;
+        addButton.dismissPointerGesture();
         if (! safe) return;
         for (auto& button : insertButtons) {button.dismissPointerGesture(); if (! safe) return;}
         for (auto& button : powerButtons) {button.dismissPointerGesture(); if (! safe) return;}
@@ -183,13 +256,117 @@ private:
     {
     public:
         std::function<void()> onContext;
+        std::function<void(const juce::MouseEvent&)> onRowDrag, onRowDrop;
+        std::function<void()> onRowCancel;
+        float dragThreshold = 6;
+        void cancelRowPointer(bool notify = true)
+        {
+            const bool wasDragging = dragging;
+            pointerIndex = -1; dragging = false;
+            setMouseCursor(juce::MouseCursor::NormalCursor);
+            const juce::Component::SafePointer<SlotButton> safe(this);
+            dismissPointerGesture();
+            if (safe && wasDragging && notify && onRowCancel) onRowCancel();
+        }
         void mouseDown(const juce::MouseEvent& event) override
         {
+            if (pointerIndex >= 0 && ! owns(event)) return;
+            const juce::Component::SafePointer<SlotButton> safe(this);
+            cancelRowPointer();
+            if (! safe) return;
             if (event.mods.isPopupMenu() && ! event.mods.isMiddleButtonDown()
                 && ! (event.mods.isLeftButtonDown() && event.mods.isRightButtonDown()))
             { if (onContext) onContext(); return; }
             PrimaryTextButton::mouseDown(event);
+            if (safe && primary(event) && isEnabled() && isShowing())
+            {
+                pointerIndex = event.source.getIndex(); pointerType = event.source.getType();
+                origin = event.position;
+            }
         }
+        void mouseDrag(const juce::MouseEvent& event) override
+        {
+            if (! owns(event)) return;
+            if (! primary(event) || ! isShowing() || ! isEnabled()) { cancelRowPointer(); return; }
+            if (! dragging && event.position.getDistanceFrom(origin) < dragThreshold)
+            { PrimaryTextButton::mouseDrag(event); return; }
+            dragging = true;
+            const juce::Component::SafePointer<SlotButton> safe(this);
+            dismissPointerGesture(); // A reorder must never become a click on release.
+            if (! safe) return;
+            setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+            if (onRowDrag) onRowDrag(event);
+        }
+        void mouseUp(const juce::MouseEvent& event) override
+        {
+            if (pointerIndex >= 0 && ! owns(event)) return;
+            if (dragging)
+            {
+                const juce::Component::SafePointer<SlotButton> safe(this);
+                cancelRowPointer(false);
+                if (! safe) return;
+                if (! event.mods.isAnyMouseButtonDown() && isShowing() && isEnabled())
+                { if (onRowDrop) onRowDrop(event); }
+                else if (onRowCancel) onRowCancel();
+                return;
+            }
+            pointerIndex = -1;
+            PrimaryTextButton::mouseUp(event);
+        }
+        void mouseMove(const juce::MouseEvent& event) override
+        {
+            const juce::Component::SafePointer<SlotButton> safe(this);
+            if (owns(event) && ! event.mods.isAnyMouseButtonDown()) cancelRowPointer();
+            if (safe) PrimaryTextButton::mouseMove(event);
+        }
+        void mouseEnter(const juce::MouseEvent& event) override
+        {
+            const juce::Component::SafePointer<SlotButton> safe(this);
+            if (owns(event) && ! event.mods.isAnyMouseButtonDown()) cancelRowPointer();
+            if (safe) PrimaryTextButton::mouseEnter(event);
+        }
+        void mouseExit(const juce::MouseEvent& event) override
+        {
+            const juce::Component::SafePointer<SlotButton> safe(this);
+            if (owns(event) && ! event.mods.isAnyMouseButtonDown()) cancelRowPointer();
+            if (safe) PrimaryTextButton::mouseExit(event);
+        }
+        bool keyPressed(const juce::KeyPress& key) override
+        {
+            if (key.isKeyCode(juce::KeyPress::escapeKey) && pointerIndex >= 0)
+            { cancelRowPointer(); return true; }
+            return PrimaryTextButton::keyPressed(key);
+        }
+        void focusLost(FocusChangeType cause) override
+        {
+            const juce::Component::SafePointer<SlotButton> safe(this);
+            cancelRowPointer();
+            if (safe) PrimaryTextButton::focusLost(cause);
+        }
+        void visibilityChanged() override
+        {
+            const juce::Component::SafePointer<SlotButton> safe(this);
+            PrimaryTextButton::visibilityChanged();
+            if (safe && ! isShowing()) cancelRowPointer();
+        }
+        void enablementChanged() override
+        {
+            const juce::Component::SafePointer<SlotButton> safe(this);
+            PrimaryTextButton::enablementChanged();
+            if (safe && ! isEnabled()) cancelRowPointer();
+        }
+    private:
+        static bool primary(const juce::MouseEvent& event)
+        {
+            return event.mods.isLeftButtonDown() && ! event.mods.isRightButtonDown()
+                && ! event.mods.isMiddleButtonDown() && ! event.mods.isPopupMenu();
+        }
+        bool owns(const juce::MouseEvent& event) const
+        { return pointerIndex >= 0 && pointerIndex == event.source.getIndex() && pointerType == event.source.getType(); }
+        int pointerIndex = -1;
+        juce::MouseInputSource::InputSourceType pointerType = juce::MouseInputSource::mouse;
+        juce::Point<float> origin;
+        bool dragging = false;
     };
     class Content final : public juce::Component
     {
@@ -204,9 +381,126 @@ private:
             g.setColour(colours::raised);
             g.fillRoundedRectangle(bounds, Metrics::radius * owner.scale);
         }
+        void paintOverChildren(juce::Graphics& g) override { owner.paintDrag(g); }
     private:
         EffectRackNavigation& owner;
     };
+    int liveSlotForButton(const juce::TextButton* button) const
+    {
+        for (size_t i = 0; i < insertButtons.size(); ++i)
+            if (&insertButtons[i] == button && processor.getInsertEffectType(scope, static_cast<int>(i)) != effects::Type::none)
+                return static_cast<int>(i);
+        return -1;
+    }
+    void noteHover(const juce::MouseEvent& event)
+    {
+        if (dragSlot >= 0) return;
+        const auto point = event.getEventRelativeTo(&viewport).position;
+        hoveredSlot = -1;
+        if (viewport.getLocalBounds().toFloat().contains(point))
+        {
+            const auto inContent = point + viewport.getViewPosition().toFloat();
+            for (auto row : visibleRows)
+                if (row.button->getBounds().toFloat().contains(inContent))
+                { hoveredSlot = liveSlotForButton(row.button); break; }
+        }
+    }
+    void mouseEnter(const juce::MouseEvent& event) override { noteHover(event); }
+    void mouseMove(const juce::MouseEvent& event) override { noteHover(event); }
+    void mouseExit(const juce::MouseEvent& event) override { noteHover(event); }
+    void mouseDown(const juce::MouseEvent& event) override { noteHover(event); }
+    void cancelDrag()
+    {
+        if (dragSlot >= 0)
+        {
+            insertButtons[static_cast<size_t>(dragSlot)].setAlpha(1);
+            powerButtons[static_cast<size_t>(dragSlot)].setAlpha(1);
+        }
+        dragSlot = -1; dragTarget = -1; scrollRemainder = 0;
+        content.repaint();
+    }
+    void cancelRowInteractions()
+    {
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        cancelDrag(); hoveredSlot = -1;
+        for (auto& button : insertButtons) {button.cancelRowPointer(false); if (! safe) return;}
+        for (auto& button : removeButtons) {button.setPresented(false, false); if (! safe) return;}
+    }
+    void updateDrag(int slot, const juce::MouseEvent& event)
+    {
+        if (! isShowing() || ! isEnabled() || processor.getInsertEffectType(scope, slot) == effects::Type::none) return;
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        if (dragSlot < 0)
+        {
+            if (visibleRows.size() < builtins.size() + 2) return;
+            dragSlot = slot; dragGeneration = generation;
+            dragOffset = juce::jlimit(0.0f, static_cast<float>(rowPitch), static_cast<float>(event.getMouseDownY()));
+            insertButtons[static_cast<size_t>(slot)].setAlpha(0.32f);
+            powerButtons[static_cast<size_t>(slot)].setAlpha(0.32f);
+            for (auto& button : removeButtons) {button.setPresented(false, false); if (! safe) return;}
+        }
+        if (dragSlot != slot || dragGeneration != generation) return;
+        dragViewPoint = event.getEventRelativeTo(&viewport).position;
+        updateDropTarget(); content.repaint();
+    }
+    void updateDropTarget()
+    {
+        dragTarget = -1;
+        if (dragSlot < 0 || ! viewport.getLocalBounds().toFloat().contains(dragViewPoint)) return;
+        const auto y = dragViewPoint.y + viewport.getViewPositionY();
+        int position = 0;
+        dropLineY = 0;
+        for (auto row : visibleRows)
+        {
+            const auto slot = liveSlotForButton(row.button);
+            if (slot < 0 || slot == dragSlot) continue;
+            if (y < row.button->getBounds().getCentreY())
+            { dropLineY = static_cast<float>(row.button->getY()) - 2.0f * scale; break; }
+            ++position;
+            dropLineY = static_cast<float>(row.button->getBottom()) + 2.0f * scale;
+        }
+        dragTarget = position;
+    }
+    void finishDrag(const juce::MouseEvent& event)
+    {
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        refresh(); // An intervening preset/order edit invalidates this gesture.
+        if (! safe || dragSlot < 0 || dragGeneration != generation) return;
+        dragViewPoint = event.getEventRelativeTo(&viewport).position;
+        updateDropTarget();
+        const auto slot = dragSlot, target = dragTarget;
+        cancelDrag();
+        if (target < 0) return;
+        processor.moveInsertEffectToPosition(scope, slot, target);
+        if (! safe) return;
+        refresh();
+        if (! safe) return;
+        if (selectedSlot == slot) updateSelection(true);
+        else if (onSelectEffect) onSelectEffect(slot);
+    }
+    void paintDrag(juce::Graphics& g)
+    {
+        if (dragSlot < 0) return;
+        const auto view = viewport.getViewArea().toFloat();
+        const auto margin = 4.0f * scale;
+        const auto height = static_cast<float>(rowPitch) - margin;
+        auto bounds = juce::Rectangle<float>(margin, juce::jlimit(view.getY(), juce::jmax(view.getY(), view.getBottom() - height),
+            dragViewPoint.y + view.getY() - dragOffset), content.getWidth() - margin * 2, height);
+        g.setColour(juce::Colours::black.withAlpha(0.3f));
+        g.fillRoundedRectangle(bounds.translated(0, 3 * scale), Metrics::radius * scale);
+        g.setColour(colours::raised.brighter(0.08f));
+        g.fillRoundedRectangle(bounds, Metrics::radius * scale);
+        auto& button = insertButtons[static_cast<size_t>(dragSlot)];
+        g.setFont(getLookAndFeel().getTextButtonFont(button, rowPitch));
+        g.setColour(colours::textPrimary);
+        g.drawFittedText(button.getButtonText(), bounds.reduced(12 * scale, 0).toNearestInt(), juce::Justification::centredLeft, 1);
+        if (dragTarget >= 0)
+        {
+            g.setColour(colours::textPrimary.withAlpha(0.85f));
+            const auto y = juce::jlimit(view.getY() + 1, view.getBottom() - 2, dropLineY);
+            g.fillRoundedRectangle(margin, y, content.getWidth() - margin * 2, 2 * scale, scale);
+        }
+    }
     juce::TextButton* selectedButton() const
     {
         for (auto row : visibleRows) if (row.button->getToggleState()) return row.button;
@@ -238,6 +532,17 @@ private:
         {
             const auto row = juce::Rectangle<int>(0, static_cast<int>(i) * rowPitch, width, rowPitch).reduced(margin);
             visibleRows[i].button->setBounds(row);
+            const auto slot = liveSlotForButton(visibleRows[i].button);
+            if (slot >= 0)
+            {
+                auto& button = insertButtons[static_cast<size_t>(slot)];
+                button.dragThreshold = 6.0f * scale;
+                const auto side = juce::jmin(row.getHeight(), juce::roundToInt(24.0f * scale));
+                button.getProperties().set("fireModuleTrailingSpace", side + 5.0f * scale);
+                auto& remove = removeButtons[static_cast<size_t>(slot)];
+                remove.setBounds(row.getRight() - side - juce::roundToInt(3 * scale), row.getCentreY() - side / 2, side, side);
+                remove.toFront(false);
+            }
             if (auto* power = visibleRows[i].power)
             {
                 const auto size = juce::roundToInt(juce::jlimit(16.0f * scale, 24.0f * scale, row.getHeight() * 0.46f));
@@ -293,6 +598,7 @@ private:
     PrimaryTextButton addButton;
     std::array<SlotButton, effects::slotCount> insertButtons;
     std::array<PrimaryToggleButton, effects::slotCount> powerButtons;
+    std::array<CloseButton, effects::slotCount> removeButtons;
     std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>, effects::slotCount> attachments;
     std::vector<Row> builtins, visibleRows;
     std::array<int, effects::slotCount> cachedTypes {}, cachedOrders {};
@@ -301,5 +607,9 @@ private:
     bool selectionInitialised = false;
     float scale = 1;
     std::uint64_t generation = 0;
+    int hoveredSlot = -1, dragSlot = -1, dragTarget = -1;
+    std::uint64_t dragGeneration = 0;
+    juce::Point<float> dragViewPoint;
+    float dragOffset = 0, dropLineY = 0, scrollRemainder = 0;
 };
 }

@@ -3017,8 +3017,18 @@ void FireAudioProcessor::removeInsertEffect(int scope, int slot)
 
 void FireAudioProcessor::moveInsertEffect(int scope, int slot, int direction)
 {
+    if (direction != 0) moveInsertEffectInternal(scope, slot, direction > 0 ? 1 : -1, true);
+}
+
+void FireAudioProcessor::moveInsertEffectToPosition(int scope, int slot, int position)
+{
+    moveInsertEffectInternal(scope, slot, position, false);
+}
+
+void FireAudioProcessor::moveInsertEffectInternal(int scope, int slot, int position, bool relative)
+{
     using namespace fire::effects;
-    if (getInsertEffectType(scope, slot) == Type::none || direction == 0) return;
+    if (getInsertEffectType(scope, slot) == Type::none) return;
     beginMultibandTopologyEdit();
     const juce::ScopeGuard publish { [this] { requestMultibandTopologyReset(); } };
     std::vector<int> active;
@@ -3027,9 +3037,10 @@ void FireAudioProcessor::moveInsertEffect(int scope, int slot, int direction)
     const auto from = std::find(active.begin(), active.end(), slot);
     if (from == active.end()) return;
     const int index = static_cast<int>(std::distance(active.begin(), from));
-    const int target = index + (direction > 0 ? 1 : -1);
-    if (! juce::isPositiveAndBelow(target, static_cast<int>(active.size()))) return;
-    std::swap(active[static_cast<size_t>(index)], active[static_cast<size_t>(target)]);
+    const int target = relative ? index + position : position;
+    if (! juce::isPositiveAndBelow(target, static_cast<int>(active.size())) || target == index) return;
+    active.erase(active.begin() + index);
+    active.insert(active.begin() + target, slot);
     for (size_t i = 0; i < active.size(); ++i)
     {
         auto* parameter = treeState.getParameter(parameterID(scope, active[i], orderField));

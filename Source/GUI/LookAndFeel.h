@@ -662,7 +662,11 @@ public:
         const bool moduleRail = static_cast<bool>(
             button.getProperties().getWithDefault("fireModuleRail", false));
         if (moduleRail)
+        {
             textBounds.removeFromLeft(juce::roundToInt(25.0f * scale));
+            textBounds.removeFromRight(juce::roundToInt(static_cast<float>(
+                button.getProperties().getWithDefault("fireModuleTrailingSpace", 0.0f))));
+        }
         g.drawFittedText(button.getButtonText(), textBounds,
                          moduleRail ? juce::Justification::centredLeft
                                     : juce::Justification::centred, 1);

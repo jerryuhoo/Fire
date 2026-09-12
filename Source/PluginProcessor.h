@@ -391,6 +391,7 @@ public:
     int addInsertEffect(int scope, fire::effects::Type type);
     void removeInsertEffect(int scope, int slot);
     void moveInsertEffect(int scope, int slot, int direction);
+    void moveInsertEffectToPosition(int scope, int slot, int position);
 
     bool hasUpdateCheckBeenPerformed = false;
     bool isSlient(const juce::AudioBuffer<float>& buffer);
@@ -755,6 +756,7 @@ private:
     };
 
     void initialiseParameterCache();
+    void moveInsertEffectInternal(int scope, int slot, int position, bool relative);
     void prepareInsertParameters(int scope, fire::effects::RackParameters& parameters) const;
     CachedParameter cacheParameter(const juce::String& parameterID);
     static float loadCachedParameter(const CachedParameter& parameter, float fallback = 0.0f) noexcept;

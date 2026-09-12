@@ -291,6 +291,90 @@ TEST_CASE("PrimarySlider preserves accessible value semantics while showing",
     slider.removeFromDesktop();
 }
 
+TEST_CASE("PrimarySlider accessible writes stop when callbacks end the visible session",
+          "[primary-slider][ui][input][accessibility][lifecycle][callback-lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    for (int entry = 0; entry < 3; ++entry)
+    {
+        for (int boundary = 0; boundary < 3; ++boundary)
+        {
+            DYNAMIC_SECTION("entry " << entry << ", lifecycle boundary " << boundary)
+            {
+                juce::Component desktopHost;
+                desktopHost.setBounds(0, 0, 160, 60);
+                PrimarySlider slider;
+                slider.setBounds(0, 0, 120, 30);
+                slider.setRange(0.0, 1.0, 0.1);
+                slider.setValue(0.2, juce::dontSendNotification);
+                desktopHost.addAndMakeVisible(slider);
+                desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+                desktopHost.setVisible(true);
+                REQUIRE(slider.isShowing());
+
+                SliderInteractionCapture capture;
+                slider.addListener(&capture);
+                const auto endVisibleSession = [&]
+                {
+                    if (boundary == 0)
+                        desktopHost.setVisible(false);
+                    else if (boundary == 1)
+                        desktopHost.setEnabled(false);
+                    else
+                        desktopHost.removeFromDesktop();
+                };
+
+                if (entry == 2)
+                    slider.valueFromTextFunction = [&](const juce::String&)
+                    {
+                        endVisibleSession();
+                        return 0.8;
+                    };
+                else
+                    slider.onDragStart = endVisibleSession;
+
+                auto* handler = slider.getAccessibilityHandler();
+                REQUIRE(handler != nullptr);
+                auto* value = handler->getValueInterface();
+                REQUIRE(value != nullptr);
+                if (entry == 0)
+                    value->setValue(0.8);
+                else
+                    value->setValueAsString("0.8");
+
+                // A host may hide its editor from beginGesture without
+                // deleting it. End that gesture, but do not write after the
+                // callback has ended the session. Text conversion happens
+                // before beginGesture, so it must not open a gesture at all.
+                CHECK(slider.getValue() == Catch::Approx(0.2));
+                CHECK(capture.valueChanges == 0);
+                CHECK(capture.dragStarts == (entry == 2 ? 0 : 1));
+                CHECK(capture.dragEnds == capture.dragStarts);
+
+                slider.onDragStart = nullptr;
+                slider.valueFromTextFunction = nullptr;
+                if (boundary == 0)
+                    desktopHost.setVisible(true);
+                else if (boundary == 1)
+                    desktopHost.setEnabled(true);
+                else
+                    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+                REQUIRE(slider.isShowing());
+                handler = slider.getAccessibilityHandler();
+                REQUIRE(handler != nullptr);
+                value = handler->getValueInterface();
+                REQUIRE(value != nullptr);
+                value->setValue(0.4);
+                CHECK(slider.getValue() == Catch::Approx(0.4));
+                CHECK(capture.valueChanges == 1);
+                CHECK(capture.dragStarts == (entry == 2 ? 1 : 2));
+                CHECK(capture.dragEnds == capture.dragStarts);
+                slider.removeListener(&capture);
+            }
+        }
+    }
+}
+
 TEST_CASE("PrimarySlider accessible writes survive synchronous Slider deletion",
           "[primary-slider][ui][input][accessibility][lifecycle][deletion]")
 {

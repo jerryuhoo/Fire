@@ -80,7 +80,8 @@ public:
                 && sampleOffset + static_cast<int>(block.getNumSamples()) <= lfo.getNumSamples()
                 ? lfo.getReadPointer(source) : nullptr;
         }
-        effects[static_cast<size_t>(slot)].process(block, p, sampleOffset);
+        effects[static_cast<size_t>(slot)].process(block, p, sampleOffset,
+                                                  &parameters[static_cast<size_t>(slot)].sources);
     }
 private:
     std::array<InsertEffect, slotCount> effects;

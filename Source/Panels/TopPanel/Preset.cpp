@@ -67,6 +67,17 @@ bool readStrictIntegerAttribute(const juce::XmlElement& xml,
     return true;
 }
 
+bool readSupportedPresetFormatVersion(const juce::XmlElement& xml,
+                                      int& version) noexcept
+{
+    // Alternate snapshots must obey the same version contract as the loader
+    // that will consume them when the user switches A/B.
+    version = 0;
+    return ! xml.hasAttribute("presetFormatVersion")
+        || (readStrictIntegerAttribute(xml, "presetFormatVersion", version)
+            && version >= 0 && version <= 2);
+}
+
 bool isStrictNumberInRange(const juce::XmlElement& xml,
                            const juce::String& name,
                            double minimum,
@@ -216,7 +227,9 @@ bool validateParameterFamily(const juce::XmlElement& xml,
 bool isValidABSnapshot(const juce::XmlElement& snapshot,
                        const juce::AudioProcessor& processor) noexcept
 {
-    if (! snapshot.hasTagName("AB_STATE") || snapshot.getNumChildElements() > 2)
+    int formatVersion = 0;
+    if (! snapshot.hasTagName("AB_STATE") || snapshot.getNumChildElements() > 2
+        || ! readSupportedPresetFormatVersion(snapshot, formatVersion))
         return false;
 
     bool legacyWithoutOtt = false;
@@ -294,18 +307,12 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     // their historical default/migration behaviour. A v2 document is an
     // explicit complete snapshot, so accepting a sparse or truncated one
     // would silently reset every omitted parameter, LFO, and routing.
-    if (! xml.hasAttribute("presetFormatVersion"))
-        return true;
-
-    int formatVersion = -1;
-    if (! readStrictIntegerAttribute(xml, "presetFormatVersion", formatVersion)
-        || formatVersion < 0)
+    int formatVersion = 0;
+    if (! readSupportedPresetFormatVersion(xml, formatVersion))
         return false;
 
     if (formatVersion < 2)
         return true;
-    if (formatVersion != 2)
-        return false;
 
     int parameterCount = 0;
     for (const auto* parameter : processor.getParameters())
@@ -590,7 +597,8 @@ namespace state
 #endif
             juce::XmlElement temp { "AB" };
             saveStateToXml(pluginProcessor, temp); // current to temp
-            loadStateFromXml(ab, pluginProcessor); // ab to current
+            if (! loadStateFromXml(ab, pluginProcessor)) // ab to current
+                return;
             ab = std::move(temp); // temp to ab
             currentSideIsA.store(! currentSideIsA.load(std::memory_order_relaxed), std::memory_order_release);
         }

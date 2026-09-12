@@ -109,12 +109,17 @@ public:
     }
     float read(size_t channel, float age) const noexcept
     {
-        if (data[0].empty() || ! std::isfinite(age) || age < 1.0f) return 0.0f;
+        if (data[0].empty() || ! std::isfinite(age) || age < 1.0f
+            || static_cast<double>(age) >= static_cast<double>(data[0].size() - 1)) return 0.0f;
         const auto whole = static_cast<size_t>(age);
-        if (whole + 1 > filled || whole + 1 >= data[0].size()) return 0.0f;
+        if (whole > filled) return 0.0f;
         const auto index = head >= whole ? head - whole : data[0].size() - (whole - head);
         const auto previous = index == 0 ? data[0].size() - 1 : index - 1;
-        return juce::jmap(age - static_cast<float>(whole), data[channel][index], data[channel][previous]);
+        // Before the first recorded sample the logical history is silence.
+        // Requiring both interpolation taps to be filled drops the first
+        // integer echo, and the leading part of a fractional echo, after reset.
+        const auto previousValue = whole < filled ? data[channel][previous] : 0.0f;
+        return juce::jmap(age - static_cast<float>(whole), data[channel][index], previousValue);
     }
 private:
     std::array<std::vector<float>, 2> data;
@@ -193,6 +198,7 @@ public:
         reverb.setSampleRate(sampleRate);
         gate.reset(sampleRate, 0.02);
         for (auto& smoother : bases) smoother.reset(sampleRate, 0.02);
+        for (auto& route : routes) route.blend.reset(sampleRate, 0.01);
         reset();
     }
     void reset() noexcept
@@ -202,15 +208,15 @@ public:
         gate.setCurrentAndTargetValue(0);
         dormant = true;
     }
-    void process(juce::dsp::AudioBlock<float> block, const Parameters& parameters, int offset = 0) noexcept
+    void process(juce::dsp::AudioBlock<float> block, const Parameters& parameters, int offset = 0,
+                 const std::array<int, controlCount>* sourceIndices = nullptr) noexcept
     {
         if (block.getNumChannels() == 0 || block.getNumSamples() == 0) return;
         auto requested = parameters.type;
         if (requested < Type::none || requested >= Type::count) requested = Type::none;
         if (requested == Type::none && currentType == Type::none) return;
         if (currentType == Type::none && requested != Type::none) activate(requested, parameters);
-        for (size_t i = 0; i < controlCount; ++i)
-            if (requested == currentType) bases[i].setTargetValue(baseValue(parameters, i));
+        if (requested == currentType) updateControlTargets(parameters, sourceIndices);
         gate.setTargetValue(parameters.enabled && requested == currentType && currentType != Type::none ? 1.0f : 0.0f);
         auto* left = block.getChannelPointer(0);
         auto* right = block.getNumChannels() > 1 ? block.getChannelPointer(1) : nullptr;
@@ -219,6 +225,7 @@ public:
             if (gate.getCurrentValue() == 0.0f && requested != currentType)
             {
                 activate(requested, parameters);
+                updateControlTargets(parameters, sourceIndices);
                 gate.setTargetValue(parameters.enabled && currentType != Type::none ? 1.0f : 0.0f);
             }
             const auto enabled = gate.getNextValue();
@@ -239,12 +246,20 @@ public:
                 if (currentNormalised)
                 {
                     value[i] = juce::exactlyEqual(modulated, lastNormalisedValues[i])
-                        ? lastValues[i] : controls(currentType)[i].fromNormalised(modulated);
+                        ? mappedValues[i] : controls(currentType)[i].fromNormalised(modulated);
                     lastNormalisedValues[i] = modulated;
                 }
                 else
                     value[i] = sanitise(currentType, i, modulated);
+                // Cache the unbridged target separately: a constant routed
+                // value must not reuse the previous step of its own fade.
+                mappedValues[i] = value[i];
+                auto& route = routes[i];
+                const auto blend = route.blend.getCurrentValue();
+                if (blend <= 0.0f) value[i] = route.anchor;
+                else if (blend < 1.0f) value[i] = route.anchor + blend * (value[i] - route.anchor);
                 lastValues[i] = value[i];
+                route.blend.getNextValue();
             }
             const auto dryL = std::isfinite(left[sample]) ? left[sample] : 0.0f;
             const auto dryR = right && std::isfinite(right[sample]) ? right[sample] : dryL;
@@ -257,6 +272,44 @@ public:
     }
 private:
     struct Grain { float age = 0, length = 1, delay = 1, speed = 1, pan = 0; bool active = false; };
+    struct Route
+    {
+        juce::SmoothedValue<float> blend;
+        float anchor = 0.0f, depth = 0.0f;
+        int source = -1;
+        bool initialised = false, routed = false, bipolar = true;
+    };
+    void updateControlTargets(const Parameters& parameters,
+                              const std::array<int, controlCount>* sourceIndices) noexcept
+    {
+        for (size_t i = 0; i < controlCount; ++i)
+        {
+            bases[i].setTargetValue(baseValue(parameters, i));
+            const auto& provider = parameters.values[i];
+            auto& route = routes[i];
+            const bool routed = provider.lfoSignal != nullptr;
+            // Source identity is independent of the buffer address, which
+            // may change every host callback or internal processing chunk.
+            const int source = ! routed ? -1
+                : sourceIndices != nullptr ? (*sourceIndices)[i] : 0;
+            const auto depth = std::isfinite(provider.modulationDepth)
+                ? juce::jlimit(-1.0f, 1.0f, provider.modulationDepth) : 0.0f;
+            if (route.initialised && (route.routed != routed
+                || (routed && (route.source != source
+                    || ! juce::exactlyEqual(route.depth, depth)
+                    || route.bipolar != provider.isBipolar))))
+            {
+                route.anchor = lastValues[i];
+                route.blend.setCurrentAndTargetValue(0.0f);
+                route.blend.setTargetValue(1.0f);
+            }
+            route.initialised = true;
+            route.routed = routed;
+            route.source = source;
+            route.depth = depth;
+            route.bipolar = provider.isBipolar;
+        }
+    }
     void resetMemory() noexcept
     {
         history.reset(); tape.reset(); reverb.reset();
@@ -266,6 +319,11 @@ private:
         lastNormalisedValues.fill(std::numeric_limits<float>::quiet_NaN());
         lastDelayTone = lastReverbLowCut = lastBits = -1.0f;
         reverbSettingsValid = false;
+        for (auto& route : routes)
+        {
+            route.initialised = false;
+            route.blend.setCurrentAndTargetValue(1.0f);
+        }
     }
     void activate(Type type, const Parameters& parameters) noexcept
     {
@@ -275,6 +333,7 @@ private:
             bases[i].setCurrentAndTargetValue(baseValue(parameters, i));
             lastValues[i] = currentNormalised ? controls(type)[i].fromNormalised(baseValue(parameters, i))
                                                : baseValue(parameters, i);
+            mappedValues[i] = lastValues[i];
         }
     }
     static float baseValue(const Parameters& parameters, size_t index) noexcept
@@ -416,7 +475,9 @@ private:
     TapeFlutter tape;
     juce::Reverb reverb;
     std::array<juce::SmoothedValue<float>, controlCount> bases;
+    std::array<Route, controlCount> routes;
     std::array<float, controlCount> lastValues {};
+    std::array<float, controlCount> mappedValues {};
     std::array<float, controlCount> lastNormalisedValues {};
     float lastDelayTone = -1.0f, delayToneCoefficient = 0.0f;
     float lastReverbLowCut = -1.0f, reverbLowCutCoefficient = 0.0f;

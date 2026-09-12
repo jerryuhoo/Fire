@@ -207,9 +207,10 @@ TEST_CASE("Fractional insert history preserves interpolation across wrap and log
         {
             const auto whole = static_cast<size_t>(age);
             float expected = 0.0f;
-            if (age >= 1.0f && whole + 1 <= written.size() && whole + 1 < 24)
+            if (age >= 1.0f && whole <= written.size() && whole + 1 < 24)
                 expected = juce::jmap(age - static_cast<float>(whole),
-                    written[written.size() - whole], written[written.size() - whole - 1]);
+                    written[written.size() - whole],
+                    whole < written.size() ? written[written.size() - whole - 1] : 0.0f);
             REQUIRE(history.read(0, age) == expected);
             REQUIRE(history.read(1, age) == -expected);
         }
@@ -279,6 +280,40 @@ TEST_CASE("Tape tone coefficients refresh when the sample rate changes", "[inser
             fresh.process(expectedLeft, expectedRight, 0.6f, 0.4f, 0.3f);
             REQUIRE(left == expectedLeft);
             REQUIRE(right == expectedRight);
+        }
+    }
+}
+
+TEST_CASE("Insert delay preserves the first impulse after reset at integer and fractional times", "[insertfx][dsp][delay][history][reset]")
+{
+    for (float delayMs : {100.0f, 100.01f})
+    {
+        CAPTURE(delayMs);
+        InsertEffect effect;
+        effect.prepare({rate, 64, 2});
+        InsertEffect::Parameters parameters(Type::delay);
+        parameters.values[0].baseValue = delayMs;
+        parameters.values[1].baseValue = 0.0f;
+        parameters.values[3].baseValue = 0.0f;
+        parameters.values[5].baseValue = 100.0f;
+        const auto delaySamples = delayMs * 0.001f * static_cast<float>(rate);
+        const auto firstEchoSample = static_cast<int>(std::floor(delaySamples));
+        const auto fraction = delaySamples - static_cast<float>(firstEchoSample);
+        juce::AudioBuffer<float> audio(2, firstEchoSample + 128);
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            CAPTURE(pass);
+            audio.clear();
+            audio.setSample(0, 0, 1.0f);
+            audio.setSample(1, 0, -0.5f);
+            effect.process(juce::dsp::AudioBlock<float>(audio), parameters);
+            // The enable ramp has finished before this first delayed echo.
+            CHECK(audio.getSample(0, firstEchoSample) == Catch::Approx(1.0f - fraction));
+            CHECK(audio.getSample(0, firstEchoSample + 1) == Catch::Approx(fraction));
+            CHECK(audio.getSample(1, firstEchoSample) == Catch::Approx(-0.5f * (1.0f - fraction)));
+            CHECK(audio.getSample(1, firstEchoSample + 1) == Catch::Approx(-0.5f * fraction));
+            CHECK(audio.getMagnitude(0, 1, firstEchoSample - 1) == 0.0f);
+            effect.reset();
         }
     }
 }

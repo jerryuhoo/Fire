@@ -105,6 +105,12 @@ private:
                                 bool writesMaximum,
                                 double newValue)
     {
+        // A custom text conversion may synchronously hide, disable, or
+        // detach the editor while keeping the Slider alive. Revalidate after
+        // that callback before opening a parameter gesture.
+        if (! target.isEnabled() || ! target.isShowing())
+            return;
+
         const juce::Component::SafePointer<juce::Slider> safeTarget(&target);
         using Drag = juce::Slider::ScopedDragNotification;
         alignas(Drag) unsigned char dragStorage[sizeof(Drag)];
@@ -116,10 +122,16 @@ private:
         if (safeTarget == nullptr)
             return;
 
-        if (writesMaximum)
-            target.setMaxValue(newValue, juce::sendNotificationSync);
-        else
-            target.setValue(newValue, juce::sendNotificationSync);
+        // beginGesture can also synchronously end the visible editor session.
+        // The started gesture still needs its matching end notification, but
+        // its value must not be written after that lifecycle boundary.
+        if (target.isEnabled() && target.isShowing())
+        {
+            if (writesMaximum)
+                target.setMaxValue(newValue, juce::sendNotificationSync);
+            else
+                target.setValue(newValue, juce::sendNotificationSync);
+        }
 
         if (safeTarget == nullptr)
             return;

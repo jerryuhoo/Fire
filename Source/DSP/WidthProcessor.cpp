@@ -204,27 +204,19 @@ void WidthProcessor::processInternal(float* channeldataL,
         panSmoother.setTargetValue(panBaseTarget);
     }
 
-    auto widthRecipeProvider = widthProvider != nullptr
-                                   ? *widthProvider
-                                   : ModulatedValueProvider {};
-    auto panRecipeProvider = panProvider != nullptr
-                                 ? *panProvider
-                                 : ModulatedValueProvider {};
     const auto getWidthTarget = [&](int sample, float baseValue)
     {
         if (widthProvider == nullptr)
             return getSafeWidth(baseValue);
 
-        widthRecipeProvider.baseValue = baseValue;
-        return getSafeWidth(widthRecipeProvider.get(sample));
+        return getSafeWidth(widthProvider->get(sample, baseValue));
     };
     const auto getPanTarget = [&](int sample, float baseValue)
     {
         if (panProvider == nullptr)
             return getSafePan(baseValue);
 
-        panRecipeProvider.baseValue = baseValue;
-        return getSafePan(panRecipeProvider.get(sample));
+        return getSafePan(panProvider->get(sample, baseValue));
     };
 
     serviceRouteTransition(

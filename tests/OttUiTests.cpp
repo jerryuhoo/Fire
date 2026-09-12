@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include <limits>
+#include "helpers/RepaintRecorder.h"
 
 namespace {
 template <typename T, typename Predicate>
@@ -326,6 +327,64 @@ TEST_CASE("OTT spectral motion follows actual narrow tones and clears invalid or
     feed();
     multiband->clearOttSpectrum();
     for (auto energy : multiband->getOttSpectrum(0)) CHECK(energy == 0.0f);
+}
+
+TEST_CASE("OTT graph stops repainting settled silence and invalidates live overlays",
+          "[ott][ui][motion][repaint][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    OttGraph graph;
+    graph.setSize(400, 240);
+    graph.setVisible(true);
+    auto* recorder = new RepaintRecorder(graph);
+    graph.setCachedComponentImage(recorder);
+    graph.advanceVisuals(1.0f / 60.0f, false, 0);
+    auto image = renderRepaintTestComponent(graph);
+    recorder->clear();
+
+    for (int frame = 0; frame < 120; ++frame)
+    {
+        graph.setLevels(-120.0f, 0.0f);
+        graph.setThresholds(-48.0f, -18.0f);
+        graph.advanceVisuals(1.0f / 60.0f, false, 0);
+    }
+    CHECK(recorder->dirtyAreas.isEmpty());
+
+    const auto checkUpdate = [&]
+    {
+        REQUIRE_FALSE(recorder->dirtyAreas.isEmpty());
+        CHECK(recorder->fullInvalidations == 0);
+        CHECK(recorder->dirtyAreas.getBounds().getHeight() < graph.getHeight());
+        recorder->paintDirtyAreas(image);
+        CHECK(repaintTestImagesMatch(image, renderRepaintTestComponent(graph)));
+        recorder->clear();
+    };
+
+    graph.setThresholds(-54.0f, -24.0f);
+    graph.advanceVisuals(1.0f / 60.0f, false, 0);
+    checkUpdate();
+
+    fire::ui::OttSpectrumProfile profile {};
+    profile.fill(0.8f);
+    graph.setSpectrum(profile, 0.5f);
+    graph.setLevels(-24.0f, 6.0f, 6.0f);
+    for (int frame = 0; frame < 5; ++frame)
+    {
+        graph.advanceVisuals(1.0f / 60.0f, true, 1);
+        checkUpdate();
+    }
+
+    graph.setLevels(-120.0f, 0.0f);
+    for (int frame = 0; frame < 900; ++frame)
+        graph.advanceVisuals(1.0f / 60.0f, false, 0);
+    checkUpdate();
+    for (int frame = 0; frame < 120; ++frame)
+        graph.advanceVisuals(1.0f / 60.0f, false, 0);
+    CHECK(recorder->dirtyAreas.isEmpty());
+
+    // A preview remains available after the quiet graph has stopped painting.
+    graph.advanceVisuals(1.0f / 60.0f, true, 2);
+    checkUpdate();
 }
 
 TEST_CASE("OTT ribbons distinguish lift and compression without animating silence", "[ott][ui][motion][render]")

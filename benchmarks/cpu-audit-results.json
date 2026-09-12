@@ -1,0 +1,890 @@
+{
+  "date": "2026-09-12",
+  "platform": "macOS 15.7.4 arm64",
+  "build": "AppleClang 17 Release -O3 -fno-fast-math, LTO",
+  "sample_rate_hz": 48000,
+  "channels": 2,
+  "benchmark_samples": 60,
+  "bootstrap_resamples": 2000,
+  "warmup_ms": 300,
+  "paired_repetitions": 3,
+  "statistic": "Median of three run means; small differences may be scheduling noise. UI measurement is geometry only. DSP includes input copy and complete callback without editor.",
+  "summary": [
+    {
+      "scenario": "Spectrum geometry / 1024 bins",
+      "before_median_mean_us": 15.567,
+      "after_median_mean_us": 7.07567,
+      "observed_reduction_percent": 54.54699042847049
+    },
+    {
+      "scenario": "default / 128",
+      "before_median_mean_us": 78.9916,
+      "after_median_mean_us": 77.7423,
+      "observed_reduction_percent": 1.5815605709974312
+    },
+    {
+      "scenario": "four bands HQ / 128",
+      "before_median_mean_us": 203.522,
+      "after_median_mean_us": 200.874,
+      "observed_reduction_percent": 1.301087843083304
+    },
+    {
+      "scenario": "delay / 128",
+      "before_median_mean_us": 83.8195,
+      "after_median_mean_us": 80.8028,
+      "observed_reduction_percent": 3.5990431820757673
+    },
+    {
+      "scenario": "reverb / 128",
+      "before_median_mean_us": 89.068,
+      "after_median_mean_us": 88.6292,
+      "observed_reduction_percent": 0.49265729554947013
+    },
+    {
+      "scenario": "OTT / 128",
+      "before_median_mean_us": 82.3228,
+      "after_median_mean_us": 77.8361,
+      "observed_reduction_percent": 5.450130462034819
+    },
+    {
+      "scenario": "modulated delay / 128",
+      "before_median_mean_us": 86.68539999999999,
+      "after_median_mean_us": 84.01039999999999,
+      "observed_reduction_percent": 3.085871438558274
+    },
+    {
+      "scenario": "default / 512",
+      "before_median_mean_us": 256.345,
+      "after_median_mean_us": 259.025,
+      "observed_reduction_percent": -1.0454660711150865
+    },
+    {
+      "scenario": "four bands HQ / 512",
+      "before_median_mean_us": 766.251,
+      "after_median_mean_us": 774.637,
+      "observed_reduction_percent": -1.094419452633666
+    },
+    {
+      "scenario": "delay / 512",
+      "before_median_mean_us": 278.714,
+      "after_median_mean_us": 268.906,
+      "observed_reduction_percent": 3.519019496688358
+    },
+    {
+      "scenario": "reverb / 512",
+      "before_median_mean_us": 298.786,
+      "after_median_mean_us": 284.481,
+      "observed_reduction_percent": 4.787707590047729
+    },
+    {
+      "scenario": "OTT / 512",
+      "before_median_mean_us": 272.827,
+      "after_median_mean_us": 262.553,
+      "observed_reduction_percent": 3.765756321771674
+    },
+    {
+      "scenario": "modulated delay / 512",
+      "before_median_mean_us": 287.214,
+      "after_median_mean_us": 283.438,
+      "observed_reduction_percent": 1.314699144192144
+    }
+  ],
+  "runs": {
+    "before": [
+      {
+        "Spectrum geometry / 1024 bins": {
+          "mean_us": 15.4312,
+          "mean_ci95_us": [
+            15.2934,
+            15.8566
+          ],
+          "stddev_us": 0.891937,
+          "samples": 60,
+          "iterations_per_sample": 2
+        },
+        "default / 128": {
+          "mean_us": 80.5382,
+          "mean_ci95_us": [
+            77.7236,
+            86.86319999999999
+          ],
+          "stddev_us": 15.8116,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "four bands HQ / 128": {
+          "mean_us": 203.522,
+          "mean_ci95_us": [
+            200.643,
+            210.79
+          ],
+          "stddev_us": 16.8919,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "delay / 128": {
+          "mean_us": 82.7945,
+          "mean_ci95_us": [
+            81.3001,
+            87.9556
+          ],
+          "stddev_us": 9.56112,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "reverb / 128": {
+          "mean_us": 87.9994,
+          "mean_ci95_us": [
+            86.1508,
+            92.9264
+          ],
+          "stddev_us": 10.988299999999999,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "OTT / 128": {
+          "mean_us": 118.883,
+          "mean_ci95_us": [
+            105.635,
+            150.228
+          ],
+          "stddev_us": 76.7974,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "modulated delay / 128": {
+          "mean_us": 86.7242,
+          "mean_ci95_us": [
+            83.96310000000001,
+            92.7645
+          ],
+          "stddev_us": 15.3676,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "default / 512": {
+          "mean_us": 258.066,
+          "mean_ci95_us": [
+            254.037,
+            266.669
+          ],
+          "stddev_us": 21.9238,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "four bands HQ / 512": {
+          "mean_us": 777.433,
+          "mean_ci95_us": [
+            769.265,
+            788.797
+          ],
+          "stddev_us": 38.528400000000005,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "delay / 512": {
+          "mean_us": 278.714,
+          "mean_ci95_us": [
+            276.362,
+            284.264
+          ],
+          "stddev_us": 13.593200000000001,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "reverb / 512": {
+          "mean_us": 298.786,
+          "mean_ci95_us": [
+            294.867,
+            308.936
+          ],
+          "stddev_us": 23.1616,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "OTT / 512": {
+          "mean_us": 275.301,
+          "mean_ci95_us": [
+            272.726,
+            281.744
+          ],
+          "stddev_us": 14.946200000000001,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "modulated delay / 512": {
+          "mean_us": 287.214,
+          "mean_ci95_us": [
+            283.772,
+            293.539
+          ],
+          "stddev_us": 18.198400000000003,
+          "samples": 60,
+          "iterations_per_sample": 1
+        }
+      },
+      {
+        "Spectrum geometry / 1024 bins": {
+          "mean_us": 15.595,
+          "mean_ci95_us": [
+            15.334700000000002,
+            16.0743
+          ],
+          "stddev_us": 1.3831300000000002,
+          "samples": 60,
+          "iterations_per_sample": 2
+        },
+        "default / 128": {
+          "mean_us": 76.89439999999999,
+          "mean_ci95_us": [
+            75.6562,
+            81.2368
+          ],
+          "stddev_us": 8.074819999999999,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "four bands HQ / 128": {
+          "mean_us": 203.338,
+          "mean_ci95_us": [
+            201.09,
+            207.49
+          ],
+          "stddev_us": 11.844700000000001,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "delay / 128": {
+          "mean_us": 83.8195,
+          "mean_ci95_us": [
+            81.8798,
+            87.5569
+          ],
+          "stddev_us": 10.5031,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "reverb / 128": {
+          "mean_us": 89.068,
+          "mean_ci95_us": [
+            87.5514,
+            92.1555
+          ],
+          "stddev_us": 8.29968,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "OTT / 128": {
+          "mean_us": 82.3228,
+          "mean_ci95_us": [
+            81.229,
+            86.12289999999999
+          ],
+          "stddev_us": 7.15652,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "modulated delay / 128": {
+          "mean_us": 82.3964,
+          "mean_ci95_us": [
+            81.55260000000001,
+            85.72630000000001
+          ],
+          "stddev_us": 6.27001,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "default / 512": {
+          "mean_us": 256.345,
+          "mean_ci95_us": [
+            253.172,
+            262.762
+          ],
+          "stddev_us": 16.9939,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "four bands HQ / 512": {
+          "mean_us": 766.251,
+          "mean_ci95_us": [
+            758.585,
+            776.572
+          ],
+          "stddev_us": 35.607800000000005,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "delay / 512": {
+          "mean_us": 279.488,
+          "mean_ci95_us": [
+            275.934,
+            287.506
+          ],
+          "stddev_us": 19.622700000000002,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "reverb / 512": {
+          "mean_us": 299.172,
+          "mean_ci95_us": [
+            296.513,
+            303.718
+          ],
+          "stddev_us": 12.8583,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "OTT / 512": {
+          "mean_us": 272.827,
+          "mean_ci95_us": [
+            270.163,
+            278.438
+          ],
+          "stddev_us": 15.2761,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "modulated delay / 512": {
+          "mean_us": 286.884,
+          "mean_ci95_us": [
+            283.932,
+            294.432
+          ],
+          "stddev_us": 17.731099999999998,
+          "samples": 60,
+          "iterations_per_sample": 1
+        }
+      },
+      {
+        "Spectrum geometry / 1024 bins": {
+          "mean_us": 15.567,
+          "mean_ci95_us": [
+            15.2625,
+            16.184
+          ],
+          "stddev_us": 1.64124,
+          "samples": 60,
+          "iterations_per_sample": 2
+        },
+        "default / 128": {
+          "mean_us": 78.9916,
+          "mean_ci95_us": [
+            76.436,
+            85.8145
+          ],
+          "stddev_us": 15.372399999999999,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "four bands HQ / 128": {
+          "mean_us": 207.16,
+          "mean_ci95_us": [
+            204.203,
+            213.406
+          ],
+          "stddev_us": 15.7508,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "delay / 128": {
+          "mean_us": 84.44789999999999,
+          "mean_ci95_us": [
+            81.4965,
+            100.575
+          ],
+          "stddev_us": 21.095200000000002,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "reverb / 128": {
+          "mean_us": 89.3902,
+          "mean_ci95_us": [
+            86.8395,
+            99.2201
+          ],
+          "stddev_us": 17.9443,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "OTT / 128": {
+          "mean_us": 81.4139,
+          "mean_ci95_us": [
+            79.1451,
+            90.40339999999999
+          ],
+          "stddev_us": 16.844099999999997,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "modulated delay / 128": {
+          "mean_us": 86.68539999999999,
+          "mean_ci95_us": [
+            82.1971,
+            97.55489999999999
+          ],
+          "stddev_us": 24.4589,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "default / 512": {
+          "mean_us": 255.549,
+          "mean_ci95_us": [
+            251.58,
+            270.649
+          ],
+          "stddev_us": 27.842299999999998,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "four bands HQ / 512": {
+          "mean_us": 755.058,
+          "mean_ci95_us": [
+            750.254,
+            773.718
+          ],
+          "stddev_us": 32.7298,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "delay / 512": {
+          "mean_us": 277.544,
+          "mean_ci95_us": [
+            274.552,
+            292.119
+          ],
+          "stddev_us": 21.345,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "reverb / 512": {
+          "mean_us": 293.155,
+          "mean_ci95_us": [
+            291.546,
+            297.292
+          ],
+          "stddev_us": 9.874379999999999,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "OTT / 512": {
+          "mean_us": 270.032,
+          "mean_ci95_us": [
+            268.536,
+            274.545
+          ],
+          "stddev_us": 8.83976,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "modulated delay / 512": {
+          "mean_us": 292.26,
+          "mean_ci95_us": [
+            288.957,
+            298.183
+          ],
+          "stddev_us": 17.119,
+          "samples": 60,
+          "iterations_per_sample": 1
+        }
+      }
+    ],
+    "after": [
+      {
+        "Spectrum geometry / 1024 bins": {
+          "mean_us": 7.07567,
+          "mean_ci95_us": [
+            6.7636400000000005,
+            8.07983
+          ],
+          "stddev_us": 1.94858,
+          "samples": 60,
+          "iterations_per_sample": 3
+        },
+        "default / 128": {
+          "mean_us": 79.3707,
+          "mean_ci95_us": [
+            77.1401,
+            88.56389999999999
+          ],
+          "stddev_us": 15.2058,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "four bands HQ / 128": {
+          "mean_us": 200.874,
+          "mean_ci95_us": [
+            198.506,
+            205.239
+          ],
+          "stddev_us": 12.5194,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "delay / 128": {
+          "mean_us": 80.8028,
+          "mean_ci95_us": [
+            79.35839999999999,
+            83.90339999999999
+          ],
+          "stddev_us": 8.205110000000001,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "reverb / 128": {
+          "mean_us": 106.536,
+          "mean_ci95_us": [
+            95.28739999999999,
+            134.131
+          ],
+          "stddev_us": 65.76469999999999,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "OTT / 128": {
+          "mean_us": 79.0979,
+          "mean_ci95_us": [
+            77.4653,
+            84.1112
+          ],
+          "stddev_us": 9.947059999999999,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "modulated delay / 128": {
+          "mean_us": 84.01039999999999,
+          "mean_ci95_us": [
+            82.08189999999999,
+            90.2325
+          ],
+          "stddev_us": 12.552700000000002,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "default / 512": {
+          "mean_us": 256.878,
+          "mean_ci95_us": [
+            253.956,
+            263.158
+          ],
+          "stddev_us": 16.2867,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "four bands HQ / 512": {
+          "mean_us": 776.566,
+          "mean_ci95_us": [
+            768.179,
+            789.499
+          ],
+          "stddev_us": 41.69,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "delay / 512": {
+          "mean_us": 268.906,
+          "mean_ci95_us": [
+            265.122,
+            276.099
+          ],
+          "stddev_us": 19.570400000000003,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "reverb / 512": {
+          "mean_us": 289.285,
+          "mean_ci95_us": [
+            285.785,
+            295.676
+          ],
+          "stddev_us": 18.7516,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "OTT / 512": {
+          "mean_us": 263.797,
+          "mean_ci95_us": [
+            260.708,
+            268.99
+          ],
+          "stddev_us": 15.3345,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "modulated delay / 512": {
+          "mean_us": 285.806,
+          "mean_ci95_us": [
+            283.393,
+            290.02
+          ],
+          "stddev_us": 12.360899999999999,
+          "samples": 60,
+          "iterations_per_sample": 1
+        }
+      },
+      {
+        "Spectrum geometry / 1024 bins": {
+          "mean_us": 7.20254,
+          "mean_ci95_us": [
+            6.690720000000001,
+            8.41621
+          ],
+          "stddev_us": 2.83333,
+          "samples": 60,
+          "iterations_per_sample": 3
+        },
+        "default / 128": {
+          "mean_us": 77.7423,
+          "mean_ci95_us": [
+            76.06110000000001,
+            81.9423
+          ],
+          "stddev_us": 9.36786,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "four bands HQ / 128": {
+          "mean_us": 200.933,
+          "mean_ci95_us": [
+            198.54,
+            207.504
+          ],
+          "stddev_us": 14.2005,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "delay / 128": {
+          "mean_us": 911.422,
+          "mean_ci95_us": [
+            144.549,
+            3352.87
+          ],
+          "stddev_us": 4620.16,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "reverb / 128": {
+          "mean_us": 88.6292,
+          "mean_ci95_us": [
+            87.05560000000001,
+            92.6791
+          ],
+          "stddev_us": 9.0732,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "OTT / 128": {
+          "mean_us": 76.8236,
+          "mean_ci95_us": [
+            75.8938,
+            80.45830000000001
+          ],
+          "stddev_us": 6.93454,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "modulated delay / 128": {
+          "mean_us": 87.8215,
+          "mean_ci95_us": [
+            86.1631,
+            94.52980000000001
+          ],
+          "stddev_us": 10.9885,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "default / 512": {
+          "mean_us": 259.025,
+          "mean_ci95_us": [
+            254.358,
+            267.481
+          ],
+          "stddev_us": 24.4127,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "four bands HQ / 512": {
+          "mean_us": 774.637,
+          "mean_ci95_us": [
+            767.928,
+            785.341
+          ],
+          "stddev_us": 32.7697,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "delay / 512": {
+          "mean_us": 278.285,
+          "mean_ci95_us": [
+            272.745,
+            292.01
+          ],
+          "stddev_us": 33.5048,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "reverb / 512": {
+          "mean_us": 283.406,
+          "mean_ci95_us": [
+            281.166,
+            290.424
+          ],
+          "stddev_us": 14.6614,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "OTT / 512": {
+          "mean_us": 262.553,
+          "mean_ci95_us": [
+            260.868,
+            267.705
+          ],
+          "stddev_us": 10.2771,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "modulated delay / 512": {
+          "mean_us": 283.438,
+          "mean_ci95_us": [
+            281.346,
+            291.041
+          ],
+          "stddev_us": 13.1796,
+          "samples": 60,
+          "iterations_per_sample": 1
+        }
+      },
+      {
+        "Spectrum geometry / 1024 bins": {
+          "mean_us": 6.71082,
+          "mean_ci95_us": [
+            6.55297,
+            7.10715
+          ],
+          "stddev_us": 0.934588,
+          "samples": 60,
+          "iterations_per_sample": 3
+        },
+        "default / 128": {
+          "mean_us": 77.4694,
+          "mean_ci95_us": [
+            76.1549,
+            81.4312
+          ],
+          "stddev_us": 7.95083,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "four bands HQ / 128": {
+          "mean_us": 197.967,
+          "mean_ci95_us": [
+            196.199,
+            203.832
+          ],
+          "stddev_us": 12.04,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "delay / 128": {
+          "mean_us": 79.3839,
+          "mean_ci95_us": [
+            77.87910000000001,
+            86.3735
+          ],
+          "stddev_us": 10.7187,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "reverb / 128": {
+          "mean_us": 82.88539999999999,
+          "mean_ci95_us": [
+            81.4854,
+            88.3917
+          ],
+          "stddev_us": 9.11053,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "OTT / 128": {
+          "mean_us": 77.8361,
+          "mean_ci95_us": [
+            76.4319,
+            83.58189999999999
+          ],
+          "stddev_us": 9.94086,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "modulated delay / 128": {
+          "mean_us": 82.2312,
+          "mean_ci95_us": [
+            81.16460000000001,
+            86.4152
+          ],
+          "stddev_us": 7.37928,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "default / 512": {
+          "mean_us": 260.099,
+          "mean_ci95_us": [
+            257.414,
+            265.363
+          ],
+          "stddev_us": 14.8205,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "four bands HQ / 512": {
+          "mean_us": 753.268,
+          "mean_ci95_us": [
+            749.876,
+            763.802
+          ],
+          "stddev_us": 21.8785,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "delay / 512": {
+          "mean_us": 264.194,
+          "mean_ci95_us": [
+            261.944,
+            271.928
+          ],
+          "stddev_us": 14.9748,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "reverb / 512": {
+          "mean_us": 284.481,
+          "mean_ci95_us": [
+            280.978,
+            292.281
+          ],
+          "stddev_us": 18.617099999999997,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "OTT / 512": {
+          "mean_us": 259.519,
+          "mean_ci95_us": [
+            257.959,
+            264.0
+          ],
+          "stddev_us": 9.27044,
+          "samples": 60,
+          "iterations_per_sample": 1
+        },
+        "modulated delay / 512": {
+          "mean_us": 282.665,
+          "mean_ci95_us": [
+            280.605,
+            289.974
+          ],
+          "stddev_us": 13.8133,
+          "samples": 60,
+          "iterations_per_sample": 1
+        }
+      }
+    ]
+  }
+}

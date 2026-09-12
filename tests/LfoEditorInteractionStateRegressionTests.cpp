@@ -12,9 +12,15 @@
 #include <initializer_list>
 #include <memory>
 #include <thread>
+#include "helpers/RepaintRecorder.h"
 
 struct LfoEditorTestAccess
 {
+    static juce::Image gridCache(const LfoEditor& editor)
+    {
+        return editor.gridCache;
+    }
+
     static int hoveredPoint(const LfoEditor& editor) noexcept
     {
         return editor.hoveredPointIndex;
@@ -3247,6 +3253,81 @@ TEST_CASE("LFO editor point hover and focus feedback animate only while visible"
     CHECK_FALSE(LfoEditorTestAccess::animationIsRunning(editor));
     CHECK(LfoEditorTestAccess::hoveredPoint(editor) == -1);
     CHECK(LfoEditorTestAccess::hoverAmount(editor) == 0.0f);
+}
+
+TEST_CASE("LFO cursor updates repaint narrow strips without leaving stale pixels",
+          "[lfo][editor][ui][repaint][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    for (const auto scale : { 0.75f, 1.0f, 2.0f })
+    {
+        INFO("scale: " << scale);
+        LfoEditor editor;
+        prepareEditor(editor);
+        editor.setDataToDisplay(makeLfoData({ { 0.0f, 0.18f },
+                                               { 0.36f, 0.72f },
+                                               { 1.0f, 0.82f } }));
+        editor.setVisible(true);
+        auto* recorder = new RepaintRecorder(editor);
+        editor.setCachedComponentImage(recorder);
+        auto image = renderRepaintTestComponent(editor, scale);
+        auto previousFullFrame = image.createCopy();
+        const auto initialGridCache = LfoEditorTestAccess::gridCache(editor);
+
+        const auto checkUpdate = [&]
+        {
+            CHECK(recorder->fullInvalidations == 0);
+            REQUIRE_FALSE(recorder->dirtyAreas.isEmpty());
+            int dirtyPixels = 0;
+            for (const auto& area : recorder->dirtyAreas)
+                dirtyPixels += area.getWidth() * area.getHeight();
+            CHECK(dirtyPixels < editor.getWidth() * editor.getHeight() / 10);
+            const auto nextFullFrame = renderRepaintTestComponent(editor, scale);
+            juce::RectangleList<int> physicalDamage;
+            for (const auto& area : recorder->dirtyAreas)
+                physicalDamage.add((area.toFloat() * scale).getSmallestIntegerContainer());
+            int missedChangedPixels = 0;
+            for (int y = 0; y < nextFullFrame.getHeight(); ++y)
+                for (int x = 0; x < nextFullFrame.getWidth(); ++x)
+                    if (previousFullFrame.getPixelAt(x, y) != nextFullFrame.getPixelAt(x, y)
+                        && ! physicalDamage.containsPoint(x, y))
+                        ++missedChangedPixels;
+            CHECK(missedChangedPixels == 0);
+            previousFullFrame = nextFullFrame;
+
+            // At fractional scales, resampling a cached image can round a
+            // colour level differently at a clipped edge. Comparing full
+            // frames above tests the exact damage coverage independently of
+            // that resampling detail; integer scales also permit exact replay.
+            if (scale >= 1.0f)
+            {
+                recorder->paintDirtyAreas(image, scale);
+                CHECK(repaintTestImagesMatch(image, nextFullFrame));
+            }
+            CHECK(LfoEditorTestAccess::gridCache(editor) == initialGridCache);
+        };
+
+        // Include subpixel movement, a wrap from right to left, and transport
+        // stop. The previous cap and line must disappear in every case.
+        for (const auto position : { 0.36f, 0.363f, 0.999f, 0.001f, -1.0f })
+        {
+            INFO("playhead: " << position);
+            recorder->clear();
+            editor.setPlayheadPosition(position);
+            checkUpdate();
+            recorder->clear();
+            editor.setPlayheadPosition(position);
+            CHECK(recorder->dirtyAreas.isEmpty());
+        }
+
+        for (const auto position : { 0.36f, 0.9f, 0.1f, -1.0f })
+        {
+            INFO("phase offset: " << position);
+            recorder->clear();
+            editor.setPhaseOffsetLinePosition(position);
+            checkUpdate();
+        }
+    }
 }
 
 TEST_CASE("LFO editor rendering follows bank colour without stale grid cache",

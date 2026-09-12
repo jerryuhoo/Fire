@@ -2613,7 +2613,14 @@ TEST_CASE("Band move/reset parameter contract covers every per-band processor pa
 {
     // Keep this explicit: a newly-added processor parameter must make this test
     // fail until the add/delete copy contract deliberately accounts for it.
-    const std::set<juce::String> expectedBaseIDs {
+    std::set<juce::String> expectedBaseIDs {
+        OTT_DEPTH_ID,
+        OTT_TIME_ID,
+        OTT_UPWARD_ID,
+        OTT_DOWNWARD_ID,
+        OTT_OUTPUT_ID,
+        OTT_MIX_ID,
+        OTT_ENABLED_ID,
         MODE_ID,
         LINKED_ID,
         SAFE_ID,
@@ -2640,6 +2647,16 @@ TEST_CASE("Band move/reset parameter contract covers every per-band processor pa
         SHAPE_BYPASS_ID,
         DC_FILTER_ID,
     };
+
+    // Keep the accepted insert/module schema independent of the production
+    // helper and counts, so adding a slot, field or node requires review here.
+    for (int slot = 1; slot <= 8; ++slot)
+        for (const auto* field : { "Control1", "Control2", "Control3",
+                                  "Control4", "Control5", "Control6",
+                                  "Type", "Enabled", "Order" })
+            expectedBaseIDs.insert("bandFx" + juce::String(slot) + field);
+    for (int node = 0; node < 13; ++node)
+        expectedBaseIDs.insert("bandModuleOrder" + juce::String(node) + "Band");
 
     std::set<juce::String> actualBaseIDs;
     for (const auto& parameter : ParameterIDAndName::getBandParameterInfo())

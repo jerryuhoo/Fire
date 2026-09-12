@@ -72,6 +72,7 @@ private:
     bool consumePendingFrame(bool startFromSilence);
     void setMouseOverSpectrum(bool shouldBeOver);
     void resetHoverPresentation();
+    void rebuildFrequencyLayout();
     void rebuildPaths();
     void updateAnimationTimer();
 
@@ -97,6 +98,16 @@ private:
     bool interpolationActive = false;
     bool geometryDirty = true;
     bool renderedDataIsClear = true;
+
+    struct FrequencyBinPosition
+    {
+        int bin = 0;
+        int bucket = 0;
+        float x = 0.0f;
+    };
+    std::array<FrequencyBinPosition, 1024> frequencyLayout {};
+    int visibleFrequencyBins = 0;
+    bool frequencyLayoutDirty = true;
 
     // Host-bypass is a presentation epoch as well as an opacity animation.
     // Updates that race with entry are rejected by acceptingSpectrumUpdates;

@@ -77,7 +77,7 @@ public:
             return false;
 
         window.multiplyWithWindowingTable (tempFFTData, fftSize);
-        forwardFFT.performFrequencyOnlyForwardTransform (tempFFTData);
+        forwardFFT.performFrequencyOnlyForwardTransform (tempFFTData, true);
         return true;
     }
 
@@ -146,10 +146,12 @@ public:
                 return false;
             }
 
-            juce::FloatVectorOperations::clear(processedDestination, processedDestinationSize);
-            juce::FloatVectorOperations::clear(originalDestination, originalDestinationSize);
             std::copy_n(newestFrame.processed.data(), fftSize, processedDestination);
             std::copy_n(newestFrame.original.data(), fftSize, originalDestination);
+            juce::FloatVectorOperations::clear(processedDestination + fftSize,
+                                                processedDestinationSize - fftSize);
+            juce::FloatVectorOperations::clear(originalDestination + fftSize,
+                                                originalDestinationSize - fftSize);
 
             // Reset or a newer publication may have won while this frame was
             // copied. The claimed slot is coherent, but no longer belongs to

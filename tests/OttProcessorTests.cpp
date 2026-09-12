@@ -193,3 +193,68 @@ TEST_CASE("OTT activity distinguishes dynamics from output trim and wet balance"
     processor.reset();
     CHECK(processor.getDynamicsActivityDb() == 0.0f);
 }
+
+TEST_CASE("OTT gain telemetry reports the final applied sample including zero wet", "[ott][dsp][telemetry]")
+{
+    OttProcessor processor;
+    processor.prepare({sampleRate, 127, 2});
+    OttProcessor::Parameters parameters;
+    parameters.enabled = true;
+    parameters.controls[OttProcessor::depth].baseValue = 0.0f;
+    parameters.controls[OttProcessor::output].baseValue = 0.0f;
+    parameters.controls[OttProcessor::output].modulationDepth = 1.0f;
+    parameters.sources[OttProcessor::output] = 0;
+    std::array<float, 127> lfo;
+    parameters.controls[OttProcessor::output].lfoSignal = lfo.data();
+    juce::AudioBuffer<float> audio(2, static_cast<int>(lfo.size()));
+    for (int block = 0; block < 32; ++block)
+    {
+        for (size_t i = 0; i < lfo.size(); ++i)
+            lfo[i] = static_cast<float>((block * 7 + static_cast<int>(i)) % 127) / 126.0f;
+        for (int channel = 0; channel < 2; ++channel)
+            juce::FloatVectorOperations::fill(audio.getWritePointer(channel), 0.2f, audio.getNumSamples());
+        if (block == 16) parameters.controls[OttProcessor::mix].baseValue = 0.0f;
+        processor.process(juce::dsp::AudioBlock<float>(audio), parameters);
+        const auto appliedGain = audio.getSample(0, audio.getNumSamples() - 1) / 0.2f;
+        CHECK(processor.getGainChangeDb() == Catch::Approx(juce::Decibels::gainToDecibels(appliedGain, -120.0f)).margin(2.0e-5f));
+    }
+    CHECK(processor.getGainChangeDb() == 0.0f);
+}
+
+TEST_CASE("OTT settled controls retain detector history through bypass and automation", "[ott][dsp][automation][cache]")
+{
+    OttProcessor processor, fallbackProcessor;
+    processor.prepare({sampleRate, 127, 2});
+    fallbackProcessor.prepare({sampleRate, 127, 2});
+    OttProcessor::Parameters parameters, fallbackParameters;
+    std::array<float, 127> invalidLfo;
+    invalidLfo.fill(std::numeric_limits<float>::quiet_NaN());
+    juce::AudioBuffer<float> audio(2, static_cast<int>(invalidLfo.size())), reference;
+    for (int block = 0; block < 96; ++block)
+    {
+        parameters.enabled = block >= 12 && (block < 48 || block >= 64);
+        parameters.controls[OttProcessor::depth].baseValue = block < 28 ? 0.75f : 0.25f;
+        parameters.controls[OttProcessor::timeScale].baseValue = block < 36 ? 50.0f : 200.0f;
+        parameters.controls[OttProcessor::output].baseValue = block < 72 ? 3.0f : -6.0f;
+        fallbackParameters = parameters;
+        // Invalid LFO samples fall back to the same base value. Keep this
+        // route present from the first block so there is no recipe transition.
+        fallbackParameters.controls[OttProcessor::depth].lfoSignal = invalidLfo.data();
+        fallbackParameters.sources[OttProcessor::depth] = 0;
+        for (int sample = 0; sample < audio.getNumSamples(); ++sample)
+        {
+            const auto input = 0.2f * std::sin(static_cast<float>(block * audio.getNumSamples() + sample) * 0.07f);
+            audio.setSample(0, sample, input);
+            audio.setSample(1, sample, input * -0.5f);
+        }
+        reference.makeCopyOf(audio);
+        processor.process(juce::dsp::AudioBlock<float>(audio), parameters);
+        fallbackProcessor.process(juce::dsp::AudioBlock<float>(reference), fallbackParameters);
+        for (int channel = 0; channel < 2; ++channel)
+            for (int sample = 0; sample < audio.getNumSamples(); ++sample)
+                REQUIRE(audio.getSample(channel, sample) == reference.getSample(channel, sample));
+        REQUIRE(processor.getInputLevelDb() == fallbackProcessor.getInputLevelDb());
+        REQUIRE(processor.getGainChangeDb() == fallbackProcessor.getGainChangeDb());
+        REQUIRE(processor.getDynamicsActivityDb() == fallbackProcessor.getDynamicsActivityDb());
+    }
+}

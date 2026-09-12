@@ -1,4 +1,7 @@
 #include <Panels/SpectrogramPanel/SpectrumComponent.h>
+#include <Panels/SpectrogramPanel/FFTProcessor.h>
+#include <Panels/SpectrogramPanel/OttBandControls.h>
+#include "helpers/RepaintRecorder.h"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -99,6 +102,11 @@ struct SpectrumComponentTestAccess
     {
         return ! component.spectrumLinePath.isEmpty();
     }
+
+    static const juce::Path& spectrumPath(const SpectrumComponent& component)
+    {
+        return component.spectrumLinePath;
+    }
 };
 
 namespace
@@ -122,6 +130,139 @@ std::uint64_t renderedAlphaSum(SpectrumComponent& component,
     return total;
 }
 } // namespace
+
+TEST_CASE("Spectrum frequency layout stays correct across size and FFT grid changes",
+          "[spectrum][ui][layout][sample-rate][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    SpectrumComponent spectrum { 1, false };
+    spectrum.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    spectrum.setVisible(true);
+    SpectrumComponentTestAccess::setInterpolationFactor(spectrum, 1.0f);
+    const juce::ScopeGuard cleanup { [&] { spectrum.removeFromDesktop(); } };
+
+    std::array<float, 1024> frame {};
+    for (size_t i = 0; i < frame.size(); ++i)
+        frame[i] = 0.01f + static_cast<float>((i * 73) % 223);
+
+    for (const auto width : { 267, 800, 503 })
+        for (const auto bins : { 1024, 64 })
+            for (const auto binWidth : { 44100.0f / 2048.0f, 96000.0f / 2048.0f })
+            {
+                CAPTURE(width, bins, binWidth);
+                SpectrumComponent fresh { 1, false };
+                fresh.setBounds(0, 0, width, 300);
+                fresh.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+                fresh.setVisible(true);
+                SpectrumComponentTestAccess::setInterpolationFactor(fresh, 1.0f);
+                const juce::ScopeGuard freshCleanup { [&] { fresh.removeFromDesktop(); } };
+
+                spectrum.setSize(width, 300);
+                spectrum.updateSpectrum(frame.data(), bins, binWidth);
+                fresh.updateSpectrum(frame.data(), bins, binWidth);
+                SpectrumComponentTestAccess::tick(spectrum);
+                SpectrumComponentTestAccess::tick(fresh);
+                REQUIRE(SpectrumComponentTestAccess::hasSpectrumPath(spectrum));
+                CHECK(SpectrumComponentTestAccess::spectrumPath(spectrum)
+                      == SpectrumComponentTestAccess::spectrumPath(fresh));
+            }
+}
+
+TEST_CASE("Spectrum FFT positive magnitudes match the complete transform",
+          "[spectrum][fft][regression]")
+{
+    SpectrumProcessor spectrum;
+    juce::dsp::FFT referenceFFT(SpectrumProcessor::fftOrder);
+    juce::dsp::WindowingFunction<float> referenceWindow(
+        SpectrumProcessor::fftSize, juce::dsp::WindowingFunction<float>::blackman);
+    std::array<float, SpectrumProcessor::fftBufferSize> actual {};
+    std::array<float, SpectrumProcessor::fftBufferSize> expected {};
+    juce::Random random(0x53504543);
+
+    for (const auto signal : { 0, 1, 2 })
+    {
+        CAPTURE(signal);
+        actual.fill(0.0f);
+        for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+            actual[static_cast<size_t>(sample)] = signal == 0 ? 0.0f
+                : signal == 1 ? std::sin(juce::MathConstants<float>::twoPi
+                                         * 37.0f * static_cast<float>(sample)
+                                         / static_cast<float>(SpectrumProcessor::fftSize))
+                              : random.nextFloat() * 2.0f - 1.0f;
+        expected = actual;
+        referenceWindow.multiplyWithWindowingTable(expected.data(), SpectrumProcessor::fftSize);
+        referenceFFT.performFrequencyOnlyForwardTransform(expected.data());
+        REQUIRE(spectrum.doProcessing(actual.data(), static_cast<int>(actual.size())));
+        for (int bin = 0; bin <= SpectrumProcessor::numBins; ++bin)
+            CHECK(actual[static_cast<size_t>(bin)]
+                  == Catch::Approx(expected[static_cast<size_t>(bin)]).margin(1.0e-5f));
+    }
+}
+
+TEST_CASE("Spectrum frame copies clear all FFT scratch samples",
+          "[spectrum][fft][fifo][regression]")
+{
+    SpectrumProcessor spectrum;
+    std::array<float, SpectrumProcessor::fftBufferSize + 17> processed;
+    std::array<float, SpectrumProcessor::fftBufferSize + 29> original;
+    processed.fill(-99.0f);
+    original.fill(-99.0f);
+    for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+        spectrum.pushNextSamplePairIntoFifo(0.5f, -0.25f);
+    REQUIRE(spectrum.popLatestFramePair(processed.data(), static_cast<int>(processed.size()),
+                                        original.data(), static_cast<int>(original.size())));
+    CHECK(std::all_of(processed.begin(), processed.begin() + SpectrumProcessor::fftSize,
+                      [](float value) { return value == 0.5f; }));
+    CHECK(std::all_of(original.begin(), original.begin() + SpectrumProcessor::fftSize,
+                      [](float value) { return value == -0.25f; }));
+    CHECK(std::all_of(processed.begin() + SpectrumProcessor::fftSize, processed.end(),
+                      [](float value) { return value == 0.0f; }));
+    CHECK(std::all_of(original.begin() + SpectrumProcessor::fftSize, original.end(),
+                      [](float value) { return value == 0.0f; }));
+}
+
+TEST_CASE("OTT spectrum band stops repainting settled silence and resumes on visual changes",
+          "[spectrum][ott][ui][repaint][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    OttBandControls controls(processor, 0);
+    controls.setSize(600, 240);
+    controls.setVisible(true);
+    auto* recorder = new RepaintRecorder(controls);
+    controls.setCachedComponentImage(recorder);
+    controls.refresh();
+    recorder->clear();
+
+    for (int frame = 0; frame < 120; ++frame)
+        controls.refresh();
+    CHECK(recorder->dirtyAreas.isEmpty());
+
+    fire::ui::OttSpectrumProfile profile {};
+    profile[8] = 0.7f;
+    controls.setSpectrum(profile, 0.4f);
+    controls.refresh();
+    REQUIRE_FALSE(recorder->dirtyAreas.isEmpty());
+    recorder->clear();
+    controls.refresh();
+    CHECK(recorder->dirtyAreas.isEmpty());
+
+    controls.setExternalInteraction(true, false);
+    controls.refresh();
+    REQUIRE_FALSE(recorder->dirtyAreas.isEmpty());
+    controls.setExternalInteraction(false, false);
+    for (int frame = 0; frame < 240; ++frame)
+        controls.refresh();
+    recorder->clear();
+    controls.refresh();
+    CHECK(recorder->dirtyAreas.isEmpty());
+
+    auto* threshold = processor.treeState.getParameter("ottUpward1");
+    REQUIRE(threshold != nullptr);
+    threshold->setValueNotifyingHost(threshold->convertTo0to1(-54.0f));
+    controls.refresh();
+    REQUIRE_FALSE(recorder->dirtyAreas.isEmpty());
+}
 
 TEST_CASE("Spectrum peak line and readout pill fade on the 60 Hz presentation clock",
           "[spectrum][ui][peak][hover][animation][regression]")

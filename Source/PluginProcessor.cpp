@@ -3003,9 +3003,14 @@ fire::module_order::Order FireAudioProcessor::getModuleOrder(int scope) const
     auto order = module_order::defaults(scope);
     if (! juce::isPositiveAndBelow(scope, effects::scopeCount)) { order.fill(-1); return order; }
     const int builtins = scope == 0 ? 3 : 5;
+    // Read each atomic parameter once. Besides avoiding repeated loads in the
+    // sort comparator, this keeps its ordering consistent during automation.
+    std::array<int, effects::slotCount> insertPositions;
+    for (int slot = 0; slot < effects::slotCount; ++slot)
+        insertPositions[static_cast<size_t>(slot)] = getInsertEffectOrder(scope, slot);
     std::sort(order.begin() + builtins, order.begin() + builtins + effects::slotCount, [&](int a, int b) {
-        const auto av = getInsertEffectOrder(scope, a - module_order::firstInsert);
-        const auto bv = getInsertEffectOrder(scope, b - module_order::firstInsert);
+        const auto av = insertPositions[static_cast<size_t>(a - module_order::firstInsert)];
+        const auto bv = insertPositions[static_cast<size_t>(b - module_order::firstInsert)];
         return av == bv ? a < b : av < bv;
     });
     std::array<int, module_order::capacity> legacyPositions {}, positions {};

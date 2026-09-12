@@ -287,20 +287,23 @@ void Multiband::animationTick(float deltaSeconds)
     const juce::Component::SafePointer<Multiband> safeThis(this);
     if (ottMode)
     {
-        if (lastOttSpectrumTimeMs < 0.0 || juce::Time::getMillisecondCounterHiRes() - lastOttSpectrumTimeMs > 250.0)
+        const auto nowMs = juce::Time::getMillisecondCounterHiRes();
+        if (lastOttSpectrumTimeMs < 0.0 || nowMs - lastOttSpectrumTimeMs > 250.0)
             ottSpectrumTargets.fill(0.0f);
+        const auto spectrumAttack = fire::ui::Motion::step(deltaSeconds, 0.055f);
+        const auto spectrumRelease = fire::ui::Motion::step(deltaSeconds, 0.14f);
         for (size_t bin = 0; bin < ottSpectrumDisplay.size(); ++bin)
         {
             const auto target = ottSpectrumTargets[bin];
             auto& value = ottSpectrumDisplay[bin];
-            value += (target - value) * fire::ui::Motion::step(deltaSeconds, target > value ? 0.055f : 0.14f);
+            value += (target - value) * (target > value ? spectrumAttack : spectrumRelease);
             if (value < 0.0005f && target == 0.0f) value = 0.0f;
         }
         for (size_t index = 0; index < bandUIs.size(); ++index)
         {
             auto* ott = bandUIs[index].ott.get();
             if (! ott) continue;
-            if (lastOttMeterTimeMs >= 0.0 && juce::Time::getMillisecondCounterHiRes() - lastOttMeterTimeMs > 250.0)
+            if (lastOttMeterTimeMs >= 0.0 && nowMs - lastOttMeterTimeMs > 250.0)
                 ott->setMeter(0.0f);
             const auto band = getBandBounds(static_cast<int>(index));
             fire::ui::OttSpectrumProfile profile {};
@@ -442,8 +445,14 @@ void Multiband::updateOttSpectrum(const float* magnitudes, int bins, float binWi
         if (! std::isfinite(magnitude) || magnitude <= 0.0f) continue;
         const auto position = std::log(frequency / 20.0f) / std::log(1000.0f);
         const auto column = static_cast<size_t>(juce::jlimit(0, 95, juce::roundToInt(position * 95.0f)));
-        const auto db = juce::Decibels::gainToDecibels(magnitude / static_cast<float>(bins), -100.0f);
-        peaks[column] = juce::jmax(peaks[column], juce::jlimit(0.0f, 1.0f, (db + 84.0f) / 72.0f));
+        peaks[column] = juce::jmax(peaks[column], magnitude);
+    }
+    // Decibel conversion is monotonic, so reduce each display column before
+    // converting it instead of taking a logarithm for every FFT bin.
+    for (auto& peak : peaks)
+    {
+        const auto db = juce::Decibels::gainToDecibels(peak / static_cast<float>(bins), -100.0f);
+        peak = juce::jlimit(0.0f, 1.0f, (db + 84.0f) / 72.0f);
     }
     for (size_t i = 0; i < peaks.size(); ++i)
         ottSpectrumTargets[i] = 0.5f * peaks[i] + 0.25f * peaks[i == 0 ? 0 : i - 1]

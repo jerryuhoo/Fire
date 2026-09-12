@@ -8,33 +8,53 @@ public:
     OttGraph() { setGraphIdentity("LIFT / PRESS", fire::ui::ModuleRole::ott); }
     void setLevels(float inputDb, float gainDb, float activityDb = 0.0f)
     {
-        input = std::isfinite(inputDb) ? inputDb : -120.0f;
-        gain = std::isfinite(gainDb) ? gainDb : 0.0f;
-        activity = std::isfinite(activityDb) ? activityDb : 0.0f;
+        inputDb = std::isfinite(inputDb) ? inputDb : -120.0f;
+        gainDb = std::isfinite(gainDb) ? gainDb : 0.0f;
+        activityDb = std::isfinite(activityDb) ? activityDb : 0.0f;
+        visualDirty = visualDirty || input != inputDb || gain != gainDb || activity != activityDb;
+        input = inputDb;
+        gain = gainDb;
+        activity = activityDb;
     }
     void setThresholds(float lowerDb, float upperDb)
     {
-        lower = juce::jmin(lowerDb, upperDb - 6.0f);
+        lowerDb = juce::jmin(lowerDb, upperDb - 6.0f);
+        visualDirty = visualDirty || lower != lowerDb || upper != upperDb;
+        lower = lowerDb;
         upper = upperDb;
     }
     void setSpectrum(const fire::ui::OttSpectrumProfile& profile, float frequencyCentroid)
     {
+        visualDirty = visualDirty || spectrum != profile;
         spectrum = profile; centroid = frequencyCentroid;
     }
     void resetVisuals()
     {
         motion.reset(); spectrum.fill(0.0f);
         readout = 0.0f; shownInput = -120.0f; shownGain = 0.0f;
+        visualDirty = true;
     }
     void advanceVisuals(float dt, bool reading, int previewDirection)
     {
         previewLift = (previewDirection & 1) != 0;
         previewPress = (previewDirection & 2) != 0;
-        fire::ui::advanceReadout(readout, reading, dt);
+        const auto previousInput = shownInput;
+        const auto previousGain = shownGain;
+        const auto previousMotion = motion;
+        const bool readoutChanged = fire::ui::advanceReadout(readout, reading, dt);
         shownInput += (input - shownInput) * fire::ui::Motion::step(dt, 0.10f);
         shownGain += (gain - shownGain) * fire::ui::Motion::step(dt, 0.08f);
         motion.advance(dt, activity, previewLift, previewPress, centroid);
-        repaint();
+        // A settled, silent OTT view has no animated pixels. Keep the shared
+        // clock for live meters and previews, but avoid invalidating its
+        // background and title on every frame.
+        if (visualDirty || readoutChanged || shownInput != previousInput
+            || shownGain != previousGain || motion.phase != previousMotion.phase
+            || motion.lift != previousMotion.lift || motion.press != previousMotion.press
+            || motion.liftPreview != previousMotion.liftPreview
+            || motion.pressPreview != previousMotion.pressPreview)
+            repaint(getGraphPlotBounds().getSmallestIntegerContainer());
+        visualDirty = false;
     }
     void paint(juce::Graphics& g) override
     {
@@ -82,6 +102,7 @@ private:
     float shownInput = -120.0f, shownGain = 0.0f;
     float lower = -48.0f, upper = -18.0f, centroid = 0.5f, readout = 0.0f;
     bool previewLift = false, previewPress = false;
+    bool visualDirty = true;
     fire::ui::OttSpectrumProfile spectrum {};
     fire::ui::OttRippleMotion motion;
 };

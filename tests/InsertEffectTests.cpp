@@ -187,3 +187,98 @@ TEST_CASE("Changing insert type fades the audible LFO value instead of its unmod
     effect.process(juce::dsp::AudioBlock<float>(audio).getSubBlock(0, 512), p);
     CHECK(std::abs(audio.getSample(0, 0) - previous) < 0.001f);
 }
+
+TEST_CASE("Fractional insert history preserves interpolation across wrap and logical reset", "[insertfx][dsp][history]")
+{
+    fire::effects::StereoHistory history;
+    history.prepare(32.0, 0.5); // 24 storage slots, including the interpolation guard.
+    std::vector<float> written;
+    for (int sample = 0; sample < 2000; ++sample)
+    {
+        if (sample % 137 == 0)
+        {
+            history.reset();
+            written.clear();
+        }
+        const float input = static_cast<float>(sample) * 0.1f;
+        history.write(input, -input);
+        written.push_back(input);
+        for (float age : {0.0f, 1.0f, 1.25f, 3.75f, 21.5f, 22.75f, 23.0f, 24.0f})
+        {
+            const auto whole = static_cast<size_t>(age);
+            float expected = 0.0f;
+            if (age >= 1.0f && whole + 1 <= written.size() && whole + 1 < 24)
+                expected = juce::jmap(age - static_cast<float>(whole),
+                    written[written.size() - whole], written[written.size() - whole - 1]);
+            REQUIRE(history.read(0, age) == expected);
+            REQUIRE(history.read(1, age) == -expected);
+        }
+    }
+}
+
+TEST_CASE("Normalised insert controls follow changing bit depth after settling and reprepare", "[insertfx][dsp][lfo][cache]")
+{
+    InsertEffect effect;
+    InsertEffect::Parameters parameters(Type::lofi);
+    parameters.normalised = true;
+    for (size_t i = 0; i < fire::effects::controlCount; ++i)
+    {
+        parameters.values[i].range = {0.0f, 1.0f};
+        parameters.values[i].baseValue = 0.0f;
+    }
+    parameters.values[5].baseValue = 1.0f;
+    std::array<float, 127> lfo;
+    parameters.values[1].lfoSignal = lfo.data();
+    parameters.values[1].isBipolar = false;
+    parameters.values[1].modulationDepth = 1.0f;
+    juce::AudioBuffer<float> audio(2, static_cast<int>(lfo.size()));
+    for (double sampleRate : {44100.0, 96000.0})
+    {
+        effect.prepare({sampleRate, static_cast<juce::uint32>(lfo.size()), 2});
+        for (int block = 0; block < 24; ++block)
+        {
+            for (size_t i = 0; i < lfo.size(); ++i)
+            {
+                lfo[i] = block < 20 ? 0.25f : (i < 40 ? 0.0f : (i < 80 ? 0.33f : 0.77f));
+                audio.setSample(0, static_cast<int>(i), 0.137f);
+                audio.setSample(1, static_cast<int>(i), -0.271f);
+            }
+            effect.process(juce::dsp::AudioBlock<float>(audio), parameters);
+            if (block < 20) continue; // Allow the enable ramp to settle.
+            for (size_t i = 0; i < lfo.size(); ++i)
+            {
+                const auto bits = fire::effects::controls(Type::lofi)[1].fromNormalised(lfo[i]);
+                const auto steps = std::pow(2.0f, bits - 1.0f);
+                CHECK(audio.getSample(0, static_cast<int>(i)) == Catch::Approx(std::round(0.137f * steps) / steps).margin(1.0e-7f));
+                CHECK(audio.getSample(1, static_cast<int>(i)) == Catch::Approx(std::round(-0.271f * steps) / steps).margin(1.0e-7f));
+            }
+        }
+    }
+}
+
+TEST_CASE("Tape tone coefficients refresh when the sample rate changes", "[insertfx][dsp][tape][prepare]")
+{
+    fire::effects::TapeFlutter reused;
+    reused.prepare(48000.0);
+    for (int sample = 0; sample < 1024; ++sample)
+    {
+        float left = 0.1f, right = -0.2f;
+        reused.process(left, right, 0.6f, 0.4f, 0.3f);
+    }
+    for (double sampleRate : {22050.0, 96000.0})
+    {
+        fire::effects::TapeFlutter fresh;
+        fresh.prepare(sampleRate);
+        reused.prepare(sampleRate);
+        for (int sample = 0; sample < 4096; ++sample)
+        {
+            float left = std::sin(static_cast<float>(sample) * 0.05f) * 0.2f;
+            float right = -left * 0.5f;
+            auto expectedLeft = left, expectedRight = right;
+            reused.process(left, right, 0.6f, 0.4f, 0.3f);
+            fresh.process(expectedLeft, expectedRight, 0.6f, 0.4f, 0.3f);
+            REQUIRE(left == expectedLeft);
+            REQUIRE(right == expectedRight);
+        }
+    }
+}

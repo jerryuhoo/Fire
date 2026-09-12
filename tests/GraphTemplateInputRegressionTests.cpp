@@ -121,13 +121,20 @@ std::vector<GraphTemplate*> directGraphs(juce::Component& owner)
     return result;
 }
 
-juce::Button* findDirectButton(juce::Component& owner,
-                               const juce::String& text)
+juce::Button* findDescendantButton(juce::Component& owner,
+                                   const juce::String& text)
 {
+    // Module buttons live inside the effect rack's viewport content; graph
+    // components and the workspace controls below remain direct panel children.
     for (int index = 0; index < owner.getNumChildComponents(); ++index)
-        if (auto* button = dynamic_cast<juce::Button*>(owner.getChildComponent(index));
+    {
+        auto* child = owner.getChildComponent(index);
+        if (auto* button = dynamic_cast<juce::Button*>(child);
             button != nullptr && button->getButtonText() == text)
             return button;
+        if (auto* button = findDescendantButton(*child, text))
+            return button;
+    }
     return nullptr;
 }
 
@@ -419,7 +426,7 @@ TEST_CASE("Production control panels wire graph zoom into their live layouts",
 
         // Shape has both an interactive mode control and DC switch in the
         // workspace that the enlarged transfer graph covers.
-        auto* shapeButton = findDirectButton(panel, "Shape");
+        auto* shapeButton = findDescendantButton(panel, "Shape");
         REQUIRE(shapeButton != nullptr);
         shapeButton->triggerClick();
 
@@ -554,7 +561,7 @@ TEST_CASE("Production control panels wire graph zoom into their live layouts",
         drive->mouseDown(makeMouseEvent(*drive, primary));
         REQUIRE(drive->hasActiveInteraction());
         REQUIRE(transferGraph->isShowing());
-        auto* shapeButton = findDirectButton(panel, "Shape");
+        auto* shapeButton = findDescendantButton(panel, "Shape");
         REQUIRE(shapeButton != nullptr);
         REQUIRE(static_cast<juce::Component&>(*shapeButton).keyPressed(
             juce::KeyPress { juce::KeyPress::returnKey }));
@@ -578,7 +585,7 @@ TEST_CASE("Production control panels wire graph zoom into their live layouts",
         panel.setVisible(true);
         panel.resized();
 
-        auto* analysisButton = findDirectButton(panel, "Analysis");
+        auto* analysisButton = findDescendantButton(panel, "Analysis");
         REQUIRE(analysisButton != nullptr);
         analysisButton->triggerClick();
 

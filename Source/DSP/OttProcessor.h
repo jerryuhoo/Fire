@@ -81,6 +81,7 @@ public:
         if (channels == 0 || samples == 0)
             return;
 
+        bool controlsAreStatic = true;
         for (size_t i = 0; i < baseSmoothers.size(); ++i)
         {
             const auto value = sanitise(i, parameters.controls[i].baseValue);
@@ -106,6 +107,8 @@ public:
             route.source = parameters.sources[i];
             route.depth = routeDepth;
             route.bipolar = provider.isBipolar;
+            controlsAreStatic = controlsAreStatic && ! routed
+                && ! baseSmoothers[i].isSmoothing() && ! route.blend.isSmoothing();
         }
         if (! initialised)
             enableSmoother.setCurrentAndTargetValue(parameters.enabled ? 1.0f : 0.0f);
@@ -113,18 +116,30 @@ public:
             enableSmoother.setTargetValue(parameters.enabled ? 1.0f : 0.0f);
         initialised = true;
 
-        for (size_t sample = 0; sample < samples; ++sample)
+        std::array<float, controlCount> values;
+        const auto updateControlValues = [&](int sample)
         {
-            std::array<float, controlCount> values;
             for (size_t i = 0; i < values.size(); ++i)
             {
-                values[i] = sanitise(i, parameters.controls[i].get(static_cast<int>(sample), baseSmoothers[i].getNextValue()));
+                values[i] = sanitise(i, parameters.controls[i].get(sample, baseSmoothers[i].getNextValue()));
                 auto& route = routes[i];
                 const auto blend = route.blend.getNextValue();
                 values[i] = route.anchor + blend * (values[i] - route.anchor);
                 route.lastValue = values[i];
             }
             updateCoefficients(values[timeScale]);
+        };
+        // A settled, unrouted control has the same value for every sample.
+        // Keep the detector running during bypass so enabling OTT preserves
+        // its envelope history, without repeating six parameter recipes.
+        if (controlsAreStatic)
+            updateControlValues(0);
+
+        float lastAppliedGain = 1.0f;
+        for (size_t sample = 0; sample < samples; ++sample)
+        {
+            if (! controlsAreStatic)
+                updateControlValues(static_cast<int>(sample));
             float peak = 0.0f;
             for (size_t channel = 0; channel < channels; ++channel)
             {
@@ -144,7 +159,7 @@ public:
             const auto wet = enableSmoother.getNextValue() * values[mix];
             if (wet <= 0.0f)
             {
-                gainChangeDb = 0.0f;
+                lastAppliedGain = 1.0f;
                 dynamicsActivityDb = 0.0f;
                 continue; // Stable bypass and zero mix are exactly transparent.
             }
@@ -155,7 +170,7 @@ public:
             dynamicsActivityDb = dynamics * wet;
             const auto wetGain = juce::Decibels::decibelsToGain(dynamics + values[output]);
             const auto gain = 1.0f + wet * (wetGain - 1.0f);
-            gainChangeDb = juce::Decibels::gainToDecibels(gain, -120.0f);
+            lastAppliedGain = gain;
             for (size_t channel = 0; channel < channels; ++channel)
             {
                 auto& input = block.getChannelPointer(channel)[sample];
@@ -163,6 +178,9 @@ public:
                 input = std::isfinite(result) ? result : 0.0f;
             }
         }
+        // Telemetry reports the final sample; earlier dB conversions never
+        // influence the detector or audio gain.
+        gainChangeDb = juce::Decibels::gainToDecibels(lastAppliedGain, -120.0f);
         levelDb = juce::Decibels::gainToDecibels(envelope, -120.0f);
     }
 

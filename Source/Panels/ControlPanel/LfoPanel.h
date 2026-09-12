@@ -147,6 +147,7 @@ private:
     void updateAnimationTargets() noexcept;
     void startAnimationIfNeeded() noexcept;
     float getPointVisualRadius() const noexcept;
+    void repaintCursor(float position);
     static bool isCompletePrimaryDown(
         const juce::MouseEvent& event) noexcept;
     static bool isStandalonePopupDown(

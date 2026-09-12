@@ -548,7 +548,8 @@ void LfoEditor::setDataContextValidator(
 void LfoEditor::paint(juce::Graphics& g)
 {
     const auto accent = getCurrentLfoAccent();
-    const auto physicalScale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    const auto physicalScale = juce::jmax(
+        1.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
     if (gridCache.isNull()
         || cachedGridWidth != getWidth()
         || cachedGridHeight != getHeight()
@@ -830,8 +831,10 @@ void LfoEditor::setPlayheadPosition(float position)
 {
     if (! juce::approximatelyEqual(playheadPos, position))
     {
+        const auto previous = playheadPos;
         playheadPos = position;
-        repaint();
+        repaintCursor(previous);
+        repaintCursor(playheadPos);
     }
 }
 
@@ -839,9 +842,27 @@ void LfoEditor::setPhaseOffsetLinePosition(float position)
 {
     if (! juce::approximatelyEqual(phaseOffsetPosition, position))
     {
+        const auto previous = phaseOffsetPosition;
         phaseOffsetPosition = position;
-        repaint();
+        repaintCursor(previous);
+        repaintCursor(phaseOffsetPosition);
     }
+}
+
+void LfoEditor::repaintCursor(float position)
+{
+    if (! std::isfinite(position) || position < 0.0f)
+        return;
+
+    // Include the playhead's 5 px cap and its antialiased edge. Keep old and
+    // new strips separate so a phase wrap does not dirty the entire waveform.
+    const auto x = static_cast<float>(getWidth()) * position;
+    if (! std::isfinite(x) || x > static_cast<float>(getWidth()) + 4.0f)
+        return;
+
+    const auto bounds = juce::Rectangle<float>(x - 4.0f, 0.0f, 8.0f,
+                                               static_cast<float>(getHeight()));
+    repaint(bounds.getSmallestIntegerContainer().getIntersection(getLocalBounds()));
 }
 
 void LfoEditor::setSmoothness(float smoothness)

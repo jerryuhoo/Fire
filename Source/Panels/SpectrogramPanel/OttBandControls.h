@@ -146,7 +146,19 @@ public:
         motion.advance(deltaSeconds, on ? dynamicsActivity : 0.0f, liftPreview, pressPreview, centroid);
         up.advanceVisuals(deltaSeconds, on, externalUp, spectrum, motion.lift);
         down.advanceVisuals(deltaSeconds, on, externalDown, spectrum, motion.press);
-        repaint();
+        // Keep the moving ripples at the presentation rate, but do not redraw
+        // the whole analyser band after silence and readouts have settled.
+        const std::array<double, 9> visualState {
+            motion.lift, motion.press, motion.phase, motion.liftPreview, motion.pressPreview,
+            up.getReadoutOpacity(), down.getReadoutOpacity(), up.getValue(), down.getValue()
+        };
+        if (visualState != lastVisualState || spectrum != lastSpectrum || on != lastProcessingState)
+        {
+            lastVisualState = visualState;
+            lastSpectrum = spectrum;
+            lastProcessingState = on;
+            repaint();
+        }
     }
     void dismiss()
     {
@@ -189,4 +201,7 @@ private:
     bool externalUp = false, externalDown = false;
     fire::ui::OttSpectrumProfile spectrum {};
     fire::ui::OttRippleMotion motion;
+    std::array<double, 9> lastVisualState {};
+    fire::ui::OttSpectrumProfile lastSpectrum {};
+    bool lastProcessingState = false;
 };

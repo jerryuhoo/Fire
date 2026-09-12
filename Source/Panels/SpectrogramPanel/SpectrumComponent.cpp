@@ -99,6 +99,8 @@ void SpectrumComponent::timerCallback()
     bool visualStateChanged = presentationOpacity.advance(1.0f / 60.0f, 0.11f);
     visualStateChanged = hoverOpacity.advance(1.0f / 60.0f, 0.10f)
                       || visualStateChanged;
+    bool spectrumDataChanged = false;
+    bool peakDataChanged = false;
     const auto newestGeneration = pendingGeneration.load(std::memory_order_acquire);
 
     if (hostBypassed)
@@ -127,7 +129,6 @@ void SpectrumComponent::timerCallback()
                 awaitingFreshFrame = false;
                 presentationOpacity.setTarget(1.0f);
             }
-            visualStateChanged = true;
         }
     }
 
@@ -138,6 +139,7 @@ void SpectrumComponent::timerCallback()
         {
             const float difference = targetData[static_cast<size_t>(i)]
                                    - displayData[static_cast<size_t>(i)];
+            spectrumDataChanged = spectrumDataChanged || difference != 0.0f;
 
             if (std::abs(difference) > 1.0e-5f)
             {
@@ -151,10 +153,9 @@ void SpectrumComponent::timerCallback()
         }
 
         interpolationActive = stillInterpolating;
-        visualStateChanged = true;
     }
 
-    if (mDrawPeak && mouseOver && visualStateChanged
+    if (mDrawPeak && mouseOver && (spectrumDataChanged || geometryDirty)
         && ! hostBypassed && ! renderedDataIsClear)
     {
         for (int i = 0; i < numberOfBins; ++i)
@@ -162,33 +163,61 @@ void SpectrumComponent::timerCallback()
                                                         displayData[static_cast<size_t>(i)]);
 
         isPeakLineVisible = true;
+        peakDataChanged = true;
     }
     else if (mDrawPeak && ! mouseOver && isPeakLineVisible)
     {
-        float loudestPeakDb = minDisplayDb;
+        float loudestPeak = 0.0f;
         for (int i = 0; i < numberOfBins; ++i)
         {
             auto& peak = maxData[static_cast<size_t>(i)];
             peak *= 0.88f;
-            loudestPeakDb = juce::jmax(loudestPeakDb, magnitudeToDb(peak, numberOfBins));
+            loudestPeak = juce::jmax(loudestPeak, peak);
         }
 
-        if (loudestPeakDb <= minDisplayDb + 0.5f)
+        if (magnitudeToDb(loudestPeak, numberOfBins) <= minDisplayDb + 0.5f)
         {
             maxData.fill(0.0f);
             isPeakLineVisible = false;
         }
 
+        peakDataChanged = true;
+    }
+
+    // Opacity animations repaint the existing geometry. Frequency paths only
+    // change when the samples, held peaks or component dimensions change.
+    if (spectrumDataChanged || peakDataChanged || geometryDirty)
+    {
+        rebuildPaths();
         visualStateChanged = true;
     }
 
-    if (visualStateChanged || geometryDirty)
-    {
-        rebuildPaths();
+    if (visualStateChanged)
         repaint();
-    }
 
     updateAnimationTimer();
+}
+
+void SpectrumComponent::rebuildFrequencyLayout()
+{
+    frequencyLayoutDirty = false;
+    visibleFrequencyBins = 0;
+    const auto bounds = getLocalBounds().toFloat();
+    for (int bin = 1; bin < numberOfBins; ++bin)
+    {
+        const float frequency = static_cast<float>(bin) * mBinWidth;
+        if (frequency < minimumDisplayFrequency || frequency > maximumDisplayFrequency)
+            continue;
+
+        const float normalisedX = transformToLog(frequency);
+        if (! std::isfinite(normalisedX))
+            continue;
+
+        const float x = bounds.getX() + normalisedX * bounds.getWidth();
+        const int bucket = juce::jlimit(0, juce::jmax(0, getWidth() - 1),
+                                       static_cast<int>(std::floor(x)));
+        frequencyLayout[static_cast<size_t>(visibleFrequencyBins++)] = { bin, bucket, x };
+    }
 }
 
 void SpectrumComponent::rebuildPaths()
@@ -202,6 +231,10 @@ void SpectrumComponent::rebuildPaths()
     if (renderedDataIsClear || bounds.isEmpty()
         || numberOfBins < 2 || mBinWidth <= 0.0f)
         return;
+
+    // The logarithmic x-axis depends only on size and the FFT frequency grid.
+    if (frequencyLayoutDirty)
+        rebuildFrequencyLayout();
 
     spectrumLinePath.preallocateSpace(juce::jmax(64, getWidth() * 4));
     peakLinePath.preallocateSpace(juce::jmax(64, getWidth() * 4));
@@ -268,22 +301,16 @@ void SpectrumComponent::rebuildPaths()
         }
     };
 
-    for (int i = 1; i < numberOfBins; ++i)
+    const bool drawPeak = mDrawPeak && isPeakLineVisible;
+    for (int position = 0; position < visibleFrequencyBins; ++position)
     {
-        const float frequency = static_cast<float>(i) * mBinWidth;
-        if (frequency < minimumDisplayFrequency || frequency > maximumDisplayFrequency)
-            continue;
-
-        const float normalisedX = transformToLog(frequency);
-        if (! std::isfinite(normalisedX))
-            continue;
-
-        const float x = bounds.getX() + normalisedX * bounds.getWidth();
-        const int bucket = juce::jlimit(0, juce::jmax(0, getWidth() - 1),
-                                       static_cast<int>(std::floor(x)));
+        const auto& binPosition = frequencyLayout[static_cast<size_t>(position)];
+        const int i = binPosition.bin;
+        const int bucket = binPosition.bucket;
         const float currentDb = magnitudeToDb(smoothedData[static_cast<size_t>(i)], numberOfBins);
         const float currentY = dbToY(currentDb);
-        const float peakDb = magnitudeToDb(maxData[static_cast<size_t>(i)], numberOfBins);
+        const float peakDb = drawPeak ? magnitudeToDb(maxData[static_cast<size_t>(i)], numberOfBins)
+                                     : minDisplayDb;
         const float peakY = dbToY(peakDb);
 
         if (bucket != currentBucket)
@@ -301,11 +328,11 @@ void SpectrumComponent::rebuildPaths()
             peakBucketY = juce::jmin(peakBucketY, peakY);
         }
 
-        if (mDrawPeak && isPeakLineVisible && peakDb > maxDecibelValue)
+        if (drawPeak && peakDb > maxDecibelValue)
         {
             maxDecibelValue = peakDb;
-            maxFreq = frequency;
-            maxDecibelPoint = { x, peakY };
+            maxFreq = static_cast<float>(i) * mBinWidth;
+            maxDecibelPoint = { binPosition.x, peakY };
         }
     }
 
@@ -428,6 +455,7 @@ void SpectrumComponent::paint(juce::Graphics& g)
 
 void SpectrumComponent::resized()
 {
+    frequencyLayoutDirty = true;
     geometryDirty = true;
     rebuildPaths();
     repaint();
@@ -518,6 +546,10 @@ bool SpectrumComponent::consumePendingFrame(bool startFromSilence)
         pendingNumberOfBins != numberOfBins
         || ! juce::approximatelyEqual(pendingBinWidth, mBinWidth);
 
+    frequencyLayoutDirty = frequencyLayoutDirty
+                        || pendingNumberOfBins != numberOfBins
+                        || pendingBinWidth != mBinWidth;
+
     if (startFromSilence || spectralGridChanged)
     {
         // Every array index now represents a different frequency. Neither an
@@ -532,6 +564,7 @@ bool SpectrumComponent::consumePendingFrame(bool startFromSilence)
     mBinWidth = pendingBinWidth;
     consumedGeneration = generation;
     interpolationActive = true;
+    geometryDirty = geometryDirty || renderedDataIsClear || frequencyLayoutDirty;
     renderedDataIsClear = false;
     return true;
 }

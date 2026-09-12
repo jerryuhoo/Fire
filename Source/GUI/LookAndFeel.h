@@ -1204,51 +1204,28 @@ private:
         const auto extent = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.34f;
         const auto stemThickness = juce::jmax(1.0f, 1.35f * scale);
         auto area = juce::Rectangle<float>(extent, extent).withCentre(bounds.getCentre());
+        // One closed outline avoids opposite-winding head/stem overlaps
+        // cancelling into a transparent notch under non-zero path filling.
+        const auto shoulder = area.getX() + area.getWidth() * 0.48f;
+        const auto halfStem = juce::jmin(stemThickness * 0.5f, area.getHeight() * 0.5f);
         juce::Path arrow;
-        if (id == "left_arrow" || id == "header_previous")
-        {
-            arrow.addRectangle(area.getX() + area.getWidth() * 0.34f,
-                               area.getCentreY() - stemThickness * 0.5f,
-                               area.getWidth() * 0.66f,
-                               stemThickness);
-            arrow.startNewSubPath(area.getX(), area.getCentreY());
-            arrow.lineTo(area.getX() + area.getWidth() * 0.48f, area.getY());
-            arrow.lineTo(area.getX() + area.getWidth() * 0.48f, area.getBottom());
-            arrow.closeSubPath();
-        }
-        else if (id == "right_arrow" || id == "header_next")
-        {
-            arrow.addRectangle(area.getX(),
-                               area.getCentreY() - stemThickness * 0.5f,
-                               area.getWidth() * 0.66f,
-                               stemThickness);
-            arrow.startNewSubPath(area.getRight(), area.getCentreY());
-            arrow.lineTo(area.getRight() - area.getWidth() * 0.48f, area.getY());
-            arrow.lineTo(area.getRight() - area.getWidth() * 0.48f, area.getBottom());
-            arrow.closeSubPath();
-        }
+        arrow.startNewSubPath(area.getX(), area.getCentreY());
+        arrow.lineTo(shoulder, area.getY());
+        arrow.lineTo(shoulder, area.getCentreY() - halfStem);
+        arrow.lineTo(area.getRight(), area.getCentreY() - halfStem);
+        arrow.lineTo(area.getRight(), area.getCentreY() + halfStem);
+        arrow.lineTo(shoulder, area.getCentreY() + halfStem);
+        arrow.lineTo(shoulder, area.getBottom());
+        arrow.closeSubPath();
+
+        float rotation = 0.0f;
+        if (id == "right_arrow" || id == "header_next")
+            rotation = juce::MathConstants<float>::pi;
         else if (id == "slider_up_arrow")
-        {
-            arrow.addRectangle(area.getCentreX() - stemThickness * 0.5f,
-                               area.getY() + area.getHeight() * 0.34f,
-                               stemThickness,
-                               area.getHeight() * 0.66f);
-            arrow.startNewSubPath(area.getCentreX(), area.getY());
-            arrow.lineTo(area.getRight(), area.getY() + area.getHeight() * 0.48f);
-            arrow.lineTo(area.getX(), area.getY() + area.getHeight() * 0.48f);
-            arrow.closeSubPath();
-        }
-        else
-        {
-            arrow.addRectangle(area.getCentreX() - stemThickness * 0.5f,
-                               area.getY(),
-                               stemThickness,
-                               area.getHeight() * 0.66f);
-            arrow.startNewSubPath(area.getCentreX(), area.getBottom());
-            arrow.lineTo(area.getRight(), area.getBottom() - area.getHeight() * 0.48f);
-            arrow.lineTo(area.getX(), area.getBottom() - area.getHeight() * 0.48f);
-            arrow.closeSubPath();
-        }
+            rotation = juce::MathConstants<float>::halfPi;
+        else if (id != "left_arrow" && id != "header_previous")
+            rotation = -juce::MathConstants<float>::halfPi;
+        arrow.applyTransform(juce::AffineTransform::rotation(rotation, area.getCentreX(), area.getCentreY()));
         g.setColour(colour);
         g.fillPath(arrow);
     }

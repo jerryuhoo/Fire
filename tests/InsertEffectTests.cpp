@@ -64,9 +64,26 @@ TEST_CASE("Insert delay repeats at its configured time and follows host tempo", 
     CHECK(delay.getSample(0, 6800) == Catch::Approx(1.0f));
     const auto synced = render(Type::delay, input, 64, [](auto& p) {
         p.bpm = 120; p.values[4].baseValue = 4; p.values[1].baseValue = 0; p.values[5].baseValue = 100;
+        p.values[3].baseValue = 0;
     });
     CHECK(synced.getSample(0, 26000) == Catch::Approx(1.0f));
     CHECK(synced.getMagnitude(1, 0, 40000) == 0);
+}
+
+TEST_CASE("Insert ping-pong alternates centred mono echoes between left and right", "[insertfx][dsp][delay][stereo]")
+{
+    juce::AudioBuffer<float> input(2, 20000);
+    input.clear(); input.setSample(0, 2000, 1); input.setSample(1, 2000, 1);
+    const auto output = render(Type::delay, input, 127, [](auto& p) {
+        p.values[0].baseValue = 100; p.values[1].baseValue = 50;
+        p.values[3].baseValue = 100; p.values[5].baseValue = 100;
+    });
+    CHECK(output.getSample(0, 6800) == Catch::Approx(1.0f));
+    CHECK(std::abs(output.getSample(1, 6800)) < 0.000001f);
+    CHECK(output.getSample(1, 11600) > 0.25f);
+    CHECK(std::abs(output.getSample(0, 11600)) < 0.000001f);
+    CHECK(output.getSample(0, 16400) > 0.05f);
+    CHECK(std::abs(output.getSample(1, 16400)) < 0.000001f);
 }
 
 TEST_CASE("Insert reverb leaves a decaying stereo tail and reset removes stored audio", "[insertfx][dsp][reverb][reset]")

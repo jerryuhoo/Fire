@@ -300,8 +300,13 @@ private:
             feedback[0] += coefficient * (l - feedback[0]);
             feedback[1] += coefficient * (r - feedback[1]);
             const auto cross = p[3] * 0.01f;
-            history.write(left + juce::jmap(cross, feedback[0], feedback[1]) * p[1] * 0.01f,
-                          right + juce::jmap(cross, feedback[1], feedback[0]) * p[1] * 0.01f);
+            // At full ping-pong, launch the mono sum into one side before
+            // alternating feedback. Cross-feedback alone leaves centred mono
+            // input identical in both channels and never produces a bounce.
+            const auto inputLeft = juce::jmap(cross, left, 0.5f * (left + right));
+            const auto inputRight = right * (1.0f - cross);
+            history.write(inputLeft + juce::jmap(cross, feedback[0], feedback[1]) * p[1] * 0.01f,
+                          inputRight + juce::jmap(cross, feedback[1], feedback[0]) * p[1] * 0.01f);
             left = l; right = r;
         }
         else if (currentType == Type::reverb)

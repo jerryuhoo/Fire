@@ -10,6 +10,7 @@
 
 #pragma once
 #include "../GUI/InterfaceDefines.h"
+#include "InsertParameters.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_core/juce_core.h"
 #include <array>
@@ -244,7 +245,8 @@ namespace ParameterIDAndName
     inline const std::vector<ModulatableParameterInfo>& getModulatableParameterInfo()
     {
         // This static vector is initialized only once.
-        static const std::vector<ModulatableParameterInfo> parameters = {
+        static const auto parameters = [] {
+            std::vector<ModulatableParameterInfo> result {
             { OTT_DEPTH_NAME, OTT_DEPTH_ID }, { OTT_TIME_NAME, OTT_TIME_ID },
             { OTT_UPWARD_NAME, OTT_UPWARD_ID }, { OTT_DOWNWARD_NAME, OTT_DOWNWARD_ID },
             { OTT_OUTPUT_NAME, OTT_OUTPUT_ID }, { OTT_MIX_NAME, OTT_MIX_ID },
@@ -262,13 +264,19 @@ namespace ParameterIDAndName
             { MIX_NAME, MIX_ID },
             { BIAS_NAME, BIAS_ID },
             { REC_NAME, REC_ID }
-        };
+            };
+            for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+                for (int control = 0; control < static_cast<int>(fire::effects::controlCount); ++control)
+                    result.push_back({fire::effects::controlName(slot, control), fire::effects::parameterBase(slot, control, false)});
+            return result;
+        }();
         return parameters;
     }
 
     inline const std::vector<ModulatableParameterInfo>& getGlobalParameterInfo()
     {
-        static const std::vector<ModulatableParameterInfo> params = {
+        static const auto params = [] {
+            std::vector<ModulatableParameterInfo> result {
             { LOWCUT_FREQ_NAME, LOWCUT_FREQ_ID },
             { LOWCUT_Q_NAME, LOWCUT_Q_ID },
             { LOWCUT_GAIN_NAME, LOWCUT_GAIN_ID },
@@ -284,7 +292,14 @@ namespace ParameterIDAndName
             { DOWNSAMPLE_MIX_NAME, DOWNSAMPLE_MIX_ID },
             { GLOBAL_OUTPUT_NAME, OUTPUT_ID },
             { GLOBAL_MIX_NAME, MIX_ID }
-        };
+            };
+            for (size_t i = 0; i < fire::effects::tapeIDs.size(); ++i)
+                result.push_back({fire::effects::tapeNames[i], fire::effects::tapeIDs[i]});
+            for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+                for (int control = 0; control < static_cast<int>(fire::effects::controlCount); ++control)
+                    result.push_back({"Master " + fire::effects::controlName(slot, control), fire::effects::parameterBase(slot, control, true)});
+            return result;
+        }();
         return params;
     }
 
@@ -327,7 +342,8 @@ namespace ParameterIDAndName
     inline const std::vector<ModulatableParameterInfo>& getBandParameterInfo()
     {
         // This static vector is initialized only once.
-        static const std::vector<ModulatableParameterInfo> params = {
+        static const auto params = [] {
+            std::vector<ModulatableParameterInfo> result {
             { OTT_DEPTH_NAME, OTT_DEPTH_ID }, { OTT_TIME_NAME, OTT_TIME_ID },
             { OTT_UPWARD_NAME, OTT_UPWARD_ID }, { OTT_DOWNWARD_NAME, OTT_DOWNWARD_ID },
             { OTT_OUTPUT_NAME, OTT_OUTPUT_ID }, { OTT_MIX_NAME, OTT_MIX_ID },
@@ -357,7 +373,13 @@ namespace ParameterIDAndName
             { WIDTH_BYPASS_NAME, WIDTH_BYPASS_ID },
             { SHAPE_BYPASS_NAME, SHAPE_BYPASS_ID },
             { DC_FILTER_NAME, DC_FILTER_ID }
-        };
+            };
+            for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+                for (int field = 0; field < fire::effects::fieldCount; ++field)
+                    result.push_back({"FX " + juce::String(slot + 1) + " Field " + juce::String(field + 1),
+                                      fire::effects::parameterBase(slot, field, false)});
+            return result;
+        }();
         return params;
     }
 } // namespace ParameterIDAndName

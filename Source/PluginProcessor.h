@@ -9,6 +9,7 @@
 */
 
 #pragma once
+#include "DSP/InsertRack.h"
 
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "DSP/WidthProcessor.h"
@@ -58,6 +59,7 @@ struct BandProcessingParameters
     ModulatedValueProvider compMixValProvider;
     bool isCompEnabled { false };
     OttProcessor::Parameters ott;
+    fire::effects::RackParameters inserts;
     float width { 0.5f };
     ModulatedValueProvider widthValProvider;
     float pan { 0.0f };
@@ -224,6 +226,7 @@ struct BandProcessor
     // Each band has its own set of processors.
     CompressorProcessor compressor;
     OttProcessor ott;
+    fire::effects::InsertRack inserts;
     WidthProcessor widthProcessor;
     DCFilter dcFilter;
     GainProcessor gain;
@@ -383,6 +386,11 @@ public:
 
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
+    fire::effects::Type getInsertEffectType(int scope, int slot) const;
+    int getInsertEffectOrder(int scope, int slot) const;
+    int addInsertEffect(int scope, fire::effects::Type type);
+    void removeInsertEffect(int scope, int slot);
+    void moveInsertEffect(int scope, int slot, int direction);
 
     bool hasUpdateCheckBeenPerformed = false;
     bool isSlient(const juce::AudioBuffer<float>& buffer);
@@ -719,6 +727,8 @@ private:
         ModulatedParameterSnapshot bitDepth;
         ModulatedParameterSnapshot jitter;
         ModulatedParameterSnapshot downsampleMix;
+        std::array<ModulatedParameterSnapshot, 3> tape;
+        fire::effects::RackParameters inserts;
         std::uint32_t publicationSequence = 0;
         bool requestedHq = false;
         bool downsampleEnabled = false;
@@ -745,6 +755,7 @@ private:
     };
 
     void initialiseParameterCache();
+    void prepareInsertParameters(int scope, fire::effects::RackParameters& parameters) const;
     CachedParameter cacheParameter(const juce::String& parameterID);
     static float loadCachedParameter(const CachedParameter& parameter, float fallback = 0.0f) noexcept;
     float getBlockModulatedValue(const CachedParameter& parameter,
@@ -781,6 +792,11 @@ private:
     CachedParameter bitDepthParameter;
     CachedParameter jitterParameter;
     CachedParameter downsampleMixParameter;
+    std::array<CachedParameter, 3> tapeParameters;
+    std::array<std::array<std::array<CachedParameter, fire::effects::fieldCount>, fire::effects::slotCount>, fire::effects::scopeCount> insertParameters;
+    fire::effects::InsertRack masterInserts;
+    fire::effects::TapeFlutter masterTape;
+    std::array<juce::SmoothedValue<float>, 3> tapeSmoothers;
 
     static constexpr std::uint64_t distortionGraphBandMask { 0x3u };
     static constexpr std::uint64_t initialDistortionGraphSourceToken { 0x4u };

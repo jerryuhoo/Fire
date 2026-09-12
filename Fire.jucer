@@ -163,6 +163,8 @@
               file="Source/DSP/SampleAccurateCompressor.cpp"/>
         <FILE id="ottCore1" name="OttProcessor.h" compile="0" resource="0" file="Source/DSP/OttProcessor.h"/>
         <FILE id="insertFx1" name="InsertEffect.h" compile="0" resource="0" file="Source/DSP/InsertEffect.h"/>
+        <FILE id="insertFx2" name="InsertRack.h" compile="0" resource="0" file="Source/DSP/InsertRack.h"/>
+        <FILE id="insertFx3" name="InsertParameters.h" compile="0" resource="0" file="Source/Utility/InsertParameters.h"/>
         <FILE id="y9Kac2" name="SampleAccurateCompressor.h" compile="0" resource="0"
               file="Source/DSP/SampleAccurateCompressor.h"/>
         <FILE id="PVeY6u" name="WDF.h" compile="0" resource="0" file="Source/DSP/WDF.h"/>

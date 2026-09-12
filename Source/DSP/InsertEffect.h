@@ -16,6 +16,16 @@ struct Control
     const char* unit;
     float minimum, maximum, initial, skew = 1.0f;
     juce::NormalisableRange<float> range() const { return {minimum, maximum, 0.0f, skew}; }
+    float fromNormalised(float value) const noexcept
+    {
+        value = juce::jlimit(0.0f, 1.0f, std::isfinite(value) ? value : 0.0f);
+        return minimum + (maximum - minimum) * (skew == 1.0f ? value : std::pow(value, 1.0f / skew));
+    }
+    float toNormalised(float value) const noexcept
+    {
+        const auto proportion = juce::jlimit(0.0f, 1.0f, (value - minimum) / (maximum - minimum));
+        return skew == 1.0f ? proportion : std::pow(proportion, skew);
+    }
 };
 
 inline const char* name(Type type) noexcept
@@ -128,6 +138,7 @@ public:
         flutter = juce::jlimit(0.0f, 1.0f, std::isfinite(flutter) ? flutter : 0.0f);
         history.write(left, right);
         phase = std::fmod(phase + 1.0 / sampleRate, 1000.0);
+        if (tape == 0.0f && wow == 0.0f && flutter == 0.0f) return;
         const auto pitchMix = juce::jlimit(0.0f, 1.0f, (wow + flutter) * 8.0f);
         const auto modulation = wow * 0.004 * std::sin(phase * 0.43 * juce::MathConstants<double>::twoPi)
             + flutter * 0.0007 * (std::sin(phase * 6.7 * juce::MathConstants<double>::twoPi)
@@ -158,6 +169,7 @@ public:
     {
         Type type = Type::none;
         bool enabled = true;
+        bool normalised = false;
         float bpm = 120;
         std::array<ModulatedValueProvider, controlCount> values;
         explicit Parameters(Type kind = Type::none) : type(kind)
@@ -195,7 +207,7 @@ public:
         if (requested == Type::none && currentType == Type::none) return;
         if (currentType == Type::none && requested != Type::none) activate(requested, parameters);
         for (size_t i = 0; i < controlCount; ++i)
-            if (requested == currentType) bases[i].setTargetValue(sanitise(currentType, i, parameters.values[i].baseValue));
+            if (requested == currentType) bases[i].setTargetValue(baseValue(parameters, i));
         gate.setTargetValue(parameters.enabled && requested == currentType && currentType != Type::none ? 1.0f : 0.0f);
         auto* left = block.getChannelPointer(0);
         auto* right = block.getNumChannels() > 1 ? block.getChannelPointer(1) : nullptr;
@@ -217,8 +229,11 @@ public:
             for (size_t i = 0; i < controlCount; ++i)
             {
                 const auto base = bases[i].getNextValue();
-                value[i] = requested == currentType
-                    ? sanitise(currentType, i, parameters.values[i].get(offset + static_cast<int>(sample), base)) : base;
+                if (requested != currentType) { value[i] = lastValues[i]; continue; }
+                const auto modulated = parameters.values[i].get(offset + static_cast<int>(sample), base);
+                value[i] = currentNormalised ? controls(currentType)[i].fromNormalised(modulated)
+                                             : sanitise(currentType, i, modulated);
+                lastValues[i] = value[i];
             }
             const auto dryL = std::isfinite(left[sample]) ? left[sample] : 0.0f;
             const auto dryR = right && std::isfinite(right[sample]) ? right[sample] : dryL;
@@ -240,9 +255,19 @@ private:
     }
     void activate(Type type, const Parameters& parameters) noexcept
     {
-        resetMemory(); currentType = type;
+        resetMemory(); currentType = type; currentNormalised = parameters.normalised;
         for (size_t i = 0; i < controlCount; ++i)
-            bases[i].setCurrentAndTargetValue(sanitise(type, i, parameters.values[i].baseValue));
+        {
+            bases[i].setCurrentAndTargetValue(baseValue(parameters, i));
+            lastValues[i] = currentNormalised ? controls(type)[i].fromNormalised(baseValue(parameters, i))
+                                               : baseValue(parameters, i);
+        }
+    }
+    static float baseValue(const Parameters& parameters, size_t index) noexcept
+    {
+        const auto value = parameters.values[index].baseValue;
+        return parameters.normalised ? juce::jlimit(0.0f, 1.0f, std::isfinite(value) ? value : 0.0f)
+                                     : sanitise(parameters.type, index, value);
     }
     float random() noexcept
     {
@@ -345,11 +370,12 @@ private:
     }
     double sampleRate = 48000, phase = 0;
     Type currentType = Type::none;
-    bool dormant = true;
+    bool dormant = true, currentNormalised = false;
     StereoHistory history;
     TapeFlutter tape;
     juce::Reverb reverb;
     std::array<juce::SmoothedValue<float>, controlCount> bases;
+    std::array<float, controlCount> lastValues {};
     juce::SmoothedValue<float> gate;
     std::array<float, 2> feedback {}, highPassInput {}, highPassOutput {}, held {};
     std::array<Grain, 12> grains;

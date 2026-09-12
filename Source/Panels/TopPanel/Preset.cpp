@@ -174,15 +174,24 @@ bool isValidRoutingState(const juce::XmlElement& routingState,
     return true;
 }
 
-bool validateOttParameterFamily(const juce::XmlElement& xml,
+bool validateParameterFamily(const juce::XmlElement& xml,
                                 const juce::AudioProcessor& processor,
-                                bool& legacyWithoutOtt)
+                                bool& legacyWithoutOtt,
+                                const char* marker = "ottSchemaVersion",
+                                bool (*belongs)(const juce::String&) = ParameterIDAndName::isOttParameterID)
 {
+    if (! xml.hasAttribute(marker))
+    {
+        bool anyPresent = false;
+        for (const auto& attribute : xml.getAttributeIterator())
+            if (belongs(attribute.name.toString())) { anyPresent = true; break; }
+        if (! anyPresent) { legacyWithoutOtt = true; return true; }
+    }
     int present = 0;
     int expected = 0;
     for (const auto* parameter : processor.getParameters())
         if (const auto* identified = dynamic_cast<const juce::AudioProcessorParameterWithID*>(parameter);
-            identified != nullptr && ParameterIDAndName::isOttParameterID(identified->paramID))
+            identified != nullptr && belongs(identified->paramID))
         {
             ++expected;
             if (xml.hasAttribute(identified->paramID))
@@ -192,13 +201,13 @@ bool validateOttParameterFamily(const juce::XmlElement& xml,
                 ++present;
             }
         }
-    legacyWithoutOtt = ! xml.hasAttribute("ottSchemaVersion") && present == 0;
+    legacyWithoutOtt = ! xml.hasAttribute(marker) && present == 0;
     if (legacyWithoutOtt)
         return true;
-    if (xml.hasAttribute("ottSchemaVersion"))
+    if (xml.hasAttribute(marker))
     {
         int version = 0;
-        if (! readStrictIntegerAttribute(xml, "ottSchemaVersion", version) || version != 1)
+        if (! readStrictIntegerAttribute(xml, marker, version) || version != 1)
             return false;
     }
     return present == expected;
@@ -211,7 +220,10 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         return false;
 
     bool legacyWithoutOtt = false;
-    if (! validateOttParameterFamily(snapshot, processor, legacyWithoutOtt))
+    if (! validateParameterFamily(snapshot, processor, legacyWithoutOtt))
+        return false;
+    bool legacyWithoutInserts = false;
+    if (! validateParameterFamily(snapshot, processor, legacyWithoutInserts, "insertEffectsSchemaVersion", fire::effects::isParameterID))
         return false;
 
     int expectedParameterCount = 0;
@@ -222,6 +234,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
             continue;
 
         if (legacyWithoutOtt && ParameterIDAndName::isOttParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutInserts && fire::effects::isParameterID(parameterWithID->paramID))
             continue;
         ++expectedParameterCount;
         if (! snapshot.hasAttribute(parameterWithID->paramID))
@@ -263,7 +277,10 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
                            const juce::AudioProcessor& processor) noexcept
 {
     bool legacyWithoutOtt = false;
-    if (! validateOttParameterFamily(xml, processor, legacyWithoutOtt))
+    if (! validateParameterFamily(xml, processor, legacyWithoutOtt))
+        return false;
+    bool legacyWithoutInserts = false;
+    if (! validateParameterFamily(xml, processor, legacyWithoutInserts, "insertEffectsSchemaVersion", fire::effects::isParameterID))
         return false;
     // Unversioned and v1 files predate complete model snapshots. Preserve
     // their historical default/migration behaviour. A v2 document is an
@@ -290,6 +307,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
             continue;
 
         if (legacyWithoutOtt && ParameterIDAndName::isOttParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutInserts && fire::effects::isParameterID(parameterWithID->paramID))
             continue;
         ++parameterCount;
         if (! isStrictNumberInRange(xml, parameterWithID->paramID, 0.0, 1.0))
@@ -337,6 +356,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.deleteAllChildElements();
     xml.setAttribute("presetFormatVersion", 2);
     xml.setAttribute("ottSchemaVersion", 1);
+    xml.setAttribute("insertEffectsSchemaVersion", 1);
     xml.setAttribute("pluginVersion", VERSION);
 
     for (const auto& param : processor.getParameters())

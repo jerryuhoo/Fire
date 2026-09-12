@@ -1249,6 +1249,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     // Prepare all the DSP modules with the sample rate and block size.
     compressor.prepare(spec);
     ott.prepare(spec);
+    inserts.prepare(spec);
     mOttInputLevelDb.store(-120.0f, std::memory_order_relaxed);
     mOttGainChangeDb.store(0.0f, std::memory_order_relaxed);
     mOttDynamicsActivityDb.store(0.0f, std::memory_order_relaxed);
@@ -1347,6 +1348,7 @@ void BandProcessor::reset()
     dcFilterMixPrimed = false;
     compressor.reset();
     ott.reset();
+    inserts.reset();
     mOttInputLevelDb.store(-120.0f, std::memory_order_relaxed);
     mOttGainChangeDb.store(0.0f, std::memory_order_relaxed);
     mOttDynamicsActivityDb.store(0.0f, std::memory_order_relaxed);
@@ -2021,6 +2023,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
     }
 
     // 4. Post-Distortion Effects
+    inserts.process(postDistortionContext.getOutputBlock(), params.inserts, lfoOutputs, lfoSampleOffset);
     // Per-sample Output Gain
     applyGain(buffer,
               paramsForProcessing.outputVal,
@@ -2794,6 +2797,12 @@ void FireAudioProcessor::initialiseParameterCache()
     bitDepthParameter = cacheParameter(BIT_DEPTH_ID);
     jitterParameter = cacheParameter(JITTER_ID);
     downsampleMixParameter = cacheParameter(DOWNSAMPLE_MIX_ID);
+    for (size_t i = 0; i < tapeParameters.size(); ++i) tapeParameters[i] = cacheParameter(fire::effects::tapeIDs[i]);
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+            for (int field = 0; field < fire::effects::fieldCount; ++field)
+                insertParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][static_cast<size_t>(field)]
+                    = cacheParameter(fire::effects::parameterID(scope, slot, field));
 
     filterParameterCache.lowCutFrequency = cacheParameter(LOWCUT_FREQ_ID);
     filterParameterCache.lowCutGain = cacheParameter(LOWCUT_GAIN_ID);
@@ -2930,7 +2939,102 @@ bool FireAudioProcessor::isMidiEffect() const
 
 double FireAudioProcessor::getTailLengthSeconds() const
 {
-    return 0.0;
+    double master = 0, bandsTail = 0;
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+    {
+        double tail = 0;
+        for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+        {
+            const auto type = getInsertEffectType(scope, slot);
+            if (type == fire::effects::Type::delay) tail += 180.0;
+            else if (type == fire::effects::Type::reverb) tail += 60.0;
+            else if (type == fire::effects::Type::granular) tail += 2.5;
+            else if (type == fire::effects::Type::chorus) tail += 2.0;
+            else if (type == fire::effects::Type::lofi) tail += 0.05;
+        }
+        if (scope == 0) master = tail; else bandsTail = juce::jmax(bandsTail, tail);
+    }
+    return master + bandsTail;
+}
+
+fire::effects::Type FireAudioProcessor::getInsertEffectType(int scope, int slot) const
+{
+    if (! juce::isPositiveAndBelow(scope, fire::effects::scopeCount) || ! juce::isPositiveAndBelow(slot, fire::effects::slotCount))
+        return fire::effects::Type::none;
+    return static_cast<fire::effects::Type>(juce::jlimit(0, 5, juce::roundToInt(loadCachedParameter(
+        insertParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][fire::effects::typeField]))));
+}
+
+int FireAudioProcessor::getInsertEffectOrder(int scope, int slot) const
+{
+    if (! juce::isPositiveAndBelow(scope, fire::effects::scopeCount) || ! juce::isPositiveAndBelow(slot, fire::effects::slotCount)) return 0;
+    return juce::roundToInt(loadCachedParameter(insertParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][fire::effects::orderField]));
+}
+
+int FireAudioProcessor::addInsertEffect(int scope, fire::effects::Type type)
+{
+    using namespace fire::effects;
+    if (! juce::isPositiveAndBelow(scope, scopeCount) || type <= Type::none || type >= Type::count) return -1;
+    beginMultibandTopologyEdit();
+    const juce::ScopeGuard publish { [this] { requestMultibandTopologyReset(); } };
+    int freeSlot = -1;
+    std::vector<int> active;
+    for (int slot = 0; slot < slotCount; ++slot)
+        if (getInsertEffectType(scope, slot) == Type::none) { if (freeSlot < 0) freeSlot = slot; }
+        else active.push_back(slot);
+    if (freeSlot < 0) return -1;
+    std::stable_sort(active.begin(), active.end(), [&](int a, int b) {return getInsertEffectOrder(scope, a) < getInsertEffectOrder(scope, b);});
+    const auto write = [&](int slot, int field, float value) {
+        auto* parameter = treeState.getParameter(parameterID(scope, slot, field));
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+        parameter->endChangeGesture();
+    };
+    for (size_t i = 0; i < active.size(); ++i) write(active[i], orderField, static_cast<float>(i + 1));
+    for (int control = 0; control < static_cast<int>(controlCount); ++control)
+    {
+        clearModulationForParameter(parameterID(scope, freeSlot, control));
+        const auto& descriptor = controls(type)[static_cast<size_t>(control)];
+        write(freeSlot, control, descriptor.toNormalised(descriptor.initial));
+    }
+    write(freeSlot, orderField, static_cast<float>(active.size() + 1));
+    write(freeSlot, enabledField, 1);
+    write(freeSlot, typeField, static_cast<float>(type));
+    return freeSlot;
+}
+
+void FireAudioProcessor::removeInsertEffect(int scope, int slot)
+{
+    using namespace fire::effects;
+    if (getInsertEffectType(scope, slot) == Type::none) return;
+    beginMultibandTopologyEdit();
+    const juce::ScopeGuard publish { [this] { requestMultibandTopologyReset(); } };
+    for (int control = 0; control < static_cast<int>(controlCount); ++control)
+        clearModulationForParameter(parameterID(scope, slot, control));
+    auto* parameter = treeState.getParameter(parameterID(scope, slot, typeField));
+    parameter->beginChangeGesture(); parameter->setValueNotifyingHost(0); parameter->endChangeGesture();
+}
+
+void FireAudioProcessor::moveInsertEffect(int scope, int slot, int direction)
+{
+    using namespace fire::effects;
+    if (getInsertEffectType(scope, slot) == Type::none || direction == 0) return;
+    beginMultibandTopologyEdit();
+    const juce::ScopeGuard publish { [this] { requestMultibandTopologyReset(); } };
+    std::vector<int> active;
+    for (int i = 0; i < slotCount; ++i) if (getInsertEffectType(scope, i) != Type::none) active.push_back(i);
+    std::stable_sort(active.begin(), active.end(), [&](int a, int b) {return getInsertEffectOrder(scope, a) < getInsertEffectOrder(scope, b);});
+    const auto from = std::find(active.begin(), active.end(), slot);
+    if (from == active.end()) return;
+    const int index = static_cast<int>(std::distance(active.begin(), from));
+    const int target = index + (direction > 0 ? 1 : -1);
+    if (! juce::isPositiveAndBelow(target, static_cast<int>(active.size()))) return;
+    std::swap(active[static_cast<size_t>(index)], active[static_cast<size_t>(target)]);
+    for (size_t i = 0; i < active.size(); ++i)
+    {
+        auto* parameter = treeState.getParameter(parameterID(scope, active[i], orderField));
+        parameter->beginChangeGesture(); parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(i + 1))); parameter->endChangeGesture();
+    }
 }
 
 int FireAudioProcessor::getNumPrograms()
@@ -3233,6 +3337,13 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     bypassDelayMixer.prepare(globalMixerSpec);
 
     lofiMixer.prepare(globalMixerSpec);
+    masterInserts.prepare(spec);
+    masterTape.prepare(safeSampleRate);
+    for (size_t i = 0; i < tapeSmoothers.size(); ++i)
+    {
+        tapeSmoothers[i].reset(safeSampleRate, 0.025);
+        tapeSmoothers[i].setCurrentAndTargetValue(loadCachedParameter(tapeParameters[i]));
+    }
     publishLatencyToHost();
     reset();
 }
@@ -4293,6 +4404,10 @@ void FireAudioProcessor::performReset()
     bypassDelayMixer.reset();
     nonHqOutputDelay.reset();
     lofiMixer.reset();
+    masterInserts.reset();
+    masterTape.reset();
+    for (size_t i = 0; i < tapeSmoothers.size(); ++i)
+        tapeSmoothers[i].setCurrentAndTargetValue(loadCachedParameter(tapeParameters[i]));
     resetDownsamplingState();
     gainProcessorGlobal.reset();
     globalOutputGainTransition.reset();
@@ -4800,6 +4915,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     auto mainState = captureCoherentSerializableMainStateSnapshot();
     xmlState.setAttribute("stateFormatVersion", hostStateFormatVersion);
     xmlState.setAttribute("ottSchemaVersion", 1);
+    xmlState.setAttribute("insertEffectsSchemaVersion", 1);
     xmlState.setAttribute("savedParameterCount",
                           mainState.parameterState.getNumChildren());
 
@@ -4920,6 +5036,16 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     }
     const bool hasSavedParameterCount =
         xmlState->hasAttribute("savedParameterCount");
+    int insertParameterCount = 0;
+    for (const auto& id : incomingParameterIDs) if (fire::effects::isParameterID(id)) ++insertParameterCount;
+    if (xmlState->hasAttribute("insertEffectsSchemaVersion") || insertParameterCount > 0)
+    {
+        int version = 1;
+        if ((xmlState->hasAttribute("insertEffectsSchemaVersion")
+             && (! parseStrictNonNegativeIntegerAttribute(*xmlState, "insertEffectsSchemaVersion", version) || version != 1))
+            || insertParameterCount != fire::effects::parameterCount)
+            return;
+    }
     if (hasStateFormatVersion != hasSavedParameterCount)
         return;
 
@@ -6147,7 +6273,60 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
                 OttProcessor::defaults[control]));
     }
 
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+        {
+            const auto prefix = (scope == 0 ? juce::String("Master") : "Band " + juce::String(scope)) + " FX " + juce::String(slot + 1);
+            for (int field = 0; field < fire::effects::fieldCount; ++field)
+            {
+                const juce::ParameterID id {fire::effects::parameterID(scope, slot, field), 3};
+                if (field == fire::effects::typeField)
+                    parameters.push_back(std::make_unique<PChoice>(id, prefix + " Type", juce::StringArray {"Empty", "Chorus", "Delay", "Reverb", "Granular", "Lo-Fi"}, 0));
+                else if (field == fire::effects::enabledField)
+                    parameters.push_back(std::make_unique<PBool>(id, prefix + " Enabled", true));
+                else if (field == fire::effects::orderField)
+                    parameters.push_back(std::make_unique<PInt>(id, prefix + " Order", 0, fire::effects::slotCount, 0));
+                else
+                    parameters.push_back(std::make_unique<PFloat>(id, prefix + " Control " + juce::String(field + 1),
+                        juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f));
+            }
+        }
+    for (size_t i = 0; i < fire::effects::tapeIDs.size(); ++i)
+        parameters.push_back(std::make_unique<PFloat>(juce::ParameterID {fire::effects::tapeIDs[i], 3},
+            "Lo-Fi " + juce::String(fire::effects::tapeNames[i]), juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+
     return { parameters.begin(), parameters.end() };
+}
+
+void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackParameters& destination) const
+{
+    float bpm = 120.0f;
+    if (auto* playHead = getPlayHead())
+        if (auto position = playHead->getPosition())
+            if (auto value = position->getBpm(); value && std::isfinite(*value) && *value > 0) bpm = static_cast<float>(*value);
+    for (size_t slot = 0; slot < destination.size(); ++slot)
+    {
+        const auto& cache = insertParameters[static_cast<size_t>(scope)][slot];
+        auto& target = destination[slot];
+        target.effect.type = static_cast<fire::effects::Type>(juce::jlimit(0, 5, juce::roundToInt(loadCachedParameter(cache[fire::effects::typeField]))));
+        target.effect.enabled = loadCachedParameter(cache[fire::effects::enabledField]) > 0.5f;
+        target.effect.normalised = true;
+        target.effect.bpm = bpm;
+        target.order = juce::roundToInt(loadCachedParameter(cache[fire::effects::orderField]));
+        for (size_t control = 0; control < fire::effects::controlCount; ++control)
+        {
+            auto& provider = target.effect.values[control];
+            provider.baseValue = loadCachedParameter(cache[control], 0.5f);
+            provider.range = {0.0f, 1.0f}; provider.lfoSignal = nullptr;
+            target.sources[control] = -1;
+            LfoManager::AudioThreadRoutingInfo routing;
+            if (cache[control].ranged && lfoManager->getAudioThreadRoutingInfo(cache[control].ranged, routing))
+            {
+                provider.modulationDepth = routing.depth; provider.isBipolar = routing.isBipolar;
+                target.sources[control] = routing.sourceLfoIndex;
+            }
+        }
+    }
 }
 
 bool FireAudioProcessor::isDawPlaying() const
@@ -6266,6 +6445,7 @@ void FireAudioProcessor::prepareHqCallbackContext(
         params.isShapeEnabled = loadCachedParameter(parameters.shapeEnabled) > 0.5f;
         params.isCompEnabled = loadCachedParameter(parameters.compressorEnabled) > 0.5f;
         params.ott.enabled = loadCachedParameter(parameters.ottEnabled) > 0.5f;
+        prepareInsertParameters(i + 1, params.inserts);
         params.isWidthEnabled = loadCachedParameter(parameters.widthEnabled) > 0.5f;
         params.isSafeModeOn = loadCachedParameter(parameters.safe) > 0.5f;
         params.isExtremeModeOn = loadCachedParameter(parameters.extreme) > 0.5f;
@@ -6443,6 +6623,8 @@ void FireAudioProcessor::prepareAudioCallbackParameterSnapshot(
     prepareModulatedParameter(jitterParameter, snapshot.jitter);
     prepareModulatedParameter(downsampleMixParameter,
                               snapshot.downsampleMix);
+    for (size_t i = 0; i < snapshot.tape.size(); ++i) prepareModulatedParameter(tapeParameters[i], snapshot.tape[i]);
+    prepareInsertParameters(0, snapshot.inserts);
 }
 
 void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
@@ -6973,8 +7155,10 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     }
 
     // ==============================================================================
-    // 2. Global Gain Processing
+    // 2. Insert effects precede the final Master output and mix controls.
     // ==============================================================================
+
+    masterInserts.process(juce::dsp::AudioBlock<float>(buffer), activeAudioCallbackParameterSnapshot.inserts, lfoOutputs);
 
     // a. Prepare the "recipe" for the global output gain.
     ModulatedValueProvider globalGainProvider;
@@ -7200,6 +7384,24 @@ void FireAudioProcessor::applyDownsamplingEffect(
                                       * std::floor(channelData[sample] / quantisationStep + 0.5f);
         }
     }
+
+    std::array<ModulatedValueProvider, 3> tapeProviders;
+    for (size_t i = 0; i < tapeProviders.size(); ++i)
+    {
+        configureProvider(callbackParameters.tape[i], tapeProviders[i], nullptr);
+        tapeSmoothers[i].setTargetValue(juce::jlimit(0.0f, 1.0f, tapeProviders[i].baseValue));
+    }
+    if (channelsToProcess > 0)
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            std::array<float, 3> values;
+            for (size_t i = 0; i < values.size(); ++i) values[i] = tapeProviders[i].get(sample, tapeSmoothers[i].getNextValue());
+            auto left = buffer.getSample(0, sample);
+            auto right = channelsToProcess > 1 ? buffer.getSample(1, sample) : left;
+            masterTape.process(left, right, values[0], values[1], values[2]);
+            buffer.setSample(0, sample, left);
+            if (channelsToProcess > 1) buffer.setSample(1, sample, right);
+        }
 
     // --- 3. Mix with Dry Signal ---
     // Finally, mix the processed (wet) buffer with the original (dry) buffer.

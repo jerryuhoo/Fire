@@ -44,7 +44,8 @@ TEST_CASE("OTT parameters append to the existing automation list with new AU hin
     FireAudioProcessor p;
     const auto& parameters = p.getParameters();
     REQUIRE(parameters.size() > 28);
-    const int firstOtt = parameters.size() - 28;
+    const int firstOtt = parameters.indexOf(p.treeState.getParameter(bandId(OTT_ENABLED_ID)));
+    REQUIRE(firstOtt > 0);
     const auto* previous = dynamic_cast<juce::AudioProcessorParameterWithID*>(parameters[firstOtt - 1]);
     REQUIRE(previous != nullptr);
     CHECK(previous->paramID == bandId(LFO_PHASE_ID, 3));
@@ -52,8 +53,8 @@ TEST_CASE("OTT parameters append to the existing automation list with new AU hin
     {
         const auto* parameter = dynamic_cast<juce::AudioProcessorParameterWithID*>(parameters[index]);
         REQUIRE(parameter != nullptr);
-        CHECK(ParameterIDAndName::isOttParameterID(parameter->paramID) == (index >= firstOtt));
-        CHECK(parameter->getVersionHint() == (index >= firstOtt ? 2 : 1));
+        CHECK(ParameterIDAndName::isOttParameterID(parameter->paramID) == (index >= firstOtt && index < firstOtt + 28));
+        CHECK(parameter->getVersionHint() == (index >= firstOtt + 28 ? 3 : index >= firstOtt ? 2 : 1));
     }
     for (int band = 0; band < 4; ++band)
         CHECK(get(p, bandId(OTT_ENABLED_ID, band)) == 0.0f);

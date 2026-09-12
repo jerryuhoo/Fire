@@ -147,3 +147,26 @@ TEST_CASE("Insert effect switching and invalid controls stay bounded", "[insertf
         }
     }
 }
+
+TEST_CASE("Changing insert type fades the audible LFO value instead of its unmodulated base", "[insertfx][dsp][lfo][transition]")
+{
+    InsertEffect effect;
+    effect.prepare({rate, 9600, 2});
+    InsertEffect::Parameters p(Type::delay);
+    p.values[0].baseValue = 100; p.values[1].baseValue = 0; p.values[3].baseValue = 0;
+    p.values[5].baseValue = 50; p.values[5].modulationDepth = 1;
+    std::vector<float> lfo(9600, 1);
+    p.values[5].lfoSignal = lfo.data();
+    juce::AudioBuffer<float> audio(2, 9600);
+    for (int channel = 0; channel < 2; ++channel)
+    {
+        juce::FloatVectorOperations::fill(audio.getWritePointer(channel), 0.2f, 8600);
+        audio.clear(channel, 8600, 1000);
+    }
+    effect.process(juce::dsp::AudioBlock<float>(audio), p);
+    const auto previous = audio.getSample(0, 9599);
+    REQUIRE(previous == Catch::Approx(0.2f));
+    audio.clear(); p.type = Type::chorus;
+    effect.process(juce::dsp::AudioBlock<float>(audio).getSubBlock(0, 512), p);
+    CHECK(std::abs(audio.getSample(0, 0) - previous) < 0.001f);
+}

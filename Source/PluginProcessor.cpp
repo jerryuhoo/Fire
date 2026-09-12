@@ -1250,6 +1250,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     compressor.prepare(spec);
     ott.prepare(spec);
     inserts.prepare(spec);
+    orderTransition.prepare(spec.sampleRate);
     mOttInputLevelDb.store(-120.0f, std::memory_order_relaxed);
     mOttGainChangeDb.store(0.0f, std::memory_order_relaxed);
     mOttDynamicsActivityDb.store(0.0f, std::memory_order_relaxed);
@@ -1326,6 +1327,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     // post-prepare callback to snap each primed control to the newly supplied
     // parameters instead of ramping from the previous playback configuration.
     isFirstBlock = true;
+    shapeControlsPrimed = false;
     shapeMixSmootherPrimed = false;
     compressorBaseSmoothersPrimed = false;
     waveshaperModeMixPrimed = false;
@@ -1341,6 +1343,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
 void BandProcessor::reset()
 {
     isFirstBlock = true;
+    shapeControlsPrimed = false;
     shapeMixSmootherPrimed = false;
     compressorBaseSmoothersPrimed = false;
     waveshaperModeMixPrimed = false;
@@ -1349,6 +1352,7 @@ void BandProcessor::reset()
     compressor.reset();
     ott.reset();
     inserts.reset();
+    orderTransition.reset();
     mOttInputLevelDb.store(-120.0f, std::memory_order_relaxed);
     mOttGainChangeDb.store(0.0f, std::memory_order_relaxed);
     mOttDynamicsActivityDb.store(0.0f, std::memory_order_relaxed);
@@ -1539,7 +1543,6 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                                  bool updateReductionMeter)
 {
     // 1. Preparation
-    fillSafePeakEnvelope(buffer);
     dryBuffer.makeCopyOf(buffer, true);
     auto block = juce::dsp::AudioBlock<float>(buffer);
     auto paramsForProcessing = params; // Create a mutable copy
@@ -1606,6 +1609,9 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
     for (size_t i = 0; i < paramsForProcessing.ott.controls.size(); ++i)
         bindCompressorProvider(paramsForProcessing.ott.controls[i], params.ott.sources[i]);
 
+    if (hasCompleteBaseRateLfoChunk && juce::isPositiveAndBelow(params.outputLfoSourceIndex, lfoOutputs.getNumChannels()))
+        paramsForProcessing.outputVal.lfoSignal = lfoOutputs.getReadPointer(params.outputLfoSourceIndex, lfoSampleOffset);
+
     // Band Enable bypasses the complete processed band, including the user's
     // own Band Mix. Align the shared dry path to the oversampled wet path once
     // so both coefficient stages retain the established Thiran phase response.
@@ -1616,6 +1622,67 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         juce::dsp::ProcessContextReplacing<float>(bandEnableDryBlock));
     bandMixer.pushDrySamples(bandEnableDryBlock);
 
+    const auto& order = orderTransition.begin(params.moduleOrder);
+    for (size_t position = 0; position < order.size(); ++position)
+    {
+        const int node = order[position];
+        if (node == 0)
+        {
+            const bool joined = position + 1 < order.size() && order[position + 1] == 1;
+            const auto peak = position == 0 ? inputPeak : buffer.getMagnitude(0, buffer.getNumSamples());
+            processDriveShapeStage(buffer, params, lfoOutputs, lfoSampleOffset, peak, updateReductionMeter, true, joined);
+            if (joined) { processDcFilter(buffer, params.isDcFilterEnabled); ++position; }
+        }
+        else if (node == 1)
+        {
+            processDriveShapeStage(buffer, params, lfoOutputs, lfoSampleOffset, inputPeak, false, false, true);
+            processDcFilter(buffer, params.isDcFilterEnabled);
+        }
+        else if (node == 2) processCompressorStage(buffer, paramsForProcessing);
+        else if (node == 3) processStereoStage(buffer, paramsForProcessing);
+        else if (node == 4)
+        {
+            ott.process(block, paramsForProcessing.ott);
+            mOttInputLevelDb.store(params.isBandEnabled ? ott.getInputLevelDb() : -120.0f, std::memory_order_relaxed);
+            mOttGainChangeDb.store(params.isBandEnabled ? ott.getGainChangeDb() : 0.0f, std::memory_order_relaxed);
+            mOttDynamicsActivityDb.store(params.isBandEnabled ? ott.getDynamicsActivityDb() : 0.0f, std::memory_order_relaxed);
+        }
+        else if (node >= fire::module_order::firstInsert)
+            inserts.processSlot(block, node - fire::module_order::firstInsert, params.inserts, lfoOutputs, lfoSampleOffset);
+    }
+    orderTransition.apply(block, dryBuffer);
+
+    // Per-sample Output Gain
+    applyGain(buffer,
+              paramsForProcessing.outputVal,
+              gain,
+              outputGainTransition,
+              params.outputLfoSourceIndex,
+              params.isOutputLinked);
+
+    // 5. Final Dry/Wet Mix. The dry samples supplied above already contain
+    // JUCE's original HQ Thiran latency compensation. Keep the coefficient
+    // stage zero-latency so stable routed modulation follows every LFO sample;
+    // scalar automation still uses the legacy 50 ms ramp.
+    bandMixer.mixWetSamples(block,
+                            paramsForProcessing.mixValProvider,
+                            params.mixVal,
+                            params.mixLfoSourceIndex,
+                            true);
+
+    processBandEnable(buffer, params.isBandEnabled);
+}
+
+void BandProcessor::processDriveShapeStage(juce::AudioBuffer<float>& buffer,
+    const BandProcessingParameters& params, const juce::AudioBuffer<float>& lfoOutputs,
+    int lfoSampleOffset, float inputPeak, bool updateReductionMeter, bool processDrive, bool processShape)
+{
+    if (processDrive) fillSafePeakEnvelope(buffer);
+    auto block = juce::dsp::AudioBlock<float>(buffer);
+    auto paramsForProcessing = params;
+    const bool useHQ = processShape && params.isHQ && oversampling != nullptr;
+    paramsForProcessing.isHQ = useHQ;
+    const bool hasCompleteBaseRateLfoChunk = lfoSampleOffset + buffer.getNumSamples() <= lfoOutputs.getNumSamples();
     // 2. Core Distortion Processing
     if (useHQ)
     {
@@ -1690,7 +1757,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                           safePeakEnvelopeBuffer.getReadPointer(0),
                           buffer.getNumSamples(),
                           inputPeak,
-                          updateReductionMeter);
+                          updateReductionMeter && processDrive, processDrive, processShape);
         oversampling->processSamplesDown(block);
     }
     else
@@ -1726,15 +1793,15 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                           safePeakEnvelopeBuffer.getReadPointer(0),
                           buffer.getNumSamples(),
                           inputPeak,
-                          updateReductionMeter);
+                          updateReductionMeter && processDrive, processDrive, processShape);
     }
 
-    // The DC filter is designed at the base sample rate, so both normal and HQ
-    // paths meet here after any downsampling. Keep its hidden wet path running
-    // while bypassed and crossfade the audible result; skipping the IIR froze
-    // its state and hard-switched up to a large DC offset at block boundaries.
-    processDcFilter(buffer, params.isDcFilterEnabled);
+}
 
+void BandProcessor::processCompressorStage(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params)
+{
+    auto block = juce::dsp::AudioBlock<float>(buffer);
+    const auto& paramsForProcessing = params;
     // 3. Block-wise Compressor and Width
     // These operate on the downsampled block, so their mixers are safe.
     auto postDistortionContext = juce::dsp::ProcessContextReplacing<float>(block);
@@ -1975,10 +2042,13 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         params.compMixVal,
         params.compMixLfoSourceIndex,
         params.isCompEnabled);
-    ott.process(postDistortionContext.getOutputBlock(), paramsForProcessing.ott);
-    mOttInputLevelDb.store(params.isBandEnabled ? ott.getInputLevelDb() : -120.0f, std::memory_order_relaxed);
-    mOttGainChangeDb.store(params.isBandEnabled ? ott.getGainChangeDb() : 0.0f, std::memory_order_relaxed);
-    mOttDynamicsActivityDb.store(params.isBandEnabled ? ott.getDynamicsActivityDb() : 0.0f, std::memory_order_relaxed);
+}
+
+void BandProcessor::processStereoStage(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params)
+{
+    auto block = juce::dsp::AudioBlock<float>(buffer);
+    auto postDistortionContext = juce::dsp::ProcessContextReplacing<float>(block);
+    const auto& paramsForProcessing = params;
     if (buffer.getNumChannels() == 2)
     {
         // Keep the width path warm and use the mixer's existing 50 ms ramp for
@@ -2022,27 +2092,6 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
             params.isWidthEnabled);
     }
 
-    // 4. Post-Distortion Effects
-    inserts.process(postDistortionContext.getOutputBlock(), params.inserts, lfoOutputs, lfoSampleOffset);
-    // Per-sample Output Gain
-    applyGain(buffer,
-              paramsForProcessing.outputVal,
-              gain,
-              outputGainTransition,
-              params.outputLfoSourceIndex,
-              params.isOutputLinked);
-
-    // 5. Final Dry/Wet Mix. The dry samples supplied above already contain
-    // JUCE's original HQ Thiran latency compensation. Keep the coefficient
-    // stage zero-latency so stable routed modulation follows every LFO sample;
-    // scalar automation still uses the legacy 50 ms ramp.
-    bandMixer.mixWetSamples(block,
-                            paramsForProcessing.mixValProvider,
-                            params.mixVal,
-                            params.mixLfoSourceIndex,
-                            true);
-
-    processBandEnable(buffer, params.isBandEnabled);
 }
 
 void BandProcessor::processBandEnable(juce::AudioBuffer<float>& buffer,
@@ -2090,12 +2139,11 @@ void BandProcessor::processBandEnable(juce::AudioBuffer<float>& buffer,
     }
 }
 
-void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
-                                      const BandProcessingParameters& params,
-                                      const float* safePeakEnvelopeValues,
-                                      int safePeakEnvelopeSamples,
-                                      float inputPeak,
-                                      bool updateReductionMeter)
+void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProcess,
+                                      const BandProcessingParameters &params,
+                                      const float *safePeakEnvelopeValues, int safePeakEnvelopeSamples,
+                                      float inputPeak, bool updateReductionMeter, bool processDrive,
+                                      bool processShape)
 {
     const int numSamples = static_cast<int>(blockToProcess.getNumSamples());
     const int numChannels = static_cast<int>(blockToProcess.getNumChannels());
@@ -2105,9 +2153,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         if (safePeakEnvelopeValues == nullptr || safePeakEnvelopeSamples <= 0)
             return 0.0f;
 
-        const int baseSample = juce::jlimit(0,
-                                            safePeakEnvelopeSamples - 1,
-                                            sample / smoothingStride);
+        const int baseSample = juce::jlimit(0, safePeakEnvelopeSamples - 1, sample / smoothingStride);
         const float peak = safePeakEnvelopeValues[baseSample];
         return std::isfinite(peak) ? juce::jmax(0.0f, peak) : 0.0f;
     };
@@ -2117,20 +2163,18 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     // stale Mix value must not silently blend Drive back to the dry signal.
     // Keep the existing Shape-on sound, but make Shape-off bypass only the
     // Shape controls (Bias/Rectification/DC) rather than the Drive module.
-    const bool hasSampleAccurateShapeMix = params.isShapeEnabled
-                                           && params.shapeMixValProvider.lfoSignal != nullptr;
-    const float requestedShapeMix = hasSampleAccurateShapeMix
-                                        ? params.shapeMixValProvider.get(0)
-                                        : params.shapeMixVal;
-    const float effectiveShapeMix = params.isShapeEnabled
-                                      ? juce::jlimit(0.0f, 1.0f, requestedShapeMix)
-                                      : 1.0f;
-    if (! shapeMixSmootherPrimed)
+    const bool hasSampleAccurateShapeMix =
+        params.isShapeEnabled && params.shapeMixValProvider.lfoSignal != nullptr;
+    const float requestedShapeMix =
+        hasSampleAccurateShapeMix ? params.shapeMixValProvider.get(0) : params.shapeMixVal;
+    const float effectiveShapeMix =
+        params.isShapeEnabled ? juce::jlimit(0.0f, 1.0f, requestedShapeMix) : 1.0f;
+    if (processShape && !shapeMixSmootherPrimed)
     {
         shapeMixSmoother.setCurrentAndTargetValue(effectiveShapeMix);
         shapeMixSmootherPrimed = true;
     }
-    else
+    else if (processShape)
     {
         shapeMixSmoother.setTargetValue(effectiveShapeMix);
     }
@@ -2140,20 +2184,19 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     // maximum to drive the audio made identical timelines sound different at
     // different host callback sizes.
     const float sampleMaxValue = std::isfinite(inputPeak) ? juce::jmax(0.0f, inputPeak) : 0.0f;
-    mSampleMaxValue.store(sampleMaxValue, std::memory_order_relaxed);
+    if (processDrive)
+        mSampleMaxValue.store(sampleMaxValue, std::memory_order_relaxed);
 
-    const auto normaliseMode = [] (int mode) noexcept
-    {
-        return juce::isPositiveAndBelow(mode, 12) ? mode : 3;
-    };
-    const auto serviceModeRequest = [&] (int rawRequestedMode)
+    const auto normaliseMode = [](int mode) noexcept
+    { return juce::isPositiveAndBelow(mode, 12) ? mode : 3; };
+    const auto serviceModeRequest = [&](int rawRequestedMode)
     {
         const int requestedMode = normaliseMode(rawRequestedMode);
         requestedWaveshaperMode = requestedMode;
 
-        if (! waveshaperModeMixPrimed)
+        if (!waveshaperModeMixPrimed)
         {
-            waveshaperModeSlots = { requestedMode, requestedMode };
+            waveshaperModeSlots = {requestedMode, requestedMode};
             waveshaperModeMixSmoother.setCurrentAndTargetValue(0.0f);
             waveshaperModeMixPrimed = true;
             return;
@@ -2182,7 +2225,8 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         waveshaperModeMixSmoother.setTargetValue(targetSlot == 1 ? 1.0f : 0.0f);
     };
 
-    serviceModeRequest(params.mode);
+    if (processShape)
+        serviceModeRequest(params.mode);
     auto mode0Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[0]);
     auto mode1Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[1]);
 
@@ -2191,7 +2235,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     auto biasProvider = params.biasVal;
     auto recProvider = params.recVal;
 
-    if (! params.isShapeEnabled)
+    if (!params.isShapeEnabled)
     {
         // Disable LFO modulation for Bias and Rectification
         biasProvider.baseValue = 0.0f;
@@ -2200,90 +2244,80 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         recProvider.lfoSignal = nullptr;
     }
 
-    const auto safeBaseValue = [] (float value) noexcept
-    {
-        return std::isfinite(value) ? value : 0.0f;
-    };
-    const float driveBaseTargetGain = driveValueToGain(
-        safeBaseValue(driveProvider.baseValue),
-        params.isExtremeModeOn);
+    const auto safeBaseValue = [](float value) noexcept { return std::isfinite(value) ? value : 0.0f; };
+    const float driveBaseTargetGain =
+        driveValueToGain(safeBaseValue(driveProvider.baseValue), params.isExtremeModeOn);
     const float biasBaseTarget = safeBaseValue(biasProvider.baseValue);
     const float recBaseTarget = safeBaseValue(recProvider.baseValue);
 
     DistortionLogic::State currentState;
     currentState.mode = params.mode;
 
-    if (isFirstBlock)
+    if (processDrive && isFirstBlock)
     {
-        // Drive's legacy 50 ms dezipper now owns only the ordinary base gain.
-        // Route, power and Safe transitions are independent below, so a stable
-        // LFO can retain its per-sample trajectory.
         driveSmoother.setCurrentAndTargetValue(driveBaseTargetGain);
-
-        // Static automation retains its established 50 ms dezipper, but the
-        // routed LFO trajectory is applied after that base-only smoother.
-        biasSmoother.setCurrentAndTargetValue(biasBaseTarget);
-        recSmoother.setCurrentAndTargetValue(recBaseTarget);
-
         isFirstBlock = false;
     }
-
-    driveSmoother.setTargetValue(driveBaseTargetGain);
-    biasSmoother.setTargetValue(biasBaseTarget);
-    recSmoother.setTargetValue(recBaseTarget);
-
-    // The legacy disabled path held its only Drive smoother at unity. If the
-    // base was edited shortly before re-enabling, playback therefore began a
-    // single 50 ms unity-to-current ramp rather than cascading two ramps. Keep
-    // hidden route state warm, but snap its base to the latest target at that
-    // same enable edge so the independent power bridge retains that contract.
-    if (driveControlTransition.enableInitialised
-        && ! driveControlTransition.lastDriveEnabled
-        && params.isDriveEnabled)
+    if (processShape && !shapeControlsPrimed)
     {
-        driveSmoother.setCurrentAndTargetValue(driveBaseTargetGain);
+        biasSmoother.setCurrentAndTargetValue(biasBaseTarget);
+        recSmoother.setCurrentAndTargetValue(recBaseTarget);
+        shapeControlsPrimed = true;
+    }
+    if (processDrive)
+        driveSmoother.setTargetValue(driveBaseTargetGain);
+    if (processShape)
+    {
+        biasSmoother.setTargetValue(biasBaseTarget);
+        recSmoother.setTargetValue(recBaseTarget);
     }
 
-    serviceDriveRecipeTransition(
-        driveControlTransition,
-        makeDriveRecipe(driveProvider,
-                        params.driveLfoSourceIndex,
-                        params.isExtremeModeOn),
-        getDriveRouteTargetGain(driveProvider,
-                                0,
-                                driveSmoother.getCurrentValue(),
-                                params.isExtremeModeOn));
-    serviceDriveEnableTransition(driveControlTransition,
-                                 params.isDriveEnabled);
+    if (processDrive)
+    {
+        // The legacy disabled path held its only Drive smoother at unity. If the
+        // base was edited shortly before re-enabling, playback therefore began a
+        // single 50 ms unity-to-current ramp rather than cascading two ramps. Keep
+        // hidden route state warm, but snap its base to the latest target at that
+        // same enable edge so the independent power bridge retains that contract.
+        if (driveControlTransition.enableInitialised && !driveControlTransition.lastDriveEnabled &&
+            params.isDriveEnabled)
+        {
+            driveSmoother.setCurrentAndTargetValue(driveBaseTargetGain);
+        }
 
-    serviceShapeControlRecipeTransition(
-        biasRecipeTransition,
-        makeShapeControlRecipe(biasProvider, params.biasLfoSourceIndex),
-        biasProvider.get(0, biasSmoother.getCurrentValue()));
-    serviceShapeControlRecipeTransition(
-        recRecipeTransition,
-        makeShapeControlRecipe(recProvider, params.recLfoSourceIndex),
-        recProvider.get(0, recSmoother.getCurrentValue()));
+        serviceDriveRecipeTransition(
+            driveControlTransition,
+            makeDriveRecipe(driveProvider, params.driveLfoSourceIndex, params.isExtremeModeOn),
+            getDriveRouteTargetGain(driveProvider, 0, driveSmoother.getCurrentValue(),
+                                    params.isExtremeModeOn));
+        serviceDriveEnableTransition(driveControlTransition, params.isDriveEnabled);
+    }
+
+    if (processShape)
+    {
+        serviceShapeControlRecipeTransition(biasRecipeTransition,
+                                            makeShapeControlRecipe(biasProvider, params.biasLfoSourceIndex),
+                                            biasProvider.get(0, biasSmoother.getCurrentValue()));
+        serviceShapeControlRecipeTransition(recRecipeTransition,
+                                            makeShapeControlRecipe(recProvider, params.recLfoSourceIndex),
+                                            recProvider.get(0, recSmoother.getCurrentValue()));
+    }
 
     float currentShapeMix = shapeMixSmoother.getCurrentValue();
     float currentRouteDriveGain = driveControlTransition.lastAppliedRouteGain;
-    const float legacyDriveForCalc = driveValueToExponent(
-        safeBaseValue(driveProvider.baseValue),
-        params.isExtremeModeOn);
+    const float legacyDriveForCalc =
+        driveValueToExponent(safeBaseValue(driveProvider.baseValue), params.isExtremeModeOn);
     float currentDriveForCalc = legacyDriveForCalc;
     float finalReductionDriveForCalc = 0.0f;
     float finalReductionDriveGain = 1.0f;
     bool hasReductionForRange = false;
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        if ((sample % smoothingStride) == 0)
+        if (processShape && (sample % smoothingStride) == 0)
         {
-            const float targetShapeMix = hasSampleAccurateShapeMix
-                                             ? juce::jlimit(
-                                                   0.0f,
-                                                   1.0f,
-                                                   params.shapeMixValProvider.get(sample))
-                                             : effectiveShapeMix;
+            const float targetShapeMix =
+                hasSampleAccurateShapeMix ? juce::jlimit(0.0f, 1.0f, params.shapeMixValProvider.get(sample))
+                                          : effectiveShapeMix;
             shapeMixSmoother.setTargetValue(targetShapeMix);
             currentShapeMix = shapeMixSmoother.getNextValue();
         }
@@ -2293,79 +2327,64 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         // per base-rate sample so their time constants do not become 4x faster.
         if ((sample % smoothingStride) == 0)
         {
-            // 1. Advance only the ordinary base gain through the established
-            // 50 ms linear-gain dezipper. Apply a stable routed LFO after it.
-            const float smoothedBaseDriveGain = driveSmoother.getNextValue();
-            const float routeTargetGain = getDriveRouteTargetGain(
-                driveProvider,
-                sample,
-                smoothedBaseDriveGain,
-                params.isExtremeModeOn);
-            currentRouteDriveGain = applyDriveRecipeTransition(
-                driveControlTransition,
-                routeTargetGain);
-            const bool useLegacyDriveForCalc =
-                ! driveControlTransition.lastRecipe.routed
-                && ! driveControlTransition.routeTransitionMix.isSmoothing();
-            currentDriveForCalc = useLegacyDriveForCalc
-                                      ? legacyDriveForCalc
-                                      : std::log2(juce::jmax(
-                                            1.0e-12f,
-                                            currentRouteDriveGain));
-
-            // 2. Power changes retain a 50 ms transition, anchored to the
-            // preceding post-Safe audible gain. Its target remains live so a
-            // hidden routed LFO is ready when Drive is enabled again.
-            const float enabledTargetGain = params.isDriveEnabled
-                                                ? currentRouteDriveGain
-                                                : 1.0f;
-            const float enabledDriveGain = applyDriveEnableTransition(
-                driveControlTransition,
-                enabledTargetGain);
-
-            // 3. Safe recovery is a held-anchor gain-domain bridge, not a
-            // multiplier. If the live request falls below its recovering cap,
-            // min() passes that request exactly instead of over-attenuating a
-            // downward LFO excursion.
-            currentState.drive = applySafeDriveRecovery(
-                driveControlTransition,
-                enabledDriveGain);
-
-            const float biasBase = biasSmoother.getNextValue();
-            const float recBase = recSmoother.getNextValue();
-            currentState.bias = applyShapeControlRecipeTransition(
-                biasRecipeTransition,
-                biasProvider.get(sample, biasBase));
-            currentState.rec = applyShapeControlRecipeTransition(
-                recRecipeTransition,
-                recProvider.get(sample, recBase));
-
-            if (params.isDriveEnabled && params.isSafeModeOn)
+            if (processDrive)
             {
-                const float causalPeak = getSafePeak(sample);
-                if (causalPeak > 0.0001f)
+                // 1. Advance only the ordinary base gain through the established
+                // 50 ms linear-gain dezipper. Apply a stable routed LFO after it.
+                const float smoothedBaseDriveGain = driveSmoother.getNextValue();
+                const float routeTargetGain = getDriveRouteTargetGain(
+                    driveProvider, sample, smoothedBaseDriveGain, params.isExtremeModeOn);
+                currentRouteDriveGain = applyDriveRecipeTransition(driveControlTransition, routeTargetGain);
+                const bool useLegacyDriveForCalc = !driveControlTransition.lastRecipe.routed &&
+                                                   !driveControlTransition.routeTransitionMix.isSmoothing();
+                currentDriveForCalc = useLegacyDriveForCalc
+                                          ? legacyDriveForCalc
+                                          : std::log2(juce::jmax(1.0e-12f, currentRouteDriveGain));
+
+                // 2. Power changes retain a 50 ms transition, anchored to the
+                // preceding post-Safe audible gain. Its target remains live so a
+                // hidden routed LFO is ready when Drive is enabled again.
+                const float enabledTargetGain = params.isDriveEnabled ? currentRouteDriveGain : 1.0f;
+                const float enabledDriveGain =
+                    applyDriveEnableTransition(driveControlTransition, enabledTargetGain);
+
+                // 3. Safe recovery is a held-anchor gain-domain bridge, not a
+                // multiplier. If the live request falls below its recovering cap,
+                // min() passes that request exactly instead of over-attenuating a
+                // downward LFO excursion.
+                currentState.drive = applySafeDriveRecovery(driveControlTransition, enabledDriveGain);
+
+                if (params.isDriveEnabled && params.isSafeModeOn)
                 {
-                    const float safeCeiling = 2.0f / causalPeak
-                                              + 0.1f * currentDriveForCalc;
-                    if (std::isfinite(safeCeiling)
-                        && safeCeiling < currentState.drive)
+                    const float causalPeak = getSafePeak(sample);
+                    if (causalPeak > 0.0001f)
                     {
-                        currentState.drive = safeCeiling;
-                        driveControlTransition.safeRecoveryAnchorGain =
-                            safeCeiling;
-                        driveControlTransition.safeRecoveryMix
-                            .setCurrentAndTargetValue(0.0f);
-                        driveControlTransition.safeRecoveryMix
-                            .setTargetValue(1.0f);
+                        const float safeCeiling = 2.0f / causalPeak + 0.1f * currentDriveForCalc;
+                        if (std::isfinite(safeCeiling) && safeCeiling < currentState.drive)
+                        {
+                            currentState.drive = safeCeiling;
+                            driveControlTransition.safeRecoveryAnchorGain = safeCeiling;
+                            driveControlTransition.safeRecoveryMix.setCurrentAndTargetValue(0.0f);
+                            driveControlTransition.safeRecoveryMix.setTargetValue(1.0f);
+                        }
                     }
                 }
+            }
+            if (processShape)
+            {
+                const float biasBase = biasSmoother.getNextValue();
+                const float recBase = recSmoother.getNextValue();
+                currentState.bias = applyShapeControlRecipeTransition(biasRecipeTransition,
+                                                                      biasProvider.get(sample, biasBase));
+                currentState.rec =
+                    applyShapeControlRecipeTransition(recRecipeTransition, recProvider.get(sample, recBase));
             }
         }
 
         // Publish the causal Safe result at base rate. Internal oversized
         // chunks share this state, so the meter and the audio follow the same
         // absolute timeline rather than whichever callback peak arrived first.
-        if ((sample % smoothingStride) == 0 && updateReductionMeter)
+        if (processDrive && (sample % smoothingStride) == 0 && updateReductionMeter)
         {
             finalReductionDriveForCalc = currentDriveForCalc;
             finalReductionDriveGain = currentState.drive;
@@ -2380,42 +2399,44 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
             float currentSample = blockToProcess.getSample(channel, sample);
             const float drySample = currentSample;
 
-            currentSample *= currentState.drive;
-            currentSample += currentState.bias;
-
-            const auto shapeAndRectify = [&] (DistortionLogic::WaveshaperFunction function)
+            if (processDrive)
+                currentSample *= currentState.drive;
+            if (processShape)
             {
-                auto shaped = function(currentSample);
-                if (shaped < 0.0f)
-                    shaped *= negativeScale;
-                return shaped;
-            };
+                currentSample += currentState.bias;
 
-            if (modeMix <= 0.0f)
-            {
-                currentSample = shapeAndRectify(mode0Function);
+                const auto shapeAndRectify = [&](DistortionLogic::WaveshaperFunction function)
+                {
+                    auto shaped = function(currentSample);
+                    if (shaped < 0.0f)
+                        shaped *= negativeScale;
+                    return shaped;
+                };
+
+                if (modeMix <= 0.0f)
+                {
+                    currentSample = shapeAndRectify(mode0Function);
+                }
+                else if (modeMix >= 1.0f)
+                {
+                    currentSample = shapeAndRectify(mode1Function);
+                }
+                else
+                {
+                    const auto mode0Sample = shapeAndRectify(mode0Function);
+                    const auto mode1Sample = shapeAndRectify(mode1Function);
+                    currentSample = mode0Sample + modeMix * (mode1Sample - mode0Sample);
+                }
+
+                currentSample -= currentState.bias;
+
+                // Shape Mix is a base-rate control even though the distortion is
+                // evaluated at 4x in HQ mode. Reuse one weight for the complete
+                // oversampled frame so its 50 ms ramp has the same wall-clock
+                // duration in both quality modes.
+                currentSample *= currentShapeMix;
+                currentSample += drySample * (1.0f - currentShapeMix);
             }
-            else if (modeMix >= 1.0f)
-            {
-                currentSample = shapeAndRectify(mode1Function);
-            }
-            else
-            {
-                const auto mode0Sample = shapeAndRectify(mode0Function);
-                const auto mode1Sample = shapeAndRectify(mode1Function);
-                currentSample = mode0Sample
-                              + modeMix * (mode1Sample - mode0Sample);
-            }
-
-            currentSample -= currentState.bias;
-
-            // Shape Mix is a base-rate control even though the distortion is
-            // evaluated at 4x in HQ mode. Reuse one weight for the complete
-            // oversampled frame so its 50 ms ramp has the same wall-clock
-            // duration in both quality modes.
-            currentSample *= currentShapeMix;
-            currentSample += drySample * (1.0f - currentShapeMix);
-
             blockToProcess.setSample(channel, sample, currentSample);
         }
 
@@ -2423,24 +2444,28 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         // base-rate frame.  Hold the same crossfade weight for that whole
         // group and advance only at its end, so the transition remains 10 ms
         // in both modes and across internal chunks.
-        const bool completesBaseFrame = ((sample + 1) % smoothingStride) == 0
-                                        || sample + 1 == numSamples;
+        const bool completesBaseFrame = ((sample + 1) % smoothingStride) == 0 || sample + 1 == numSamples;
         if (completesBaseFrame)
         {
-            driveControlTransition.lastAppliedRouteGain =
-                currentRouteDriveGain;
-            driveControlTransition.lastAppliedFinalGain = currentState.drive;
-            driveControlTransition.routeTransitionMix.getNextValue();
-            biasRecipeTransition.lastAppliedValue = currentState.bias;
-            recRecipeTransition.lastAppliedValue = currentState.rec;
-            biasRecipeTransition.routeTransitionMix.getNextValue();
-            recRecipeTransition.routeTransitionMix.getNextValue();
+            if (processDrive)
+            {
+                driveControlTransition.lastAppliedRouteGain = currentRouteDriveGain;
+                driveControlTransition.lastAppliedFinalGain = currentState.drive;
+                driveControlTransition.routeTransitionMix.getNextValue();
+            }
+            if (processShape)
+            {
+                biasRecipeTransition.lastAppliedValue = currentState.bias;
+                recRecipeTransition.lastAppliedValue = currentState.rec;
+                biasRecipeTransition.routeTransitionMix.getNextValue();
+                recRecipeTransition.routeTransitionMix.getNextValue();
+            }
         }
 
-        if (completesBaseFrame && waveshaperModeMixSmoother.isSmoothing())
+        if (processShape && completesBaseFrame && waveshaperModeMixSmoother.isSmoothing())
         {
             waveshaperModeMixSmoother.getNextValue();
-            if (! waveshaperModeMixSmoother.isSmoothing())
+            if (!waveshaperModeMixSmoother.isSmoothing())
             {
                 serviceModeRequest(requestedWaveshaperMode);
                 mode0Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[0]);
@@ -2452,14 +2477,11 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     if (hasReductionForRange)
     {
         float reduction = 1.0f;
-        if (params.isDriveEnabled && params.isSafeModeOn
-            && std::abs(finalReductionDriveForCalc) > 1.0e-8f)
+        if (params.isDriveEnabled && params.isSafeModeOn && std::abs(finalReductionDriveForCalc) > 1.0e-8f)
         {
-            reduction = juce::jlimit(
-                0.0f,
-                1.0f,
-                std::log2(juce::jmax(finalReductionDriveGain, 1.0e-12f))
-                    / finalReductionDriveForCalc);
+            reduction = juce::jlimit(0.0f, 1.0f,
+                                     std::log2(juce::jmax(finalReductionDriveGain, 1.0e-12f)) /
+                                         finalReductionDriveForCalc);
         }
         mReductionPercent.store(reduction, std::memory_order_relaxed);
     }
@@ -2797,6 +2819,10 @@ void FireAudioProcessor::initialiseParameterCache()
     bitDepthParameter = cacheParameter(BIT_DEPTH_ID);
     jitterParameter = cacheParameter(JITTER_ID);
     downsampleMixParameter = cacheParameter(DOWNSAMPLE_MIX_ID);
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+        for (int node = 0; node < fire::module_order::capacity; ++node)
+            if (fire::module_order::valid(scope, node))
+                moduleOrderParameters[static_cast<size_t>(scope)][static_cast<size_t>(node)] = cacheParameter(fire::module_order::parameterID(scope, node));
     for (size_t i = 0; i < tapeParameters.size(); ++i) tapeParameters[i] = cacheParameter(fire::effects::tapeIDs[i]);
     for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
         for (int slot = 0; slot < fire::effects::slotCount; ++slot)
@@ -2971,6 +2997,94 @@ int FireAudioProcessor::getInsertEffectOrder(int scope, int slot) const
     return juce::roundToInt(loadCachedParameter(insertParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][fire::effects::orderField]));
 }
 
+fire::module_order::Order FireAudioProcessor::getModuleOrder(int scope) const
+{
+    using namespace fire;
+    auto order = module_order::defaults(scope);
+    if (! juce::isPositiveAndBelow(scope, effects::scopeCount)) { order.fill(-1); return order; }
+    const int builtins = scope == 0 ? 3 : 5;
+    std::sort(order.begin() + builtins, order.begin() + builtins + effects::slotCount, [&](int a, int b) {
+        const auto av = getInsertEffectOrder(scope, a - module_order::firstInsert);
+        const auto bv = getInsertEffectOrder(scope, b - module_order::firstInsert);
+        return av == bv ? a < b : av < bv;
+    });
+    std::array<int, module_order::capacity> legacyPositions {}, positions {};
+    for (int index = 0; index < builtins + effects::slotCount; ++index)
+    {
+        const auto node = static_cast<size_t>(order[static_cast<size_t>(index)]);
+        legacyPositions[node] = index;
+        const auto stored = juce::roundToInt(juce::jlimit(-1.0f, 12.0f,
+            loadCachedParameter(moduleOrderParameters[static_cast<size_t>(scope)][node], -1)));
+        positions[node] = stored < 0 ? index : stored;
+    }
+    std::sort(order.begin(), order.begin() + builtins + effects::slotCount, [&](int a, int b) {
+        const auto ai = static_cast<size_t>(a), bi = static_cast<size_t>(b);
+        return positions[ai] == positions[bi] ? legacyPositions[ai] < legacyPositions[bi] : positions[ai] < positions[bi];
+    });
+    return order;
+}
+
+std::vector<int> FireAudioProcessor::visibleModuleOrder(int scope) const
+{
+    std::vector<int> result;
+    for (int node : getModuleOrder(scope))
+        if (node >= 0 && (node < fire::module_order::firstInsert
+            || getInsertEffectType(scope, node - fire::module_order::firstInsert) != fire::effects::Type::none)) result.push_back(node);
+    return result;
+}
+
+void FireAudioProcessor::writeModuleOrder(int scope, const fire::module_order::Order& order)
+{
+    int insertPosition = 0;
+    for (size_t position = 0; position < order.size(); ++position)
+    {
+        const int node = order[position];
+        if (! fire::module_order::valid(scope, node)) continue;
+        const auto write = [](juce::RangedAudioParameter* parameter, float value) {
+            if (! parameter || juce::approximatelyEqual(parameter->getValue(), parameter->convertTo0to1(value))) return;
+            parameter->beginChangeGesture(); parameter->setValueNotifyingHost(parameter->convertTo0to1(value)); parameter->endChangeGesture();
+        };
+        write(treeState.getParameter(fire::module_order::parameterID(scope, node)), static_cast<float>(position));
+        if (node >= fire::module_order::firstInsert && getInsertEffectType(scope, node - fire::module_order::firstInsert) != fire::effects::Type::none)
+            write(treeState.getParameter(fire::effects::parameterID(scope, node - fire::module_order::firstInsert, fire::effects::orderField)), static_cast<float>(++insertPosition));
+    }
+}
+
+void FireAudioProcessor::moveModuleBefore(int scope, int node, int beforeNode)
+{
+    if (! fire::module_order::valid(scope, node) || beforeNode == node) return;
+    beginMultibandTopologyEdit();
+    const juce::ScopeGuard publish {[this] {requestMultibandTopologyReset();}};
+    auto visible = visibleModuleOrder(scope);
+    const auto previous = visible;
+    const auto source = std::find(visible.begin(), visible.end(), node);
+    if (source == visible.end()) return;
+    visible.erase(source);
+    const auto target = std::find(visible.begin(), visible.end(), beforeNode);
+    if (beforeNode >= 0 && target == visible.end()) return;
+    visible.insert(target, node);
+    if (visible == previous) return;
+    for (int id : getModuleOrder(scope))
+        if (id >= 0 && std::find(visible.begin(), visible.end(), id) == visible.end()) visible.push_back(id);
+    fire::module_order::Order order; order.fill(-1);
+    std::copy(visible.begin(), visible.end(), order.begin());
+    writeModuleOrder(scope, order);
+}
+
+void FireAudioProcessor::moveModuleBy(int scope, int node, int direction)
+{
+    if (! fire::module_order::valid(scope, node) || direction == 0) return;
+    beginMultibandTopologyEdit();
+    const juce::ScopeGuard publish {[this] {requestMultibandTopologyReset();}};
+    const auto visible = visibleModuleOrder(scope);
+    const auto found = std::find(visible.begin(), visible.end(), node);
+    if (found == visible.end()) return;
+    const int index = static_cast<int>(std::distance(visible.begin(), found));
+    if (direction < 0 && index > 0) moveModuleBefore(scope, node, visible[static_cast<size_t>(index - 1)]);
+    else if (direction > 0 && index + 1 < static_cast<int>(visible.size()))
+        moveModuleBefore(scope, node, index + 2 < static_cast<int>(visible.size()) ? visible[static_cast<size_t>(index + 2)] : -1);
+}
+
 int FireAudioProcessor::addInsertEffect(int scope, fire::effects::Type type)
 {
     using namespace fire::effects;
@@ -3000,6 +3114,17 @@ int FireAudioProcessor::addInsertEffect(int scope, fire::effects::Type type)
     write(freeSlot, orderField, static_cast<float>(active.size() + 1));
     write(freeSlot, enabledField, 1);
     write(freeSlot, typeField, static_cast<float>(type));
+    // Reused storage slots still append to the visible chain, irrespective of
+    // where their previous instance was located.
+    auto nodes = visibleModuleOrder(scope);
+    const int node = fire::module_order::firstInsert + freeSlot;
+    nodes.erase(std::remove(nodes.begin(), nodes.end(), node), nodes.end());
+    nodes.push_back(node);
+    for (int id : getModuleOrder(scope))
+        if (id >= 0 && std::find(nodes.begin(), nodes.end(), id) == nodes.end()) nodes.push_back(id);
+    fire::module_order::Order order; order.fill(-1);
+    std::copy(nodes.begin(), nodes.end(), order.begin());
+    writeModuleOrder(scope, order);
     return freeSlot;
 }
 
@@ -3041,11 +3166,12 @@ void FireAudioProcessor::moveInsertEffectInternal(int scope, int slot, int posit
     if (! juce::isPositiveAndBelow(target, static_cast<int>(active.size())) || target == index) return;
     active.erase(active.begin() + index);
     active.insert(active.begin() + target, slot);
-    for (size_t i = 0; i < active.size(); ++i)
-    {
-        auto* parameter = treeState.getParameter(parameterID(scope, active[i], orderField));
-        parameter->beginChangeGesture(); parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(i + 1))); parameter->endChangeGesture();
-    }
+    auto order = getModuleOrder(scope);
+    size_t next = 0;
+    for (auto& node : order)
+        if (node >= fire::module_order::firstInsert && getInsertEffectType(scope, node - fire::module_order::firstInsert) != Type::none)
+            node = fire::module_order::firstInsert + active[next++];
+    writeModuleOrder(scope, order);
 }
 
 int FireAudioProcessor::getNumPrograms()
@@ -3349,6 +3475,8 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     lofiMixer.prepare(globalMixerSpec);
     masterInserts.prepare(spec);
+    masterOrderTransition.prepare(safeSampleRate);
+    masterOrderDry.setSize(static_cast<int>(spec.numChannels), static_cast<int>(spec.maximumBlockSize));
     masterTape.prepare(safeSampleRate);
     for (size_t i = 0; i < tapeSmoothers.size(); ++i)
     {
@@ -4416,6 +4544,7 @@ void FireAudioProcessor::performReset()
     nonHqOutputDelay.reset();
     lofiMixer.reset();
     masterInserts.reset();
+    masterOrderTransition.reset();
     masterTape.reset();
     for (size_t i = 0; i < tapeSmoothers.size(); ++i)
         tapeSmoothers[i].setCurrentAndTargetValue(loadCachedParameter(tapeParameters[i]));
@@ -4927,6 +5056,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("stateFormatVersion", hostStateFormatVersion);
     xmlState.setAttribute("ottSchemaVersion", 1);
     xmlState.setAttribute("insertEffectsSchemaVersion", 1);
+    xmlState.setAttribute("moduleOrderSchemaVersion", 1);
     xmlState.setAttribute("savedParameterCount",
                           mainState.parameterState.getNumChildren());
 
@@ -5056,6 +5186,15 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
              && (! parseStrictNonNegativeIntegerAttribute(*xmlState, "insertEffectsSchemaVersion", version) || version != 1))
             || insertParameterCount != fire::effects::parameterCount)
             return;
+    }
+    int moduleOrderCount = 0;
+    for (const auto& id : incomingParameterIDs) if (fire::module_order::isParameterID(id)) ++moduleOrderCount;
+    if (xmlState->hasAttribute("moduleOrderSchemaVersion") || moduleOrderCount > 0)
+    {
+        int version = 1;
+        if ((xmlState->hasAttribute("moduleOrderSchemaVersion")
+             && (! parseStrictNonNegativeIntegerAttribute(*xmlState, "moduleOrderSchemaVersion", version) || version != 1))
+            || moduleOrderCount != fire::module_order::parameterCount) return;
     }
     if (hasStateFormatVersion != hasSavedParameterCount)
         return;
@@ -6305,6 +6444,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     for (size_t i = 0; i < fire::effects::tapeIDs.size(); ++i)
         parameters.push_back(std::make_unique<PFloat>(juce::ParameterID {fire::effects::tapeIDs[i], 3},
             "Lo-Fi " + juce::String(fire::effects::tapeNames[i]), juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+        for (int node = 0; node < fire::module_order::capacity; ++node)
+            if (fire::module_order::valid(scope, node))
+                parameters.push_back(std::make_unique<PInt>(juce::ParameterID {fire::module_order::parameterID(scope, node), 4},
+                    (scope == 0 ? juce::String("Master") : "Band " + juce::String(scope)) + " Module " + juce::String(node + 1) + " Order",
+                    -1, fire::module_order::capacity - 1, -1));
 
     return { parameters.begin(), parameters.end() };
 }
@@ -6457,6 +6602,7 @@ void FireAudioProcessor::prepareHqCallbackContext(
         params.isCompEnabled = loadCachedParameter(parameters.compressorEnabled) > 0.5f;
         params.ott.enabled = loadCachedParameter(parameters.ottEnabled) > 0.5f;
         prepareInsertParameters(i + 1, params.inserts);
+        params.moduleOrder = getModuleOrder(i + 1);
         params.isWidthEnabled = loadCachedParameter(parameters.widthEnabled) > 0.5f;
         params.isSafeModeOn = loadCachedParameter(parameters.safe) > 0.5f;
         params.isExtremeModeOn = loadCachedParameter(parameters.extreme) > 0.5f;
@@ -6636,6 +6782,7 @@ void FireAudioProcessor::prepareAudioCallbackParameterSnapshot(
                               snapshot.downsampleMix);
     for (size_t i = 0; i < snapshot.tape.size(); ++i) prepareModulatedParameter(tapeParameters[i], snapshot.tape[i]);
     prepareInsertParameters(0, snapshot.inserts);
+    snapshot.moduleOrder = getModuleOrder(0);
 }
 
 void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
@@ -7054,9 +7201,23 @@ void FireAudioProcessor::processMultiBandRange(
 
 void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate)
 {
-    // ==============================================================================
-    // 1. Global Filter Processing (Block-based)
-    // ==============================================================================
+    masterOrderDry.makeCopyOf(buffer, true);
+    const auto& order = masterOrderTransition.begin(activeAudioCallbackParameterSnapshot.moduleOrder);
+    auto block = juce::dsp::AudioBlock<float>(buffer);
+    for (int node : order)
+    {
+        if (node == 0) applyMasterFilter(buffer, lfoOutputs, sampleRate);
+        else if (node == 1) applyDownsamplingEffect(buffer, lfoOutputs);
+        else if (node >= fire::module_order::firstInsert)
+            masterInserts.processSlot(block, node - fire::module_order::firstInsert, activeAudioCallbackParameterSnapshot.inserts, lfoOutputs);
+        // Analysis is a view-only row; its position has no audio operation.
+    }
+    masterOrderTransition.apply(block, masterOrderDry);
+    applyMasterOutput(buffer, lfoOutputs);
+}
+
+void FireAudioProcessor::applyMasterFilter(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate)
+{
     {
         const auto& filterSnapshot =
             activeAudioCallbackParameterSnapshot.globalFilter;
@@ -7165,12 +7326,10 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
         globalFilterMixer.mixWetSamples(block);
     }
 
-    // ==============================================================================
-    // 2. Insert effects precede the final Master output and mix controls.
-    // ==============================================================================
+}
 
-    masterInserts.process(juce::dsp::AudioBlock<float>(buffer), activeAudioCallbackParameterSnapshot.inserts, lfoOutputs);
-
+void FireAudioProcessor::applyMasterOutput(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs)
+{
     // a. Prepare the "recipe" for the global output gain.
     ModulatedValueProvider globalGainProvider;
     if (globalOutputParameter.ranged == nullptr)
@@ -7813,7 +7972,6 @@ void FireAudioProcessor::processActiveHqRange(
                           callbackContext,
                           useHQ,
                           updateReductionMeter);
-    applyDownsamplingEffect(buffer, lfoOutputs);
     applyGlobalEffects(buffer, lfoOutputs, sampleRate);
     applyGlobalMix(buffer,
                    delayMatchedDryBufferForRange,

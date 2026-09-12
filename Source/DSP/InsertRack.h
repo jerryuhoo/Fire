@@ -1,5 +1,5 @@
 #pragma once
-#include "../Utility/InsertParameters.h"
+#include "../Utility/ModuleOrder.h"
 
 namespace fire::effects
 {
@@ -56,18 +56,7 @@ public:
             for (size_t channel = 0; channel < channels; ++channel)
                 juce::FloatVectorOperations::copy(dry.getWritePointer(static_cast<int>(channel)),
                     block.getChannelPointer(channel), static_cast<int>(block.getNumSamples()));
-        for (int slot : order)
-        {
-            auto p = parameters[static_cast<size_t>(slot)].effect;
-            for (size_t control = 0; control < controlCount; ++control)
-            {
-                const auto source = parameters[static_cast<size_t>(slot)].sources[control];
-                p.values[control].lfoSignal = juce::isPositiveAndBelow(source, lfo.getNumChannels())
-                    && sampleOffset + static_cast<int>(block.getNumSamples()) <= lfo.getNumSamples()
-                    ? lfo.getReadPointer(source) : nullptr;
-            }
-            effects[static_cast<size_t>(slot)].process(block, p, sampleOffset);
-        }
+        for (int slot : order) processSlot(block, slot, parameters, lfo, sampleOffset);
         if (blending)
             for (size_t sample = 0; sample < block.getNumSamples(); ++sample)
             {
@@ -78,6 +67,20 @@ public:
                     wet = juce::jmap(mix, dry.getSample(static_cast<int>(channel), static_cast<int>(sample)), wet);
                 }
             }
+    }
+    void processSlot(juce::dsp::AudioBlock<float> block, int slot, const RackParameters& parameters,
+                     const juce::AudioBuffer<float>& lfo, int sampleOffset = 0) noexcept
+    {
+        if (! juce::isPositiveAndBelow(slot, slotCount)) return;
+        auto p = parameters[static_cast<size_t>(slot)].effect;
+        for (size_t control = 0; control < controlCount; ++control)
+        {
+            const auto source = parameters[static_cast<size_t>(slot)].sources[control];
+            p.values[control].lfoSignal = juce::isPositiveAndBelow(source, lfo.getNumChannels())
+                && sampleOffset + static_cast<int>(block.getNumSamples()) <= lfo.getNumSamples()
+                ? lfo.getReadPointer(source) : nullptr;
+        }
+        effects[static_cast<size_t>(slot)].process(block, p, sampleOffset);
     }
 private:
     std::array<InsertEffect, slotCount> effects;

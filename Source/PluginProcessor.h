@@ -60,6 +60,7 @@ struct BandProcessingParameters
     bool isCompEnabled { false };
     OttProcessor::Parameters ott;
     fire::effects::RackParameters inserts;
+    fire::module_order::Order moduleOrder = fire::module_order::bandDefault;
     float width { 0.5f };
     ModulatedValueProvider widthValProvider;
     float pan { 0.0f };
@@ -268,6 +269,7 @@ struct BandProcessor
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bandEnableMixSmoother;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> dcFilterMixSmoother;
     bool isFirstBlock = true;
+    bool shapeControlsPrimed = false;
     bool shapeMixSmootherPrimed = false;
     bool compressorBaseSmoothersPrimed = false;
     bool bandEnableMixPrimed = false;
@@ -319,7 +321,13 @@ private:
                            const float* safePeakEnvelope,
                            int safePeakEnvelopeSamples,
                            float inputPeak,
-                           bool updateReductionMeter);
+                           bool updateReductionMeter, bool processDrive = true, bool processShape = true);
+    void processDriveShapeStage(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params,
+                                const juce::AudioBuffer<float>& lfo, int offset, float inputPeak,
+                                bool meter, bool drive, bool shape);
+    void processCompressorStage(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params);
+    void processStereoStage(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params);
+    fire::module_order::Transition orderTransition;
     void fillSafePeakEnvelope(const juce::AudioBuffer<float>& buffer) noexcept;
     void processBandEnable(juce::AudioBuffer<float>& buffer, bool enabled);
     void processDcFilter(juce::AudioBuffer<float>& buffer, bool enabled);
@@ -392,6 +400,9 @@ public:
     void removeInsertEffect(int scope, int slot);
     void moveInsertEffect(int scope, int slot, int direction);
     void moveInsertEffectToPosition(int scope, int slot, int position);
+    fire::module_order::Order getModuleOrder(int scope) const;
+    void moveModuleBefore(int scope, int node, int beforeNode);
+    void moveModuleBy(int scope, int node, int direction);
 
     bool hasUpdateCheckBeenPerformed = false;
     bool isSlient(const juce::AudioBuffer<float>& buffer);
@@ -730,6 +741,7 @@ private:
         ModulatedParameterSnapshot downsampleMix;
         std::array<ModulatedParameterSnapshot, 3> tape;
         fire::effects::RackParameters inserts;
+        fire::module_order::Order moduleOrder = fire::module_order::masterDefault;
         std::uint32_t publicationSequence = 0;
         bool requestedHq = false;
         bool downsampleEnabled = false;
@@ -757,6 +769,8 @@ private:
 
     void initialiseParameterCache();
     void moveInsertEffectInternal(int scope, int slot, int position, bool relative);
+    void writeModuleOrder(int scope, const fire::module_order::Order& order);
+    std::vector<int> visibleModuleOrder(int scope) const;
     void prepareInsertParameters(int scope, fire::effects::RackParameters& parameters) const;
     CachedParameter cacheParameter(const juce::String& parameterID);
     static float loadCachedParameter(const CachedParameter& parameter, float fallback = 0.0f) noexcept;
@@ -797,6 +811,11 @@ private:
     std::array<CachedParameter, 3> tapeParameters;
     std::array<std::array<std::array<CachedParameter, fire::effects::fieldCount>, fire::effects::slotCount>, fire::effects::scopeCount> insertParameters;
     fire::effects::InsertRack masterInserts;
+    std::array<std::array<CachedParameter, fire::module_order::capacity>, fire::effects::scopeCount> moduleOrderParameters;
+    fire::module_order::Transition masterOrderTransition;
+    juce::AudioBuffer<float> masterOrderDry;
+    void applyMasterFilter(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfo, double rate);
+    void applyMasterOutput(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfo);
     fire::effects::TapeFlutter masterTape;
     std::array<juce::SmoothedValue<float>, 3> tapeSmoothers;
 

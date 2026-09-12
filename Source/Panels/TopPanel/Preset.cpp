@@ -225,6 +225,9 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
     bool legacyWithoutInserts = false;
     if (! validateParameterFamily(snapshot, processor, legacyWithoutInserts, "insertEffectsSchemaVersion", fire::effects::isParameterID))
         return false;
+    bool legacyWithoutModuleOrder = false;
+    if (! validateParameterFamily(snapshot, processor, legacyWithoutModuleOrder, "moduleOrderSchemaVersion", fire::module_order::isParameterID))
+        return false;
 
     int expectedParameterCount = 0;
     for (const auto* parameter : processor.getParameters())
@@ -236,6 +239,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (legacyWithoutOtt && ParameterIDAndName::isOttParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutInserts && fire::effects::isParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutModuleOrder && fire::module_order::isParameterID(parameterWithID->paramID))
             continue;
         ++expectedParameterCount;
         if (! snapshot.hasAttribute(parameterWithID->paramID))
@@ -282,6 +287,9 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     bool legacyWithoutInserts = false;
     if (! validateParameterFamily(xml, processor, legacyWithoutInserts, "insertEffectsSchemaVersion", fire::effects::isParameterID))
         return false;
+    bool legacyWithoutModuleOrder = false;
+    if (! validateParameterFamily(xml, processor, legacyWithoutModuleOrder, "moduleOrderSchemaVersion", fire::module_order::isParameterID))
+        return false;
     // Unversioned and v1 files predate complete model snapshots. Preserve
     // their historical default/migration behaviour. A v2 document is an
     // explicit complete snapshot, so accepting a sparse or truncated one
@@ -309,6 +317,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         if (legacyWithoutOtt && ParameterIDAndName::isOttParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutInserts && fire::effects::isParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutModuleOrder && fire::module_order::isParameterID(parameterWithID->paramID))
             continue;
         ++parameterCount;
         if (! isStrictNumberInRange(xml, parameterWithID->paramID, 0.0, 1.0))
@@ -357,6 +367,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("presetFormatVersion", 2);
     xml.setAttribute("ottSchemaVersion", 1);
     xml.setAttribute("insertEffectsSchemaVersion", 1);
+    xml.setAttribute("moduleOrderSchemaVersion", 1);
     xml.setAttribute("pluginVersion", VERSION);
 
     for (const auto& param : processor.getParameters())

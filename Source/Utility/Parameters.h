@@ -11,6 +11,7 @@
 #pragma once
 #include "../GUI/InterfaceDefines.h"
 #include "InsertParameters.h"
+#include "ModuleOrder.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_core/juce_core.h"
 #include <array>
@@ -378,6 +379,8 @@ namespace ParameterIDAndName
                 for (int field = 0; field < fire::effects::fieldCount; ++field)
                     result.push_back({"FX " + juce::String(slot + 1) + " Field " + juce::String(field + 1),
                                       fire::effects::parameterBase(slot, field, false)});
+            for (int node = 0; node < fire::module_order::capacity; ++node)
+                result.push_back({"Module Order " + juce::String(node), fire::module_order::parameterBase(node, false)});
             return result;
         }();
         return params;

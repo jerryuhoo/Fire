@@ -305,7 +305,10 @@ private:
                 const juce::Component::SafePointer<SlotButton> safe(this);
                 cancelRowPointer(false);
                 if (! safe) return;
-                if (! event.mods.isAnyMouseButtonDown() && isShowing() && isEnabled())
+                // JUCE delivers mouseUp with the modifiers from before the
+                // release, including the released left button itself.
+                if (! event.mods.isRightButtonDown() && ! event.mods.isMiddleButtonDown()
+                    && ! event.mods.isPopupMenu() && isShowing() && isEnabled())
                 { if (onRowDrop) onRowDrop(event); }
                 else if (onRowCancel) onRowCancel();
                 return;

@@ -137,7 +137,7 @@ TEST_CASE("Rack drag commits one ordered transaction and preserves parameter and
     static_cast<juce::Component&>(row).mouseDrag(event(row, destination, origin, juce::ModifierKeys::leftButtonModifier, true));
     CHECK(f.order() == std::vector<int>{0, 1, 2, 3});
     CHECK(changes.values == 0); CHECK(changes.starts == 0);
-    static_cast<juce::Component&>(row).mouseUp(event(row, destination, origin, {}, true));
+    static_cast<juce::Component&>(row).mouseUp(event(row, destination, origin, juce::ModifierKeys::leftButtonModifier, true));
     CHECK(f.order() == std::vector<int>{1, 2, 3, 0});
     CHECK(changes.values == 4); CHECK(changes.starts == 4); CHECK(changes.ends == 4);
     CHECK(clicks == 0); CHECK(f.selections == 1);
@@ -187,7 +187,7 @@ TEST_CASE("Rack drag auto-scrolls to offscreen effects and keeps the five-row pi
     f.tick(90);
     CHECK(f.nav.getViewport().getViewPositionY() > pitch * 3);
     CHECK(f.nav.getRowPitch() == pitch);
-    static_cast<juce::Component&>(row).mouseUp(event(row, f.inRow(row, edge), origin, {}, true));
+    static_cast<juce::Component&>(row).mouseUp(event(row, f.inRow(row, edge), origin, juce::ModifierKeys::leftButtonModifier, true));
     CHECK(f.order() == std::vector<int>{1, 2, 3, 4, 5, 6, 7, 0});
     CHECK(f.selections == 0);
 }

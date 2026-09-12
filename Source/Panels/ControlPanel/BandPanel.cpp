@@ -76,6 +76,21 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     createButtons();
     createComboBoxes(); // Create distortion mode dropdowns
 
+    std::array<ModulatableSlider*, fire::effects::controlCount> insertKnobs {};
+    for (size_t i = 0; i < insertKnobs.size(); ++i)
+    {
+        const auto key = "InsertControl" + juce::String(static_cast<int>(i));
+        createAndConfigureSlider(key, "", fire::ui::colours::chorus);
+        insertKnobs[i] = modulatableSliderComponents.at(key).get();
+        insertKnobs[i]->setInteractionOnlyReadout(true);
+    }
+    insertControls.setControls(insertKnobs);
+    insertControls.bind(1, 0);
+    addChildComponent(insertControls);
+    addAndMakeVisible(effectNavigation);
+    effectNavigation.setBuiltins({{&oscSwitch, &driveBypassButton}, {&shapeSwitch, &shapeBypassButton}, {&compressorSwitch, &compressorBypassButton}, {&widthSwitch, &widthBypassButton}, {&ottSwitch, &ottBypassButton}});
+    effectNavigation.onSelectEffect = [this](int slot) { selectInsertEffect(slot); };
+
     // Assign callbacks to all modulatable sliders in this panel
     for (auto& sliderPair : modulatableSliderComponents)
     {
@@ -132,6 +147,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
 
 BandPanel::~BandPanel()
 {
+    effectNavigation.onSelectEffect = nullptr;
     for (auto& sliderPair : modulatableSliderComponents)
     {
         sliderPair.second->onInteractionEnded = nullptr;
@@ -392,6 +408,7 @@ void BandPanel::setupComponentGroups()
     allControls.addArray(compressorComponents);
     allControls.addArray(widthComponents);
     allControls.addArray(ottComponents);
+    allControls.add(&insertControls);
     for (auto& modeBox : distortionModes)
         allControls.add(&modeBox);
 }
@@ -407,15 +424,6 @@ void BandPanel::paint(juce::Graphics& g)
     if (! chromeCache.isNull())
         g.drawImage(chromeCache, getLocalBounds().toFloat());
 
-    const auto selectionBounds = getModuleSelectionBounds(moduleSelectionPosition.current);
-    if (! selectionBounds.isEmpty())
-    {
-        const auto radius = juce::jmin(selectionBounds.getHeight() * 0.24f,
-                                       fire::ui::Metrics::radius * scale);
-
-        g.setColour(fire::ui::colours::raised);
-        g.fillRoundedRectangle(selectionBounds, radius);
-    }
 }
 
 void BandPanel::resized()
@@ -461,7 +469,6 @@ void BandPanel::resized()
         return card;
     };
 
-    auto switchColumnArea = contentArea(tabAreaRect);
     auto knobsColumnArea = contentArea(knobsAreaRect);
     auto graphColumnArea = contentArea(graphAreaRect);
     auto outputColumnArea = contentArea(outputAreaRect);
@@ -487,37 +494,10 @@ void BandPanel::resized()
 
     const int secondaryKnobHeight = secondaryKnobSize + valueHeight;
 
-    // --- Module rail ---
-    juce::FlexBox switchColumnBox;
-    switchColumnBox.flexDirection = juce::FlexBox::Direction::column;
-    switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
-    const auto rowMargin = juce::FlexItem::Margin(juce::jmax(1.0f, 2.0f * uiScale));
-    switchColumnBox.items.add(juce::FlexItem(oscSwitch).withFlex(1.0f).withMargin(rowMargin));
-    switchColumnBox.items.add(juce::FlexItem(shapeSwitch).withFlex(1.0f).withMargin(rowMargin));
-    switchColumnBox.items.add(juce::FlexItem(compressorSwitch).withFlex(1.0f).withMargin(rowMargin));
-    switchColumnBox.items.add(juce::FlexItem(widthSwitch).withFlex(1.0f).withMargin(rowMargin));
-    switchColumnBox.items.add(juce::FlexItem(ottSwitch).withFlex(1.0f).withMargin(rowMargin));
-    switchColumnBox.performLayout(switchColumnArea);
-
-    auto layoutBypassButton = [&](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
-    {
-        auto parentBounds = parentSwitch.getBounds();
-        const int bypassSize = juce::roundToInt(juce::jlimit(16.0f * uiScale,
-                                                            24.0f * uiScale,
-                                                            parentBounds.getHeight() * 0.46f));
-
-        bypass.setBounds(parentBounds.getX() + juce::roundToInt(7.0f * uiScale),
-                         parentBounds.getCentreY() - (bypassSize / 2),
-                         bypassSize,
-                         bypassSize);
-        bypass.toFront(false);
-    };
-
-    layoutBypassButton(driveBypassButton, oscSwitch);
-    layoutBypassButton(shapeBypassButton, shapeSwitch);
-    layoutBypassButton(compressorBypassButton, compressorSwitch);
-    layoutBypassButton(widthBypassButton, widthSwitch);
-    layoutBypassButton(ottBypassButton, ottSwitch);
+    effectNavigation.setBounds(tabAreaRect);
+    effectNavigation.setScale(uiScale);
+    insertControls.setScale(uiScale);
+    insertControls.setBounds(knobsColumnArea);
 
     // --- Active module controls ---
     if (oscSwitch.getToggleState())
@@ -682,7 +662,8 @@ void BandPanel::rebuildChromeCache(float displayScale)
 
     if (ottSwitch.getToggleState()) { moduleTitle = "OTT"; graphTitle = "DYNAMICS"; }
 
-    drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "MODULE");
+    if (selectedInsert >= 0) { moduleTitle = fire::effects::name(processor.getInsertEffectType(focusBandNum + 1, selectedInsert)); graphTitle = "OUTPUT"; }
+    drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "MODE");
     drawMinimalTitle(cacheGraphics, titleFor(knobsAreaRect), moduleTitle);
     drawMinimalTitle(cacheGraphics, titleFor(graphAreaRect), graphTitle);
     drawMinimalTitle(cacheGraphics,
@@ -824,6 +805,7 @@ void BandPanel::restoreComponentsObscuredByZoom() noexcept
 
 GraphTemplate* BandPanel::getSelectedModuleGraph() noexcept
 {
+    if (selectedInsert >= 0) return &oscilloscope;
     if (ottSwitch.getToggleState()) return &ottGraph;
     if (shapeSwitch.getToggleState())
         return &distortionGraph;
@@ -868,6 +850,45 @@ void BandPanel::setAnimatedModuleTarget(int moduleIndex)
     startContentTransition(knobsAreaRect.getUnion(graphAreaRect));
 }
 
+void BandPanel::selectInsertEffect(int slot)
+{
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    if (slot < 0 || processor.getInsertEffectType(focusBandNum + 1, slot) == fire::effects::Type::none)
+    {
+        selectedInsert = -1;
+        oscSwitch.setToggleState(true, juce::sendNotificationSync);
+        return;
+    }
+    dismissTransientInteraction();
+    if (! safeThis) return;
+    clearGraphZoom();
+    if (! safeThis) return;
+    selectedInsert = slot;
+    effectNavigation.setSelectedSlot(slot);
+    for (auto* group : {&driveComponents, &shapeComponents, &compressorComponents, &widthComponents, &ottComponents})
+    {
+        setVisibility(*group, false);
+        if (! safeThis) return;
+    }
+    for (auto* graph : {static_cast<GraphTemplate*>(&distortionGraph), static_cast<GraphTemplate*>(&vuPanel),
+                       static_cast<GraphTemplate*>(&widthGraph), static_cast<GraphTemplate*>(&ottGraph)})
+    {
+        graph->setVisible(false);
+        if (! safeThis) return;
+    }
+    oscilloscope.setVisible(true);
+    insertControls.bind(focusBandNum + 1, slot);
+    if (! safeThis) return;
+    insertControls.setActive(true);
+    if (! safeThis) return;
+    modulatableSliderComponents.at(OUTPUT_NAME)->setInteractionOnlyReadout(true);
+    modulatableSliderComponents.at(MIX_NAME)->setInteractionOnlyReadout(true);
+    startContentTransition(knobsAreaRect.getUnion(graphAreaRect));
+    resized(); invalidateChromeCache();
+    auto callback = onModuleChanged;
+    if (callback) callback();
+}
+
 juce::Rectangle<float> BandPanel::getModuleSelectionBounds(float modulePosition) const
 {
     const std::array<const juce::TextButton*, 5> switches {
@@ -878,8 +899,10 @@ juce::Rectangle<float> BandPanel::getModuleSelectionBounds(float modulePosition)
     const auto lowerIndex = juce::jlimit(0, 3, static_cast<int>(std::floor(modulePosition)));
     const auto upperIndex = juce::jmin(4, lowerIndex + 1);
     const auto mix = modulePosition - static_cast<float>(lowerIndex);
-    const auto lower = switches[static_cast<size_t>(lowerIndex)]->getBounds().toFloat();
-    const auto upper = switches[static_cast<size_t>(upperIndex)]->getBounds().toFloat();
+    const auto* lowerButton = switches[static_cast<size_t>(lowerIndex)];
+    const auto* upperButton = switches[static_cast<size_t>(upperIndex)];
+    const auto lower = getLocalArea(lowerButton, lowerButton->getLocalBounds()).toFloat();
+    const auto upper = getLocalArea(upperButton, upperButton->getLocalBounds()).toFloat();
 
     if (lower.isEmpty())
         return {};
@@ -900,6 +923,11 @@ int BandPanel::getOttPreviewDirection() const
 
 void BandPanel::animationTick(float deltaSeconds)
 {
+    const juce::Component::SafePointer<BandPanel> safeOwner(this);
+    effectNavigation.animationTick(deltaSeconds);
+    if (! safeOwner) return;
+    insertControls.refresh();
+    if (! safeOwner) return;
     if (ottSwitch.getToggleState())
     {
         auto* rawUp = processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(OTT_UPWARD_ID, focusBandNum));
@@ -995,6 +1023,7 @@ void BandPanel::dismissButtonInteractions() noexcept
 
 void BandPanel::dismissTransientInteraction() noexcept
 {
+    effectNavigation.dismiss();
     const juce::Component::SafePointer<BandPanel> safeThis(this);
     for (auto* slider : modulatableSliders)
     {
@@ -1305,6 +1334,10 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
 
     if (isSwitch)
     {
+        selectedInsert = -1;
+        effectNavigation.setSelectedSlot(-1);
+        insertControls.setActive(false);
+        if (! safeThis) return;
         modulatableSliderComponents.at(OUTPUT_NAME)->setInteractionOnlyReadout(ottSwitch.getToggleState());
         modulatableSliderComponents.at(MIX_NAME)->setInteractionOnlyReadout(ottSwitch.getToggleState());
         resized();
@@ -1372,6 +1405,11 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
         return;
 
     focusBandNum = num;
+    effectNavigation.setScope(num + 1);
+    if (! safeThis) return;
+    if (selectedInsert >= 0) selectInsertEffect(selectedInsert);
+    else insertControls.bind(num + 1, 0);
+    if (! safeThis) return;
     lastGraphTelemetryTimeMs = -1.0;
     ottGraph.setLevels(-120.0f, 0.0f);
     ottGraph.resetVisuals();

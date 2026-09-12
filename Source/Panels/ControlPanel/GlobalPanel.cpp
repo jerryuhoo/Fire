@@ -82,6 +82,21 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
 
     vuPanel.setFocusBandNum(-1);
 
+    std::array<ModulatableSlider*, fire::effects::controlCount> insertKnobs {};
+    for (size_t i = 0; i < insertKnobs.size(); ++i)
+    {
+        const auto key = "InsertControl" + juce::String(static_cast<int>(i));
+        createAndConfigureSlider(key, "", fire::ui::colours::chorus);
+        insertKnobs[i] = modulatableSliderComponents.at(key).get();
+        insertKnobs[i]->setInteractionOnlyReadout(true);
+    }
+    insertControls.setControls(insertKnobs);
+    insertControls.bind(0, 0);
+    addChildComponent(insertControls);
+    addAndMakeVisible(effectNavigation);
+    effectNavigation.setBuiltins({{&filterSwitch, filterBypassButton.get()}, {&downsampleSwitch, downsampleBypassButton.get()}, {&graphSwitch, nullptr}});
+    effectNavigation.onSelectEffect = [this](int slot) { selectInsertEffect(slot); };
+
     // Assign callbacks to all modulatable sliders in this panel
     for (auto& sliderPair : modulatableSliderComponents)
     {
@@ -112,6 +127,7 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
 
 GlobalPanel::~GlobalPanel()
 {
+    effectNavigation.onSelectEffect = nullptr;
     dismissTransientInteraction();
 
     filterSwitch.removeListener(this);
@@ -124,6 +140,7 @@ GlobalPanel::~GlobalPanel()
 
 void GlobalPanel::dismissTransientInteraction() noexcept
 {
+    effectNavigation.dismiss();
     const juce::Component::SafePointer<GlobalPanel> safeThis(this);
     for (auto* slider : modulatableSliders)
     {
@@ -246,6 +263,11 @@ void GlobalPanel::createSliders()
     createAndConfigureSlider(BIT_DEPTH_NAME, "Bits", lofiColour, " bit");
     createAndConfigureSlider(JITTER_NAME, "Jitter", lofiColour);
     createAndConfigureSlider(DOWNSAMPLE_MIX_NAME, "Mix", lofiColour);
+    for (size_t i = 0; i < fire::effects::tapeIDs.size(); ++i)
+        createAndConfigureSlider(fire::effects::tapeNames[i], fire::effects::tapeNames[i], lofiColour);
+    for (const auto& name : {juce::String(DOWNSAMPLE_NAME), juce::String(BIT_DEPTH_NAME), juce::String(JITTER_NAME),
+                             juce::String(DOWNSAMPLE_MIX_NAME), juce::String("Tape"), juce::String("Wow"), juce::String("Flutter")})
+        modulatableSliderComponents.at(name)->setInteractionOnlyReadout(true);
 
     // Filter Knobs
     const auto filterColour = fire::ui::colours::filter;
@@ -449,10 +471,12 @@ void GlobalPanel::setupComponentGroups()
         modulatableSliderComponents.at(JITTER_NAME).get(),
         modulatableSliderComponents.at(DOWNSAMPLE_MIX_NAME).get(),
     };
+    for (auto* name : fire::effects::tapeNames) downsampleComponents.add(modulatableSliderComponents.at(name).get());
 
     allControls.addArray(filterComponents);
     allControls.addArray(downsampleComponents);
     allControls.addArray(graphComponents);
+    allControls.add(&insertControls);
     allControls.add(modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME).get());
     allControls.add(modulatableSliderComponents.at(GLOBAL_MIX_NAME).get());
 }
@@ -520,22 +544,6 @@ void GlobalPanel::paint(juce::Graphics& g)
     if (! chromeCache.isNull())
         g.drawImage(chromeCache, getLocalBounds().toFloat());
 
-    if (selectionAnimationInitialised)
-    {
-        if (auto* selectedSwitch = getSelectedSwitch())
-        {
-            auto selectionBounds = selectedSwitch->getBounds().toFloat().reduced(
-                juce::jmax(0.5f, 1.0f * scale));
-            selectionBounds.setY(selectionY.current);
-
-            const auto radius = juce::jmin(selectionBounds.getHeight() * 0.5f,
-                                           fire::ui::Metrics::radius * scale);
-
-            g.setColour(fire::ui::colours::raised);
-            g.fillRoundedRectangle(selectionBounds, radius);
-
-        }
-    }
 }
 
 void GlobalPanel::resized()
@@ -579,7 +587,6 @@ void GlobalPanel::resized()
         return card;
     };
 
-    auto switchColumnArea = contentArea(tabAreaRect);
     auto knobsColumnArea = contentArea(controlsAreaRect);
     auto outputColumnArea = contentArea(outputAreaRect);
 
@@ -600,34 +607,18 @@ void GlobalPanel::resized()
                                                           knobsColumnArea.getHeight() - valueHeight }));
     const int ordinaryKnobHeight = ordinaryKnobSize + valueHeight;
 
-    // --- Process rail ---
-    juce::FlexBox switchColumnBox;
-    switchColumnBox.flexDirection = juce::FlexBox::Direction::column;
-    switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
-    switchColumnBox.alignItems = juce::FlexBox::AlignItems::stretch;
-    const auto rowMargin = juce::FlexItem::Margin(juce::jmax(1.0f, 2.0f * uiScale));
-    switchColumnBox.items.add(juce::FlexItem(filterSwitch).withFlex(1.0f).withMargin(rowMargin));
-    switchColumnBox.items.add(juce::FlexItem(downsampleSwitch).withFlex(1.0f).withMargin(rowMargin));
-    switchColumnBox.items.add(juce::FlexItem(graphSwitch).withFlex(1.0f).withMargin(rowMargin));
-    switchColumnBox.performLayout(switchColumnArea);
-
-    auto layoutBypassButton = [&](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
+    effectNavigation.setBounds(tabAreaRect);
+    effectNavigation.setScale(uiScale);
+    insertControls.setScale(uiScale);
+    if (selectedInsert >= 0)
     {
-        auto parentBounds = parentSwitch.getBounds();
-        const int bypassSize = juce::roundToInt(juce::jlimit(16.0f * uiScale,
-                                                            24.0f * uiScale,
-                                                            parentBounds.getHeight() * 0.46f));
-
-        bypass.setBounds(parentBounds.getX() + juce::roundToInt(7.0f * uiScale),
-                         parentBounds.getCentreY() - (bypassSize / 2),
-                         bypassSize,
-                         bypassSize);
-        bypass.toFront(false);
-    };
-
-    layoutBypassButton(*filterBypassButton, filterSwitch);
-    layoutBypassButton(*downsampleBypassButton, downsampleSwitch);
-
+        auto insertArea = knobsColumnArea;
+        auto graphArea = insertArea.removeFromRight(juce::jmin(insertArea.getWidth() / 2, juce::roundToInt(230.0f * uiScale)));
+        insertArea.removeFromRight(controlGap);
+        insertControls.setBounds(insertArea);
+        oscilloscope.setBounds(graphArea);
+        if (zoomedGraph != nullptr) zoomedGraph->setBounds(knobsColumnArea.reduced(2));
+    }
     updateSelectionTarget(! selectionAnimationInitialised);
 
     // --- Master output card ---
@@ -714,15 +705,19 @@ void GlobalPanel::resized()
     }
     else if (downsampleSwitch.getToggleState())
     {
-        auto knobRow = knobsColumnArea.withSizeKeepingCentre(ordinaryKnobSize * 4 + controlGap * 3,
-                                                             ordinaryKnobHeight);
-        modulatableSliderComponents.at(DOWNSAMPLE_NAME)->setBounds(knobRow.removeFromLeft(ordinaryKnobSize));
-        knobRow.removeFromLeft(controlGap);
-        modulatableSliderComponents.at(BIT_DEPTH_NAME)->setBounds(knobRow.removeFromLeft(ordinaryKnobSize));
-        knobRow.removeFromLeft(controlGap);
-        modulatableSliderComponents.at(JITTER_NAME)->setBounds(knobRow.removeFromLeft(ordinaryKnobSize));
-        knobRow.removeFromLeft(controlGap);
-        modulatableSliderComponents.at(DOWNSAMPLE_MIX_NAME)->setBounds(knobRow.removeFromLeft(ordinaryKnobSize));
+        const auto size = juce::jmax(1, juce::jmin(ordinaryKnobSize, (knobsColumnArea.getHeight() - controlGap) / 2 - valueHeight));
+        auto area = knobsColumnArea.withSizeKeepingCentre(size * 4 + controlGap * 3, (size + valueHeight) * 2 + controlGap);
+        constexpr const char* names[] {DOWNSAMPLE_NAME, BIT_DEPTH_NAME, JITTER_NAME, DOWNSAMPLE_MIX_NAME, "Tape", "Wow", "Flutter"};
+        for (int row = 0; row < 2; ++row)
+        {
+            auto strip = area.removeFromTop(size + valueHeight); area.removeFromTop(controlGap);
+            if (row == 1) strip = strip.withSizeKeepingCentre(size * 3 + controlGap * 2, size + valueHeight);
+            for (int column = 0; column < (row == 0 ? 4 : 3); ++column)
+            {
+                modulatableSliderComponents.at(names[row * 4 + column])->setBounds(strip.removeFromLeft(size));
+                strip.removeFromLeft(controlGap);
+            }
+        }
     }
     else if (graphSwitch.getToggleState())
     {
@@ -752,6 +747,11 @@ void GlobalPanel::resized()
 
 void GlobalPanel::animationTick(float deltaSeconds)
 {
+    const juce::Component::SafePointer<GlobalPanel> safeOwner(this);
+    effectNavigation.animationTick(deltaSeconds);
+    if (! safeOwner) return;
+    insertControls.refresh();
+    if (! safeOwner) return;
     advanceContentTransition(deltaSeconds);
     if (! selectionAnimationInitialised)
         return;
@@ -786,6 +786,7 @@ void GlobalPanel::setScale(float newScale)
 
 juce::TextButton* GlobalPanel::getSelectedSwitch() noexcept
 {
+    if (selectedInsert >= 0) return nullptr;
     if (downsampleSwitch.getToggleState())
         return &downsampleSwitch;
     if (graphSwitch.getToggleState())
@@ -838,6 +839,7 @@ void GlobalPanel::rebuildChromeCache(float displayScale)
     };
 
     juce::String sectionTitle { "FILTER" };
+    if (selectedInsert >= 0) sectionTitle = fire::effects::name(processor.getInsertEffectType(0, selectedInsert));
     if (downsampleSwitch.getToggleState())
         sectionTitle = "LO-FI";
     else if (graphSwitch.getToggleState())
@@ -1049,6 +1051,12 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
 
     if (isSwitch)
     {
+        selectedInsert = -1;
+        effectNavigation.setSelectedSlot(-1);
+        insertControls.setActive(false);
+        if (! safeThis) return;
+        modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setInteractionOnlyReadout(downsampleSwitch.getToggleState());
+        modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setInteractionOnlyReadout(downsampleSwitch.getToggleState());
         startContentTransition(controlsAreaRect);
         resized();
         if (safeThis == nullptr)
@@ -1056,6 +1064,37 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
 
         invalidateChromeCache();
     }
+}
+
+void GlobalPanel::selectInsertEffect(int slot)
+{
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    if (slot < 0 || processor.getInsertEffectType(0, slot) == fire::effects::Type::none)
+    {
+        selectedInsert = -1;
+        filterSwitch.setToggleState(true, juce::sendNotificationSync);
+        return;
+    }
+    dismissTransientInteraction();
+    if (! safeThis) return;
+    clearGraphZoom();
+    if (! safeThis) return;
+    selectedInsert = slot;
+    effectNavigation.setSelectedSlot(slot);
+    for (auto* group : {&filterComponents, &downsampleComponents, &graphComponents})
+    {
+        setVisibility(*group, false);
+        if (! safeThis) return;
+    }
+    insertControls.bind(0, slot);
+    if (! safeThis) return;
+    insertControls.setActive(true);
+    if (! safeThis) return;
+    oscilloscope.setVisible(true);
+    modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setInteractionOnlyReadout(true);
+    modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setInteractionOnlyReadout(true);
+    startContentTransition(controlsAreaRect);
+    resized(); invalidateChromeCache();
 }
 
 void GlobalPanel::updateFilterKnobVisibility()

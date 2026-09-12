@@ -18,6 +18,7 @@
 #include "../ControlPanel/Graph Components/VUPanel.h"
 #include "../ControlPanel/Graph Components/WidthGraph.h"
 #include "PanelBase.h"
+#include "../../GUI/InsertEffectControls.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <array>
 #include <atomic>
@@ -115,6 +116,7 @@ private:
     juce::Rectangle<float> getModuleSelectionBounds(float modulePosition) const;
 
     void createSliders();
+    void selectInsertEffect(int slot);
     void createLabels();
     void createButtons();
     void createComboBoxes(); // New function
@@ -207,6 +209,9 @@ private:
     DriveGraphPreviewPhase driveGraphPreviewPhase =
         DriveGraphPreviewPhase::idle;
     GraphTemplate* graphBeforeDrivePreview = nullptr;
+    fire::ui::EffectRackNavigation effectNavigation {processor, 1};
+    InsertEffectControls insertControls {processor};
+    int selectedInsert = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BandPanel)
 };

@@ -440,3 +440,21 @@ OTT uses a blue-violet palette distinct from Compressor. Threshold lines have no
 Ribbons rise for upward compression and sink for downward compression. Their shape, local opacity and saturation follow the live logarithmic spectrum; motion strength follows wet-weighted dynamics activity, excluding output trim. Higher-frequency energy produces faster ripples. Dragging a threshold previews its direction even without audio, and the preview fades away on release. Stale audio telemetry settles back to idle.
 
 OTT settings participate in presets, A/B comparisons and band copying. Older projects load with OTT disabled, preserving their existing processing. Existing parameter IDs and automation indices are retained.
+
+### Master and Band insert effects
+
+Use **MODE → +** in either **Master Lab** or **Band Lab** to add an effect. Each master/band chain has eight independent insert slots and can contain multiple instances of the same effect. The module rail keeps five fixed-height rows visible and scrolls as more effects are added. The selected module scrolls into view automatically.
+
+| Effect | Controls |
+| --- | --- |
+| Chorus | Rate, Depth, Delay, Feedback, Width, Mix. |
+| Delay | Time (10–2000 ms), Feedback, Tone, Ping-Pong, tempo Sync, Mix. Sync offers 1/16 through one bar, including dotted eighth/quarter notes, within the two-second delay capacity. |
+| Reverb | Size, Damping, Pre-delay, Width, Low Cut, Mix. |
+| Granular | Grain Size, Density, Pitch (±24 semitones), Position, Spray, Mix. Uses overlapping windowed grains from recent audio. |
+| Lo-Fi insert | Rate, Bits, Tape, Wow, Flutter, Mix. |
+
+The existing **Master Lo-Fi** page retains Rate, Bits, Jitter and Mix, and adds **Tape**, **Wow** and **Flutter**. Tape adds saturation and a softer high-frequency response; Wow introduces slow pitch drift and Flutter adds faster pitch variation. Zero Tape/Wow/Flutter preserves the previous Lo-Fi processing.
+
+Insert effects run in list order after the existing modules and before the chain's Output/Mix controls. Use each row's power button to bypass it, or right-click an inserted effect to move it up/down within the insert chain or remove it. Reordering retains that slot's parameters and LFO assignments. New effect values fade in while editing; the waveform shows the selected band's output or the master output.
+
+Every insert exposes six normalized host controls with effect-specific labels and units in Fire's UI. LFO modulation, presets, host state, A/B comparisons and band copying include the new controls. New host parameters are appended with a newer AU version hint, and older projects load empty insert racks with Tape/Wow/Flutter at zero. The insert stages add no reported processing latency; delay, pitch modulation, granular playback and reverb create their intended time offsets and tails in the wet signal. Tail reporting reserves conservative bounds so hosts do not cut long echoes prematurely.

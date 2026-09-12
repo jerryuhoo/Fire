@@ -1,0 +1,305 @@
+#pragma once
+#include "../PluginProcessor.h"
+#include "LookAndFeel.h"
+
+namespace fire::ui
+{
+inline juce::Colour effectColour(effects::Type type)
+{
+    switch (type)
+    {
+        case effects::Type::chorus: return colours::chorus;
+        case effects::Type::delay: return colours::delay;
+        case effects::Type::reverb: return colours::reverb;
+        case effects::Type::granular: return colours::granular;
+        case effects::Type::lofi: return colours::loFi;
+        case effects::Type::none: case effects::Type::count: return colours::textMuted;
+    }
+    return colours::textMuted;
+}
+
+// Reuses the existing module buttons rather than duplicating their attachments,
+// accessibility or selection behaviour. The row pitch always equals 1/5 of the
+// viewport; adding modules extends the content, never shrinks existing rows.
+class EffectRackNavigation final : public juce::Component
+{
+public:
+    struct Row { juce::TextButton* button; juce::ToggleButton* power; };
+    EffectRackNavigation(FireAudioProcessor& p, int initialScope) : processor(p), content(*this)
+    {
+        setInterceptsMouseClicks(false, true);
+        viewport.setViewedComponent(&content, false);
+        viewport.setScrollBarsShown(true, false);
+        viewport.setScrollOnDragMode(juce::Viewport::ScrollOnDragMode::never);
+        viewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, colours::textMuted.withAlpha(0.25f));
+        addAndMakeVisible(viewport);
+        addAndMakeVisible(addButton);
+        addButton.setButtonText("+"); addButton.setTitle("Add effect");
+        addButton.setTooltip("Add an effect to this chain (8 insert slots)");
+        addButton.setColour(juce::TextButton::buttonColourId, colours::raised);
+        addButton.setColour(juce::TextButton::textColourOffId, colours::textSecondary);
+        addButton.onClick = [this] { showAddMenu(); };
+        for (int slot = 0; slot < effects::slotCount; ++slot)
+        {
+            auto& button = insertButtons[static_cast<size_t>(slot)];
+            auto& power = powerButtons[static_cast<size_t>(slot)];
+            content.addChildComponent(button); content.addChildComponent(power);
+            button.getProperties().set("fireAnimatedSelection", true);
+            button.getProperties().set("fireModuleRail", true);
+            button.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+            button.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+            button.setColour(juce::TextButton::textColourOffId, colours::textSecondary);
+            button.setColour(juce::TextButton::textColourOnId, colours::textPrimary);
+            button.onClick = [this, slot] { if (onSelectEffect) onSelectEffect(slot); };
+            button.onContext = [this, slot] { showSlotMenu(slot); };
+            power.getProperties().set("iconType", "power");
+        }
+        setScope(initialScope);
+    }
+    ~EffectRackNavigation() override { dismiss(); viewport.setViewedComponent(nullptr, false); }
+    std::function<void(int)> onSelectEffect;
+
+    void setBuiltins(std::vector<Row> rows)
+    {
+        builtins = std::move(rows);
+        for (auto row : builtins)
+        {
+            content.addAndMakeVisible(*row.button);
+            if (row.power) content.addAndMakeVisible(*row.power);
+        }
+        rebuildRows();
+    }
+    void setScope(int nextScope)
+    {
+        if (scope == nextScope) return;
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        dismiss();
+        if (! safe) return;
+        scope = nextScope; selectedSlot = -1;
+        cachedTypes.fill(-1); cachedOrders.fill(-1);
+        addButton.setComponentID(scope == 0 ? "addMasterEffect" : "addBandEffect");
+        for (int slot = 0; slot < effects::slotCount; ++slot)
+        {
+            const auto i = static_cast<size_t>(slot);
+            attachments[i].reset();
+            auto id = effects::parameterID(scope, slot, effects::enabledField);
+            powerButtons[i].setComponentID(id);
+            powerButtons[i].setTitle((scope == 0 ? "Master" : "Band " + juce::String(scope)) + " FX " + juce::String(slot + 1) + " power");
+            attachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, id, powerButtons[i]);
+            insertButtons[i].setComponentID(effects::parameterID(scope, slot, effects::typeField));
+        }
+        refresh();
+    }
+    void setSelectedSlot(int slot)
+    {
+        selectedSlot = slot;
+        for (int i = 0; i < effects::slotCount; ++i) insertButtons[static_cast<size_t>(i)].setToggleState(i == slot, juce::dontSendNotification);
+        if (slot >= 0)
+            for (auto row : builtins) row.button->setToggleState(false, juce::dontSendNotification);
+        updateSelection(true);
+    }
+    void refresh()
+    {
+        bool changed = false;
+        for (int slot = 0; slot < effects::slotCount; ++slot)
+        {
+            const auto i = static_cast<size_t>(slot);
+            const auto type = processor.getInsertEffectType(scope, slot);
+            const auto order = processor.getInsertEffectOrder(scope, slot);
+            if (cachedTypes[i] != static_cast<int>(type) || cachedOrders[i] != order) changed = true;
+            if (cachedTypes[i] != static_cast<int>(type))
+            {
+                insertButtons[i].setButtonText(effects::name(type));
+                insertButtons[i].setTooltip(juce::String(effects::name(type)) + " · slot " + juce::String(slot + 1) + ". Right-click to move or remove.");
+                powerButtons[i].setColour(juce::ToggleButton::tickColourId, effectColour(type));
+                powerButtons[i].setColour(juce::ToggleButton::tickDisabledColourId, colours::disabled);
+                powerButtons[i].setTooltip("Enable or bypass " + juce::String(effects::name(type)) + " in this chain");
+            }
+            cachedTypes[i] = static_cast<int>(type); cachedOrders[i] = order;
+        }
+        if (! changed) return;
+        ++generation;
+        rebuildRows();
+        if (selectedSlot >= 0 && processor.getInsertEffectType(scope, selectedSlot) == effects::Type::none)
+        {
+            selectedSlot = -1;
+            if (onSelectEffect) onSelectEffect(-1);
+        }
+    }
+    void setScale(float value) { scale = value; resized(); }
+    void resized() override
+    {
+        auto area = getLocalBounds().reduced(juce::roundToInt(8.0f * scale));
+        const auto title = area.removeFromTop(juce::jmin(area.getHeight(), juce::roundToInt(22.0f * scale)));
+        const auto side = juce::jmin(title.getHeight(), juce::roundToInt(21.0f * scale));
+        addButton.setBounds(title.getRight() - side, title.getY() - juce::roundToInt(3.0f * scale), side, side);
+        viewport.setScrollBarThickness(juce::jmax(3, juce::roundToInt(4.0f * scale)));
+        viewport.setBounds(area);
+        layoutRows();
+    }
+    void animationTick(float dt)
+    {
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        refresh();
+        if (! safe) return;
+        updateSelection(false);
+        if (selectionY.advance(dt)) content.repaint();
+    }
+    void dismiss()
+    {
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        ++generation; addButton.dismissPointerGesture();
+        if (! safe) return;
+        for (auto& button : insertButtons) {button.dismissPointerGesture(); if (! safe) return;}
+        for (auto& button : powerButtons) {button.dismissPointerGesture(); if (! safe) return;}
+    }
+    int getRowPitch() const { return rowPitch; }
+    juce::Viewport& getViewport() { return viewport; }
+    int getScope() const noexcept { return scope; }
+    void showAddMenu()
+    {
+        if (! isShowing() || ! isEnabled()) return;
+        if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr) return;
+        bool room = false;
+        for (int slot = 0; slot < effects::slotCount; ++slot) room = room || processor.getInsertEffectType(scope, slot) == effects::Type::none;
+        juce::PopupMenu menu;
+        for (int type = 1; type < static_cast<int>(effects::Type::count); ++type)
+            menu.addItem(type, effects::name(static_cast<effects::Type>(type)), room);
+        const auto epoch = generation;
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        menu.showMenuAsync(prepareContextMenu(menu, addButton, addButton.getScreenBounds().getBottomLeft())
+                              .withMinimumWidth(juce::roundToInt(170.0f * scale))
+                              .withStandardItemHeight(juce::roundToInt(29.0f * scale)),
+            [safe, epoch](int result) {
+                if (! safe || result <= 0 || safe->generation != epoch || ! safe->isShowing() || ! safe->isEnabled()) return;
+                const auto slot = safe->processor.addInsertEffect(safe->scope, static_cast<effects::Type>(result));
+                if (! safe) return;
+                safe->refresh();
+                if (safe && slot >= 0 && safe->onSelectEffect) safe->onSelectEffect(slot);
+            });
+    }
+private:
+    class SlotButton final : public PrimaryTextButton
+    {
+    public:
+        std::function<void()> onContext;
+        void mouseDown(const juce::MouseEvent& event) override
+        {
+            if (event.mods.isPopupMenu() && ! event.mods.isMiddleButtonDown()
+                && ! (event.mods.isLeftButtonDown() && event.mods.isRightButtonDown()))
+            { if (onContext) onContext(); return; }
+            PrimaryTextButton::mouseDown(event);
+        }
+    };
+    class Content final : public juce::Component
+    {
+    public:
+        explicit Content(EffectRackNavigation& p) : owner(p) {}
+        void paint(juce::Graphics& g) override
+        {
+            if (! owner.selectionInitialised || ! owner.selectedButton()) return;
+            const auto margin = juce::jmax(1.0f, 2.0f * owner.scale);
+            auto bounds = juce::Rectangle<float>(margin, owner.selectionY.current, getWidth() - margin * 2,
+                                                 owner.rowPitch - margin * 2);
+            g.setColour(colours::raised);
+            g.fillRoundedRectangle(bounds, Metrics::radius * owner.scale);
+        }
+    private:
+        EffectRackNavigation& owner;
+    };
+    juce::TextButton* selectedButton() const
+    {
+        for (auto row : visibleRows) if (row.button->getToggleState()) return row.button;
+        return nullptr;
+    }
+    void rebuildRows()
+    {
+        visibleRows = builtins;
+        std::vector<int> active;
+        for (int slot = 0; slot < effects::slotCount; ++slot)
+            if (processor.getInsertEffectType(scope, slot) != effects::Type::none) active.push_back(slot);
+        std::stable_sort(active.begin(), active.end(), [&](int a, int b) {return processor.getInsertEffectOrder(scope, a) < processor.getInsertEffectOrder(scope, b);});
+        for (int slot = 0; slot < effects::slotCount; ++slot)
+        {
+            const bool visible = std::find(active.begin(), active.end(), slot) != active.end();
+            insertButtons[static_cast<size_t>(slot)].setVisible(visible);
+            powerButtons[static_cast<size_t>(slot)].setVisible(visible);
+        }
+        for (int slot : active) visibleRows.push_back({&insertButtons[static_cast<size_t>(slot)], &powerButtons[static_cast<size_t>(slot)]});
+        layoutRows();
+    }
+    void layoutRows()
+    {
+        rowPitch = juce::jmax(1, viewport.getHeight() / 5);
+        const auto width = juce::jmax(1, viewport.getWidth() - juce::roundToInt(6.0f * scale));
+        content.setSize(width, juce::jmax(viewport.getHeight(), rowPitch * static_cast<int>(visibleRows.size())));
+        const auto margin = juce::jmax(1, juce::roundToInt(2.0f * scale));
+        for (size_t i = 0; i < visibleRows.size(); ++i)
+        {
+            const auto row = juce::Rectangle<int>(0, static_cast<int>(i) * rowPitch, width, rowPitch).reduced(margin);
+            visibleRows[i].button->setBounds(row);
+            if (auto* power = visibleRows[i].power)
+            {
+                const auto size = juce::roundToInt(juce::jlimit(16.0f * scale, 24.0f * scale, row.getHeight() * 0.46f));
+                power->setBounds(row.getX() + juce::roundToInt(7.0f * scale), row.getCentreY() - size / 2, size, size);
+                power->toFront(false);
+            }
+        }
+        updateSelection(false); content.repaint();
+    }
+    void updateSelection(bool reveal)
+    {
+        auto* selected = selectedButton();
+        if (! selected) return;
+        const auto y = static_cast<float>(selected->getY());
+        if (! selectionInitialised || ! isShowing()) selectionY.snapTo(y); else selectionY.setTarget(y);
+        selectionInitialised = true;
+        if (reveal)
+        {
+            const auto top = viewport.getViewPositionY();
+            if (selected->getY() < top) viewport.setViewPosition(0, selected->getY());
+            else if (selected->getBottom() > top + viewport.getHeight())
+                viewport.setViewPosition(0, selected->getBottom() - viewport.getHeight());
+        }
+    }
+    void showSlotMenu(int slot)
+    {
+        if (! isShowing() || ! isEnabled() || ! insertButtons[static_cast<size_t>(slot)].isShowing()
+            || processor.getInsertEffectType(scope, slot) == effects::Type::none) return;
+        if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr) return;
+        juce::PopupMenu menu;
+        const auto* selected = &insertButtons[static_cast<size_t>(slot)];
+        const bool canMoveUp = visibleRows.size() > builtins.size() && visibleRows[builtins.size()].button != selected;
+        const bool canMoveDown = ! visibleRows.empty() && visibleRows.back().button != selected;
+        menu.addItem(1, "Move up", canMoveUp); menu.addItem(2, "Move down", canMoveDown);
+        menu.addSeparator(); menu.addItem(3, "Remove effect");
+        const auto epoch = generation;
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        auto& button = insertButtons[static_cast<size_t>(slot)];
+        menu.showMenuAsync(prepareContextMenu(menu, button, juce::Desktop::getMousePosition())
+                              .withMinimumWidth(juce::roundToInt(170.0f * scale))
+                              .withStandardItemHeight(juce::roundToInt(29.0f * scale)), [safe, epoch, slot](int result) {
+            if (! safe || safe->generation != epoch || ! safe->isShowing() || ! safe->isEnabled()) return;
+            if (result == 3) safe->processor.removeInsertEffect(safe->scope, slot);
+            else if (result == 1 || result == 2) safe->processor.moveInsertEffect(safe->scope, slot, result == 1 ? -1 : 1);
+            if (safe) safe->refresh();
+        });
+    }
+    void visibilityChanged() override { if (! isShowing()) dismiss(); }
+    void enablementChanged() override { if (! isEnabled()) dismiss(); }
+    FireAudioProcessor& processor;
+    juce::Viewport viewport;
+    Content content;
+    PrimaryTextButton addButton;
+    std::array<SlotButton, effects::slotCount> insertButtons;
+    std::array<PrimaryToggleButton, effects::slotCount> powerButtons;
+    std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>, effects::slotCount> attachments;
+    std::vector<Row> builtins, visibleRows;
+    std::array<int, effects::slotCount> cachedTypes {}, cachedOrders {};
+    SpringValue selectionY;
+    int scope = -1, selectedSlot = -1, rowPitch = 1;
+    bool selectionInitialised = false;
+    float scale = 1;
+    std::uint64_t generation = 0;
+};
+}

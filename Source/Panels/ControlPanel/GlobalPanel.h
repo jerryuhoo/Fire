@@ -16,6 +16,7 @@
 #include "Graph Components/VUPanel.h"
 #include "Graph Components/WidthGraph.h"
 #include "PanelBase.h"
+#include "../../GUI/InsertEffectControls.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <cstdint>
 #include <vector>
@@ -63,6 +64,7 @@ private:
 
     // Initialization helpers
     void createSliders();
+    void selectInsertEffect(int slot);
     void createLabels();
     void createButtons();
     void createComboBoxes();
@@ -153,6 +155,9 @@ private:
     GraphTemplate* zoomedGraph = nullptr;
     std::vector<juce::Component::SafePointer<juce::Component>>
         componentsHiddenForGraphZoom;
+    fire::ui::EffectRackNavigation effectNavigation {processor, 0};
+    InsertEffectControls insertControls {processor};
+    int selectedInsert = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GlobalPanel)
 };

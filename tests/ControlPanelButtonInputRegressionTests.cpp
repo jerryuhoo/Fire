@@ -267,8 +267,20 @@ std::vector<juce::Button*> collectDirectButtons(juce::Component& panel)
     std::vector<juce::Button*> buttons;
 
     for (auto* child : panel.getChildren())
+    {
         if (auto* button = dynamic_cast<juce::Button*>(child))
+        {
+            const auto id = button->getComponentID();
+            // Empty insert slots are deliberately absent from the module rail.
+            if ((id.startsWith("masterFx") || id.startsWith("bandFx")) && ! button->isVisible()) continue;
             buttons.push_back(button);
+        }
+        else if (dynamic_cast<juce::ScrollBar*>(child) == nullptr)
+        {
+            auto nested = collectDirectButtons(*child);
+            buttons.insert(buttons.end(), nested.begin(), nested.end());
+        }
+    }
 
     return buttons;
 }
@@ -370,14 +382,14 @@ TEST_CASE("Control-panel buttons reject popup and auxiliary pointer gestures",
     {
         BandPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
-        checkPanelButtons(panel, 14);
+        checkPanelButtons(panel, 15);
     }
 
     SECTION("global controls")
     {
         GlobalPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
-        checkPanelButtons(panel, 8);
+        checkPanelButtons(panel, 9);
     }
 }
 

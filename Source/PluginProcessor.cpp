@@ -151,6 +151,38 @@ bool hasStrictBooleanAttribute(const juce::XmlElement& xml,
     return value == "0" || value == "1";
 }
 
+bool readLoudnessMatchSettings(const juce::XmlElement* xml,
+                              fire::dsp::LoudnessMatchState::Settings& settings)
+{
+    settings = {};
+    if (xml == nullptr)
+        return true;
+    constexpr std::array<const char*, 6> attributes { "loudnessMatchVersion", "loudnessMatchEnabled",
+        "loudnessMatchReadyA", "loudnessMatchReadyB", "loudnessMatchGainA", "loudnessMatchGainB" };
+    const bool hasAny = std::any_of(attributes.begin(), attributes.end(),
+        [xml](const auto* name) { return xml->hasAttribute(name); });
+    if (! hasAny)
+        return true;
+    int version = 0;
+    if (! parseStrictNonNegativeIntegerAttribute(*xml, attributes[0], version) || version != 1
+        || ! hasStrictBooleanAttribute(*xml, attributes[1])
+        || ! hasStrictBooleanAttribute(*xml, attributes[2])
+        || ! hasStrictBooleanAttribute(*xml, attributes[3])
+        || ! hasStrictFiniteAttributeInRange(*xml, attributes[4], -18.0, 18.0)
+        || ! hasStrictFiniteAttributeInRange(*xml, attributes[5], -18.0, 18.0))
+        return false;
+    settings.enabled = xml->getBoolAttribute(attributes[1]);
+    for (size_t side = 0; side < 2; ++side)
+    {
+        settings.ready[side] = xml->getBoolAttribute(attributes[side + 2]);
+        double gainDb = 0.0;
+        parseStrictFiniteDouble(xml->getStringAttribute(attributes[side + 4]), gainDb);
+        settings.gainDb[side] = settings.ready[side] ? static_cast<float>(gainDb) : 0.0f;
+        settings.limited[side] = settings.ready[side] && std::abs(settings.gainDb[side]) >= 18.0f;
+    }
+    return true;
+}
+
 int countDirectChildrenWithTagName(const juce::XmlElement& parent,
                                    const char* tagName) noexcept
 {
@@ -2829,6 +2861,11 @@ void FireAudioProcessor::initialiseParameterCache()
             for (int field = 0; field < fire::effects::fieldCount; ++field)
                 insertParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][static_cast<size_t>(field)]
                     = cacheParameter(fire::effects::parameterID(scope, slot, field));
+    for (int scope = 0; scope < fire::clouds_params::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::clouds_params::slotCount; ++slot)
+            for (int field = 0; field < fire::clouds_params::fieldCount; ++field)
+                cloudsParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][static_cast<size_t>(field)]
+                    = cacheParameter(fire::clouds_params::parameterID(scope, slot, field));
 
     filterParameterCache.lowCutFrequency = cacheParameter(LOWCUT_FREQ_ID);
     filterParameterCache.lowCutGain = cacheParameter(LOWCUT_GAIN_ID);
@@ -2966,6 +3003,10 @@ bool FireAudioProcessor::isMidiEffect() const
 double FireAudioProcessor::getTailLengthSeconds() const
 {
     double master = 0, bandsTail = 0;
+    const auto activeBands = juce::jlimit(1, 4, juce::roundToInt(loadCachedParameter(numBandsParameter, 1.0f)));
+    bool anySolo = false;
+    for (int band = 0; band < activeBands; ++band)
+        anySolo = anySolo || loadCachedParameter(bandParameterCache[static_cast<size_t>(band)].solo) > 0.5f;
     for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
     {
         double tail = 0;
@@ -2974,7 +3015,22 @@ double FireAudioProcessor::getTailLengthSeconds() const
             const auto type = getInsertEffectType(scope, slot);
             if (type == fire::effects::Type::delay) tail += 180.0;
             else if (type == fire::effects::Type::reverb) tail += 60.0;
-            else if (type == fire::effects::Type::granular) tail += 2.5;
+            else if (type == fire::effects::Type::granular)
+            {
+                const auto& clouds = cloudsParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)];
+                const auto& insert = insertParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)];
+                const bool cloudsEnabled = loadCachedParameter(insert[fire::effects::enabledField]) > 0.5f;
+                const bool audibleScope = scope == 0 || (scope <= activeBands
+                    && loadCachedParameter(bandParameterCache[static_cast<size_t>(scope - 1)].enabled) > 0.5f
+                    && (! anySolo || loadCachedParameter(bandParameterCache[static_cast<size_t>(scope - 1)].solo) > 0.5f));
+                if (cloudsEnabled && audibleScope
+                    && (loadCachedParameter(clouds[fire::clouds_params::freezeField]) > 0.5f
+                        || loadCachedParameter(clouds[fire::clouds_params::feedbackField]) >= 1.0f))
+                    return std::numeric_limits<double>::infinity();
+                // Keep a conservative finite tail while a disabled slot's
+                // existing wet state completes its short bypass fade.
+                tail += 180.0;
+            }
             else if (type == fire::effects::Type::chorus) tail += 2.0;
             else if (type == fire::effects::Type::lofi) tail += 0.05;
         }
@@ -3116,6 +3172,16 @@ int FireAudioProcessor::addInsertEffect(int scope, fire::effects::Type type)
         const auto& descriptor = controls(type)[static_cast<size_t>(control)];
         write(freeSlot, control, descriptor.toNormalised(descriptor.initial));
     }
+    for (int field = 0; field < fire::clouds_params::fieldCount; ++field)
+    {
+        const auto id = fire::clouds_params::parameterID(scope, freeSlot, field);
+        clearModulationForParameter(id);
+        auto* parameter = treeState.getParameter(id);
+        const auto value = fire::clouds_params::defaults[static_cast<size_t>(field)];
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+        parameter->endChangeGesture();
+    }
     write(freeSlot, orderField, static_cast<float>(active.size() + 1));
     write(freeSlot, enabledField, 1);
     write(freeSlot, typeField, static_cast<float>(type));
@@ -3141,6 +3207,15 @@ void FireAudioProcessor::removeInsertEffect(int scope, int slot)
     const juce::ScopeGuard publish { [this] { requestMultibandTopologyReset(); } };
     for (int control = 0; control < static_cast<int>(controlCount); ++control)
         clearModulationForParameter(parameterID(scope, slot, control));
+    for (int field = 0; field < fire::clouds_params::fieldCount; ++field)
+    {
+        const auto id = fire::clouds_params::parameterID(scope, slot, field);
+        clearModulationForParameter(id);
+        auto* extension = treeState.getParameter(id);
+        extension->beginChangeGesture();
+        extension->setValueNotifyingHost(extension->getDefaultValue());
+        extension->endChangeGesture();
+    }
     auto* parameter = treeState.getParameter(parameterID(scope, slot, typeField));
     parameter->beginChangeGesture(); parameter->setValueNotifyingHost(0); parameter->endChangeGesture();
 }
@@ -3148,6 +3223,43 @@ void FireAudioProcessor::removeInsertEffect(int scope, int slot)
 void FireAudioProcessor::moveInsertEffect(int scope, int slot, int direction)
 {
     if (direction != 0) moveInsertEffectInternal(scope, slot, direction > 0 ? 1 : -1, true);
+}
+
+fire::dsp::LoudnessMatchState::View FireAudioProcessor::getLoudnessMatchState() const noexcept
+{
+    return loudnessMatch.view(stateAB.isCurrentA() ? 0 : 1, isBypassed.load(std::memory_order_acquire));
+}
+
+void FireAudioProcessor::setLoudnessMatchEnabled(bool enabled)
+{
+    loudnessMatch.setEnabled(enabled, stateAB.isCurrentA() ? 0 : 1);
+    updateHostDisplay(juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
+}
+
+void FireAudioProcessor::learnLoudnessMatch()
+{
+    const auto current = getLoudnessMatchState();
+    if (current.measuring)
+        loudnessMatch.cancelMeasurement(current.side);
+    else
+        loudnessMatch.requestLearn(current.side);
+    updateHostDisplay(juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
+}
+
+void FireAudioProcessor::clearCurrentLoudnessMatch() noexcept
+{
+    loudnessMatch.cancelMeasurements();
+    loudnessMatch.clearSide(stateAB.isCurrentA() ? 0 : 1);
+}
+
+void FireAudioProcessor::cancelLoudnessMatchMeasurement() noexcept
+{
+    loudnessMatch.cancelMeasurements();
+}
+
+void FireAudioProcessor::copyLoudnessMatchToOtherSide() noexcept
+{
+    loudnessMatch.copyToOtherSide(stateAB.isCurrentA() ? 0 : 1);
 }
 
 void FireAudioProcessor::moveInsertEffectToPosition(int scope, int slot, int position)
@@ -3246,6 +3358,11 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     if (! std::isfinite(hqLatency) || hqLatency < 0.0f)
         hqLatency = 0.0f;
     preparedHqLatency.store(hqLatency, std::memory_order_release);
+    loudnessMatch.prepare(safeSampleRate);
+    loudnessReference.setSize(outputChannels, maximumBlockSize);
+    loudnessReferenceDelay.setMaximumDelayInSamples(juce::jmax(1, static_cast<int>(std::ceil(hqLatency)) + 2));
+    loudnessReferenceDelay.prepare(spec);
+    loudnessReferenceWasActive = false;
     // Host PDC cannot safely follow an automatable quality switch. Report the
     // prepared HQ latency for both modes; base processing is delayed by the
     // same integer number of samples at the end of the callback.
@@ -3505,6 +3622,9 @@ FireAudioProcessor::captureSerializableMainStateSnapshot() const
     const auto currentEditorSize = getSavedEditorSize();
     const auto savedEditorSize = normaliseEditorSize(currentEditorSize.width,
                                                      currentEditorSize.height);
+    // Copy A/B does not change the audible topology generation. Hold its lock
+    // across both the alternate sound and the associated comparison gains.
+    const juce::ScopedLock abLock(stateAB.stateLock);
     return {
         std::move(lfoSnapshot.parameterState),
         std::move(lfoSnapshot.lfoData),
@@ -3513,7 +3633,8 @@ FireAudioProcessor::captureSerializableMainStateSnapshot() const
         std::move(presetIdentity.key),
         savedEditorSize.width,
         savedEditorSize.height,
-        stateAB.captureSerializableStateSnapshot()
+        stateAB.captureSerializableStateSnapshot(),
+        loudnessMatch.settings()
     };
 }
 
@@ -4483,6 +4604,8 @@ void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
 
 void FireAudioProcessor::performReset()
 {
+    loudnessMatch.suspendMeasurement();
+    loudnessReferenceWasActive = false;
     spectrumProcessor.reset();
     historySamplesUntilCapture = 0;
     synchroniseMultibandTopologyResetState();
@@ -4581,7 +4704,13 @@ void FireAudioProcessor::timerCallback()
 {
     // setLatencySamples synchronously notifies the host, so keep it on the
     // message thread. The prepared maximum is invariant across HQ automation.
-    publishLatencyToHost();
+    if (getLatencySamples() != juce::roundToInt(totalLatency.load(std::memory_order_acquire)))
+    {
+        publishLatencyToHost();
+        return; // A host notification may synchronously delete the processor.
+    }
+    if (loudnessMatch.takeCompletedNotification())
+        updateHostDisplay(juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
 }
 
 #ifndef JucePlugin_PreferredChannelConfigurations
@@ -4615,6 +4744,8 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
     // wet render. Protect the complete callback so subnormal tails cannot cause
     // floating-point assists while the plug-in is host-bypassed.
     juce::ScopedNoDenormals noDenormals;
+    loudnessMatch.suspendMeasurement();
+    loudnessReferenceWasActive = false;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     if (const auto hook = hostBypassDenormalStateHookForTesting.load(
             std::memory_order_acquire))
@@ -4865,6 +4996,24 @@ void FireAudioProcessor::processWetBlock(
     const bool requestedHq =
         activeAudioCallbackParameterSnapshot.requestedHq;
 
+    // Measure the raw host input against the final output, using a separate
+    // latency-matched reference. The crossover/solo dry bus is not raw input.
+    const auto& matchFrame = activeAudioCallbackParameterSnapshot.loudnessMatch;
+    const bool needsLoudnessReference = ! hostBypassShadow && loudnessMatch.needsReference(matchFrame);
+    if (needsLoudnessReference)
+    {
+        if (! loudnessReferenceWasActive)
+            loudnessReferenceDelay.reset();
+        loudnessReferenceDelay.setDelay(activeHqMode
+            ? preparedHqLatency.load(std::memory_order_relaxed)
+            : static_cast<float>(juce::roundToInt(preparedHqLatency.load(std::memory_order_relaxed))));
+        loudnessReference.makeCopyOf(buffer, true);
+        juce::dsp::AudioBlock<float> referenceBlock(loudnessReference);
+        juce::dsp::ProcessContextReplacing<float> referenceContext(referenceBlock);
+        loudnessReferenceDelay.process(referenceContext);
+    }
+    loudnessReferenceWasActive = needsLoudnessReference;
+
     mBuffer1.setSize(numBufferChannels, numSamples, false, false, true);
     mBuffer2.setSize(numBufferChannels, numSamples, false, false, true);
     mBuffer3.setSize(numBufferChannels, numSamples, false, false, true);
@@ -4932,6 +5081,10 @@ void FireAudioProcessor::processWetBlock(
     // untouched until normal processing resumes.
     if (hostBypassShadow)
         return;
+
+    loudnessMatch.process(loudnessReference, buffer, matchFrame,
+        capturedStableCallbackState && ! topologyTransitionActive && ! startTopologyTransition
+        && ! hqTransitionNeedsService && ! hasPendingTopologyChange());
 
     for (int bandIndex = 0; bandIndex < numBands; ++bandIndex)
     {
@@ -5062,6 +5215,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("ottSchemaVersion", 1);
     xmlState.setAttribute("insertEffectsSchemaVersion", 1);
     xmlState.setAttribute("moduleOrderSchemaVersion", 1);
+    xmlState.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xmlState.setAttribute("savedParameterCount",
                           mainState.parameterState.getNumChildren());
 
@@ -5079,6 +5233,9 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     // 1. save treestate (parameters)
     std::unique_ptr<juce::XmlElement> treeStateXml(
         mainState.parameterState.createXml());
+    for (auto* parameter : treeStateXml->getChildIterator())
+        if (fire::clouds_params::isReservedEngineParameterID(parameter->getStringAttribute("id")))
+            parameter->setAttribute("value", 1.0f);
     xmlState.insertChildElement(treeStateXml.release(), xmlIndex++);
 
     // 2. save current preset ID, width and height
@@ -5087,6 +5244,12 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     currentStateXml->setAttribute("currentPresetKey", mainState.currentPresetKey);
     currentStateXml->setAttribute("editorWidth", mainState.editorWidth);
     currentStateXml->setAttribute("editorHeight", mainState.editorHeight);
+    currentStateXml->setAttribute("loudnessMatchVersion", 1);
+    currentStateXml->setAttribute("loudnessMatchEnabled", mainState.loudnessMatch.enabled);
+    currentStateXml->setAttribute("loudnessMatchReadyA", mainState.loudnessMatch.ready[0]);
+    currentStateXml->setAttribute("loudnessMatchReadyB", mainState.loudnessMatch.ready[1]);
+    currentStateXml->setAttribute("loudnessMatchGainA", mainState.loudnessMatch.gainDb[0]);
+    currentStateXml->setAttribute("loudnessMatchGainB", mainState.loudnessMatch.gainDb[1]);
 
     xmlState.insertChildElement(currentStateXml.release(), xmlIndex++);
 
@@ -5200,6 +5363,19 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         if ((xmlState->hasAttribute("moduleOrderSchemaVersion")
              && (! parseStrictNonNegativeIntegerAttribute(*xmlState, "moduleOrderSchemaVersion", version) || version != 1))
             || moduleOrderCount != fire::module_order::parameterCount) return;
+    }
+    int cloudsParameterCount = 0;
+    int cloudsStateVersion = 0;
+    for (const auto& id : incomingParameterIDs)
+        if (fire::clouds_params::isParameterID(id)) ++cloudsParameterCount;
+    if (xmlState->hasAttribute("cloudsSchemaVersion") || cloudsParameterCount > 0)
+    {
+        cloudsStateVersion = 1;
+        if ((xmlState->hasAttribute("cloudsSchemaVersion")
+             && (! parseStrictNonNegativeIntegerAttribute(*xmlState, "cloudsSchemaVersion", cloudsStateVersion)
+                 || cloudsStateVersion < 1 || cloudsStateVersion > fire::clouds_params::schemaVersion))
+            || cloudsParameterCount != fire::clouds_params::parameterCount)
+            return;
     }
     if (hasStateFormatVersion != hasSavedParameterCount)
         return;
@@ -5330,6 +5506,47 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 smoothnessPresentInParameterState[static_cast<size_t>(i)] = true;
     }
 
+    // Only pre-v2 Granular slots whose old engine was Legacy are remapped.
+    // The canonical tree already contains finite, legal normalised insert
+    // controls; absence of the old engine field is an explicit Legacy marker.
+    bool migratedLegacyGranular = false;
+    juce::StringArray migratedCloudsRoutingTargets;
+    for (int scope = 0; scope < fire::clouds_params::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::clouds_params::slotCount; ++slot)
+        {
+            const auto engineID = fire::clouds_params::parameterID(scope, slot, fire::clouds_params::engineField);
+            auto engineState = findParameterState(treeToLoad, engineID);
+            const auto typeState = findParameterState(treeToLoad,
+                fire::effects::parameterID(scope, slot, fire::effects::typeField));
+            const bool wasLegacy = ! loadedParameterIDs.contains(engineID)
+                               || static_cast<float>(engineState.getProperty("value", 0.0f)) < 0.5f;
+            if (cloudsStateVersion < fire::clouds_params::schemaVersion
+                && static_cast<int>(typeState.getProperty("value", 0)) == 4 && wasLegacy)
+            {
+                migratedLegacyGranular = true;
+                std::array<float, 6> values;
+                std::array<juce::ValueTree, 6> controls;
+                for (int control = 0; control < 6; ++control)
+                {
+                    controls[static_cast<size_t>(control)] = findParameterState(treeToLoad,
+                        fire::effects::parameterID(scope, slot, control));
+                    values[static_cast<size_t>(control)] = static_cast<float>(
+                        controls[static_cast<size_t>(control)].getProperty("value", 0.5f));
+                }
+                values = fire::clouds_params::migrateLegacyGranular(values);
+                for (size_t control = 0; control < controls.size(); ++control)
+                    controls[control].setProperty("value", values[control], nullptr);
+                // These controls were inaudible in Legacy. In particular,
+                // do not freeze an empty new engine using an obsolete flag.
+                for (int field = fire::clouds_params::freezeField; field < fire::clouds_params::fieldCount; ++field)
+                    findParameterState(treeToLoad, fire::clouds_params::parameterID(scope, slot, field))
+                        .setProperty("value", fire::clouds_params::defaults[static_cast<size_t>(field)], nullptr);
+                for (int field = fire::clouds_params::spreadField; field < fire::clouds_params::fieldCount; ++field)
+                    migratedCloudsRoutingTargets.add(fire::clouds_params::parameterID(scope, slot, field));
+            }
+            engineState.setProperty("value", 1.0f, nullptr);
+        }
+
     // A correctly named but empty/foreign PARAMETERS node is not a usable Fire
     // state. Reject it transactionally rather than interpreting it as Init.
     if (recognisedParameterCount == 0)
@@ -5427,6 +5644,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             auto routing = ModulationRouting::readFromXml(*routingXml);
             if (routing.targetParameterID.isEmpty()
                 || treeState.getParameter(routing.targetParameterID) == nullptr
+                || migratedCloudsRoutingTargets.contains(routing.targetParameterID)
                 || loadedRoutingTargets.contains(routing.targetParameterID))
                 continue;
 
@@ -5436,6 +5654,9 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     }
 
     const auto* xmlCurrentState = xmlState->getChildByName("otherState");
+    fire::dsp::LoudnessMatchState::Settings restoredLoudnessMatch;
+    if (! readLoudnessMatchSettings(xmlCurrentState, restoredLoudnessMatch))
+        return;
     const auto presetKey = xmlCurrentState != nullptr
                                ? xmlCurrentState->getStringAttribute("currentPresetKey").trim()
                                : juce::String {};
@@ -5479,7 +5700,11 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 
         // A/B restoration mutates its internal snapshot, so keep it inside the
         // commit phase after the complete host chunk has passed validation.
-        stateAB.readFromXml(xmlState->getChildByName("AB_STATE"));
+        bool migratedAlternateGranular = false;
+        if (! stateAB.readFromXml(xmlState->getChildByName("AB_STATE"), &migratedAlternateGranular)
+            || migratedLegacyGranular || migratedAlternateGranular)
+            restoredLoudnessMatch = {}; // A fallback or engine migration changed the calibrated sound.
+        loudnessMatch.restore(restoredLoudnessMatch);
 
         // The scope guard publishes even if a foreign synchronous listener
         // throws, so no failed restore can strand the generation odd or retain
@@ -6456,6 +6681,28 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
                     (scope == 0 ? juce::String("Master") : "Band " + juce::String(scope)) + " Module " + juce::String(node + 1) + " Order",
                     -1, fire::module_order::capacity - 1, -1));
 
+    // Append the extension after every historical parameter. The original
+    // insert choice/ranges and AU indices retain their saved meaning.
+    for (int scope = 0; scope < fire::clouds_params::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::clouds_params::slotCount; ++slot)
+            for (int field = 0; field < fire::clouds_params::fieldCount; ++field)
+            {
+                const auto prefix = (scope == 0 ? juce::String("Master") : "Band " + juce::String(scope))
+                                  + " FX " + juce::String(slot + 1) + " Clouds ";
+                const juce::ParameterID id { fire::clouds_params::parameterID(scope, slot, field), 5 };
+                const auto name = prefix + fire::clouds_params::fieldNames[static_cast<size_t>(field)];
+                if (field == fire::clouds_params::engineField)
+                    parameters.push_back(std::make_unique<PChoice>(id, name + " (Reserved)",
+                        juce::StringArray { "Reserved", "Clouds" }, 1,
+                        juce::AudioParameterChoiceAttributes().withAutomatable(false).withMeta(true)));
+                else if (field == fire::clouds_params::freezeField)
+                    parameters.push_back(std::make_unique<PBool>(id, name, false));
+                else
+                    parameters.push_back(std::make_unique<PFloat>(id, name,
+                        juce::NormalisableRange<float>(0.0f, 1.0f),
+                        fire::clouds_params::defaults[static_cast<size_t>(field)]));
+            }
+
     return { parameters.begin(), parameters.end() };
 }
 
@@ -6485,6 +6732,28 @@ void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackP
             {
                 provider.modulationDepth = routing.depth; provider.isBipolar = routing.isBipolar;
                 target.sources[control] = routing.sourceLfoIndex;
+            }
+        }
+        const auto& clouds = cloudsParameters[static_cast<size_t>(scope)][slot];
+        const bool isGranular = target.effect.type == fire::effects::Type::granular;
+        target.effect.clouds.freeze = isGranular
+            && loadCachedParameter(clouds[fire::clouds_params::freezeField]) > 0.5f;
+        for (size_t control = 0; control < target.effect.clouds.values.size(); ++control)
+        {
+            const auto field = static_cast<size_t>(fire::clouds_params::spreadField) + control;
+            auto& provider = target.effect.clouds.values[control];
+            provider.lfoSignal = nullptr;
+            target.cloudsSources[control] = -1;
+            // Empty/non-granular slots have no Clouds modulation work.
+            if (! isGranular) continue;
+            provider.baseValue = loadCachedParameter(clouds[field], fire::clouds_params::defaults[field]);
+            provider.range = { 0.0f, 1.0f };
+            LfoManager::AudioThreadRoutingInfo routing;
+            if (clouds[field].ranged && lfoManager->getAudioThreadRoutingInfo(clouds[field].ranged, routing))
+            {
+                provider.modulationDepth = routing.depth;
+                provider.isBipolar = routing.isBipolar;
+                target.cloudsSources[control] = routing.sourceLfoIndex;
             }
         }
     }
@@ -6700,6 +6969,7 @@ void FireAudioProcessor::prepareAudioCallbackParameterSnapshot(
     snapshot.requestedHq = loadCachedParameter(hqParameter) > 0.5f;
     snapshot.downsampleEnabled =
         loadCachedParameter(downsampleEnabledParameter) > 0.5f;
+    snapshot.loudnessMatch = loudnessMatch.capture(stateAB.isCurrentA() ? 0 : 1);
     snapshot.lfoParameters =
         lfoManager->captureAudioThreadParameterSnapshot();
 
@@ -8828,9 +9098,13 @@ bool FireAudioProcessor::toggleModulationBypassForParameter(
     return true;
 }
 
-bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml)
+bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement& incomingPresetXml)
 {
     constexpr float comparisonTolerance = 1.0e-6f;
+    if (! state::canLoadStateFromXml(incomingPresetXml, *this))
+        return false;
+    juce::XmlElement presetXml(incomingPresetXml);
+    state::canonicaliseCloudsPresetState(presetXml);
 
     // Recreate the exact model produced by loadStateFromXml rather than
     // comparing XML text. Older presets omit attributes whose loader defaults
@@ -8870,6 +9144,8 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
         auto* parameterWithID = dynamic_cast<juce::AudioProcessorParameterWithID*>(parameter);
         if (parameterWithID == nullptr)
             continue;
+        if (fire::clouds_params::isReservedEngineParameterID(parameterWithID->paramID))
+            continue; // Deprecated automation slots do not affect the sound.
 
         float presetValue = parameterWithID->getDefaultValue();
         if (presetXml.hasAttribute(parameterWithID->paramID))

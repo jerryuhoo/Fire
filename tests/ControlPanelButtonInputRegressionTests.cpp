@@ -345,6 +345,12 @@ void checkPanelButtons(juce::Component& panel, int expectedButtonCount)
 {
     auto buttons = collectDirectButtons(panel);
     REQUIRE(buttons.size() == static_cast<size_t>(expectedButtonCount));
+    // The insert page now owns one additional PrimaryTextButton for Clouds
+    // Freeze. Keep it in the same rejected-gesture checks as every old button.
+    REQUIRE(std::count_if(buttons.begin(), buttons.end(), [](const auto* button)
+    {
+        return button->getButtonText() == "Freeze";
+    }) == 1);
 
     for (auto* button : buttons)
     {
@@ -382,14 +388,70 @@ TEST_CASE("Control-panel buttons reject popup and auxiliary pointer gestures",
     {
         BandPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
-        checkPanelButtons(panel, 15);
+        checkPanelButtons(panel, 16);
     }
 
     SECTION("global controls")
     {
         GlobalPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
-        checkPanelButtons(panel, 9);
+        checkPanelButtons(panel, 10);
+    }
+}
+
+TEST_CASE("Clouds Freeze rejects auxiliary gestures without changing its attached parameter",
+          "[control-panel][clouds-ui][ui][input][primary-button]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    for (int scope : { 1, 0 })
+    {
+        CAPTURE(scope);
+        FireAudioProcessor processor;
+        const int slot = processor.addInsertEffect(scope, fire::effects::Type::granular);
+        REQUIRE(slot >= 0);
+        std::unique_ptr<juce::Component> panel;
+        if (scope == 1)
+            panel = std::make_unique<BandPanel>(processor, nullptr, nullptr, nullptr, nullptr, nullptr);
+        else
+            panel = std::make_unique<GlobalPanel>(processor, nullptr, nullptr, nullptr, nullptr, nullptr);
+        panel->setBounds(0, 0, 1000, 500);
+        panel->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel->setVisible(true);
+
+        auto buttons = collectDirectButtons(*panel);
+        const auto slotID = fire::effects::parameterID(scope, slot, fire::effects::typeField);
+        auto slotButton = std::find_if(buttons.begin(), buttons.end(), [&](const auto* button)
+        { return button->getComponentID() == slotID; });
+        REQUIRE(slotButton != buttons.end());
+        (*slotButton)->triggerClick();
+
+        buttons = collectDirectButtons(*panel);
+        const auto freezeID = fire::clouds_params::parameterID(scope, slot, fire::clouds_params::freezeField);
+        auto found = std::find_if(buttons.begin(), buttons.end(), [&](const auto* button)
+        { return button->getComponentID() == freezeID; });
+        REQUIRE(found != buttons.end());
+        auto& freeze = **found;
+        REQUIRE(freeze.isShowing());
+        REQUIRE(dynamic_cast<PrimaryTextButton*>(&freeze) != nullptr);
+        auto* parameter = processor.treeState.getRawParameterValue(freezeID);
+        REQUIRE(parameter != nullptr);
+        const auto originalValue = parameter->load();
+        const auto originalToggle = freeze.getToggleState();
+        for (const auto modifiers : rejectedPointerModifiers())
+        {
+            CAPTURE(modifiers.getRawFlags());
+            auto& component = static_cast<juce::Component&>(freeze);
+            component.mouseDown(makeMouseEvent(component, modifiers));
+            component.mouseDrag(makeMouseEvent(component, modifiers, true));
+            component.mouseUp(makeMouseEvent(component, {}, true));
+            CHECK_FALSE(freeze.isDown());
+            CHECK(freeze.getToggleState() == originalToggle);
+            CHECK(juce::exactlyEqual(parameter->load(), originalValue));
+        }
+        beginPrimaryClick(freeze);
+        endPrimaryClick(freeze);
+        CHECK(freeze.getToggleState() != originalToggle);
+        CHECK((parameter->load() > 0.5f) == freeze.getToggleState());
     }
 }
 

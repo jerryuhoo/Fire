@@ -7,6 +7,7 @@ struct SlotParameters
 {
     InsertEffect::Parameters effect;
     std::array<int, controlCount> sources {-1, -1, -1, -1, -1, -1};
+    std::array<int, 3> cloudsSources {-1, -1, -1};
     int order = 0;
     SlotParameters() { effect.normalised = true; }
 };
@@ -80,8 +81,16 @@ public:
                 && sampleOffset + static_cast<int>(block.getNumSamples()) <= lfo.getNumSamples()
                 ? lfo.getReadPointer(source) : nullptr;
         }
+        for (size_t control = 0; control < p.clouds.values.size(); ++control)
+        {
+            const auto source = parameters[static_cast<size_t>(slot)].cloudsSources[control];
+            p.clouds.values[control].lfoSignal = juce::isPositiveAndBelow(source, lfo.getNumChannels())
+                && sampleOffset >= 0 && sampleOffset + static_cast<int>(block.getNumSamples()) <= lfo.getNumSamples()
+                ? lfo.getReadPointer(source) : nullptr;
+        }
         effects[static_cast<size_t>(slot)].process(block, p, sampleOffset,
-                                                  &parameters[static_cast<size_t>(slot)].sources);
+                                                  &parameters[static_cast<size_t>(slot)].sources,
+                                                  &parameters[static_cast<size_t>(slot)].cloudsSources);
     }
 private:
     std::array<InsertEffect, slotCount> effects;

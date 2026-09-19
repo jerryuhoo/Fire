@@ -1,4 +1,4 @@
-# Fire (Version 1.5.0) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://app.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
+# Fire (Version 1.6.0) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://app.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
 
 ![Alt text](Fire1.png?raw=true "Title")
 
@@ -109,6 +109,19 @@ Thank you for your understanding!
 
 ### ✅ OPTION 2 – Build with JUCE or CMake
 
+The project pins **JUCE 9.0.2** in its `JUCE` submodule. Initialise submodules
+before building; CMake and every Projucer exporter use this local copy.
+To build plug-in bundles without installing them into the user's plug-in folders:
+
+```sh
+cmake -S . -B Builds/Release -G Ninja -DCMAKE_BUILD_TYPE=Release -DFIRE_INSTALL_PLUGINS=OFF
+cmake --build Builds/Release --target Fire_AU Fire_VST3 Fire_CLAP -j6
+```
+
+The AU target is available on macOS. Built bundles are under
+`Builds/Release/Fire_artefacts/Release/`. Set `FIRE_INSTALL_PLUGINS=ON` to retain
+the project's usual automatic copy behaviour.
+
 #### 🔧 Using Projucer (JUCE GUI)
 
 1. Open the `.jucer` file using **Projucer**.
@@ -152,9 +165,35 @@ Builds/Fire_artefacts/Release/
 - **HQ**: 4x oversampling for high quality audio.
 - **A/B**: Switch between A/B to compare.
 - **Copy**: Copy current preset parameters to another (A/B) panel.
+- **Match**: Learn and hold separate loudness compensation for A and B.
 - **Preset bar**: Choose your current preset.
 - **Save**: Save your preset to user folder.
 - **Menu**: Other settings including init, open preset folder, rescan preset folder, open GitHub page, check for new version.
+
+#### Equal-loudness A/B listening
+
+Loop a representative passage, then turn **Match** on and play for about three seconds.
+The current side learns its processed level relative to the plug-in input,
+then displays a fixed compensation value in dB. Switch **A/B** and replay the
+same passage to learn the other side. Previously learned sides retain their
+own compensation, and **Copy** copies the current side's compensation too.
+
+Click the value/Learn button to measure again; click it during measurement to
+cancel. The compensation stays fixed when you subsequently adjust controls.
+Turn Match off to hear the original output level; changes use a short gain
+fade. The Output knob, its automation, and the plug-in's reported latency stay
+unchanged. Host bypass passes the original bypass signal and pauses learning.
+
+Measurement uses K-weighted energy over a short window, accepting only frames
+where both input and output contain usable audio. **Play audio** means there
+was insufficient signal; a previous valid compensation is retained. Correction
+is limited to **±18 dB**, with **LIMIT** shown when full matching is outside
+that range. This is an audition aid, rather than an integrated LUFS meter.
+
+Match settings and both learned gains are saved in the DAW project, separately
+from sound-preset files. Loading a sound preset clears the current side's
+measurement and learns again if Match is enabled. Older projects open with
+Match off. Closing the editor retains the comparison state in the processor.
 
 ### 3.2. Spectrogram
 
@@ -450,11 +489,42 @@ Use **MODE → +** in either **Master Lab** or **Band Lab** to add an effect. Ea
 | Chorus | Rate, Depth, Delay, Feedback, Width, Mix. |
 | Delay | Time (10–2000 ms), Feedback, Tone, Ping-Pong, tempo Sync, Mix. Sync offers 1/16 through one bar, including dotted eighth/quarter notes, within the two-second delay capacity. |
 | Reverb | Size, Damping, Pre-delay, Width, Low Cut, Mix. |
-| Granular | Grain Size, Density, Pitch (±24 semitones), Position, Spray, Mix. Uses overlapping windowed grains from recent audio. |
+| Granular | Clouds: Position, Size, Pitch (±24 semitones), Density, Texture, Mix, Spread, Feedback, Reverb and Freeze. Clouds is the sole granular engine. |
 | Lo-Fi insert | Rate, Bits, Tape, Wow, Flutter, Mix. |
+
+All Granular inserts use a port of Mutable Instruments' **Clouds normal granular
+mode**, with its grain scheduler, window shapes, diffusion, feedback and reverb.
+Density selects regular grains to the left, random grains to the right, and no
+new grains in the centre. Texture moves from sharp to smooth grain envelopes,
+then adds diffusion. Position selects progressively older audio. The expanded
+Clouds control page uses the space normally occupied by the waveform display.
+
+Freeze holds the recording while grains continue to play. Its switch is saved,
+but recorded audio is not stored in presets, A/B snapshots or host projects.
+After an empty reset, Freeze captures a fresh buffer of audio before holding it.
+Spread, Feedback and Reverb support host automation and LFO modulation.
+
+The Clouds core runs at the original 32 kHz, stereo/16-bit quality, with
+band-limited conversion to and from the host sample rate. Its wet bandwidth and
+intentional granular texture follow that design. Fire retains its transparent
+dry path and linear Mix control. The alternate stretch, looping-delay and
+spectral modes, hardware trigger input and lower-fidelity quality modes are not
+included. This is a desktop adaptation, not a claim of bit-identical hardware
+emulation. Upstream source revisions, licensing and portability fixes are
+documented in [the Clouds port notes](Source/DSP/Clouds/README.md).
+Regression coverage and reproducible CPU measurements are in
+[the Clouds validation report](benchmarks/CLOUDS_PORT.md).
+
+Granular now uses Clouds exclusively; the engine selector and the original Fire
+granular DSP have been removed. Older Fire granular states are converted once to
+Clouds controls on load. Pitch and Mix are preserved; Size, Density, Position and
+Spray are mapped to the closest supported Clouds controls. This migration changes
+the sound of old granular presets. Existing Clouds presets keep their values.
+The old engine parameter IDs remain inert reserved slots so later automation
+indices do not move; they cannot select another engine.
 
 The existing **Master Lo-Fi** page retains Rate, Bits, Jitter and Mix, and adds **Tape**, **Wow** and **Flutter**. Tape adds saturation and a softer high-frequency response; Wow introduces slow pitch drift and Flutter adds faster pitch variation. Zero Tape/Wow/Flutter preserves the previous Lo-Fi processing.
 
 Built-in modules and insert effects run in the same freely reorderable list, before the chain's Output/Mix controls. Drag any module, including Drive, Shape, Compressor, Stereo, OTT, Master Filter and Lo-Fi, to change its processing position. Analysis is a movable display page and does not process audio. Older presets retain their original audio order (OTT before Stereo, and Master Lo-Fi before Filter); the list now displays that order. Drive and Shape retain their legacy combined processing when adjacent in that order, and run as separate stages when moved apart. Hover an inserted effect to reveal its remove button, or drag its name/body to reorder it. A floating preview and insertion line indicate the destination; holding near the list edges scrolls to offscreen effects. The new order is committed once on release. Escape, dropping outside the list or changing workspace/band cancels the drag. Removing the selected effect selects its nearest remaining neighbour. The power button bypasses each effect, and the context menu also provides move/remove actions. Reordering retains that slot's parameters and LFO assignments. New effect values fade in while editing; the waveform shows the selected band's output or the master output.
 
-Every insert exposes six normalized host controls with effect-specific labels and units in Fire's UI. LFO modulation, presets, host state, A/B comparisons and band copying include the new controls. New host parameters are appended with a newer AU version hint, and older projects load empty insert racks with Tape/Wow/Flutter at zero. The insert stages add no reported processing latency; delay, pitch modulation, granular playback and reverb create their intended time offsets and tails in the wet signal. Tail reporting reserves conservative bounds so hosts do not cut long echoes prematurely.
+Every insert retains its six normalized host controls with effect-specific labels and units in Fire's UI; Clouds adds a separately versioned set of controls. LFO modulation, presets, host state, A/B comparisons and band copying include the new controls. New host parameters are appended with a newer AU version hint, and older projects load empty insert racks with Tape/Wow/Flutter at zero. The insert stages add no reported processing latency; delay, pitch modulation, granular playback and reverb create their intended time offsets and tails in the wet signal. Tail reporting reserves conservative bounds so hosts do not cut long echoes prematurely; a frozen Clouds buffer or maximum feedback reports an infinite tail.

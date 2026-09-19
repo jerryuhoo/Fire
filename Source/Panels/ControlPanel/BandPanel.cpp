@@ -85,7 +85,21 @@ BandPanel::BandPanel(FireAudioProcessor& p,
         insertKnobs[i]->setInteractionOnlyReadout(true);
     }
     insertControls.setControls(insertKnobs);
+    std::array<ModulatableSlider*, InsertEffectControls::cloudsExtraCount> cloudsKnobs {};
+    const std::array<const char*, InsertEffectControls::cloudsExtraCount> cloudsNames { "Spread", "Feedback", "Reverb" };
+    for (size_t i = 0; i < cloudsKnobs.size(); ++i)
+    {
+        const auto key = "CloudsControl" + juce::String(static_cast<int>(i));
+        createAndConfigureSlider(key, cloudsNames[i], fire::ui::colours::granular);
+        cloudsKnobs[i] = modulatableSliderComponents.at(key).get();
+        cloudsKnobs[i]->setInteractionOnlyReadout(true);
+    }
+    insertControls.setCloudsControls(cloudsKnobs);
     insertControls.bind(1, 0);
+    insertControls.onLayoutChanged = [safe = juce::Component::SafePointer<BandPanel>(this)]
+    {
+        if (safe) safe->refreshInsertLayout();
+    };
     addChildComponent(insertControls);
     addAndMakeVisible(effectNavigation);
     effectNavigation.setBuiltins({{&oscSwitch, &driveBypassButton}, {&shapeSwitch, &shapeBypassButton}, {&compressorSwitch, &compressorBypassButton}, {&widthSwitch, &widthBypassButton}, {&ottSwitch, &ottBypassButton}});
@@ -148,6 +162,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
 BandPanel::~BandPanel()
 {
     effectNavigation.onSelectEffect = nullptr;
+    insertControls.onLayoutChanged = nullptr;
     for (auto& sliderPair : modulatableSliderComponents)
     {
         sliderPair.second->onInteractionEnded = nullptr;
@@ -497,7 +512,8 @@ void BandPanel::resized()
     effectNavigation.setBounds(tabAreaRect);
     effectNavigation.setScale(uiScale);
     insertControls.setScale(uiScale);
-    insertControls.setBounds(knobsColumnArea);
+    insertControls.setBounds(selectedInsert >= 0 && insertControls.usesExpandedLayout()
+        ? contentArea(knobsAreaRect.getUnion(graphAreaRect)) : knobsColumnArea);
 
     // --- Active module controls ---
     if (oscSwitch.getToggleState())
@@ -664,8 +680,12 @@ void BandPanel::rebuildChromeCache(float displayScale)
 
     if (selectedInsert >= 0) { moduleTitle = fire::effects::name(processor.getInsertEffectType(focusBandNum + 1, selectedInsert)); graphTitle = "OUTPUT"; }
     drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "MODE");
-    drawMinimalTitle(cacheGraphics, titleFor(knobsAreaRect), moduleTitle);
-    drawMinimalTitle(cacheGraphics, titleFor(graphAreaRect), graphTitle);
+    const bool expandedInsert = selectedInsert >= 0 && insertControls.usesExpandedLayout();
+    drawMinimalTitle(cacheGraphics,
+                     titleFor(expandedInsert ? knobsAreaRect.getUnion(graphAreaRect) : knobsAreaRect),
+                     expandedInsert ? "CLOUDS" : moduleTitle);
+    if (! expandedInsert)
+        drawMinimalTitle(cacheGraphics, titleFor(graphAreaRect), graphTitle);
     drawMinimalTitle(cacheGraphics,
                      titleFor(outputAreaRect),
                      "BAND " + juce::String(focusBandNum + 1));
@@ -805,7 +825,7 @@ void BandPanel::restoreComponentsObscuredByZoom() noexcept
 
 GraphTemplate* BandPanel::getSelectedModuleGraph() noexcept
 {
-    if (selectedInsert >= 0) return &oscilloscope;
+    if (selectedInsert >= 0) return insertControls.usesExpandedLayout() ? nullptr : &oscilloscope;
     if (ottSwitch.getToggleState()) return &ottGraph;
     if (shapeSwitch.getToggleState())
         return &distortionGraph;
@@ -876,10 +896,11 @@ void BandPanel::selectInsertEffect(int slot)
         graph->setVisible(false);
         if (! safeThis) return;
     }
-    oscilloscope.setVisible(true);
     insertControls.bind(focusBandNum + 1, slot);
     if (! safeThis) return;
     insertControls.setActive(true);
+    if (! safeThis) return;
+    oscilloscope.setVisible(! insertControls.usesExpandedLayout());
     if (! safeThis) return;
     modulatableSliderComponents.at(OUTPUT_NAME)->setInteractionOnlyReadout(true);
     modulatableSliderComponents.at(MIX_NAME)->setInteractionOnlyReadout(true);
@@ -887,6 +908,20 @@ void BandPanel::selectInsertEffect(int slot)
     resized(); invalidateChromeCache();
     auto callback = onModuleChanged;
     if (callback) callback();
+}
+
+void BandPanel::refreshInsertLayout()
+{
+    if (selectedInsert < 0) return;
+    const auto expectedSlot = selectedInsert;
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    clearGraphZoom();
+    if (! safeThis || selectedInsert != expectedSlot) return;
+    oscilloscope.setVisible(! insertControls.usesExpandedLayout());
+    if (! safeThis) return;
+    resized();
+    if (! safeThis) return;
+    invalidateChromeCache();
 }
 
 juce::Rectangle<float> BandPanel::getModuleSelectionBounds(float modulePosition) const
@@ -1023,8 +1058,11 @@ void BandPanel::dismissButtonInteractions() noexcept
 
 void BandPanel::dismissTransientInteraction() noexcept
 {
-    effectNavigation.dismiss();
     const juce::Component::SafePointer<BandPanel> safeThis(this);
+    effectNavigation.dismiss();
+    if (! safeThis) return;
+    insertControls.dismissButtons();
+    if (! safeThis) return;
     for (auto* slider : modulatableSliders)
     {
         if (slider != nullptr)
@@ -1044,6 +1082,8 @@ void BandPanel::dismissTransientInteraction() noexcept
 void BandPanel::dismissTransientInteractionForParameterRebind() noexcept
 {
     const juce::Component::SafePointer<BandPanel> safeThis(this);
+    insertControls.dismissButtons();
+    if (! safeThis) return;
     for (auto* slider : modulatableSliders)
     {
         if (slider != nullptr)

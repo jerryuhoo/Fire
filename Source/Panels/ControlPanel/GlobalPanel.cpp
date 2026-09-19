@@ -91,7 +91,21 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
         insertKnobs[i]->setInteractionOnlyReadout(true);
     }
     insertControls.setControls(insertKnobs);
+    std::array<ModulatableSlider*, InsertEffectControls::cloudsExtraCount> cloudsKnobs {};
+    const std::array<const char*, InsertEffectControls::cloudsExtraCount> cloudsNames { "Spread", "Feedback", "Reverb" };
+    for (size_t i = 0; i < cloudsKnobs.size(); ++i)
+    {
+        const auto key = "CloudsControl" + juce::String(static_cast<int>(i));
+        createAndConfigureSlider(key, cloudsNames[i], fire::ui::colours::granular);
+        cloudsKnobs[i] = modulatableSliderComponents.at(key).get();
+        cloudsKnobs[i]->setInteractionOnlyReadout(true);
+    }
+    insertControls.setCloudsControls(cloudsKnobs);
     insertControls.bind(0, 0);
+    insertControls.onLayoutChanged = [safe = juce::Component::SafePointer<GlobalPanel>(this)]
+    {
+        if (safe) safe->refreshInsertLayout();
+    };
     addChildComponent(insertControls);
     addAndMakeVisible(effectNavigation);
     effectNavigation.setBuiltins({{&filterSwitch, filterBypassButton.get()}, {&downsampleSwitch, downsampleBypassButton.get()}, {&graphSwitch, nullptr}});
@@ -128,6 +142,7 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
 GlobalPanel::~GlobalPanel()
 {
     effectNavigation.onSelectEffect = nullptr;
+    insertControls.onLayoutChanged = nullptr;
     dismissTransientInteraction();
 
     filterSwitch.removeListener(this);
@@ -140,8 +155,11 @@ GlobalPanel::~GlobalPanel()
 
 void GlobalPanel::dismissTransientInteraction() noexcept
 {
-    effectNavigation.dismiss();
     const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    effectNavigation.dismiss();
+    if (! safeThis) return;
+    insertControls.dismissButtons();
+    if (! safeThis) return;
     for (auto* slider : modulatableSliders)
     {
         if (slider != nullptr)
@@ -613,10 +631,13 @@ void GlobalPanel::resized()
     if (selectedInsert >= 0)
     {
         auto insertArea = knobsColumnArea;
-        auto graphArea = insertArea.removeFromRight(juce::jmin(insertArea.getWidth() / 2, juce::roundToInt(230.0f * uiScale)));
-        insertArea.removeFromRight(controlGap);
+        if (! insertControls.usesExpandedLayout())
+        {
+            auto graphArea = insertArea.removeFromRight(juce::jmin(insertArea.getWidth() / 2, juce::roundToInt(230.0f * uiScale)));
+            insertArea.removeFromRight(controlGap);
+            oscilloscope.setBounds(graphArea);
+        }
         insertControls.setBounds(insertArea);
-        oscilloscope.setBounds(graphArea);
         if (zoomedGraph != nullptr) zoomedGraph->setBounds(knobsColumnArea.reduced(2));
     }
     updateSelectionTarget(! selectionAnimationInitialised);
@@ -839,8 +860,10 @@ void GlobalPanel::rebuildChromeCache(float displayScale)
     };
 
     juce::String sectionTitle { "FILTER" };
-    if (selectedInsert >= 0) sectionTitle = fire::effects::name(processor.getInsertEffectType(0, selectedInsert));
-    if (downsampleSwitch.getToggleState())
+    if (selectedInsert >= 0)
+        sectionTitle = insertControls.usesExpandedLayout() ? "CLOUDS"
+            : fire::effects::name(processor.getInsertEffectType(0, selectedInsert));
+    else if (downsampleSwitch.getToggleState())
         sectionTitle = "LO-FI";
     else if (graphSwitch.getToggleState())
         sectionTitle = "ANALYSIS";
@@ -1090,11 +1113,26 @@ void GlobalPanel::selectInsertEffect(int slot)
     if (! safeThis) return;
     insertControls.setActive(true);
     if (! safeThis) return;
-    oscilloscope.setVisible(true);
+    oscilloscope.setVisible(! insertControls.usesExpandedLayout());
+    if (! safeThis) return;
     modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setInteractionOnlyReadout(true);
     modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setInteractionOnlyReadout(true);
     startContentTransition(controlsAreaRect);
     resized(); invalidateChromeCache();
+}
+
+void GlobalPanel::refreshInsertLayout()
+{
+    if (selectedInsert < 0) return;
+    const auto expectedSlot = selectedInsert;
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    clearGraphZoom();
+    if (! safeThis || selectedInsert != expectedSlot) return;
+    oscilloscope.setVisible(! insertControls.usesExpandedLayout());
+    if (! safeThis) return;
+    resized();
+    if (! safeThis) return;
+    invalidateChromeCache();
 }
 
 void GlobalPanel::updateFilterKnobVisibility()

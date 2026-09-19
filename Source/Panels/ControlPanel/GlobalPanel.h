@@ -65,6 +65,7 @@ private:
     // Initialization helpers
     void createSliders();
     void selectInsertEffect(int slot);
+    void refreshInsertLayout();
     void createLabels();
     void createButtons();
     void createComboBoxes();

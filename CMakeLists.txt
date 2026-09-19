@@ -43,12 +43,13 @@ project(${PROJECT_NAME} VERSION ${PROJECT_VERSION_NUMERIC})
 
 # JUCE is setup as a submodule in the /JUCE folder
 # Locally, you must run `git submodule update --init --recursive` once
-# and later `git submodule update --remote --merge` to keep it up to date
+# The recorded submodule revision pins the tested JUCE release (9.0.2).
 # On Github Actions, this is done as a part of actions/checkout
 add_subdirectory(JUCE)
 
 # Add CLAP format
 add_subdirectory(modules/clap-juce-extensions EXCLUDE_FROM_ALL)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake-overrides/ClapTail.cmake")
 
 # Add any other modules you want modules here, before the juce_add_plugin call
 # juce_add_module(modules/my_module)
@@ -57,6 +58,7 @@ add_subdirectory(modules/clap-juce-extensions EXCLUDE_FROM_ALL)
 add_subdirectory (modules/melatonin_inspector)
 
 # See `docs/CMake API.md` in the JUCE repo for all config options
+option(FIRE_INSTALL_PLUGINS "Copy compiled plug-ins to the user's plug-in folders" ON)
 juce_add_plugin("${PROJECT_NAME}"
     # Icons for the standalone app
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/packaging/icon.png"
@@ -66,7 +68,7 @@ juce_add_plugin("${PROJECT_NAME}"
     BUNDLE_ID "${BUNDLE_ID}"
 
     # On MacOS, plugin is copied to /Users/yourname/Library/Audio/Plug-Ins/
-    COPY_PLUGIN_AFTER_BUILD TRUE
+    COPY_PLUGIN_AFTER_BUILD ${FIRE_INSTALL_PLUGINS}
 
     # Change me!
     # A four-character plugin id
@@ -108,6 +110,28 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         PROPERTY JUCE_COPY_PLUGIN_AFTER_BUILD
         "${FIRE_COPY_PLUGIN_AFTER_BUILD}")
 
+    # The AU bundle needs a resource signature even when automatic install is
+    # disabled; the linker's binary-only ad-hoc signature is not sufficient.
+    if (TARGET "${PROJECT_NAME}_AU")
+        add_custom_command(TARGET "${PROJECT_NAME}_AU" POST_BUILD
+            COMMAND /usr/bin/codesign --force --deep --sign -
+                "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_AU>"
+            COMMAND /usr/bin/codesign --verify --deep --strict
+                "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_AU>"
+            COMMENT "Signing ${PRODUCT_NAME}.component"
+            VERBATIM)
+    endif ()
+
+    add_custom_command(TARGET "${PROJECT_NAME}_CLAP" POST_BUILD
+        COMMAND /usr/bin/codesign --force --deep --sign -
+            "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_CLAP>"
+        COMMAND /usr/bin/codesign --verify --deep --strict
+            "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_CLAP>"
+        COMMENT "Signing ${PRODUCT_NAME}.clap"
+        VERBATIM)
+endif ()
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND FIRE_INSTALL_PLUGINS)
     if ("$ENV{HOME}" STREQUAL "")
         message(FATAL_ERROR "HOME must be set before installing the CLAP bundle")
     endif ()
@@ -117,10 +141,6 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set(FIRE_CLAP_INSTALL_BUNDLE
         "${FIRE_CLAP_INSTALL_DIRECTORY}/${PRODUCT_NAME}.clap")
     add_custom_command(TARGET "${PROJECT_NAME}_CLAP" POST_BUILD
-        COMMAND /usr/bin/codesign --force --deep --sign -
-            "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_CLAP>"
-        COMMAND /usr/bin/codesign --verify --deep --strict
-            "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_CLAP>"
         COMMAND "${CMAKE_COMMAND}" -E make_directory
             "${FIRE_CLAP_INSTALL_DIRECTORY}"
         COMMAND "${CMAKE_COMMAND}" -E remove_directory

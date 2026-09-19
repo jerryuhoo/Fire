@@ -16,6 +16,7 @@
 #include "../../GUI/FocusAwareComboBox.h"
 #include "../../GUI/LookAndFeel.h"
 #include "../../GUI/PrimaryButton.h"
+#include "../../GUI/LoudnessMatchControls.h"
 #include "../../GUI/SettingsComponent.h"
 #include "../../Utility/VersionInfo.h"
 #include "juce_audio_processors/juce_audio_processors.h"
@@ -42,7 +43,13 @@ namespace state
 
     //==============================================================================
     void saveStateToXml(const juce::AudioProcessor& processor, juce::XmlElement& xml);
-    bool loadStateFromXml(const juce::XmlElement& xml, juce::AudioProcessor& processor);
+    bool canLoadStateFromXml(const juce::XmlElement& xml, const juce::AudioProcessor& processor);
+    bool loadStateFromXml(const juce::XmlElement& xml, juce::AudioProcessor& processor,
+                          bool preserveLoudnessComparison = false);
+    // Called after format validation, and by preset-equivalence checks.
+    // Upgrades only the former Granular controls and reserved engine fields.
+    // Returns true only when an actual Legacy Granular slot was converted.
+    bool canonicaliseCloudsPresetState(juce::XmlElement& xml);
 
     //==============================================================================
     /** Handler for AB state toggling and copying in plugin.                        // improve descriptions
@@ -67,7 +74,7 @@ methods from button callback in editor.
 
         juce::XmlElement captureSerializableStateSnapshot() const;
         // The caller must already own the processor's topology transaction.
-        void readFromXml(const juce::XmlElement* state);
+        bool readFromXml(const juce::XmlElement* state, bool* migratedGranular = nullptr);
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         void invokeMutationLockAcquiredHookForTesting();
 #endif
@@ -240,6 +247,7 @@ PluginProcessor).
         void updatePresetBox(int selectedId);
         void synchronisePresetSelectionFromManager();
         void synchroniseABButtonFromManager();
+        void updateLoudnessMatchState();
         StatePresets* getProcStatePresets();
         StateAB* getProcStateAB();
         juce::TextButton* getCopyABButton();
@@ -379,6 +387,7 @@ PluginProcessor).
 
         PrimaryTextButton toggleABButton;
         PrimaryTextButton copyABButton;
+        fire::ui::LoudnessMatchControls loudnessMatchControls;
         PresetComboBox presetBox;
         PrimaryTextButton previousButton;
         PrimaryTextButton nextButton;

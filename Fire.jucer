@@ -131,6 +131,8 @@
               file="Source/GUI/ModulatableSlider.h"/>
         <FILE id="pBtn01" name="PrimaryButton.h" compile="0" resource="0"
               file="Source/GUI/PrimaryButton.h"/>
+        <FILE id="lmUi01" name="LoudnessMatchControls.h" compile="0" resource="0"
+              file="Source/GUI/LoudnessMatchControls.h"/>
         <FILE id="pLbl01" name="PrimaryEditableLabel.h" compile="0" resource="0"
               file="Source/GUI/PrimaryEditableLabel.h"/>
         <FILE id="pSld01" name="PrimarySlider.h" compile="0" resource="0"
@@ -145,6 +147,16 @@
         <FILE id="h6WIOb" name="ValuePopup.h" compile="0" resource="0" file="Source/GUI/ValuePopup.h"/>
       </GROUP>
       <GROUP id="{6D93BA34-0044-C87D-1644-2333FABFA73D}" name="DSP">
+        <GROUP id="cloudsDspGroup" name="Clouds">
+          <FILE id="cloudsEngineCpp" name="CloudsEngine.cpp" compile="1" resource="0"
+                file="Source/DSP/Clouds/CloudsEngine.cpp"/>
+          <FILE id="cloudsEngineH" name="CloudsEngine.h" compile="0" resource="0"
+                file="Source/DSP/Clouds/CloudsEngine.h"/>
+        </GROUP>
+        <FILE id="lmDsp1" name="LoudnessMatcher.h" compile="0" resource="0"
+              file="Source/DSP/LoudnessMatcher.h"/>
+        <FILE id="lmDsp2" name="LoudnessMatchState.h" compile="0" resource="0"
+              file="Source/DSP/LoudnessMatchState.h"/>
         <FILE id="kfZ8qg" name="ClippingFunctions.h" compile="0" resource="0"
               file="Source/DSP/ClippingFunctions.h"/>
         <FILE id="fGPNaV" name="Delay.h" compile="0" resource="0" file="Source/DSP/Delay.h"/>
@@ -168,6 +180,8 @@
         <FILE id="insertFx1" name="InsertEffect.h" compile="0" resource="0" file="Source/DSP/InsertEffect.h"/>
         <FILE id="insertFx2" name="InsertRack.h" compile="0" resource="0" file="Source/DSP/InsertRack.h"/>
         <FILE id="insertFx3" name="InsertParameters.h" compile="0" resource="0" file="Source/Utility/InsertParameters.h"/>
+        <FILE id="cloudsParams" name="CloudsParameters.h" compile="0" resource="0" file="Source/Utility/CloudsParameters.h"/>
+        <FILE id="clapTail" name="ClapTail.h" compile="0" resource="0" file="Source/Utility/ClapTail.h"/>
         <FILE id="moduleOrder1" name="ModuleOrder.h" compile="0" resource="0" file="Source/Utility/ModuleOrder.h"/>
         <FILE id="y9Kac2" name="SampleAccurateCompressor.h" compile="0" resource="0"
               file="Source/DSP/SampleAccurateCompressor.h"/>
@@ -200,6 +214,7 @@
         <MODULEPATH id="juce_audio_formats" path="JUCE/modules"/>
         <MODULEPATH id="juce_audio_plugin_client" path="JUCE/modules"/>
         <MODULEPATH id="juce_audio_processors" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="JUCE/modules"/>
         <MODULEPATH id="juce_audio_utils" path="JUCE/modules"/>
         <MODULEPATH id="juce_core" path="JUCE/modules"/>
         <MODULEPATH id="juce_cryptography" path="JUCE/modules"/>
@@ -218,21 +233,22 @@
         <CONFIGURATION isDebug="0" name="Release"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
-        <MODULEPATH id="juce_opengl" path="JUCE\modules"/>
-        <MODULEPATH id="juce_gui_extra" path="JUCE\modules"/>
-        <MODULEPATH id="juce_gui_basics" path="JUCE\modules"/>
-        <MODULEPATH id="juce_graphics" path="JUCE\modules"/>
-        <MODULEPATH id="juce_events" path="JUCE\modules"/>
-        <MODULEPATH id="juce_dsp" path="JUCE\modules"/>
-        <MODULEPATH id="juce_data_structures" path="JUCE\modules"/>
-        <MODULEPATH id="juce_cryptography" path="JUCE\modules"/>
-        <MODULEPATH id="juce_core" path="JUCE\modules"/>
-        <MODULEPATH id="juce_audio_utils" path="JUCE\modules"/>
-        <MODULEPATH id="juce_audio_processors" path="JUCE\modules"/>
-        <MODULEPATH id="juce_audio_plugin_client" path="JUCE\modules"/>
-        <MODULEPATH id="juce_audio_formats" path="JUCE\modules"/>
-        <MODULEPATH id="juce_audio_devices" path="JUCE\modules"/>
-        <MODULEPATH id="juce_audio_basics" path="JUCE\modules"/>
+        <MODULEPATH id="juce_opengl" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_graphics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_events" path="JUCE/modules"/>
+        <MODULEPATH id="juce_dsp" path="JUCE/modules"/>
+        <MODULEPATH id="juce_data_structures" path="JUCE/modules"/>
+        <MODULEPATH id="juce_cryptography" path="JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="JUCE/modules"/>
       </MODULEPATHS>
     </VS2019>
     <VS2017 targetFolder="Builds/VisualStudio2017">
@@ -241,21 +257,22 @@
         <CONFIGURATION isDebug="0" name="Release"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
-        <MODULEPATH id="juce_opengl" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_gui_extra" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_gui_basics" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_graphics" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_events" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_dsp" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_data_structures" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_cryptography" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_core" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_audio_utils" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_audio_processors" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_audio_plugin_client" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_audio_formats" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_audio_devices" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="juce_audio_basics" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_opengl" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_graphics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_events" path="JUCE/modules"/>
+        <MODULEPATH id="juce_dsp" path="JUCE/modules"/>
+        <MODULEPATH id="juce_data_structures" path="JUCE/modules"/>
+        <MODULEPATH id="juce_cryptography" path="JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="JUCE/modules"/>
       </MODULEPATHS>
     </VS2017>
     <VS2022 targetFolder="Builds/VisualStudio2022">
@@ -264,21 +281,22 @@
         <CONFIGURATION isDebug="0" name="Release"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
-        <MODULEPATH id="juce_opengl"/>
-        <MODULEPATH id="juce_gui_extra"/>
-        <MODULEPATH id="juce_gui_basics"/>
-        <MODULEPATH id="juce_graphics"/>
-        <MODULEPATH id="juce_events"/>
-        <MODULEPATH id="juce_dsp"/>
-        <MODULEPATH id="juce_data_structures"/>
-        <MODULEPATH id="juce_cryptography"/>
-        <MODULEPATH id="juce_core"/>
-        <MODULEPATH id="juce_audio_utils"/>
-        <MODULEPATH id="juce_audio_processors"/>
-        <MODULEPATH id="juce_audio_plugin_client"/>
-        <MODULEPATH id="juce_audio_formats"/>
-        <MODULEPATH id="juce_audio_devices"/>
-        <MODULEPATH id="juce_audio_basics"/>
+        <MODULEPATH id="juce_opengl" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_graphics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_events" path="JUCE/modules"/>
+        <MODULEPATH id="juce_dsp" path="JUCE/modules"/>
+        <MODULEPATH id="juce_data_structures" path="JUCE/modules"/>
+        <MODULEPATH id="juce_cryptography" path="JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="JUCE/modules"/>
       </MODULEPATHS>
     </VS2022>
   </EXPORTFORMATS>
@@ -289,6 +307,7 @@
     <MODULE id="juce_audio_plugin_client" showAllCode="1" useLocalCopy="0"
             useGlobalPath="0"/>
     <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_processors_headless" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_cryptography" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>

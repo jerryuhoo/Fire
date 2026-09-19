@@ -10,6 +10,8 @@
 
 #pragma once
 #include "DSP/InsertRack.h"
+#include "DSP/LoudnessMatchState.h"
+#include "Utility/CloudsParameters.h"
 
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "DSP/WidthProcessor.h"
@@ -404,6 +406,13 @@ public:
     void moveModuleBefore(int scope, int node, int beforeNode);
     void moveModuleBy(int scope, int node, int direction);
 
+    fire::dsp::LoudnessMatchState::View getLoudnessMatchState() const noexcept;
+    void setLoudnessMatchEnabled(bool enabled);
+    void learnLoudnessMatch();
+    void clearCurrentLoudnessMatch() noexcept;
+    void cancelLoudnessMatchMeasurement() noexcept;
+    void copyLoudnessMatchToOtherSide() noexcept;
+
     bool hasUpdateCheckBeenPerformed = false;
     bool isSlient(const juce::AudioBuffer<float>& buffer);
 
@@ -745,6 +754,7 @@ private:
         std::uint32_t publicationSequence = 0;
         bool requestedHq = false;
         bool downsampleEnabled = false;
+        fire::dsp::LoudnessMatchState::Frame loudnessMatch;
     };
 
     struct MultibandTopologySnapshot
@@ -765,6 +775,7 @@ private:
         int editorWidth = static_cast<int>(INIT_WIDTH);
         int editorHeight = static_cast<int>(INIT_HEIGHT);
         juce::XmlElement abState { "AB_STATE" };
+        fire::dsp::LoudnessMatchState::Settings loudnessMatch;
     };
 
     void initialiseParameterCache();
@@ -810,10 +821,15 @@ private:
     CachedParameter downsampleMixParameter;
     std::array<CachedParameter, 3> tapeParameters;
     std::array<std::array<std::array<CachedParameter, fire::effects::fieldCount>, fire::effects::slotCount>, fire::effects::scopeCount> insertParameters;
+    std::array<std::array<std::array<CachedParameter, fire::clouds_params::fieldCount>, fire::clouds_params::slotCount>, fire::clouds_params::scopeCount> cloudsParameters;
     fire::effects::InsertRack masterInserts;
     std::array<std::array<CachedParameter, fire::module_order::capacity>, fire::effects::scopeCount> moduleOrderParameters;
     fire::module_order::Transition masterOrderTransition;
     juce::AudioBuffer<float> masterOrderDry;
+    fire::dsp::LoudnessMatchState loudnessMatch;
+    juce::AudioBuffer<float> loudnessReference;
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran> loudnessReferenceDelay;
+    bool loudnessReferenceWasActive = false;
     void applyMasterFilter(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfo, double rate);
     void applyMasterOutput(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfo);
     fire::effects::TapeFlutter masterTape;

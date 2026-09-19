@@ -317,3 +317,25 @@ TEST_CASE("Insert delay preserves the first impulse after reset at integer and f
         }
     }
 }
+
+TEST_CASE("Granular uses Clouds percent controls in physical and normalised DSP calls", "[insertfx][clouds][dsp][controls]")
+{
+    const auto input = signal(32000);
+    const auto physical = render(Type::granular, input, 127, [](auto& parameters) {
+        // Size %, bipolar Density %, Pitch st, Position %, Texture %, Mix %.
+        constexpr std::array<float, 6> values {50.0f, -50.0f, 0.0f, 10.0f, 50.0f, 100.0f};
+        for (size_t index = 0; index < values.size(); ++index)
+            parameters.values[index].baseValue = values[index];
+    });
+    const auto normalised = render(Type::granular, input, 37, [](auto& parameters) {
+        constexpr std::array<float, 6> values {0.5f, 0.25f, 0.5f, 0.1f, 0.5f, 1.0f};
+        parameters.normalised = true;
+        for (size_t index = 0; index < values.size(); ++index)
+        {
+            parameters.values[index].baseValue = values[index];
+            parameters.values[index].range = {0.0f, 1.0f};
+        }
+    });
+    CHECK(physical.getMagnitude(0, physical.getNumSamples()) > 0.001f);
+    CHECK(difference(physical, normalised) == 0.0f);
+}

@@ -1539,6 +1539,9 @@ void FireAudioProcessorEditor::timerCallback()
         globalPanel.presentMeterValues(cachedMeterValues, meterPacketGeneration);
     }
 
+    stateComponent.updateLoudnessMatchState();
+    if (safeThis == nullptr)
+        return;
     advanceAnimations(deltaSeconds);
 
     ++animationFrame;
@@ -1721,6 +1724,9 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
             return;
 
         clickedButton->setButtonText(stateComponent.getProcStateAB()->isCurrentA() ? "A" : "B");
+        stateComponent.updateLoudnessMatchState();
+        if (safeThis == nullptr)
+            return;
         multiband.resortAndRedrawLines();
 
         if (safeThis == nullptr)

@@ -11,6 +11,7 @@
 #pragma once
 #include "../GUI/InterfaceDefines.h"
 #include "InsertParameters.h"
+#include "CloudsParameters.h"
 #include "ModuleOrder.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_core/juce_core.h"
@@ -269,6 +270,11 @@ namespace ParameterIDAndName
             for (int slot = 0; slot < fire::effects::slotCount; ++slot)
                 for (int control = 0; control < static_cast<int>(fire::effects::controlCount); ++control)
                     result.push_back({fire::effects::controlName(slot, control), fire::effects::parameterBase(slot, control, false)});
+            for (int slot = 0; slot < fire::clouds_params::slotCount; ++slot)
+                for (int field = fire::clouds_params::spreadField; field < fire::clouds_params::fieldCount; ++field)
+                    result.push_back({"FX " + juce::String(slot + 1) + " Clouds "
+                                          + fire::clouds_params::fieldNames[static_cast<size_t>(field)],
+                                      fire::clouds_params::parameterBase(slot, field, false)});
             return result;
         }();
         return parameters;
@@ -299,6 +305,11 @@ namespace ParameterIDAndName
             for (int slot = 0; slot < fire::effects::slotCount; ++slot)
                 for (int control = 0; control < static_cast<int>(fire::effects::controlCount); ++control)
                     result.push_back({"Master " + fire::effects::controlName(slot, control), fire::effects::parameterBase(slot, control, true)});
+            for (int slot = 0; slot < fire::clouds_params::slotCount; ++slot)
+                for (int field = fire::clouds_params::spreadField; field < fire::clouds_params::fieldCount; ++field)
+                    result.push_back({"Master FX " + juce::String(slot + 1) + " Clouds "
+                                          + fire::clouds_params::fieldNames[static_cast<size_t>(field)],
+                                      fire::clouds_params::parameterBase(slot, field, true)});
             return result;
         }();
         return params;
@@ -381,6 +392,11 @@ namespace ParameterIDAndName
                                       fire::effects::parameterBase(slot, field, false)});
             for (int node = 0; node < fire::module_order::capacity; ++node)
                 result.push_back({"Module Order " + juce::String(node), fire::module_order::parameterBase(node, false)});
+            for (int slot = 0; slot < fire::clouds_params::slotCount; ++slot)
+                for (int field = 0; field < fire::clouds_params::fieldCount; ++field)
+                    result.push_back({"FX " + juce::String(slot + 1) + " Clouds "
+                                          + fire::clouds_params::fieldNames[static_cast<size_t>(field)],
+                                      fire::clouds_params::parameterBase(slot, field, false)});
             return result;
         }();
         return params;

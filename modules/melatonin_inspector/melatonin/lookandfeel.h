@@ -164,7 +164,7 @@ namespace melatonin
 
             if (component.getProperties().getWithDefault ("isUserProperty", false))
             {
-                auto textWidth = (float) g.getCurrentFont().getStringWidth (component.getName());
+                auto textWidth = (float) juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), component.getName());
                 auto tagBounds = juce::Rectangle<float> (3 + textWidth + 3, 7, 40, 14).toFloat();
                 g.setColour (colors::panelBackgroundDarker);
                 g.fillRoundedRectangle (tagBounds, 3);

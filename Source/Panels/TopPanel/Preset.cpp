@@ -189,7 +189,8 @@ bool validateParameterFamily(const juce::XmlElement& xml,
                                 const juce::AudioProcessor& processor,
                                 bool& legacyWithoutOtt,
                                 const char* marker = "ottSchemaVersion",
-                                bool (*belongs)(const juce::String&) = ParameterIDAndName::isOttParameterID)
+                                bool (*belongs)(const juce::String&) = ParameterIDAndName::isOttParameterID,
+                                int maximumVersion = 1)
 {
     if (! xml.hasAttribute(marker))
     {
@@ -218,7 +219,7 @@ bool validateParameterFamily(const juce::XmlElement& xml,
     if (xml.hasAttribute(marker))
     {
         int version = 0;
-        if (! readStrictIntegerAttribute(xml, marker, version) || version != 1)
+        if (! readStrictIntegerAttribute(xml, marker, version) || version < 1 || version > maximumVersion)
             return false;
     }
     return present == expected;
@@ -241,6 +242,10 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
     bool legacyWithoutModuleOrder = false;
     if (! validateParameterFamily(snapshot, processor, legacyWithoutModuleOrder, "moduleOrderSchemaVersion", fire::module_order::isParameterID))
         return false;
+    bool legacyWithoutClouds = false;
+    if (! validateParameterFamily(snapshot, processor, legacyWithoutClouds, "cloudsSchemaVersion", fire::clouds_params::isParameterID,
+                                  fire::clouds_params::schemaVersion))
+        return false;
 
     int expectedParameterCount = 0;
     for (const auto* parameter : processor.getParameters())
@@ -254,6 +259,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (legacyWithoutInserts && fire::effects::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutModuleOrder && fire::module_order::isParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutClouds && fire::clouds_params::isParameterID(parameterWithID->paramID))
             continue;
         ++expectedParameterCount;
         if (! snapshot.hasAttribute(parameterWithID->paramID))
@@ -303,6 +310,10 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     bool legacyWithoutModuleOrder = false;
     if (! validateParameterFamily(xml, processor, legacyWithoutModuleOrder, "moduleOrderSchemaVersion", fire::module_order::isParameterID))
         return false;
+    bool legacyWithoutClouds = false;
+    if (! validateParameterFamily(xml, processor, legacyWithoutClouds, "cloudsSchemaVersion", fire::clouds_params::isParameterID,
+                                  fire::clouds_params::schemaVersion))
+        return false;
     // Unversioned and v1 files predate complete model snapshots. Preserve
     // their historical default/migration behaviour. A v2 document is an
     // explicit complete snapshot, so accepting a sparse or truncated one
@@ -326,6 +337,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         if (legacyWithoutInserts && fire::effects::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutModuleOrder && fire::module_order::isParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutClouds && fire::clouds_params::isParameterID(parameterWithID->paramID))
             continue;
         ++parameterCount;
         if (! isStrictNumberInRange(xml, parameterWithID->paramID, 0.0, 1.0))
@@ -375,6 +388,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("ottSchemaVersion", 1);
     xml.setAttribute("insertEffectsSchemaVersion", 1);
     xml.setAttribute("moduleOrderSchemaVersion", 1);
+    xml.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xml.setAttribute("pluginVersion", VERSION);
 
     for (const auto& param : processor.getParameters())
@@ -401,7 +415,8 @@ void writeSerializablePresetSnapshotToXml(
                 }
                 break;
             }
-            xml.setAttribute(p->paramID, normalisedValue);
+            xml.setAttribute(p->paramID, fire::clouds_params::isReservedEngineParameterID(p->paramID)
+                                            ? 1.0f : normalisedValue);
         }
 
     auto* lfoState = xml.createNewChildElement("LFO_STATE");
@@ -428,6 +443,58 @@ void writeSerializablePresetSnapshotToXml(
 
 namespace state
 {
+    bool canonicaliseCloudsPresetState(juce::XmlElement& xml)
+    {
+        const int version = xml.getIntAttribute("cloudsSchemaVersion", 0);
+        bool anyLegacyGranularMigrated = false;
+        for (int scope = 0; scope < fire::clouds_params::scopeCount; ++scope)
+            for (int slot = 0; slot < fire::clouds_params::slotCount; ++slot)
+            {
+                const auto engineID = fire::clouds_params::parameterID(scope, slot, fire::clouds_params::engineField);
+                const auto typeID = fire::effects::parameterID(scope, slot, fire::effects::typeField);
+                const auto type = juce::roundToInt(readNormalisedAttribute(xml, typeID, 0.0f) * 5.0f);
+                const bool wasLegacy = ! xml.hasAttribute(engineID)
+                                    || readNormalisedAttribute(xml, engineID, 0.0f) < 0.5f;
+                const bool migratingLegacy = version < fire::clouds_params::schemaVersion && type == 4 && wasLegacy;
+                if (migratingLegacy)
+                {
+                    anyLegacyGranularMigrated = true;
+                    std::array<float, 6> values;
+                    for (int control = 0; control < 6; ++control)
+                        values[static_cast<size_t>(control)] = readNormalisedAttribute(
+                            xml, fire::effects::parameterID(scope, slot, control), 0.5f);
+                    values = fire::clouds_params::migrateLegacyGranular(values);
+                    for (int control = 0; control < 6; ++control)
+                        xml.setAttribute(fire::effects::parameterID(scope, slot, control), values[static_cast<size_t>(control)]);
+                    // These targets were inaudible in Legacy. Reset their
+                    // recipes along with the extension bases, so a latent
+                    // full-depth feedback assignment cannot become active.
+                    if (auto* routings = xml.getChildByName("MODULATION_STATE"))
+                        for (int index = routings->getNumChildElements(); --index >= 0;)
+                        {
+                            auto* routing = routings->getChildElement(index);
+                            if (! routing->hasTagName("ROUTING"))
+                                continue;
+                            const auto target = routing->getStringAttribute("target");
+                            for (int field = fire::clouds_params::spreadField; field < fire::clouds_params::fieldCount; ++field)
+                                if (target == fire::clouds_params::parameterID(scope, slot, field))
+                                {
+                                    routings->removeChildElement(routing, true);
+                                    break;
+                                }
+                        }
+                }
+                for (int field = 0; field < fire::clouds_params::fieldCount; ++field)
+                {
+                    const auto id = fire::clouds_params::parameterID(scope, slot, field);
+                    if (migratingLegacy || field == fire::clouds_params::engineField || ! xml.hasAttribute(id))
+                        xml.setAttribute(id, fire::clouds_params::defaults[static_cast<size_t>(field)]);
+                }
+            }
+        xml.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
+        return anyLegacyGranularMigrated;
+    }
+
     //==============================================================================
     void saveStateToXml(const juce::AudioProcessor& proc, juce::XmlElement& xml)
     {
@@ -436,10 +503,19 @@ namespace state
         writeSerializablePresetSnapshotToXml(fireProc, snapshot, xml);
     }
 
-    bool loadStateFromXml(const juce::XmlElement& xml, juce::AudioProcessor& proc)
+    bool canLoadStateFromXml(const juce::XmlElement& xml, const juce::AudioProcessor& processor)
     {
-        if (! isLoadablePresetState(xml, proc))
+        return isLoadablePresetState(xml, processor);
+    }
+
+    bool loadStateFromXml(const juce::XmlElement& incomingXml, juce::AudioProcessor& proc,
+                          bool preserveLoudnessComparison)
+    {
+        if (! canLoadStateFromXml(incomingXml, proc))
             return false;
+
+        juce::XmlElement xml(incomingXml);
+        canonicaliseCloudsPresetState(xml);
 
         auto& fireProc = static_cast<FireAudioProcessor&>(proc);
         {
@@ -448,6 +524,9 @@ namespace state
             {
                 fireProc.requestMultibandTopologyReset();
             } };
+
+            if (! preserveLoudnessComparison)
+                fireProc.clearCurrentLoudnessMatch();
 
             for (const auto& param : proc.getParameters())
             {
@@ -466,6 +545,15 @@ namespace state
                     {
                         valueToLoad = 1.0f;
                     }
+
+                    // JUCE's Bool parameter retains a fractional normalised
+                    // value even though its APVTS raw value snaps to 0/1.
+                    // Canonicalise this new family so Freeze/Engine, the
+                    // saved snapshot and preset-equivalence checks agree.
+                    if (fire::clouds_params::isParameterID(p->paramID))
+                        if (auto* ranged = fireProc.treeState.getParameter(p->paramID))
+                            valueToLoad = ranged->convertTo0to1(
+                                ranged->convertFrom0to1(valueToLoad));
 
                     p->setValueNotifyingHost(valueToLoad);
                 }
@@ -597,8 +685,9 @@ namespace state
 #endif
             juce::XmlElement temp { "AB" };
             saveStateToXml(pluginProcessor, temp); // current to temp
-            if (! loadStateFromXml(ab, pluginProcessor)) // ab to current
+            if (! loadStateFromXml(ab, pluginProcessor, true)) // ab to current
                 return;
+            fireProc.cancelLoudnessMatchMeasurement();
             ab = std::move(temp); // temp to ab
             currentSideIsA.store(! currentSideIsA.load(std::memory_order_relaxed), std::memory_order_release);
         }
@@ -626,6 +715,7 @@ namespace state
             juce::XmlElement replacement { "AB" };
             saveStateToXml(pluginProcessor, replacement);
             ab = std::move(replacement);
+            fireProc.copyLoudnessMatchToOtherSide();
         }
 
         if (notifyHost)
@@ -644,14 +734,17 @@ namespace state
     {
         const juce::ScopedLock lock(stateLock);
         juce::XmlElement snapshot { ab };
+        canonicaliseCloudsPresetState(snapshot);
         snapshot.setTagName("AB_STATE");
         snapshot.setAttribute("currentSideIsA",
                               currentSideIsA.load(std::memory_order_relaxed));
         return snapshot;
     }
 
-    void StateAB::readFromXml(const juce::XmlElement* state)
+    bool StateAB::readFromXml(const juce::XmlElement* state, bool* migratedGranular)
     {
+        if (migratedGranular != nullptr)
+            *migratedGranular = false;
         const juce::ScopedLock lock(stateLock);
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         invokeMutationLockAcquiredHookForTesting();
@@ -671,14 +764,18 @@ namespace state
                 fireProc, fallback, replacement);
             ab = std::move(replacement);
             currentSideIsA.store(true, std::memory_order_release);
-            return;
+            return false;
         }
 
         juce::XmlElement replacement { *state };
+        const bool migrated = canonicaliseCloudsPresetState(replacement);
+        if (migratedGranular != nullptr)
+            *migratedGranular = migrated;
         replacement.setTagName("AB");
         replacement.removeAttribute("currentSideIsA");
         ab = std::move(replacement);
         currentSideIsA.store(state->getBoolAttribute("currentSideIsA", true), std::memory_order_release);
+        return true;
     }
 
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
@@ -2063,6 +2160,40 @@ namespace state
         }
         addAndMakeVisible(toggleABButton);
         addAndMakeVisible(copyABButton);
+        addAndMakeVisible(loudnessMatchControls);
+        const juce::Component::SafePointer<StateComponent> safeMatchOwner(this);
+        loudnessMatchControls.onEnabledChanged = [safeMatchOwner](bool enabled)
+        {
+            if (! safeMatchOwner)
+                return;
+            auto& processor = static_cast<FireAudioProcessor&>(safeMatchOwner->procStatePresets.getProcessor());
+            if (safeMatchOwner->loudnessMatchControls.getState().enabled != processor.getLoudnessMatchState().enabled)
+            {
+                safeMatchOwner->updateLoudnessMatchState();
+                return;
+            }
+            processor.setLoudnessMatchEnabled(enabled);
+            if (safeMatchOwner)
+                safeMatchOwner->updateLoudnessMatchState();
+        };
+        loudnessMatchControls.onLearn = [safeMatchOwner]
+        {
+            if (! safeMatchOwner)
+                return;
+            auto& processor = static_cast<FireAudioProcessor&>(safeMatchOwner->procStatePresets.getProcessor());
+            const auto shown = safeMatchOwner->loudnessMatchControls.getState();
+            const auto current = processor.getLoudnessMatchState();
+            if (shown.side != current.side || shown.enabled != current.enabled
+                || shown.measuring != current.measuring || shown.bypassed != current.bypassed)
+            {
+                safeMatchOwner->updateLoudnessMatchState();
+                return;
+            }
+            processor.learnLoudnessMatch();
+            if (safeMatchOwner)
+                safeMatchOwner->updateLoudnessMatchState();
+        };
+        updateLoudnessMatchState();
         toggleABButton.addListener(this);
         copyABButton.addListener(this);
 
@@ -2141,6 +2272,9 @@ namespace state
 
     StateComponent::~StateComponent()
     {
+        loudnessMatchControls.onEnabledChanged = nullptr;
+        loudnessMatchControls.onLearn = nullptr;
+        loudnessMatchControls.dismiss();
         stopTimer();
         invalidateManualUpdateRequest();
         manualUpdateCheckThread.stop();
@@ -2175,9 +2309,10 @@ namespace state
 
     void StateComponent::parameterChanged(const juce::String& parameterID, float newValue)
     {
-        juce::ignoreUnused(parameterID, newValue);
+        juce::ignoreUnused(newValue);
 
-        if (programmaticChangeDepth.load(std::memory_order_acquire) > 0)
+        if (fire::clouds_params::isReservedEngineParameterID(parameterID)
+            || programmaticChangeDepth.load(std::memory_order_acquire) > 0)
             return;
 
         dirtyUpdatePending.store(true, std::memory_order_release);
@@ -2474,6 +2609,7 @@ namespace state
 
         placeLeft(toggleABButton, compactWidth);
         placeLeft(copyABButton, actionWidth);
+        placeLeft(loudnessMatchControls, juce::roundToInt(164.0f * uiScale));
         placeRight(menuButton, actionWidth);
         placeRight(savePresetButton, actionWidth);
         placeRight(nextButton, compactWidth);
@@ -2752,7 +2888,17 @@ namespace state
 
     void StateComponent::synchroniseABButtonFromManager()
     {
+        const juce::Component::SafePointer<StateComponent> safeThis(this);
         toggleABButton.setButtonText(procStateAB.isCurrentA() ? "A" : "B");
+        if (safeThis)
+            safeThis->updateLoudnessMatchState();
+    }
+
+    void StateComponent::updateLoudnessMatchState()
+    {
+        const auto view = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor()).getLoudnessMatchState();
+        loudnessMatchControls.setState({view.enabled, view.measuring, view.ready, view.limited,
+            view.noSignal, view.bypassed, view.side, view.gainDb, view.progress});
     }
 
     void StateComponent::deletePresetAndRefresh()
@@ -3440,6 +3586,10 @@ namespace state
         // interaction-session boundary as hiding or disabling this component.
         const juce::Component::SafePointer<StateComponent> safeThis(this);
         ++safeThis->interactionSessionGeneration;
+
+        safeThis->loudnessMatchControls.dismiss();
+        if (safeThis == nullptr)
+            return;
 
         safeThis->invalidatePresetMenuSession();
         if (safeThis == nullptr)

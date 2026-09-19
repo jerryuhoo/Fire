@@ -34,6 +34,12 @@ void checkState(FireAudioProcessor& p, const juce::XmlElement& expected)
         auto* identified = dynamic_cast<juce::AudioProcessorParameterWithID*>(parameter);
         REQUIRE(identified != nullptr);
         CAPTURE(identified->paramID);
+        if (fire::clouds_params::isReservedEngineParameterID(identified->paramID))
+        {
+            CHECK(expected.getDoubleAttribute(identified->paramID) == 1.0);
+            CHECK_FALSE(parameter->isAutomatable());
+            continue;
+        }
         CHECK(parameter->getValue() == Catch::Approx(expected.getDoubleAttribute(identified->paramID)).margin(1.0e-6));
     }
     CHECK(p.isCurrentStateEquivalentToPreset(expected)); // Includes shape, polarity, depth and routing bypass.

@@ -277,21 +277,6 @@ juce::MouseEvent makeMouseEvent(juce::Component& component,
              mouseWasDragged };
 }
 
-bool containsComboBoxText(juce::Component& component,
-                          const juce::String& expectedText)
-{
-    if (auto* menu = dynamic_cast<juce::ComboBox*>(&component);
-        menu != nullptr && menu->getText() == expectedText)
-        return true;
-
-    for (int childIndex = 0; childIndex < component.getNumChildComponents(); ++childIndex)
-        if (auto* child = component.getChildComponent(childIndex))
-            if (containsComboBoxText(*child, expectedText))
-                return true;
-
-    return false;
-}
-
 juce::TextButton* findTextButton(juce::Component& component,
                                  const juce::String& buttonText)
 {
@@ -628,7 +613,7 @@ TEST_CASE("Modulation matrix viewport stays width-stable at first overflow",
     auto* content = viewport->getViewedComponent();
     REQUIRE(content != nullptr);
 
-    const auto rowsThatFit = viewport->getHeight() / 44;
+    const auto rowsThatFit = viewport->getHeight() / ModulationMatrixPanel::rowPitch;
     REQUIRE(rowsThatFit > 0);
     setRoutingCount(rowsThatFit);
     panel.buildUiFromProcessorState();
@@ -769,7 +754,7 @@ TEST_CASE("Modulation routing edits stop at the shared capacity",
 
         ModulationMatrixPanel panel { processor };
         panel.setBounds(0, 0, 760, 420);
-        auto* addButton = findTextButton(panel, "+ ADD ROUTE");
+        auto* addButton = findTextButton(panel, "Add routing");
         REQUIRE(addButton != nullptr);
         CHECK_FALSE(addButton->isEnabled());
 
@@ -1004,7 +989,7 @@ TEST_CASE("Modulation matrix host notifications may synchronously delete the pan
 
     SECTION("add route")
     {
-        auto* addButton = findTextButton(*panel, "+ ADD ROUTE");
+        auto* addButton = findTextButton(*panel, "Add routing");
         REQUIRE(addButton != nullptr);
         DeleteMatrixPanelOnHostNotification host(processor, panel);
 
@@ -1024,7 +1009,7 @@ TEST_CASE("Modulation matrix host notifications may synchronously delete the pan
         collectMatrixRows(*panel, rows);
         REQUIRE(rows.size() == 1);
         auto* amountSlider = findAmountSlider(*rows.front());
-        auto* addButton = findTextButton(*panel, "+ ADD ROUTE");
+        auto* addButton = findTextButton(*panel, "Add routing");
         REQUIRE(amountSlider != nullptr);
         REQUIRE(addButton != nullptr);
 
@@ -2076,7 +2061,7 @@ TEST_CASE("Modulation matrix buttons accept only complete primary-button clicks"
         });
     row.setBounds(0, 0, 760, 40);
     auto* polarityButton = findTextButton(row, "Bi");
-    auto* bypassButton = findTextButton(row, "Off");
+    auto* bypassButton = findTextButton(row, "On");
     auto* removeButton = dynamic_cast<juce::TextButton*>(
         row.findChildWithID("remove_button"));
     REQUIRE(polarityButton != nullptr);
@@ -2085,10 +2070,11 @@ TEST_CASE("Modulation matrix buttons accept only complete primary-button clicks"
 
     ModulationMatrixPanel panel(processor);
     panel.setBounds(0, 0, 760, 420);
-    auto* addButton = findTextButton(panel, "+ ADD ROUTE");
-    auto* closeButton = findTextButton(panel, "Close");
+    auto* addButton = findTextButton(panel, "Add routing");
+    auto* actionButton = removeButton;
+    CHECK(findTextButton(panel, "Close") == nullptr);
     REQUIRE(addButton != nullptr);
-    REQUIRE(closeButton != nullptr);
+    REQUIRE(actionButton != nullptr);
 
     NonParameterChangeCapture host(processor);
 
@@ -2138,8 +2124,8 @@ TEST_CASE("Modulation matrix buttons accept only complete primary-button clicks"
             const auto routings = manager.getModulationRoutingsCopy();
             REQUIRE(routings.size() == 1);
             CHECK_FALSE(routings[0].isBypassed);
-            CHECK_FALSE(bypassButton->getToggleState());
-            CHECK(bypassButton->getButtonText() == "Off");
+            CHECK(bypassButton->getToggleState());
+            CHECK(bypassButton->getButtonText() == "On");
             CHECK(clicks.getClickCount() == 0);
             CHECK(host.notificationCount == 0);
         };
@@ -2152,8 +2138,8 @@ TEST_CASE("Modulation matrix buttons accept only complete primary-button clicks"
         const auto routings = manager.getModulationRoutingsCopy();
         REQUIRE(routings.size() == 1);
         CHECK(routings[0].isBypassed);
-        CHECK(bypassButton->getToggleState());
-        CHECK(bypassButton->getButtonText() == "On");
+        CHECK_FALSE(bypassButton->getToggleState());
+        CHECK(bypassButton->getButtonText() == "Off");
         CHECK(clicks.getClickCount() == 1);
         CHECK(host.notificationCount == 1);
     }
@@ -2202,18 +2188,18 @@ TEST_CASE("Modulation matrix buttons accept only complete primary-button clicks"
         CHECK(host.notificationCount == 1);
     }
 
-    SECTION("close")
+    SECTION("remove action")
     {
-        ButtonClickCapture clicks(*closeButton);
+        ButtonClickCapture clicks(*actionButton);
         const auto checkUnchanged = [&]
         {
             CHECK(clicks.getClickCount() == 0);
             CHECK(host.notificationCount == 0);
         };
 
-        exerciseRejectedGestures(*closeButton, checkUnchanged);
+        exerciseRejectedGestures(*actionButton, checkUnchanged);
         exerciseButtonPointerGesture(
-            *closeButton,
+            *actionButton,
             juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
 
         CHECK(clicks.getClickCount() == 1);
@@ -2222,79 +2208,79 @@ TEST_CASE("Modulation matrix buttons accept only complete primary-button clicks"
 
     SECTION("a new primary down replaces stale rejected ownership")
     {
-        ButtonClickCapture clicks(*closeButton);
+        ButtonClickCapture clicks(*actionButton);
         beginButtonPointerGesture(
-            *closeButton,
+            *actionButton,
             juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier });
 
         exerciseButtonPointerGesture(
-            *closeButton,
+            *actionButton,
             juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
 
         CHECK(clicks.getClickCount() == 1);
-        CHECK_FALSE(closeButton->isDown());
+        CHECK_FALSE(actionButton->isDown());
     }
 
     SECTION("a new primary down safely replaces stale primary ownership")
     {
-        ButtonClickCapture clicks(*closeButton);
+        ButtonClickCapture clicks(*actionButton);
         beginButtonPointerGesture(
-            *closeButton,
+            *actionButton,
             juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
-        REQUIRE(closeButton->isDown());
+        REQUIRE(actionButton->isDown());
 
         exerciseButtonPointerGesture(
-            *closeButton,
+            *actionButton,
             juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
 
         CHECK(clicks.getClickCount() == 1);
-        CHECK_FALSE(closeButton->isDown());
+        CHECK_FALSE(actionButton->isDown());
     }
 
     SECTION("hiding cancels a primary gesture without clicking")
     {
-        ButtonClickCapture clicks(*closeButton);
+        ButtonClickCapture clicks(*actionButton);
         beginButtonPointerGesture(
-            *closeButton,
+            *actionButton,
             juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
-        REQUIRE(closeButton->isDown());
+        REQUIRE(actionButton->isDown());
 
-        closeButton->setVisible(false);
+        actionButton->setVisible(false);
         CHECK(clicks.getClickCount() == 0);
-        CHECK_FALSE(closeButton->isDown());
+        CHECK_FALSE(actionButton->isDown());
 
-        closeButton->setVisible(true);
-        endButtonPointerGesture(*closeButton);
+        actionButton->setVisible(true);
+        endButtonPointerGesture(*actionButton);
         CHECK(clicks.getClickCount() == 0);
         exerciseButtonPointerGesture(
-            *closeButton,
+            *actionButton,
             juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
 
         CHECK(clicks.getClickCount() == 1);
-        CHECK_FALSE(closeButton->isDown());
+        CHECK_FALSE(actionButton->isDown());
     }
 
     SECTION("disabling cancels a primary gesture without clicking")
     {
-        ButtonClickCapture clicks(*closeButton);
+        ButtonClickCapture clicks(*actionButton);
         beginButtonPointerGesture(
-            *closeButton,
+            *actionButton,
             juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
-        REQUIRE(closeButton->isDown());
+        REQUIRE(actionButton->isDown());
 
-        closeButton->setEnabled(false);
+        actionButton->setEnabled(false);
         CHECK(clicks.getClickCount() == 0);
-        CHECK_FALSE(closeButton->isDown());
+        CHECK_FALSE(actionButton->isDown());
 
-        closeButton->setEnabled(true);
-        endButtonPointerGesture(*closeButton);
+        actionButton->setEnabled(true);
+        endButtonPointerGesture(*actionButton);
         CHECK(clicks.getClickCount() == 0);
         exerciseButtonPointerGesture(
-            *closeButton,
+            *actionButton,
             juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
 
         CHECK(clicks.getClickCount() == 1);
-        CHECK_FALSE(closeButton->isDown());
+        CHECK_FALSE(actionButton->isDown());
     }
 }
 
@@ -2329,7 +2315,7 @@ TEST_CASE("Modulation matrix primary buttons preserve non-pointer activation",
         });
     row.setBounds(0, 0, 760, 40);
     auto* polarityButton = findTextButton(row, "Bi");
-    auto* bypassButton = findTextButton(row, "Off");
+    auto* bypassButton = findTextButton(row, "On");
     auto* removeButton = dynamic_cast<juce::TextButton*>(
         row.findChildWithID("remove_button"));
     REQUIRE(polarityButton != nullptr);
@@ -2340,11 +2326,10 @@ TEST_CASE("Modulation matrix primary buttons preserve non-pointer activation",
     panel.setBounds(0, 0, 760, 420);
     panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
     panel.setVisible(true);
-    auto* addButton = findTextButton(panel, "+ ADD ROUTE");
-    auto* closeButton = findTextButton(panel, "Close");
+    auto* addButton = findTextButton(panel, "Add routing");
+    CHECK(findTextButton(panel, "Close") == nullptr);
     REQUIRE(addButton != nullptr);
-    REQUIRE(closeButton != nullptr);
-    REQUIRE(closeButton->isShowing());
+    REQUIRE(addButton->isShowing());
 
     SECTION("polarity triggerClick")
     {
@@ -2394,19 +2379,19 @@ TEST_CASE("Modulation matrix primary buttons preserve non-pointer activation",
         CHECK(manager.getModulationRoutingsCopy().size() == 2);
     }
 
-    SECTION("close Return key")
+    SECTION("add Return key")
     {
-        ButtonClickCapture clicks(*closeButton);
-        CHECK(static_cast<juce::Component&>(*closeButton).keyPressed(
+        ButtonClickCapture clicks(*addButton);
+        CHECK(static_cast<juce::Component&>(*addButton).keyPressed(
             juce::KeyPress { juce::KeyPress::returnKey }));
         juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
         CHECK(clicks.getClickCount() == 1);
     }
 
-    SECTION("close Space key")
+    SECTION("add Space key")
     {
-        ButtonClickCapture clicks(*closeButton);
-        CHECK(static_cast<juce::Component&>(*closeButton).keyPressed(
+        ButtonClickCapture clicks(*addButton);
+        CHECK(static_cast<juce::Component&>(*addButton).keyPressed(
             juce::KeyPress { juce::KeyPress::spaceKey }));
         CHECK(clicks.getClickCount() == 1);
     }
@@ -2439,7 +2424,7 @@ TEST_CASE("Modulation matrix toggle buttons publish only real model changes",
         [](std::uint64_t, ModulationRouting) {});
     row.setBounds(0, 0, 760, 40);
     auto* polarityButton = findTextButton(row, "Bi");
-    auto* bypassButton = findTextButton(row, "Off");
+    auto* bypassButton = findTextButton(row, "On");
     REQUIRE(polarityButton != nullptr);
     REQUIRE(bypassButton != nullptr);
     NonParameterChangeCapture host(processor);
@@ -2484,7 +2469,7 @@ TEST_CASE("Modulation matrix toggle buttons publish only real model changes",
         liveRoutings = manager.getModulationRoutingsCopy();
         REQUIRE_FALSE(liveRoutings.isEmpty());
         CHECK(liveRoutings[0].isBypassed);
-        CHECK(bypassButton->getButtonText() == "On");
+        CHECK(bypassButton->getButtonText() == "Off");
         CHECK(host.notificationCount == 1);
     }
 }
@@ -2518,7 +2503,7 @@ TEST_CASE("Modulation matrix follows externally recalled routings without stale-
     std::vector<ModulationMatrixRow*> rows;
     collectMatrixRows(panel, rows);
     REQUIRE(rows.size() == 1);
-    CHECK(containsComboBoxText(*rows.front(), targets[0].displayText));
+    CHECK(ModulationMatrixRowTestAccess::getDestinationMenu(*rows.front()).getSelectedId() == 2);
 
     juce::XmlElement recalledPreset { "WINGSFIRE" };
     state::saveStateToXml(processor, recalledPreset);
@@ -2544,15 +2529,19 @@ TEST_CASE("Modulation matrix follows externally recalled routings without stale-
     collectMatrixRows(panel, rows);
     REQUIRE(rows.size() == 2);
 
-    const auto rowsDisplaying = [&](const juce::String& targetText)
+    const auto rowsDisplaying = [&](int targetItemId)
     {
         return static_cast<int>(std::count_if(rows.begin(), rows.end(), [&](auto* row)
-                                              { return containsComboBoxText(*row, targetText); }));
+        {
+            return ModulationMatrixRowTestAccess::getDestinationMenu(*row).getSelectedId() == targetItemId;
+        }));
     };
 
-    CHECK(rowsDisplaying(targets[1].displayText) == 1);
-    CHECK(rowsDisplaying(targets[2].displayText) == 1);
-    CHECK(rowsDisplaying(targets[0].displayText) == 0);
+    // Menu IDs retain their parameter identity while display captions can
+    // use the same friendly module names as the rest of the editor.
+    CHECK(rowsDisplaying(3) == 1);
+    CHECK(rowsDisplaying(4) == 1);
+    CHECK(rowsDisplaying(2) == 0);
 }
 
 TEST_CASE("Modulation matrix rejects stale rows after same-target state recall",
@@ -2930,16 +2919,16 @@ TEST_CASE("Modulation matrix source affordances follow the LFO bank palette",
         const auto& bypassButton =
             ModulationMatrixRowTestAccess::getBypassButton(row);
         CHECK(bypassButton.findColour(juce::TextButton::textColourOnId)
-              == fire::ui::colours::danger);
-        CHECK(bypassButton.findColour(juce::TextButton::textColourOffId)
               == fire::ui::colours::positive);
+        CHECK(bypassButton.findColour(juce::TextButton::textColourOffId)
+              == fire::ui::colours::textMuted);
 
         const auto& removeButton =
             ModulationMatrixRowTestAccess::getRemoveButton(row);
         CHECK(removeButton.findColour(juce::TextButton::textColourOnId)
               == fire::ui::colours::danger);
         CHECK(removeButton.findColour(juce::TextButton::textColourOffId)
-              == fire::ui::colours::danger);
+              == fire::ui::colours::textMuted);
     }
 
     for (size_t first = 0; first < fingerprints.size(); ++first)
@@ -2966,7 +2955,7 @@ TEST_CASE("Modulation matrix source affordances follow the LFO bank palette",
           > 24);
 
     ModulationMatrixPanel panel { processor };
-    auto* addButton = findTextButton(panel, "+ ADD ROUTE");
+    auto* addButton = findTextButton(panel, "Add routing");
     REQUIRE(addButton != nullptr);
     CHECK(addButton->findColour(juce::TextButton::textColourOnId)
           == fire::ui::colours::modulation);
@@ -3008,7 +2997,7 @@ TEST_CASE("Modulation matrix row controls expose distinct accessibility semantic
     auto* destinationMenu = findRoutingComboBox(row, false);
     auto* amountSlider = findAmountSlider(row);
     auto* polarityButton = findTextButton(row, "Bi");
-    auto* bypassButton = findTextButton(row, "Off");
+    auto* bypassButton = findTextButton(row, "On");
     auto* removeButton = dynamic_cast<juce::TextButton*>(
         row.findChildWithID("remove_button"));
     REQUIRE(sourceMenu != nullptr);
@@ -3038,9 +3027,9 @@ TEST_CASE("Modulation matrix row controls expose distinct accessibility semantic
     const std::array<juce::String, 6> expectedTitles {
         "Modulation routing 1 source",
         "Modulation routing 1 destination",
-        "Modulation routing 1 amount",
+        "Modulation routing 1 depth",
         "Modulation routing 1 polarity",
-        "Modulation routing 1 bypass",
+        "Modulation routing 1 active",
         "Remove modulation routing 1"
     };
     const std::array<juce::String, 6> expectedHelp {
@@ -3048,7 +3037,7 @@ TEST_CASE("Modulation matrix row controls expose distinct accessibility semantic
         "Select the destination for modulation routing 1",
         "Set the modulation depth for modulation routing 1",
         "Switch modulation routing 1 between bipolar and unipolar",
-        "Turn bypass on or off for modulation routing 1",
+        "Enable or bypass modulation routing 1",
         "Remove modulation routing 1"
     };
     const std::array<juce::AccessibilityRole, 6> expectedRoles {
@@ -3139,7 +3128,7 @@ TEST_CASE("Cached modulation amount accessibility rejects stale value writes",
             auto* handler = amountSlider->getAccessibilityHandler();
             REQUIRE(handler != nullptr);
             CHECK(handler->getRole() == juce::AccessibilityRole::slider);
-            CHECK(handler->getTitle() == "Modulation routing 1 amount");
+            CHECK(handler->getTitle() == "Modulation routing 1 depth");
             CHECK(handler->getHelp() == amountSlider->getTooltip());
             auto* value = handler->getValueInterface();
             REQUIRE(value != nullptr);

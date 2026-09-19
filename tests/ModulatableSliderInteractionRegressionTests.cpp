@@ -1548,6 +1548,14 @@ TEST_CASE("Modulation overlays follow the assigned LFO bank palette",
     slider.lfoAmount = 0.72;
     slider.lfoValue = 0.38;
 
+    slider.lfoSource = 0;
+    juce::Image fallbackImage(juce::Image::ARGB, 180, 180, true);
+    {
+        juce::Graphics graphics(fallbackImage);
+        slider.paintEntireComponent(graphics, true);
+    }
+    const auto fallback = fire::ui::lfoBankColourForSource(0);
+
     std::set<std::uint64_t> fingerprints;
     for (int source = 1; source <= fire::ui::lfoBankCount; ++source)
     {
@@ -1557,19 +1565,30 @@ TEST_CASE("Modulation overlays follow the assigned LFO bank palette",
         slider.paintEntireComponent(graphics, true);
 
         const auto expected = fire::ui::lfoBankColourForSource(source);
+        const auto expectedRed = static_cast<float>(expected.getRed()) - fallback.getRed();
+        const auto expectedGreen = static_cast<float>(expected.getGreen()) - fallback.getGreen();
+        const auto expectedBlue = static_cast<float>(expected.getBlue()) - fallback.getBlue();
+        const auto expectedMagnitude = expectedRed * expectedRed
+                                       + expectedGreen * expectedGreen
+                                       + expectedBlue * expectedBlue;
         int matchingPixels = 0;
         for (int y = 0; y < image.getHeight(); ++y)
             for (int x = 0; x < image.getWidth(); ++x)
             {
                 const auto pixel = image.getPixelAt(x, y);
-                const auto channelDistance =
-                    std::abs(static_cast<int>(pixel.getRed())
-                             - static_cast<int>(expected.getRed()))
-                    + std::abs(static_cast<int>(pixel.getGreen())
-                               - static_cast<int>(expected.getGreen()))
-                    + std::abs(static_cast<int>(pixel.getBlue())
-                               - static_cast<int>(expected.getBlue()));
-                if (pixel.getAlpha() >= 96 && channelDistance <= 36)
+                const auto previous = fallbackImage.getPixelAt(x, y);
+                const auto red = static_cast<float>(pixel.getRed()) - previous.getRed();
+                const auto green = static_cast<float>(pixel.getGreen()) - previous.getGreen();
+                const auto blue = static_cast<float>(pixel.getBlue()) - previous.getBlue();
+                const auto magnitude = red * red + green * green + blue * blue;
+                const auto alignment = red * expectedRed + green * expectedGreen
+                                       + blue * expectedBlue;
+                // Translucent range bands and white-tinted live markers no
+                // longer equal an opaque palette entry. Their colour change
+                // from the neutral fallback must still point toward this bank,
+                // regardless of alpha or antialiasing coverage.
+                if (pixel.getAlpha() >= 96 && magnitude >= 100.0f && alignment > 0.0f
+                    && alignment * alignment > 0.98f * 0.98f * magnitude * expectedMagnitude)
                     ++matchingPixels;
             }
 

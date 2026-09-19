@@ -679,11 +679,11 @@ void BandPanel::rebuildChromeCache(float displayScale)
     if (ottSwitch.getToggleState()) { moduleTitle = "OTT"; graphTitle = "DYNAMICS"; }
 
     if (selectedInsert >= 0) { moduleTitle = fire::effects::name(processor.getInsertEffectType(focusBandNum + 1, selectedInsert)); graphTitle = "OUTPUT"; }
-    drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "MODE");
+    drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "CHAIN");
     const bool expandedInsert = selectedInsert >= 0 && insertControls.usesExpandedLayout();
     drawMinimalTitle(cacheGraphics,
                      titleFor(expandedInsert ? knobsAreaRect.getUnion(graphAreaRect) : knobsAreaRect),
-                     expandedInsert ? "CLOUDS" : moduleTitle);
+                     expandedInsert ? "GRANULAR / CLOUDS" : moduleTitle);
     if (! expandedInsert)
         drawMinimalTitle(cacheGraphics, titleFor(graphAreaRect), graphTitle);
     drawMinimalTitle(cacheGraphics,

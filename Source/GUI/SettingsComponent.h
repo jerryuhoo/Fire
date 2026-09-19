@@ -36,31 +36,21 @@ public:
         // Use the getVersionString() function you already have
         versionLabel.setText("FIRE  /  VERSION " + juce::String(VERSION), juce::dontSendNotification);
         versionLabel.setJustificationType(juce::Justification::centred);
-        versionLabel.setFont(juce::Font {
-            juce::FontOptions()
-                .withHeight(14.0f)
-                .withStyle("italic") });
+        versionLabel.setFont(fire::ui::displayFont(16.0f));
         versionLabel.setColour(juce::Label::textColourId, fire::ui::colours::whiteHot);
         addAndMakeVisible(versionLabel);
 
         // --- Author Label Setup ---
         authorLabel.setText("Designed & developed by Yifeng Yu", juce::dontSendNotification);
         authorLabel.setJustificationType(juce::Justification::centred);
-        authorLabel.setFont(juce::Font {
-            juce::FontOptions()
-                .withHeight(14.0f)
-                .withStyle("Plain") });
+        authorLabel.setFont(fire::ui::bodyFont(12.5f));
         authorLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
         addAndMakeVisible(authorLabel);
 
         companyLabel.setButtonText("BLUE WINGS MUSIC");
         companyLabel.setURL(juce::URL("https://bluewingsmusic.com"));
         companyLabel.setJustificationType(juce::Justification::centred);
-        companyLabel.setFont(juce::Font {
-                                 juce::FontOptions()
-                                     .withHeight(14.0f)
-                                     .withStyle("Plain") },
-                             false);
+        companyLabel.setFont(fire::ui::labelFont(12.0f), false);
         companyLabel.setColour(juce::HyperlinkButton::textColourId, fire::ui::colours::signalCool);
         addAndMakeVisible(companyLabel);
 

@@ -1029,6 +1029,9 @@ TEST_CASE("Modulation Matrix dialog closes synchronously with its owning UI",
         REQUIRE(content != nullptr);
 
         CHECK(launchOptions.dialogTitle == "Modulation Matrix");
+        CHECK(launchOptions.dialogBackgroundColour == fire::ui::colours::canvas);
+        CHECK(launchOptions.useNativeTitleBar);
+        CHECK(launchOptions.escapeKeyTriggersCloseButton);
         CHECK(launchOptions.componentToCentreAround == &panel);
         CHECK(launchOptions.resizable);
         CHECK(content->getWidth()
@@ -1097,31 +1100,28 @@ TEST_CASE("Modulation Matrix dialog closes synchronously with its owning UI",
         auto* header = findComponentOfType<ModulationMatrixHeader>(*content);
         auto* viewport = findComponentOfType<juce::Viewport>(*content);
         auto* row = findComponentOfType<ModulationMatrixRow>(*content);
-        auto* addButton = findButtonWithText(*content, "+ ADD ROUTE");
+        auto* addButton = findButtonWithText(*content, "Add routing");
         auto* closeButton = findButtonWithText(*content, "Close");
         REQUIRE(header != nullptr);
         REQUIRE(viewport != nullptr);
         REQUIRE(row != nullptr);
         REQUIRE(addButton != nullptr);
-        REQUIRE(closeButton != nullptr);
+        CHECK(closeButton == nullptr);
         CHECK_FALSE(header->getBounds().isEmpty());
         CHECK(viewport->getHeight() > 0);
         CHECK(viewport->getVerticalScrollBar().isVisible());
         CHECK_FALSE(viewport->getHorizontalScrollBar().isVisible());
         CHECK_FALSE(row->getBounds().isEmpty());
         CHECK_FALSE(addButton->getBounds().isEmpty());
-        CHECK_FALSE(closeButton->getBounds().isEmpty());
-        CHECK_FALSE(addButton->getBounds().intersects(
-            closeButton->getBounds()));
-
-        int previousRight = 0;
+        std::vector<juce::Rectangle<int>> controlBounds;
         for (auto* child : row->getChildren())
         {
             REQUIRE(child != nullptr);
             CHECK_FALSE(child->getBounds().isEmpty());
             CHECK(row->getLocalBounds().contains(child->getBounds()));
-            CHECK(child->getX() >= previousRight);
-            previousRight = child->getRight();
+            for (const auto& previous : controlBounds)
+                CHECK_FALSE(previous.intersects(child->getBounds()));
+            controlBounds.push_back(child->getBounds());
         }
 
         juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);

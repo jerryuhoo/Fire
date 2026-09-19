@@ -116,6 +116,12 @@ class ModulationMatrixPrimaryButton final : public PrimaryTextButton
 {
 public:
     using PrimaryTextButton::PrimaryTextButton;
+    enum class Appearance { standard, polarity, enable, remove, add };
+    void setAppearance(Appearance value) { appearance = value; repaint(); }
+
+private:
+    void paintButton(juce::Graphics&, bool, bool) override;
+    Appearance appearance = Appearance::standard;
 };
 
 //
@@ -241,6 +247,7 @@ private:
     void requestParentRebuild();
     void completeAmountPointerDispatch(bool requestRebuild,
                                        bool notifyHost);
+    void updateVisualState();
 
     FireAudioProcessor& processor;
     FireLookAndFeel fireLookAndFeel;
@@ -273,6 +280,8 @@ public:
     static constexpr int preferredContentHeight = 400;
     static constexpr int minimumContentWidth = 620;
     static constexpr int minimumContentHeight = 300;
+    static constexpr int rowHeight = 56;
+    static constexpr int rowPitch = 64;
 
     ModulationMatrixPanel(FireAudioProcessor& p);
     ~ModulationMatrixPanel() override;
@@ -297,11 +306,13 @@ private:
 
     ModulationMatrixHeader header;
     std::vector<std::unique_ptr<ModulationMatrixRow>> rows;
-    ModulationMatrixPrimaryButton addButton { "+" };
-    ModulationMatrixPrimaryButton closeButton { "Close" };
+    ModulationMatrixPrimaryButton addButton { "Add routing" };
 
     juce::Viewport viewport;
     juce::Component contentComponent;
     juce::Rectangle<int> titleArea;
+    juce::Rectangle<int> summaryArea;
+    juce::Label emptyTitle, emptyDescription;
+    int activeRouteCount = 0;
     std::shared_ptr<ModulationRoutingEditSession> routingEditSession;
 };

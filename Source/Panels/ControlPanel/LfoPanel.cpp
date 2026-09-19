@@ -3168,6 +3168,22 @@ void LfoPanel::resized()
     knobGrid.alignContent = juce::Grid::AlignContent::center;
 
     knobGrid.performLayout(knobsArea);
+
+    const auto titleFont = juce::Font { juce::FontOptions()
+        .withName(KNOB_FONT)
+        .withHeight(juce::jmax(1.0f, juce::jmin(KNOB_FONT_SIZE * uiScale,
+                            fire::ui::Metrics::knobTitleHeight * uiScale * 0.68f)))
+        .withStyle("Plain") };
+    const auto updateTitle = [&titleFont](juce::Label& label, juce::Slider& slider)
+    {
+        label.setFont(titleFont);
+        // Attached labels calculate their bounds from the font. Refresh that
+        // position even when a host changes scale without changing bounds.
+        label.attachToComponent(&slider, false);
+    };
+    updateTitle(rateLabel, rateSlider);
+    updateTitle(lfoSmoothLabel, lfoSmoothSlider);
+    updateTitle(lfoPhaseLabel, lfoPhaseSlider);
 }
 
 void LfoPanel::animationTick(float deltaSeconds)
@@ -3442,6 +3458,9 @@ void LfoPanel::configureModulationMatrixDialog(
         getModulationMatrixInitialContentSize(*this);
     launchOptions.content->setSize(initialSize.x, initialSize.y);
     launchOptions.dialogTitle = "Modulation Matrix";
+    launchOptions.dialogBackgroundColour = fire::ui::colours::canvas;
+    launchOptions.useNativeTitleBar = true;
+    launchOptions.escapeKeyTriggersCloseButton = true;
     launchOptions.resizable = true;
     launchOptions.componentToCentreAround = this;
 }

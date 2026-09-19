@@ -252,6 +252,16 @@ The main LFO display allows you to create complex modulation shapes. It has two 
 - **Matrix Button**: Opens the Modulation Matrix window, where you can assign LFOs to control plugin parameters.
 - **Assign Button**: Engages "Assign Mode." While active, the next parameter you click in the plugin will be automatically assigned to the currently selected LFO.
 
+The matrix presents each routing from **Source → Destination → Depth**, with
+signed percentage depth, bipolar/unipolar selection, an **Active** power button
+and a remove icon. Use **Add routing** to create a connection; close the window
+with its native close button or Escape. The column layout stays aligned while
+scrolling and resizing.
+
+Assigned knobs use a translucent source-coloured range band. A bright outlined
+dot shows the current modulated value, while the neutral inner notch marks the
+base value. Bypassed modulation is dimmed and does not show a moving dot.
+
 ### 3.5. Global Effect
 
 - **Filter**: you can set lowcut, highcut, and peak. Lowcut and highcut each has four slopes (12, 24, 36, 48) you can choose.
@@ -482,7 +492,7 @@ OTT settings participate in presets, A/B comparisons and band copying. Older pro
 
 ### Master and Band insert effects
 
-Use **MODE → +** in either **Master Lab** or **Band Lab** to add an effect. Each master/band chain has eight independent insert slots and can contain multiple instances of the same effect. The module rail keeps five fixed-height rows visible and scrolls as more effects are added. The selected module scrolls into view automatically.
+Use **CHAIN → +** in either **Master Lab** or **Band Lab** to add an effect. Each master/band chain has eight independent insert slots and can contain multiple instances of the same effect. The module rail keeps five fixed-height rows visible and scrolls as more effects are added. The selected module scrolls into view automatically.
 
 | Effect | Controls |
 | --- | --- |

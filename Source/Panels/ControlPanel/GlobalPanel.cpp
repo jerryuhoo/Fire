@@ -861,14 +861,14 @@ void GlobalPanel::rebuildChromeCache(float displayScale)
 
     juce::String sectionTitle { "FILTER" };
     if (selectedInsert >= 0)
-        sectionTitle = insertControls.usesExpandedLayout() ? "CLOUDS"
+        sectionTitle = insertControls.usesExpandedLayout() ? "GRANULAR / CLOUDS"
             : fire::effects::name(processor.getInsertEffectType(0, selectedInsert));
     else if (downsampleSwitch.getToggleState())
         sectionTitle = "LO-FI";
     else if (graphSwitch.getToggleState())
         sectionTitle = "ANALYSIS";
 
-    drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "MODE");
+    drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "CHAIN");
     drawMinimalTitle(cacheGraphics, titleFor(controlsAreaRect), sectionTitle);
     drawMinimalTitle(cacheGraphics, titleFor(outputAreaRect), "MASTER");
 

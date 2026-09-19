@@ -202,19 +202,38 @@ private:
                 return;
             const auto scale = juce::jlimit(0.4f, 3.0f, getHeight() / 32.0f);
             const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
-            const auto radius = juce::jmin(5.0f * scale, bounds.getHeight() * 0.5f);
-            const auto emphasis = juce::jmax(getHoverAnimation(), getFocusAnimation());
-            const auto alpha = isEnabled() ? 1.0f : 0.62f;
-            g.setColour(colours::surface1.interpolatedWith(colours::raised, emphasis * 0.55f)
-                            .darker(getPressAnimation() * 0.18f));
-            g.fillRoundedRectangle(bounds, radius);
-            g.setColour((getToggleState() ? accent.withAlpha(0.70f) : colours::hairline)
-                            .withMultipliedAlpha(alpha));
-            g.drawRoundedRectangle(bounds, radius, 1.0f);
-            if (getFocusAnimation() > 0.001f)
+            const auto radius = juce::jmin(Metrics::radiusSmall * scale, bounds.getHeight() * 0.5f);
+            const auto hover = getHoverAnimation();
+            const auto press = getPressAnimation();
+            const auto focus = getFocusAnimation();
+            const auto disabled = getDisabledAnimation();
+            const auto alpha = 1.0f - disabled * 0.38f;
+            const auto washAlpha = juce::jlimit(0.0f, 1.0f,
+                (getToggleState() ? 1.0f : 0.56f * hover + 0.72f * press + 0.34f * focus)
+                    * (1.0f - disabled));
+
+            // Match shares the header's quiet idle chrome. Selection and
+            // keyboard focus use short rails, leaving the learning track clear.
+            if (washAlpha > 0.001f)
             {
-                g.setColour(colours::gold.withAlpha(getFocusAnimation() * 0.65f));
-                g.drawRoundedRectangle(bounds.reduced(scale), radius, scale);
+                const auto wash = getToggleState() ? colours::raised
+                    : colours::surface2.interpolatedWith(colours::raised, press);
+                g.setColour(wash.withAlpha(washAlpha));
+                g.fillRoundedRectangle(bounds, radius);
+            }
+            if (getToggleState())
+            {
+                const auto rail = bounds.withSizeKeepingCentre(bounds.getWidth() * 0.42f, 2.0f * scale)
+                                        .withBottomY(bounds.getBottom());
+                g.setColour(accent.withAlpha(0.72f * (1.0f - disabled)));
+                g.fillRect(rail);
+            }
+            if (focus > 0.001f)
+            {
+                const auto rail = bounds.withSizeKeepingCentre(bounds.getWidth() * 0.55f, scale)
+                                        .withY(bounds.getY());
+                g.setColour(colours::gold.withAlpha(focus * 0.65f * alpha));
+                g.fillRect(rail);
             }
             if (progressVisible)
             {
@@ -224,7 +243,7 @@ private:
                 g.setColour(accent.withAlpha(0.72f));
                 g.fillRect(track.withWidth(track.getWidth() * progress));
             }
-            g.setColour(accent.withMultipliedAlpha(alpha));
+            g.setColour(accent.brighter(0.14f * hover).darker(0.08f * press).withMultipliedAlpha(alpha));
             g.setFont(bodyFont(10.5f * scale));
             g.drawFittedText(getButtonText(), getLocalBounds().reduced(3, 2),
                              juce::Justification::centred, 1);

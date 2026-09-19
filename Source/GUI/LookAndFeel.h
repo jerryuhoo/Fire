@@ -581,9 +581,9 @@ public:
             }
 
             if (id == "header_previous" || id == "header_next")
-                drawArrowIcon(g, bounds, id, accent);
+                drawArrowIcon(g, bounds, id, accent.withMultipliedAlpha(1.0f - 0.60f * disabledAmount));
             else if (id == "header_menu")
-                drawMenuIcon(g, bounds, accent);
+                drawMenuIcon(g, bounds, accent.withMultipliedAlpha(1.0f - 0.60f * disabledAmount));
 
             return;
         }
@@ -643,8 +643,10 @@ public:
             cross.lineTo(area.getBottomRight());
             cross.startNewSubPath(area.getTopRight());
             cross.lineTo(area.getBottomLeft());
-            g.setColour(colours::danger.withAlpha(0.68f + 0.32f * animation.hover));
-            g.strokePath(cross, juce::PathStrokeType(1.8f * scale,
+            const auto emphasis = juce::jmax(animation.hover, animation.focus);
+            g.setColour(colours::textMuted.interpolatedWith(colours::danger, emphasis)
+                            .withMultipliedAlpha(1.0f - 0.60f * animation.disabled));
+            g.strokePath(cross, juce::PathStrokeType(1.4f * scale,
                                                     juce::PathStrokeType::curved,
                                                     juce::PathStrokeType::rounded));
             return;
@@ -1100,7 +1102,8 @@ private:
                           juce::jmax(1.0f, 1.5f * scale));
         }
 
-        if (slider.isModulated && std::abs(slider.lfoAmount) > 0.0001 && slider.isEnabled())
+        if (slider.isModulated && std::abs(slider.lfoAmount) > 0.0001
+            && slider.isEnabled() && radius > 1.0f)
         {
             const auto base = slider.valueToProportionOfLength(slider.getValue());
             const auto depth = std::abs(slider.lfoAmount);
@@ -1112,21 +1115,22 @@ private:
             // stroke and the live marker clear of its rim and the value arc.
             const auto dialRadius = juce::jmax(
                 2.0f, radius - slider.getPressAnimation() * 0.8f * scale);
-            const auto modStroke = juce::jmax(
-                1.5f, juce::jmin(3.5f * scale, dialRadius * 0.1f));
-            const auto pointDiameter = 3.8f * scale;
-            const auto pointBorder = 0.8f * scale;
+            const auto discRadius = dialRadius * (1.0f - dialDiscInsetProportion);
+            const auto modStroke = juce::jmin(3.0f * scale, discRadius * 0.14f);
+            const auto pointDiameter = juce::jmin(4.0f * scale, discRadius * 0.22f);
+            const auto pointBorder = juce::jmin(0.8f * scale, discRadius * 0.05f);
             const auto rimInset = juce::jmax(modStroke * 0.5f,
                                              pointDiameter * 0.5f + pointBorder)
-                                  + 1.5f * scale;
-            const auto modRadius = juce::jmax(
-                2.0f, dialRadius * (1.0f - dialDiscInsetProportion) - rimInset);
+                                  + juce::jmin(0.8f * scale, discRadius * 0.05f);
+            const auto modRadius = discRadius - rimInset;
             juce::Path range;
             range.addCentredArc(centre.x, centre.y, modRadius, modRadius, 0.0f,
                                 startAngle + static_cast<float>(low) * (endAngle - startAngle),
                                 startAngle + static_cast<float>(high) * (endAngle - startAngle), true);
-            g.setColour(modulationAccent.withAlpha(slider.isBypassed ? 0.48f
-                                                                     : 0.94f));
+            // The band describes the available range, so keep it behind the
+            // neutral base pointer and the brighter, moving position marker.
+            g.setColour(modulationAccent.withAlpha(slider.isBypassed ? 0.18f
+                                                                     : 0.30f));
             g.strokePath(range, juce::PathStrokeType(modStroke,
                                                     juce::PathStrokeType::curved,
                                                     juce::PathStrokeType::rounded));
@@ -1143,11 +1147,32 @@ private:
                 const auto pointBounds = juce::Rectangle<float>(
                                              pointDiameter, pointDiameter)
                                              .withCentre(point);
-                g.setColour(colours::canvas.withAlpha(0.88f));
+                g.setColour(colours::canvas.withAlpha(0.96f));
                 g.fillEllipse(pointBounds.expanded(pointBorder));
-                g.setColour(bankAccent);
+                g.setColour(bankAccent.interpolatedWith(colours::whiteHot, 0.60f));
                 g.fillEllipse(pointBounds);
             }
+
+            // Extend the base pointer with an inner origin notch. It sits
+            // inward of the live dot, including when both values coincide.
+            const auto baseAngle = startAngle
+                                   + static_cast<float>(base) * (endAngle - startAngle);
+            const juce::Point<float> baseDirection {
+                std::sin(baseAngle), -std::cos(baseAngle)
+            };
+            const auto originOuter = modRadius - pointDiameter * 0.5f - pointBorder
+                                     - juce::jmin(0.7f * scale, discRadius * 0.045f);
+            const auto originInner = originOuter
+                                     - juce::jmin(3.0f * scale, discRadius * 0.20f);
+            const juce::Line<float> origin {
+                centre + baseDirection * originInner,
+                centre + baseDirection * originOuter
+            };
+            const auto originWidth = juce::jmin(1.3f * scale, discRadius * 0.09f);
+            g.setColour(colours::canvas.withAlpha(0.92f));
+            g.drawLine(origin, originWidth + pointBorder * 2.0f);
+            g.setColour(colours::whiteHot.withAlpha(slider.isBypassed ? 0.48f : 0.96f));
+            g.drawLine(origin, originWidth);
         }
 
         if (slider.isModulated)
@@ -1204,19 +1229,15 @@ private:
         const auto extent = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.34f;
         const auto stemThickness = juce::jmax(1.0f, 1.35f * scale);
         auto area = juce::Rectangle<float>(extent, extent).withCentre(bounds.getCentre());
-        // One closed outline avoids opposite-winding head/stem overlaps
-        // cancelling into a transparent notch under non-zero path filling.
+        // Match the menu/zoom icon's light, rounded strokes. An open arrow
+        // keeps the same connected shaft without a heavy filled triangle.
         const auto shoulder = area.getX() + area.getWidth() * 0.48f;
-        const auto halfStem = juce::jmin(stemThickness * 0.5f, area.getHeight() * 0.5f);
         juce::Path arrow;
-        arrow.startNewSubPath(area.getX(), area.getCentreY());
+        arrow.startNewSubPath(area.getRight(), area.getCentreY());
+        arrow.lineTo(area.getX(), area.getCentreY());
+        arrow.startNewSubPath(shoulder, area.getBottom());
+        arrow.lineTo(area.getX(), area.getCentreY());
         arrow.lineTo(shoulder, area.getY());
-        arrow.lineTo(shoulder, area.getCentreY() - halfStem);
-        arrow.lineTo(area.getRight(), area.getCentreY() - halfStem);
-        arrow.lineTo(area.getRight(), area.getCentreY() + halfStem);
-        arrow.lineTo(shoulder, area.getCentreY() + halfStem);
-        arrow.lineTo(shoulder, area.getBottom());
-        arrow.closeSubPath();
 
         float rotation = 0.0f;
         if (id == "right_arrow" || id == "header_next")
@@ -1227,7 +1248,9 @@ private:
             rotation = -juce::MathConstants<float>::halfPi;
         arrow.applyTransform(juce::AffineTransform::rotation(rotation, area.getCentreX(), area.getCentreY()));
         g.setColour(colour);
-        g.fillPath(arrow);
+        g.strokePath(arrow, juce::PathStrokeType(stemThickness,
+                                               juce::PathStrokeType::curved,
+                                               juce::PathStrokeType::rounded));
     }
 
     void drawMenuIcon(juce::Graphics& g,

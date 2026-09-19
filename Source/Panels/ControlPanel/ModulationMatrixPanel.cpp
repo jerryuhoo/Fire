@@ -15,6 +15,35 @@
 
 namespace
 {
+struct MatrixColumns
+{
+    juce::Rectangle<int> source, arrow, destination, amount, polarity, enabled, remove;
+};
+
+MatrixColumns matrixColumns(juce::Rectangle<int> bounds)
+{
+    auto area = bounds.reduced(10, 0);
+    const auto extra = juce::jmax(0, area.getWidth() - 548);
+    const auto sourceWidth = 72 + juce::jmin(24, extra / 6);
+    const auto amountWidth = 120 + juce::jmin(56, extra / 3);
+    const auto destinationWidth = juce::jmax(0, area.getWidth()
+        - sourceWidth - amountWidth - 44 - 30 - 28 - 18 - 32);
+    area = area.withSizeKeepingCentre(area.getWidth(), juce::jlimit(0, 32, bounds.getHeight() - 12));
+    MatrixColumns columns;
+    columns.source = area.removeFromLeft(sourceWidth);
+    columns.arrow = area.removeFromLeft(18);
+    columns.destination = area.removeFromLeft(destinationWidth);
+    area.removeFromLeft(8);
+    columns.amount = area.removeFromLeft(amountWidth);
+    area.removeFromLeft(8);
+    columns.polarity = area.removeFromLeft(44);
+    area.removeFromLeft(8);
+    columns.enabled = area.removeFromLeft(30);
+    area.removeFromLeft(8);
+    columns.remove = area.removeFromLeft(28);
+    return columns;
+}
+
 bool haveSameRoutingState(const ModulationRouting& lhs,
                           const ModulationRouting& rhs) noexcept
 {
@@ -524,6 +553,88 @@ void ModulationMatrixRoutingComboBox::showPopup()
                            requestInteractionGeneration));
 }
 
+void ModulationMatrixPrimaryButton::paintButton(juce::Graphics& g, bool, bool)
+{
+    using namespace fire::ui;
+    const auto bounds = getLocalBounds().toFloat().reduced(0.75f);
+    if (bounds.isEmpty()) return;
+    const auto hover = getHoverAnimation();
+    const auto focus = getFocusAnimation();
+    const auto press = getPressAnimation();
+    const auto enabledAlpha = isEnabled() ? 1.0f : 0.42f;
+    const bool active = getToggleState();
+    auto ink = findColour(active ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId);
+    auto fill = colours::surface1.interpolatedWith(colours::raised, hover * 0.65f + press * 0.25f);
+    auto outline = colours::hairline.withAlpha(0.70f + hover * 0.30f);
+    if (appearance == Appearance::add)
+    {
+        ink = colours::whiteHot;
+        fill = colours::modulation.withAlpha(0.16f + hover * 0.08f + press * 0.08f);
+        outline = colours::modulation.withAlpha(0.38f + hover * 0.25f);
+    }
+    else if (appearance == Appearance::enable)
+    {
+        ink = active ? colours::positive : colours::textMuted;
+        fill = active ? colours::positive.withAlpha(0.08f + hover * 0.05f) : fill;
+        outline = active ? colours::positive.withAlpha(0.22f + hover * 0.25f) : outline;
+    }
+    else if (appearance == Appearance::remove)
+    {
+        ink = colours::textMuted.interpolatedWith(colours::danger, juce::jmax(hover, press));
+        fill = colours::danger.withAlpha(hover * 0.09f + press * 0.07f);
+        outline = colours::hairline.withAlpha(hover * 0.60f);
+    }
+    g.setColour(fill.withMultipliedAlpha(enabledAlpha));
+    g.fillRoundedRectangle(bounds, 6.0f);
+    g.setColour(outline.withMultipliedAlpha(enabledAlpha));
+    g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
+    if (focus > 0.001f)
+    {
+        g.setColour(colours::gold.withAlpha(focus * 0.70f));
+        g.drawRoundedRectangle(bounds.reduced(1.5f), 4.5f, 1.25f);
+    }
+    g.setColour(ink.withMultipliedAlpha(enabledAlpha));
+    const auto centre = bounds.getCentre();
+    const auto stroke = juce::PathStrokeType(1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+    if (appearance == Appearance::enable)
+    {
+        juce::Path symbol;
+        symbol.addCentredArc(centre.x, centre.y + 0.5f, 5.7f, 5.7f, 0.0f,
+                            0.55f, juce::MathConstants<float>::twoPi - 0.55f, true);
+        symbol.startNewSubPath(centre.x, centre.y - 6.0f);
+        symbol.lineTo(centre.x, centre.y + 0.5f);
+        g.strokePath(symbol, stroke);
+    }
+    else if (appearance == Appearance::remove)
+    {
+        juce::Path symbol;
+        symbol.startNewSubPath(centre.x - 4.0f, centre.y - 3.0f);
+        symbol.lineTo(centre.x - 3.3f, centre.y + 5.5f);
+        symbol.lineTo(centre.x + 3.3f, centre.y + 5.5f);
+        symbol.lineTo(centre.x + 4.0f, centre.y - 3.0f);
+        symbol.startNewSubPath(centre.x - 5.5f, centre.y - 5.0f);
+        symbol.lineTo(centre.x + 5.5f, centre.y - 5.0f);
+        symbol.startNewSubPath(centre.x - 2.0f, centre.y - 5.0f);
+        symbol.lineTo(centre.x - 1.5f, centre.y - 7.0f);
+        symbol.lineTo(centre.x + 1.5f, centre.y - 7.0f);
+        symbol.lineTo(centre.x + 2.0f, centre.y - 5.0f);
+        g.strokePath(symbol, stroke);
+    }
+    else
+    {
+        auto textBounds = getLocalBounds().reduced(6, 2);
+        if (appearance == Appearance::add)
+        {
+            const auto x = bounds.getX() + 16.0f;
+            g.drawLine(x - 3.5f, centre.y, x + 3.5f, centre.y, 1.5f);
+            g.drawLine(x, centre.y - 3.5f, x, centre.y + 3.5f, 1.5f);
+            textBounds.removeFromLeft(22);
+        }
+        g.setFont(labelFont(appearance == Appearance::add ? 11.5f : 10.5f));
+        g.drawFittedText(getButtonText(), textBounds, juce::Justification::centred, 1);
+    }
+}
+
 //==============================================================================
 // ModulationMatrixHeader Implementation
 //==============================================================================
@@ -531,52 +642,47 @@ ModulationMatrixHeader::ModulationMatrixHeader()
 {
     // Initialize and add labels for the column titles.
     addAndMakeVisible(sourceLabel);
-    sourceLabel.setText("Source", juce::dontSendNotification);
-    sourceLabel.setJustificationType(juce::Justification::centred);
+    sourceLabel.setText("SOURCE", juce::dontSendNotification);
+    sourceLabel.setJustificationType(juce::Justification::centredLeft);
 
     addAndMakeVisible(amountLabel);
-    amountLabel.setText("Amount", juce::dontSendNotification);
+    amountLabel.setText("DEPTH", juce::dontSendNotification);
     amountLabel.setJustificationType(juce::Justification::centred);
 
     addAndMakeVisible(polarityLabel);
-    polarityLabel.setText("Polarity", juce::dontSendNotification);
+    polarityLabel.setText("POLARITY", juce::dontSendNotification);
     polarityLabel.setJustificationType(juce::Justification::centred);
 
     addAndMakeVisible(bypassLabel);
-    bypassLabel.setText("Bypass", juce::dontSendNotification);
+    bypassLabel.setText("ACTIVE", juce::dontSendNotification);
     bypassLabel.setJustificationType(juce::Justification::centred);
 
     addAndMakeVisible(destinationLabel);
-    destinationLabel.setText("Destination", juce::dontSendNotification);
-    destinationLabel.setJustificationType(juce::Justification::centred);
+    destinationLabel.setText("DESTINATION", juce::dontSendNotification);
+    destinationLabel.setJustificationType(juce::Justification::centredLeft);
 
     for (auto* label : { &sourceLabel, &amountLabel, &polarityLabel, &bypassLabel, &destinationLabel })
     {
         label->setColour(juce::Label::textColourId, fire::ui::colours::textMuted);
-        label->setFont(fire::ui::labelFont(10.0f));
+        label->setFont(fire::ui::labelFont(9.0f));
+        label->setBorderSize({});
     }
 }
 
 void ModulationMatrixHeader::paint(juce::Graphics& g)
 {
-    g.setColour(fire::ui::colours::surface1.withAlpha(0.86f));
-    g.fillRoundedRectangle(getLocalBounds().toFloat(), fire::ui::Metrics::radiusSmall);
-    g.setColour(fire::ui::colours::hairline.withAlpha(0.72f));
+    g.setColour(fire::ui::colours::hairline.withAlpha(0.55f));
     g.drawHorizontalLine(getHeight() - 1, 0.0f, static_cast<float>(getWidth()));
 }
 
 void ModulationMatrixHeader::resized()
 {
-    // Use a FlexBox to lay out the header labels, matching the row layout.
-    juce::FlexBox flex;
-    flex.flexDirection = juce::FlexBox::Direction::row;
-    flex.items.add(juce::FlexItem(sourceLabel).withFlex(1.0f).withMargin(2));
-    flex.items.add(juce::FlexItem(amountLabel).withFlex(2.0f).withMargin(2));
-    flex.items.add(juce::FlexItem(polarityLabel).withFlex(1.0f).withMargin(2));
-    flex.items.add(juce::FlexItem(bypassLabel).withFlex(1.0f).withMargin(2));
-    flex.items.add(juce::FlexItem(destinationLabel).withFlex(1.6f).withMargin(2));
-    flex.items.add(juce::FlexItem().withWidth(35).withMargin(2));
-    flex.performLayout(getLocalBounds());
+    const auto columns = matrixColumns(getLocalBounds());
+    sourceLabel.setBounds(columns.source);
+    destinationLabel.setBounds(columns.destination);
+    amountLabel.setBounds(columns.amount);
+    polarityLabel.setBounds(columns.polarity.expanded(3, 0));
+    bypassLabel.setBounds(columns.enabled.expanded(3, 0));
 }
 
 //==============================================================================
@@ -958,6 +1064,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     // SOURCE MENU
     addAndMakeVisible(sourceMenu);
     sourceMenu.setTitle(routingName + " source");
+    sourceMenu.setComponentID("matrix_source");
     sourceMenu.setTooltip("Select the LFO source for modulation routing "
                           + routingNumber);
     for (int sourceNumber = 1;
@@ -973,16 +1080,30 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     sourceMenu.setColour(juce::ComboBox::outlineColourId,
                          sourceColour.withAlpha(0.45f));
     sourceMenu.setColour(juce::ComboBox::textColourId, sourceColour);
+    sourceMenu.setColour(juce::ComboBox::arrowColourId, sourceColour);
 
     // AMOUNT SLIDER
     addAndMakeVisible(amountSlider);
-    amountSlider.setTitle(routingName + " amount");
+    amountSlider.setTitle(routingName + " depth");
+    amountSlider.setComponentID("matrix_amount");
     amountSlider.setTooltip("Set the modulation depth for modulation routing "
                             + routingNumber);
     amountSlider.setRange(-1.0, 1.0, 0.01);
+    amountSlider.textFromValueFunction = [](double value)
+    {
+        const auto percent = juce::roundToInt(value * 100.0);
+        return (percent > 0 ? "+" : "") + juce::String(percent) + "%";
+    };
+    amountSlider.valueFromTextFunction = [](const juce::String& text)
+    {
+        return text.trim().trimCharactersAtEnd("%").getDoubleValue() * 0.01;
+    };
     amountSlider.setValue(routing.depth, juce::dontSendNotification);
     amountSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-    amountSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
+    amountSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 50, 24);
+    amountSlider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+    amountSlider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    amountSlider.setColour(juce::Slider::textBoxTextColourId, fire::ui::colours::textPrimary);
     amountSlider.setColour(juce::Slider::trackColourId, sourceColour);
     amountSlider.setScrollWheelEnabled(false);
     amountSlider.onPointerDispatchComplete =
@@ -998,6 +1119,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     bipolarButton.setTooltip("Switch modulation routing " + routingNumber
                              + " between bipolar and unipolar");
     bipolarButton.setComponentID("rounded");
+    bipolarButton.setAppearance(ModulationMatrixPrimaryButton::Appearance::polarity);
     bipolarButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
     bipolarButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
     bipolarButton.setColour(juce::TextButton::textColourOnId, sourceColour);
@@ -1010,28 +1132,34 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
 
     // BYPASS BUTTON
     addAndMakeVisible(bypassButton);
-    bypassButton.setTitle(routingName + " bypass");
-    bypassButton.setTooltip("Turn bypass on or off for modulation routing "
-                            + routingNumber);
+    bypassButton.setTitle(routingName + " active");
+    bypassButton.setTooltip("Enable or bypass modulation routing " + routingNumber);
     bypassButton.setComponentID("rounded");
+    bypassButton.setAppearance(ModulationMatrixPrimaryButton::Appearance::enable);
     bypassButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
     bypassButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
-    bypassButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::danger);
-    bypassButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::positive);
+    bypassButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::positive);
+    bypassButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
     bypassButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
     bypassButton.setClickingTogglesState(true);
-    bypassButton.setToggleState(routing.isBypassed, juce::dontSendNotification);
+    bypassButton.setToggleState(! routing.isBypassed, juce::dontSendNotification);
     bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
     bypassButton.addListener(this);
 
     // === DESTINATION MENU ===
     addAndMakeVisible(destinationMenu);
     destinationMenu.setTitle(routingName + " destination");
+    destinationMenu.setComponentID("matrix_destination");
     destinationMenu.setTooltip("Select the destination for modulation routing "
                                + routingNumber);
 
     // 1. get all possible modulation targets
     allPossibleTargets = ParameterIDAndName::getAllModulatableTargets();
+    // Keep the host's stable names/IDs intact, but spell the OTT destination
+    // captions as the module and control names shown in the main editor.
+    for (auto& target : allPossibleTargets)
+        if (target.displayText.startsWith("Ott"))
+            target.displayText = "OTT " + target.displayText.substring(3);
 
     // 2. Populate the destination menu
     destinationMenu.addItem("None", 1);
@@ -1063,6 +1191,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     destinationMenu.setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface0);
     destinationMenu.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
     destinationMenu.setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
+    destinationMenu.setColour(juce::ComboBox::arrowColourId, fire::ui::colours::textSecondary);
 
     const auto configureRoutingMenu = [this](auto& menu)
     {
@@ -1088,18 +1217,42 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     removeButton.setTitle("Remove modulation routing " + routingNumber);
     removeButton.setTooltip("Remove modulation routing " + routingNumber);
     removeButton.setComponentID("remove_button");
+    removeButton.setAppearance(ModulationMatrixPrimaryButton::Appearance::remove);
     removeButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
     removeButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::danger);
-    removeButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::danger);
+    removeButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
     removeButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
     removeButton.addListener(this);
+    sourceMenu.setExplicitFocusOrder(1);
+    destinationMenu.setExplicitFocusOrder(2);
+    amountSlider.setExplicitFocusOrder(3);
+    bipolarButton.setExplicitFocusOrder(4);
+    bypassButton.setExplicitFocusOrder(5);
+    removeButton.setExplicitFocusOrder(6);
+    updateVisualState();
 }
 
 void ModulationMatrixRow::paint(juce::Graphics& g)
 {
-    fire::ui::drawPanel(g, getLocalBounds().toFloat().reduced(1.0f),
-                        fire::ui::colours::modulation, false,
-                        fire::ui::Metrics::radiusSmall);
+    const bool bypassed = ! bypassButton.getToggleState();
+    const auto accent = fire::ui::lfoBankColour(expectedRouting.sourceLfoIndex);
+    const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+    g.setColour(bypassed ? fire::ui::colours::surface0 : fire::ui::colours::surface1);
+    g.fillRoundedRectangle(bounds, 8.0f);
+    g.setColour(fire::ui::colours::hairline.withAlpha(bypassed ? 0.35f : 0.60f));
+    g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
+    g.setColour(accent.withAlpha(bypassed ? 0.22f : 0.85f));
+    g.fillRoundedRectangle(3.0f, 12.0f, 2.0f, juce::jmax(0.0f, getHeight() - 24.0f), 1.0f);
+    const auto arrow = matrixColumns(getLocalBounds()).arrow.toFloat();
+    const auto centre = arrow.getCentre();
+    juce::Path direction;
+    direction.startNewSubPath(centre.x - 4.0f, centre.y);
+    direction.lineTo(centre.x + 4.0f, centre.y);
+    direction.startNewSubPath(centre.x + 1.0f, centre.y - 3.0f);
+    direction.lineTo(centre.x + 4.0f, centre.y);
+    direction.lineTo(centre.x + 1.0f, centre.y + 3.0f);
+    g.setColour(fire::ui::colours::textMuted.withAlpha(bypassed ? 0.35f : 0.80f));
+    g.strokePath(direction, juce::PathStrokeType(1.25f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
 ModulationMatrixRow::~ModulationMatrixRow()
@@ -1116,15 +1269,28 @@ ModulationMatrixRow::~ModulationMatrixRow()
 
 void ModulationMatrixRow::resized()
 {
-    juce::FlexBox flex;
-    flex.flexDirection = juce::FlexBox::Direction::row;
-    flex.items.add(juce::FlexItem(sourceMenu).withFlex(1.0f).withMargin(2));
-    flex.items.add(juce::FlexItem(amountSlider).withFlex(2.0f).withMargin(2));
-    flex.items.add(juce::FlexItem(bipolarButton).withFlex(1.0f).withMargin(2));
-    flex.items.add(juce::FlexItem(bypassButton).withFlex(1.0f).withMargin(2));
-    flex.items.add(juce::FlexItem(destinationMenu).withFlex(1.6f).withMargin(2));
-    flex.items.add(juce::FlexItem(removeButton).withWidth(35).withMargin(2));
-    flex.performLayout(getLocalBounds());
+    const auto columns = matrixColumns(getLocalBounds());
+    sourceMenu.setBounds(columns.source);
+    destinationMenu.setBounds(columns.destination);
+    amountSlider.setBounds(columns.amount);
+    bipolarButton.setBounds(columns.polarity);
+    bypassButton.setBounds(columns.enabled);
+    removeButton.setBounds(columns.remove);
+}
+
+void ModulationMatrixRow::updateVisualState()
+{
+    const auto alpha = bypassButton.getToggleState() ? 1.0f : 0.48f;
+    const juce::Component::SafePointer<ModulationMatrixRow> safeThis(this);
+    for (auto* control : { static_cast<juce::Component*>(&sourceMenu),
+                          static_cast<juce::Component*>(&destinationMenu),
+                          static_cast<juce::Component*>(&amountSlider),
+                          static_cast<juce::Component*>(&bipolarButton) })
+    {
+        control->setAlpha(alpha);
+        if (! safeThis) return;
+    }
+    repaint();
 }
 
 void ModulationMatrixRow::visibilityChanged()
@@ -1173,8 +1339,13 @@ void ModulationMatrixRow::buttonClicked(juce::Button* button)
 {
     if (button == &bipolarButton || button == &bypassButton)
     {
+        const juce::Component::SafePointer<ModulationMatrixRow> safeThis(this);
         bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
+        if (! safeThis) return;
         bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
+        if (! safeThis) return;
+        updateVisualState();
+        if (! safeThis) return;
 
         if (isParentRebuildPending())
         {
@@ -1193,7 +1364,7 @@ void ModulationMatrixRow::buttonClicked(juce::Button* button)
         if (button == &bipolarButton)
             replacementRouting.isBipolar = bipolarButton.getToggleState();
         else
-            replacementRouting.isBypassed = bypassButton.getToggleState();
+            replacementRouting.isBypassed = ! bypassButton.getToggleState();
 
         auto& manager = processor.getLfoManager();
         const auto result = manager.updateModulationRoutingIfRevisionMatches(
@@ -1435,24 +1606,39 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
 {
     setOpaque(true);
     setLookAndFeel(&fireLookAndFeel);
+    setTitle("Modulation matrix");
     processor.addChangeListener(this);
     addAndMakeVisible(header);
     addAndMakeVisible(viewport);
     viewport.setScrollBarsShown(true, false);
+    viewport.setScrollBarThickness(10);
+    viewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId,
+                                             fire::ui::colours::textMuted.withAlpha(0.24f));
     viewport.setViewedComponent(&contentComponent, false);
     addAndMakeVisible(addButton);
     addButton.addListener(this);
-    addButton.setButtonText("+ ADD ROUTE");
+    addButton.setButtonText("Add routing");
+    addButton.setComponentID("matrix_add_route");
+    addButton.setTitle("Add modulation routing");
+    addButton.setTooltip("Connect an LFO to another control.");
+    addButton.setAppearance(ModulationMatrixPrimaryButton::Appearance::add);
     addButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface1);
     addButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::modulation);
     addButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::modulation);
     addButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
-    addAndMakeVisible(closeButton);
-    closeButton.addListener(this);
-    closeButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface1);
-    closeButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::textPrimary);
-    closeButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
-    closeButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    addAndMakeVisible(emptyTitle);
+    addAndMakeVisible(emptyDescription);
+    emptyTitle.setText("No modulation routings yet", juce::dontSendNotification);
+    emptyDescription.setText("Add a routing to connect an LFO to a control.", juce::dontSendNotification);
+    emptyTitle.setFont(fire::ui::displayFont(16.0f));
+    emptyDescription.setFont(fire::ui::bodyFont(11.5f));
+    emptyTitle.setColour(juce::Label::textColourId, fire::ui::colours::textPrimary);
+    emptyDescription.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    for (auto* label : { &emptyTitle, &emptyDescription })
+    {
+        label->setJustificationType(juce::Justification::centred);
+        label->setInterceptsMouseClicks(false, false);
+    }
     buildUiFromProcessorState();
 }
 
@@ -1462,34 +1648,63 @@ ModulationMatrixPanel::~ModulationMatrixPanel()
     processor.removeChangeListener(this);
     cancelPendingUpdate();
     addButton.removeListener(this);
-    closeButton.removeListener(this);
     setLookAndFeel(nullptr);
 }
 
 void ModulationMatrixPanel::paint(juce::Graphics& g)
 {
-    fire::ui::drawCanvas(g, getLocalBounds().toFloat());
-    fire::ui::drawTechGrid(g, getLocalBounds().toFloat(), 28.0f, 0.05f);
-    g.setFont(fire::ui::displayFont(17.0f));
+    g.fillAll(fire::ui::colours::canvas);
+    auto heading = titleArea.withTrimmedRight(148);
+    g.setFont(fire::ui::displayFont(20.0f));
     g.setColour(fire::ui::colours::textPrimary);
-    g.drawText("MODULATION MATRIX", titleArea, juce::Justification::centredLeft);
-    auto subtitle = titleArea.withTrimmedLeft(205);
-    g.setFont(fire::ui::labelFont(9.0f));
+    g.drawText("Modulation", heading.removeFromTop(28), juce::Justification::centredLeft);
+    g.setFont(fire::ui::bodyFont(11.5f));
     g.setColour(fire::ui::colours::textMuted);
-    g.drawText("SIGNAL ROUTING / DEPTH / POLARITY", subtitle, juce::Justification::centredLeft);
+    g.drawText("Choose a source and destination, then set the depth.", heading.removeFromTop(20), juce::Justification::centredLeft);
+    g.setFont(fire::ui::labelFont(9.5f));
+    g.drawText(juce::String(static_cast<int>(rows.size())) + (rows.size() == 1 ? " routing" : " routings")
+               + "  /  " + juce::String(activeRouteCount) + " active",
+               summaryArea, juce::Justification::centredLeft);
+    if (rows.empty())
+    {
+        const auto centre = viewport.getBounds().toFloat().getCentre().translated(0.0f, -40.0f);
+        const auto source = juce::Rectangle<float>(56.0f, 34.0f).withCentre(centre.translated(-46.0f, 0.0f));
+        const auto target = juce::Rectangle<float>(40.0f, 34.0f).withCentre(centre.translated(50.0f, 0.0f));
+        g.setColour(fire::ui::colours::modulation.withAlpha(0.10f));
+        g.fillRoundedRectangle(source, 8.0f);
+        g.setColour(fire::ui::colours::modulation.withAlpha(0.45f));
+        g.drawRoundedRectangle(source, 8.0f, 1.0f);
+        g.setFont(fire::ui::labelFont(11.0f));
+        g.setColour(fire::ui::colours::modulation);
+        g.drawText("LFO", source, juce::Justification::centred);
+        g.setColour(fire::ui::colours::surface2);
+        g.fillRoundedRectangle(target, 8.0f);
+        g.setColour(fire::ui::colours::textSecondary);
+        g.drawEllipse(target.withSizeKeepingCentre(14.0f, 14.0f), 1.25f);
+        g.drawLine(target.getCentreX(), target.getCentreY(), target.getCentreX() + 3.0f,
+                   target.getCentreY() - 5.0f, 1.25f);
+        juce::Path arrow;
+        arrow.startNewSubPath(source.getRight() + 10.0f, centre.y);
+        arrow.lineTo(target.getX() - 10.0f, centre.y);
+        arrow.startNewSubPath(target.getX() - 14.0f, centre.y - 3.0f);
+        arrow.lineTo(target.getX() - 10.0f, centre.y);
+        arrow.lineTo(target.getX() - 14.0f, centre.y + 3.0f);
+        g.setColour(fire::ui::colours::textMuted);
+        g.strokePath(arrow, juce::PathStrokeType(1.25f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
 }
 
 void ModulationMatrixPanel::resized()
 {
-    auto bounds = getLocalBounds().reduced(10);
-    titleArea = bounds.removeFromTop(34);
-    auto bottomArea = bounds.removeFromBottom(44);
-    closeButton.setBounds(bottomArea.removeFromRight(110).reduced(4));
-    addButton.setBounds(bottomArea.removeFromLeft(130).reduced(4));
+    auto bounds = getLocalBounds().reduced(16);
+    titleArea = bounds.removeFromTop(62);
+    addButton.setBounds(titleArea.withWidth(136).withRightX(titleArea.getRight())
+                           .withSizeKeepingCentre(136, 34));
+    summaryArea = bounds.removeFromBottom(22);
 
     // Position the header at the top.
-    header.setBounds(bounds.removeFromTop(30));
-    bounds.removeFromTop(4);
+    auto headerArea = bounds.removeFromTop(28);
+    bounds.removeFromTop(8);
     viewport.setBounds(bounds);
 
     // Setting a taller content component can make the vertical scrollbar
@@ -1497,18 +1712,18 @@ void ModulationMatrixPanel::resized()
     // resulting width once more so rows never extend underneath that bar.
     // Horizontal scrolling is intentionally disabled for this column layout.
     const auto contentHeight =
-        juce::jmax(viewport.getHeight(), static_cast<int>(rows.size()) * 44);
+        juce::jmax(viewport.getHeight(), static_cast<int>(rows.size()) * rowPitch);
     for (int layoutPass = 0; layoutPass < 2; ++layoutPass)
         contentComponent.setBounds(0, 0,
                                    viewport.getMaximumVisibleWidth(),
                                    contentHeight);
 
-    // Layout the rows inside the content component.
-    juce::FlexBox flex;
-    flex.flexDirection = juce::FlexBox::Direction::column;
-    for (auto& row : rows)
-        flex.items.add(juce::FlexItem(*row).withHeight(40).withMargin(2));
-    flex.performLayout(contentComponent.getLocalBounds());
+    header.setBounds(headerArea.withWidth(contentComponent.getWidth()));
+    for (size_t i = 0; i < rows.size(); ++i)
+        rows[i]->setBounds(0, static_cast<int>(i) * rowPitch, contentComponent.getWidth(), rowHeight);
+    const auto emptyCentreY = viewport.getBounds().getCentreY();
+    emptyTitle.setBounds(viewport.getX(), emptyCentreY - 3, viewport.getWidth(), 24);
+    emptyDescription.setBounds(viewport.getX(), emptyCentreY + 24, viewport.getWidth(), 32);
 }
 
 void ModulationMatrixPanel::visibilityChanged()
@@ -1537,9 +1752,6 @@ void ModulationMatrixPanel::dismissTransientInteractions() noexcept
     }
 
     addButton.dismissPointerGesture();
-    if (safeThis == nullptr)
-        return;
-    closeButton.dismissPointerGesture();
 }
 
 void ModulationMatrixPanel::buttonClicked(juce::Button* button)
@@ -1575,11 +1787,6 @@ void ModulationMatrixPanel::buttonClicked(juce::Button* button)
         return;
     }
 
-    if (button == &closeButton)
-    {
-        if (auto* dw = findParentComponentOfClass<juce::DialogWindow>())
-            dw->exitModalState(0);
-    }
 }
 
 void ModulationMatrixPanel::buildUiFromProcessorState()
@@ -1596,6 +1803,8 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
     // must not happen while the shared routing lock is held.
     const auto routingState =
         processor.getLfoManager().getModulationRoutingStateSnapshot();
+    activeRouteCount = static_cast<int>(std::count_if(routingState.routings.begin(), routingState.routings.end(),
+                                    [](const auto& routing) { return ! routing.isBypassed; }));
     addButton.setEnabled(
         routingState.routings.size()
         < LfoManager::maximumModulationRoutings);
@@ -1644,7 +1853,12 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
         contentComponent.addAndMakeVisible(*rows.back());
     }
 
+    emptyTitle.setVisible(rows.empty());
+    if (! safePanel) return;
+    emptyDescription.setVisible(rows.empty());
+    if (! safePanel) return;
     resized();
+    if (safePanel) repaint();
 }
 
 void ModulationMatrixPanel::requestUiRebuild()

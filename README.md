@@ -122,6 +122,24 @@ The AU target is available on macOS. Built bundles are under
 `Builds/Release/Fire_artefacts/Release/`. Set `FIRE_INSTALL_PLUGINS=ON` to retain
 the project's usual automatic copy behaviour.
 
+Use **Release** builds when auditioning in a host. Projucer Debug configurations
+do not automatically replace the installed plug-in. Fresh CMake Debug and
+multi-configuration builds default to `FIRE_INSTALL_PLUGINS=OFF`; an existing
+cache or explicit option is preserved. Set `-DFIRE_INSTALL_PLUGINS=OFF` when
+reusing an older build directory. Debug output remains available in the build
+directory for debugger sessions.
+
+To build AudioPluginHost with the same pinned JUCE version, build it separately:
+
+```bash
+cmake -S JUCE -B Builds/JUCE9-Host -G Ninja -DCMAKE_BUILD_TYPE=Release -DJUCE_BUILD_EXTRAS=ON
+cmake --build Builds/JUCE9-Host --target AudioPluginHost --parallel
+```
+
+The macOS app is in
+`Builds/JUCE9-Host/extras/AudioPluginHost/AudioPluginHost_artefacts/Release/`.
+Updating Projucer or rebuilding Fire does not update an existing AudioPluginHost.
+
 #### 🔧 Using Projucer (JUCE GUI)
 
 1. Open the `.jucer` file using **Projucer**.

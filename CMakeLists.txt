@@ -58,7 +58,11 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake-overrides/ClapTail.cmake")
 add_subdirectory (modules/melatonin_inspector)
 
 # See `docs/CMake API.md` in the JUCE repo for all config options
-option(FIRE_INSTALL_PLUGINS "Copy compiled plug-ins to the user's plug-in folders" ON)
+set(FIRE_INSTALL_PLUGINS_DEFAULT ON)
+if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_CONFIGURATION_TYPES)
+    set(FIRE_INSTALL_PLUGINS_DEFAULT OFF)
+endif ()
+option(FIRE_INSTALL_PLUGINS "Copy compiled plug-ins to the user's plug-in folders" ${FIRE_INSTALL_PLUGINS_DEFAULT})
 juce_add_plugin("${PROJECT_NAME}"
     # Icons for the standalone app
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/packaging/icon.png"

@@ -17,6 +17,7 @@
 #include "Graph Components/WidthGraph.h"
 #include "PanelBase.h"
 #include "../../GUI/InsertEffectControls.h"
+#include "../../GUI/EqControlsPanel.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <cstdint>
 #include <vector>
@@ -52,6 +53,9 @@ public:
     ModulatableSlider& getHighcutGainKnob();
 
     void setToggleButtonState(juce::String toggleButton);
+    void selectEqNode(int slot);
+    int getSelectedEqNode() const noexcept { return eqControls.getSelectedNode(); }
+    EqControlsPanel& getEqControls() noexcept { return eqControls; }
     void presentMeterValues(const MeterValues& values, std::uint64_t generation);
     float scale = 1.0f;
 
@@ -159,6 +163,8 @@ private:
     fire::ui::EffectRackNavigation effectNavigation {processor, 0};
     InsertEffectControls insertControls {processor};
     int selectedInsert = -1;
+    EqControlsPanel eqControls {processor};
+    std::array<bool, 3> lastLegacyFilterSelection {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GlobalPanel)
 };

@@ -33,6 +33,8 @@ public:
     }
     bool usesExpandedLayout() const noexcept
     { return type == fire::effects::Type::granular; }
+    bool usesFullWidthLayout() const noexcept
+    { return usesExpandedLayout() || type == fire::effects::Type::lofi; }
     void setActive(bool shouldBeActive)
     {
         const juce::Component::SafePointer<InsertEffectControls> safe(this);
@@ -170,12 +172,17 @@ public:
         }
         else
         {
+            // Lo-Fi shares Master's two functional groups: reduction/mix
+            // above, tape motion below. Old insert slots have no Jitter ID.
+            const std::array<size_t, 6> order = type == fire::effects::Type::lofi
+                ? std::array<size_t, 6> { 0, 1, 5, 2, 3, 4 }
+                : std::array<size_t, 6> { 0, 1, 2, 3, 4, 5 };
             for (size_t row = 0; row < 2; ++row)
             {
                 auto strip = area.removeFromTop(size + footer); area.removeFromTop(gap);
                 for (size_t column = 0; column < 3; ++column)
                 {
-                    if (auto* slider = sliders[row * 3 + column]) slider->setBounds(strip.removeFromLeft(size));
+                    if (auto* slider = sliders[order[row * 3 + column]]) slider->setBounds(strip.removeFromLeft(size));
                     strip.removeFromLeft(gap);
                 }
             }

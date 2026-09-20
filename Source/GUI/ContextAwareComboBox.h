@@ -15,6 +15,7 @@
 #include <functional>
 
 struct ContextAwareComboBoxTestAccess;
+struct GraphViewSelectorTestAccess;
 
 //==============================================================================
 class ContextAwareComboBox final : public FocusAwareComboBox
@@ -22,17 +23,24 @@ class ContextAwareComboBox final : public FocusAwareComboBox
 public:
     using GenerationProvider = std::function<std::uint64_t()>;
     using ContextValidator = std::function<bool()>;
+    using SelectionCallback = std::function<void(int)>;
 
     ContextAwareComboBox() = default;
 
     void configurePopupSession(GenerationProvider generationProvider,
                                ContextValidator contextValidator,
                                juce::RangedAudioParameter* parameter);
+    // UI-only choices use the same lifecycle protection without creating a
+    // dummy audio parameter or notifying the host of a presentation change.
+    void configurePopupSession(GenerationProvider generationProvider,
+                               ContextValidator contextValidator,
+                               SelectionCallback selectionCallback);
     void dismissTransientInteraction() noexcept;
     void showPopup() override;
 
 private:
     friend struct ContextAwareComboBoxTestAccess;
+    friend struct GraphViewSelectorTestAccess;
 
     bool keyPressed(const juce::KeyPress& key) override;
     void mouseDown(const juce::MouseEvent& event) override;
@@ -59,6 +67,7 @@ private:
     GenerationProvider getCurrentGeneration;
     ContextValidator isPopupContextValid;
     juce::RangedAudioParameter* boundParameter = nullptr;
+    SelectionCallback commitSelection;
     std::uint64_t popupRequestGeneration = 0;
     std::uint64_t popupSessionRevision = 0;
     std::uint64_t pointerInteractionGeneration = 0;

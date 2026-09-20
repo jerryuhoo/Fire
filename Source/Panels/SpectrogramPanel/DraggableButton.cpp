@@ -128,10 +128,27 @@ void DraggableButton::paint(juce::Graphics& g)
                                       : 0.38f));
     g.drawEllipse(bounds.reduced(bounds.getWidth() * 0.16f), 1.0f);
 
-    const auto coreInset = 0.38f - hover * 0.04f + press * 0.015f;
-    const auto core = bounds.reduced(bounds.getWidth() * coreInset);
-    g.setColour(mState ? fire::ui::colours::whiteHot : fire::ui::colours::disabled);
-    g.fillEllipse(core);
+    const auto ordinal = static_cast<int>(getProperties().getWithDefault("eqOrdinal", 0));
+    if (ordinal > 0)
+    {
+        const bool selected = getProperties().getWithDefault("eqSelected", false);
+        const bool bypassed = getProperties().getWithDefault("eqBypassed", false);
+        if (selected)
+        {
+            g.setColour(accent.withAlpha(0.65f));
+            g.drawEllipse(bounds.reduced(1.5f), 1.2f);
+        }
+        g.setColour(! bypassed && mState ? fire::ui::colours::whiteHot : fire::ui::colours::textMuted);
+        g.setFont(fire::ui::labelFont(bounds.getWidth() * 0.43f));
+        g.drawText(juce::String(ordinal), bounds, juce::Justification::centred);
+    }
+    else
+    {
+        const auto coreInset = 0.38f - hover * 0.04f + press * 0.015f;
+        const auto core = bounds.reduced(bounds.getWidth() * coreInset);
+        g.setColour(mState ? fire::ui::colours::whiteHot : fire::ui::colours::disabled);
+        g.fillEllipse(core);
+    }
 
     if (focus > 0.001f)
     {

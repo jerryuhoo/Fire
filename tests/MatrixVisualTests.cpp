@@ -180,7 +180,14 @@ TEST_CASE("Matrix empty state leads into a routing and exports review snapshots 
     CHECK(add->getButtonText() == "Add routing");
     saveSnapshot(panel, "matrix-empty");
     add->triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    // Adding a routing queues an AsyncUpdater rebuild. Allow a busy native
+    // message queue to deliver it, without invoking the rebuild from the test.
+    const auto waitStarted = juce::Time::getMillisecondCounter();
+    while ((empty->isShowing()
+            || find<ModulationMatrixRow>(panel, [](auto&) { return true; }) == nullptr)
+           && juce::Time::getMillisecondCounter() - waitStarted < 500u)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    CAPTURE(panel.isUiRebuildPending());
     CHECK(processor.getLfoManager().getModulationRoutingsCopy().size() == 1);
     CHECK_FALSE(empty->isShowing());
     CHECK(find<ModulationMatrixRow>(panel, [](auto&) { return true; }) != nullptr);

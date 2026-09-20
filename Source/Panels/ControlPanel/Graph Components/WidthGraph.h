@@ -30,6 +30,7 @@ public:
 
 private:
     friend struct WidthGraphHistorySourceTestAccess;
+    friend struct GraphViewSelectorTestAccess;
 
     FireAudioProcessor& processor;
     juce::Array<float> historyL;

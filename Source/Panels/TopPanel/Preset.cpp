@@ -247,6 +247,10 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
                                   fire::clouds_params::schemaVersion))
         return false;
 
+    bool legacyWithoutEq = false;
+    if (! validateParameterFamily(snapshot, processor, legacyWithoutEq, "eqSchemaVersion", fire::eq::isAppendedParameterID))
+        return false;
+
     int expectedParameterCount = 0;
     for (const auto* parameter : processor.getParameters())
     {
@@ -261,6 +265,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (legacyWithoutModuleOrder && fire::module_order::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutClouds && fire::clouds_params::isParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutEq && fire::eq::isAppendedParameterID(parameterWithID->paramID))
             continue;
         ++expectedParameterCount;
         if (! snapshot.hasAttribute(parameterWithID->paramID))
@@ -314,6 +320,9 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     if (! validateParameterFamily(xml, processor, legacyWithoutClouds, "cloudsSchemaVersion", fire::clouds_params::isParameterID,
                                   fire::clouds_params::schemaVersion))
         return false;
+    bool legacyWithoutEq = false;
+    if (! validateParameterFamily(xml, processor, legacyWithoutEq, "eqSchemaVersion", fire::eq::isAppendedParameterID))
+        return false;
     // Unversioned and v1 files predate complete model snapshots. Preserve
     // their historical default/migration behaviour. A v2 document is an
     // explicit complete snapshot, so accepting a sparse or truncated one
@@ -339,6 +348,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         if (legacyWithoutModuleOrder && fire::module_order::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutClouds && fire::clouds_params::isParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutEq && fire::eq::isAppendedParameterID(parameterWithID->paramID))
             continue;
         ++parameterCount;
         if (! isStrictNumberInRange(xml, parameterWithID->paramID, 0.0, 1.0))
@@ -388,6 +399,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("ottSchemaVersion", 1);
     xml.setAttribute("insertEffectsSchemaVersion", 1);
     xml.setAttribute("moduleOrderSchemaVersion", 1);
+    xml.setAttribute("eqSchemaVersion", 1);
     xml.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xml.setAttribute("pluginVersion", VERSION);
 

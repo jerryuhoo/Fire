@@ -227,7 +227,7 @@ TEST_CASE("Real module rails freely interleave builtin modules and inserts and r
         nav->refresh();
         REQUIRE(nav->isShowing());
         const std::vector<juce::String> names = scope == 0
-            ? std::vector<juce::String>{"Filter", "Lo-Fi", "Analysis", "Delay"}
+            ? std::vector<juce::String>{"EQ", "Lo-Fi", "Analysis", "Delay"}
             : std::vector<juce::String>{"Drive", "Shape", "Compressor", "Stereo", "OTT", "Chorus"};
         std::vector<fire::ui::ModuleDragButton*> rows;
         for (const auto& name : names)

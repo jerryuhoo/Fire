@@ -2708,7 +2708,20 @@ ChainSettings FireAudioProcessor::getCachedChainSettings(const juce::AudioBuffer
     settings.highCutQuality = getValue(filterParameterCache.highCutQuality);
     settings.highCutSlope = getSlopeParameterValue(filterParameterCache.highCutSlope.raw);
     settings.highCutBypassed = loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f;
+    settings.lowCutBypassed = settings.lowCutBypassed || ! isLegacyEqNodeActive(0);
+    settings.peakBypassed = settings.peakBypassed || ! isLegacyEqNodeActive(1);
+    settings.highCutBypassed = settings.highCutBypassed || ! isLegacyEqNodeActive(2);
     return settings;
+}
+
+bool FireAudioProcessor::isLegacyEqNodeActive(int slot) const noexcept
+{
+    using namespace fire::eq;
+    const auto& parameters = eqParameterCache[static_cast<size_t>(slot)];
+    return loadCachedParameter(parameters[static_cast<size_t>(Field::present)], 1.0f) > 0.5f
+           && juce::roundToInt(loadCachedParameter(parameters[static_cast<size_t>(Field::type)],
+                                                   static_cast<float>(defaultType(slot))))
+                  == static_cast<int>(defaultType(slot));
 }
 
 ChainSettings FireAudioProcessor::getCachedChainSettingsAtSample(
@@ -2735,6 +2748,9 @@ ChainSettings FireAudioProcessor::getCachedChainSettingsAtSample(
     settings.highCutQuality = getValue(filterParameterCache.highCutQuality);
     settings.highCutSlope = getSlopeParameterValue(filterParameterCache.highCutSlope.raw);
     settings.highCutBypassed = loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f;
+    settings.lowCutBypassed = settings.lowCutBypassed || ! isLegacyEqNodeActive(0);
+    settings.peakBypassed = settings.peakBypassed || ! isLegacyEqNodeActive(1);
+    settings.highCutBypassed = settings.highCutBypassed || ! isLegacyEqNodeActive(2);
     return settings;
 }
 
@@ -2881,6 +2897,10 @@ void FireAudioProcessor::initialiseParameterCache()
     filterParameterCache.highCutQuality = cacheParameter(HIGHCUT_Q_ID);
     filterParameterCache.highCutSlope = cacheParameter(HIGHCUT_SLOPE_ID);
     filterParameterCache.highCutBypassed = cacheParameter(HIGHCUT_BYPASSED_ID);
+    for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
+        for (int field = 0; field < fire::eq::fieldCount; ++field)
+            eqParameterCache[static_cast<size_t>(slot)][static_cast<size_t>(field)] =
+                cacheParameter(fire::eq::parameterID(slot, static_cast<fire::eq::Field>(field)));
 }
 
 //==============================================================================
@@ -2914,6 +2934,7 @@ FireAudioProcessor::FireAudioProcessor()
 #endif
 #endif
 {
+    for (auto& generation : eqNodeGenerations) generation.store(0u, std::memory_order_relaxed);
     serializableMainStateReady.store(true, std::memory_order_release);
     initialiseParameterCache();
 
@@ -3045,6 +3066,70 @@ fire::effects::Type FireAudioProcessor::getInsertEffectType(int scope, int slot)
         return fire::effects::Type::none;
     return static_cast<fire::effects::Type>(juce::jlimit(0, 5, juce::roundToInt(loadCachedParameter(
         insertParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][fire::effects::typeField]))));
+}
+
+fire::eq::NodeState FireAudioProcessor::getEqNodeState(int slot) const
+{
+    return fire::eq::readNode(treeState, slot);
+}
+
+int FireAudioProcessor::addEqNode(float frequency, float gainDb, fire::eq::Type type)
+{
+    using namespace fire::eq;
+    if (! std::isfinite(frequency) || ! std::isfinite(gainDb)
+        || static_cast<int>(type) < 0 || static_cast<int>(type) >= static_cast<int>(typeNames.size())) return -1;
+    beginMultibandTopologyEdit();
+    const juce::ScopeGuard publish { [this] { finishMainStateEdit(false); } };
+    int slot = -1;
+    for (int index = 0; index < maxNodes; ++index)
+        if (! getEqNodeState(index).present) { slot = index; break; }
+    if (slot < 0) return -1;
+    const auto write = [&](Field field, float value)
+    {
+        auto* parameter = treeState.getParameter(parameterID(slot, field));
+        if (parameter == nullptr) return;
+        const auto& range = parameter->getNormalisableRange();
+        const auto safeValue = range.snapToLegalValue(juce::jlimit(range.start, range.end, value));
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(safeValue));
+        parameter->endChangeGesture();
+    };
+    // A deleted stable slot can carry historical automation values. Clear only
+    // its old LFO assignments before publishing its new active identity.
+    for (auto field : {Field::frequency, Field::gain, Field::q})
+        clearModulationForParameter(parameterID(slot, field));
+    write(Field::frequency, frequency);
+    write(Field::gain, gainDb);
+    write(Field::q, slot < 3 ? 1.0f : 0.70710678f);
+    write(Field::slope, 0.0f);
+    write(Field::type, static_cast<float>(type));
+    write(Field::bypassed, 0.0f);
+    eqNodeGenerations[static_cast<size_t>(slot)].fetch_add(1u, std::memory_order_relaxed);
+    write(Field::present, 1.0f);
+    if (auto* enabled = treeState.getParameter(FILTER_BYPASS_ID))
+    {
+        enabled->beginChangeGesture();
+        enabled->setValueNotifyingHost(1.0f);
+        enabled->endChangeGesture();
+    }
+    return slot;
+}
+
+bool FireAudioProcessor::removeEqNode(int slot)
+{
+    using namespace fire::eq;
+    if (! validSlot(slot)) return false;
+    beginMultibandTopologyEdit();
+    const juce::ScopeGuard publish { [this] { finishMainStateEdit(false); } };
+    if (! getEqNodeState(slot).present) return false;
+    auto* present = treeState.getParameter(parameterID(slot, Field::present));
+    if (present == nullptr) return false;
+    present->beginChangeGesture();
+    present->setValueNotifyingHost(0.0f);
+    present->endChangeGesture();
+    for (auto field : {Field::frequency, Field::gain, Field::q})
+        clearModulationForParameter(parameterID(slot, field));
+    return true;
 }
 
 int FireAudioProcessor::getInsertEffectOrder(int scope, int slot) const
@@ -3504,6 +3589,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     updateFilter(safeSampleRate);
     leftChain.prepare(spec);
     rightChain.prepare(spec);
+    eqProcessor.prepare(safeSampleRate);
     lowCutSlopeTransition.leftStandby.prepare(spec);
     lowCutSlopeTransition.rightStandby.prepare(spec);
     highCutSlopeTransition.leftStandby.prepare(spec);
@@ -4178,6 +4264,7 @@ void FireAudioProcessor::beginMultibandTopologyEdit()
             throw;
         }
 
+        mainStateEditRequiresDspReset = false;
         const auto previous = multibandTopologyResetGeneration.fetch_add(
             1u, std::memory_order_seq_cst);
         jassert((previous & 1u) == 0u);
@@ -4252,6 +4339,11 @@ FireAudioProcessor::getLastAudioCallbackRecipeForTesting() const noexcept
 
 void FireAudioProcessor::requestMultibandTopologyReset() noexcept
 {
+    finishMainStateEdit(true);
+}
+
+void FireAudioProcessor::finishMainStateEdit(bool resetDsp) noexcept
+{
     // CriticalSection is recursive. The extra level acquired here lets the
     // owner finish its transaction while competing writers wait; the second
     // exit balances the level deliberately retained by begin().
@@ -4259,9 +4351,12 @@ void FireAudioProcessor::requestMultibandTopologyReset() noexcept
 
     if (multibandTopologyEditDepth > 0)
     {
+        mainStateEditRequiresDspReset = mainStateEditRequiresDspReset || resetDsp;
         --multibandTopologyEditDepth;
         if (multibandTopologyEditDepth == 0)
         {
+            if (mainStateEditRequiresDspReset)
+                multibandDspResetSequence.fetch_add(1u, std::memory_order_relaxed);
             const auto previous = multibandTopologyResetGeneration.fetch_add(
                 1u, std::memory_order_seq_cst);
             jassert((previous & 1u) != 0u);
@@ -4273,6 +4368,7 @@ void FireAudioProcessor::requestMultibandTopologyReset() noexcept
     }
 
     // A standalone request represents a complete same-count publication.
+    if (resetDsp) multibandDspResetSequence.fetch_add(1u, std::memory_order_relaxed);
     const auto previous = multibandTopologyResetGeneration.fetch_add(
         2u, std::memory_order_seq_cst);
     jassert((previous & 1u) == 0u);
@@ -4476,6 +4572,7 @@ bool FireAudioProcessor::tryCaptureMultibandTopologySnapshot(
 
     MultibandTopologySnapshot candidate;
     candidate.publicationSequence = sequenceBefore;
+    candidate.dspResetSequence = multibandDspResetSequence.load(std::memory_order_relaxed);
     candidate.numBands = juce::jlimit(
         1,
         4,
@@ -4580,6 +4677,8 @@ void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
         activeMultibandTopologySnapshot.publicationSequence =
             multibandTopologyResetGeneration.load(std::memory_order_relaxed)
             & ~std::uint32_t { 1 };
+        activeMultibandTopologySnapshot.dspResetSequence =
+            multibandDspResetSequence.load(std::memory_order_relaxed);
         activeMultibandTopologySnapshotInitialised = true;
     }
 
@@ -4613,6 +4712,7 @@ void FireAudioProcessor::performReset()
         &activeMultibandTopologySnapshot.callbackContext);
     leftChain.reset();
     rightChain.reset();
+    eqProcessor.reset();
     lowCutSlopeTransition.leftStandby.reset();
     lowCutSlopeTransition.rightStandby.reset();
     highCutSlopeTransition.leftStandby.reset();
@@ -5128,6 +5228,25 @@ void FireAudioProcessor::processWetBlock(
         filterVals.peakFreq = chainSettings.peakFreq;
         filterVals.peakGain = chainSettings.peakGainInDecibels;
         filterVals.peakQ = chainSettings.peakQuality;
+        for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
+        {
+            auto node = eqProcessor.currentState(slot);
+            const auto& state = activeAudioCallbackParameterSnapshot.globalFilter.eqNodes[static_cast<size_t>(slot)].state;
+            node.present = state.present;
+            node.bypassed = state.bypassed;
+            node.type = state.type;
+            node.slope = state.slope;
+            if (fire::eq::usesLegacyShape(slot, state.type))
+            {
+                node.frequency = slot == 0 ? cachedGlobalFilterSettings.lowCutFreq
+                    : slot == 1 ? cachedGlobalFilterSettings.peakFreq : cachedGlobalFilterSettings.highCutFreq;
+                node.gainDb = slot == 0 ? cachedGlobalFilterSettings.lowCutGainInDecibels
+                    : slot == 1 ? cachedGlobalFilterSettings.peakGainInDecibels : cachedGlobalFilterSettings.highCutGainInDecibels;
+                node.q = slot == 0 ? cachedGlobalFilterSettings.lowCutQuality
+                    : slot == 1 ? cachedGlobalFilterSettings.peakQuality : cachedGlobalFilterSettings.highCutQuality;
+            }
+            filterVals.eqNodes[static_cast<size_t>(slot)] = node;
+        }
 
         pushToFifo(filterFifo, filterFifoBuffer, filterVals);
     }
@@ -5216,6 +5335,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("insertEffectsSchemaVersion", 1);
     xmlState.setAttribute("moduleOrderSchemaVersion", 1);
     xmlState.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
+    xmlState.setAttribute("eqSchemaVersion", 1);
     xmlState.setAttribute("savedParameterCount",
                           mainState.parameterState.getNumChildren());
 
@@ -5376,6 +5496,16 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                  || cloudsStateVersion < 1 || cloudsStateVersion > fire::clouds_params::schemaVersion))
             || cloudsParameterCount != fire::clouds_params::parameterCount)
             return;
+    }
+    int eqParameterCount = 0;
+    for (const auto& id : incomingParameterIDs)
+        if (fire::eq::isAppendedParameterID(id)) ++eqParameterCount;
+    if (xmlState->hasAttribute("eqSchemaVersion") || eqParameterCount > 0)
+    {
+        int version = 1;
+        if ((xmlState->hasAttribute("eqSchemaVersion")
+             && (! parseStrictNonNegativeIntegerAttribute(*xmlState, "eqSchemaVersion", version) || version != 1))
+            || eqParameterCount != fire::eq::appendedParameterCount) return;
     }
     if (hasStateFormatVersion != hasSavedParameterCount)
         return;
@@ -6703,6 +6833,34 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
                         fire::clouds_params::defaults[static_cast<size_t>(field)]));
             }
 
+    for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
+        for (int fieldIndex = 0; fieldIndex < fire::eq::fieldCount; ++fieldIndex)
+        {
+            using namespace fire::eq;
+            const auto field = static_cast<Field>(fieldIndex);
+            if (! isAppendedParameter(slot, field)) continue;
+            const juce::ParameterID id { parameterID(slot, field), 6 };
+            const auto name = "EQ " + juce::String(slot + 1) + " ";
+            if (field == Field::present)
+                parameters.push_back(std::make_unique<PBool>(id, name + "Present", slot < 3));
+            else if (field == Field::bypassed)
+                parameters.push_back(std::make_unique<PBool>(id, name + "Bypassed", false));
+            else if (field == Field::type)
+            {
+                juce::StringArray choices;
+                for (const auto* typeName : typeNames) choices.add(typeName);
+                parameters.push_back(std::make_unique<PChoice>(id, name + "Type", choices, static_cast<int>(defaultType(slot))));
+            }
+            else if (field == Field::slope)
+                parameters.push_back(std::make_unique<PInt>(id, name + "Slope", 0, 3, 0));
+            else if (field == Field::frequency)
+                parameters.push_back(std::make_unique<PFloat>(id, name + "Frequency", cutoffRange, 1000.0f));
+            else if (field == Field::gain)
+                parameters.push_back(std::make_unique<PFloat>(id, name + "Gain", juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
+            else if (field == Field::q)
+                parameters.push_back(std::make_unique<PFloat>(id, name + "Q", juce::NormalisableRange<float>(0.1f, 18.0f, 0.01f), 0.70710678f));
+        }
+
     return { parameters.begin(), parameters.end() };
 }
 
@@ -6819,6 +6977,7 @@ bool FireAudioProcessor::updateParameters(
             // snapshot immediately. A true topology identity change remains
             // pending until the output bus has faded to zero.
             activeMultibandTopologySnapshot = requestedSnapshot;
+            appliedMultibandTopologyResetGeneration = requestedSnapshot.publicationSequence;
             numBands = activeMultibandTopologySnapshot.numBands;
             activeCrossovers = numBands - 1;
 
@@ -7046,6 +7205,46 @@ void FireAudioProcessor::prepareAudioCallbackParameterSnapshot(
         getSlopeParameterValue(filterParameterCache.highCutSlope.raw);
     filter.baseSettings.highCutBypassed =
         loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f;
+
+    const std::array<const ModulatedParameterSnapshot*, 9> legacyControls {
+        &filter.lowCutFrequency, &filter.lowCutGain, &filter.lowCutQuality,
+        &filter.peakFrequency, &filter.peakGain, &filter.peakQuality,
+        &filter.highCutFrequency, &filter.highCutGain, &filter.highCutQuality
+    };
+    for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
+    {
+        using namespace fire::eq;
+        auto& node = filter.eqNodes[static_cast<size_t>(slot)];
+        node.generation = eqNodeGenerations[static_cast<size_t>(slot)].load(std::memory_order_relaxed);
+        const auto& cached = eqParameterCache[static_cast<size_t>(slot)];
+        const auto read = [&](Field field, float fallback)
+        { return loadCachedParameter(cached[static_cast<size_t>(field)], fallback); };
+        node.state = defaultNode(slot);
+        node.state.present = read(Field::present, node.state.present ? 1.0f : 0.0f) > 0.5f;
+        node.state.bypassed = read(Field::bypassed, 0.0f) > 0.5f;
+        node.state.type = static_cast<Type>(juce::jlimit(0, 6, juce::roundToInt(read(Field::type,
+                                                                                static_cast<float>(node.state.type)))));
+        node.state.slope = juce::jlimit(0, 3, juce::roundToInt(read(Field::slope, 0.0f)));
+        for (int control = 0; control < 3; ++control)
+        {
+            ModulatedParameterSnapshot value;
+            if (slot < 3) value = *legacyControls[static_cast<size_t>(slot * 3 + control)];
+            else prepareModulatedParameter(cached[static_cast<size_t>(control)], value);
+            node.controls[static_cast<size_t>(control)] = value.provider;
+            node.sources[static_cast<size_t>(control)] = value.lfoSourceIndex;
+        }
+        node.state.frequency = node.controls[0].baseValue;
+        node.state.gainDb = node.controls[1].baseValue;
+        node.state.q = node.controls[2].baseValue;
+        node.enabled = node.state.present && ! node.state.bypassed
+                       && ! usesLegacyShape(slot, node.state.type);
+    }
+    filter.baseSettings.lowCutBypassed = filter.baseSettings.lowCutBypassed
+        || ! filter.eqNodes[0].state.present || ! fire::eq::usesLegacyShape(0, filter.eqNodes[0].state.type);
+    filter.baseSettings.peakBypassed = filter.baseSettings.peakBypassed
+        || ! filter.eqNodes[1].state.present || ! fire::eq::usesLegacyShape(1, filter.eqNodes[1].state.type);
+    filter.baseSettings.highCutBypassed = filter.baseSettings.highCutBypassed
+        || ! filter.eqNodes[2].state.present || ! fire::eq::usesLegacyShape(2, filter.eqNodes[2].state.type);
 
     prepareModulatedParameter(globalOutputParameter, snapshot.globalOutput);
     prepareModulatedParameter(globalMixParameter, snapshot.globalMix);
@@ -7504,6 +7703,15 @@ void FireAudioProcessor::applyMasterFilter(juce::AudioBuffer<float>& buffer, con
         globalFilterMixer.pushDrySamples(juce::dsp::AudioBlock<float>(buffer));
 
         auto block = juce::dsp::AudioBlock<float>(buffer);
+        for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
+        {
+            auto parameters = filterSnapshot.eqNodes[static_cast<size_t>(slot)];
+            for (size_t control = 0; control < parameters.controls.size(); ++control)
+                if (juce::isPositiveAndBelow(parameters.sources[control], lfoOutputs.getNumChannels())
+                    && lfoOutputs.getNumSamples() >= buffer.getNumSamples())
+                    parameters.controls[control].lfoSignal = lfoOutputs.getReadPointer(parameters.sources[control]);
+            eqProcessor.begin(slot, parameters);
+        }
 
         const float lowCutMix = filterSnapshot.baseSettings.lowCutBypassed
                                     ? 0.0f
@@ -7529,6 +7737,7 @@ void FireAudioProcessor::applyMasterFilter(juce::AudioBuffer<float>& buffer, con
                                   globalFilterStageMix[lowCutStage],
                                   startSample,
                                   numSamples);
+            eqProcessor.process(0, block, startSample, numSamples);
             processGlobalFilterStage(leftChain.get<ChainPositions::Peak>(),
                                      rightChain.get<ChainPositions::Peak>(),
                                      block,
@@ -7536,6 +7745,7 @@ void FireAudioProcessor::applyMasterFilter(juce::AudioBuffer<float>& buffer, con
                                      globalFilterStageMix[peakStage],
                                      startSample,
                                      numSamples);
+            eqProcessor.process(1, block, startSample, numSamples);
             processCutFilterStage(leftChain.get<ChainPositions::HighCut>(),
                                   rightChain.get<ChainPositions::HighCut>(),
                                   highCutSlopeTransition,
@@ -7543,6 +7753,7 @@ void FireAudioProcessor::applyMasterFilter(juce::AudioBuffer<float>& buffer, con
                                   globalFilterStageMix[highCutStage],
                                   startSample,
                                   numSamples);
+            eqProcessor.process(2, block, startSample, numSamples);
             processGlobalFilterStage(leftChain.get<ChainPositions::LowCutQ>(),
                                      rightChain.get<ChainPositions::LowCutQ>(),
                                      block,
@@ -7557,6 +7768,8 @@ void FireAudioProcessor::applyMasterFilter(juce::AudioBuffer<float>& buffer, con
                                      globalFilterStageMix[highCutQStage],
                                      startSample,
                                      numSamples);
+            for (int slot = 3; slot < fire::eq::maxNodes; ++slot)
+                eqProcessor.process(slot, block, startSample, numSamples);
         };
 
         const auto isFilterSmoothing = [&]
@@ -7940,7 +8153,7 @@ bool FireAudioProcessor::sameTopologyIdentity(
     const MultibandTopologySnapshot& second) noexcept
 {
     return first.numBands == second.numBands
-        && first.publicationSequence == second.publicationSequence;
+        && first.dspResetSequence == second.dspResetSequence;
 }
 
 bool FireAudioProcessor::hasPendingTopologyChange() const noexcept

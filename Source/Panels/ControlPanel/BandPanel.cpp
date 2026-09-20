@@ -127,6 +127,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     addAndMakeVisible(widthGraph);
     addAndMakeVisible(ottGraph);
     configureGraphInteractions();
+    configureGraphViewMenu();
 
     // Group components for visibility management after they've been created
     setupComponentGroups();
@@ -163,6 +164,7 @@ BandPanel::~BandPanel()
 {
     effectNavigation.onSelectEffect = nullptr;
     insertControls.onLayoutChanged = nullptr;
+    graphViewMenu.configurePopupSession({}, {}, ContextAwareComboBox::SelectionCallback {});
     for (auto& sliderPair : modulatableSliderComponents)
     {
         sliderPair.second->onInteractionEnded = nullptr;
@@ -512,7 +514,7 @@ void BandPanel::resized()
     effectNavigation.setBounds(tabAreaRect);
     effectNavigation.setScale(uiScale);
     insertControls.setScale(uiScale);
-    insertControls.setBounds(selectedInsert >= 0 && insertControls.usesExpandedLayout()
+    insertControls.setBounds(selectedInsert >= 0 && insertControls.usesFullWidthLayout()
         ? contentArea(knobsAreaRect.getUnion(graphAreaRect)) : knobsColumnArea);
 
     // --- Active module controls ---
@@ -611,6 +613,21 @@ void BandPanel::resized()
         zoomedGraph->toFront(false);
     }
 
+    auto selectorArea = graphAreaRect.reduced(cardPadding, cardPadding).removeFromTop(titleHeight);
+    if (zoomedGraph != nullptr && zoomedGraph->isVisible())
+    {
+        selectorArea = zoomedGraph->getBounds().reduced(juce::roundToInt(7.0f * uiScale),
+                                                       juce::roundToInt(5.0f * uiScale));
+        selectorArea = selectorArea.removeFromTop(juce::roundToInt(23.0f * uiScale));
+        selectorArea = selectorArea.removeFromRight(juce::jmin(selectorArea.getWidth(), juce::roundToInt(216.0f * uiScale)));
+    }
+    graphSelectorStrip.setBounds(selectorArea);
+    auto selectorBounds = graphSelectorStrip.getLocalBounds();
+    graphViewLabel.setFont(fire::ui::labelFont(10.0f * uiScale));
+    graphViewLabel.setBounds(selectorBounds.removeFromLeft(juce::roundToInt(34.0f * uiScale)));
+    graphViewMenu.setBounds(selectorBounds);
+    graphSelectorStrip.toFront(false);
+
     // --- Output card ---
     auto buttonArea = outputColumnArea.removeFromBottom(buttonAreaHeight);
     outputColumnArea.removeFromBottom(juce::jmin(controlGap, outputColumnArea.getHeight()));
@@ -659,33 +676,28 @@ void BandPanel::rebuildChromeCache(float displayScale)
     };
 
     juce::String moduleTitle { "DRIVE" };
-    juce::String graphTitle { "INPUT" };
     if (shapeSwitch.getToggleState())
     {
         moduleTitle = "SHAPE";
-        graphTitle = "TRANSFER";
     }
     else if (compressorSwitch.getToggleState())
     {
         moduleTitle = "COMPRESSOR";
-        graphTitle = "GAIN REDUCTION";
     }
     else if (widthSwitch.getToggleState())
     {
         moduleTitle = "STEREO";
-        graphTitle = "WIDTH";
     }
 
-    if (ottSwitch.getToggleState()) { moduleTitle = "OTT"; graphTitle = "DYNAMICS"; }
+    if (ottSwitch.getToggleState()) moduleTitle = "OTT";
 
-    if (selectedInsert >= 0) { moduleTitle = fire::effects::name(processor.getInsertEffectType(focusBandNum + 1, selectedInsert)); graphTitle = "OUTPUT"; }
+    if (selectedInsert >= 0) moduleTitle = fire::effects::name(processor.getInsertEffectType(focusBandNum + 1, selectedInsert));
     drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "CHAIN");
     const bool expandedInsert = selectedInsert >= 0 && insertControls.usesExpandedLayout();
+    const bool fullWidthInsert = selectedInsert >= 0 && insertControls.usesFullWidthLayout();
     drawMinimalTitle(cacheGraphics,
-                     titleFor(expandedInsert ? knobsAreaRect.getUnion(graphAreaRect) : knobsAreaRect),
+                     titleFor(fullWidthInsert ? knobsAreaRect.getUnion(graphAreaRect) : knobsAreaRect),
                      expandedInsert ? "GRANULAR / CLOUDS" : moduleTitle);
-    if (! expandedInsert)
-        drawMinimalTitle(cacheGraphics, titleFor(graphAreaRect), graphTitle);
     drawMinimalTitle(cacheGraphics,
                      titleFor(outputAreaRect),
                      "BAND " + juce::String(focusBandNum + 1));
@@ -716,6 +728,116 @@ void BandPanel::configureGraphInteractions()
     }
 }
 
+void BandPanel::configureGraphViewMenu()
+{
+    addAndMakeVisible(graphSelectorStrip);
+    graphSelectorStrip.setInterceptsMouseClicks(false, true);
+    graphSelectorStrip.addAndMakeVisible(graphViewLabel);
+    graphSelectorStrip.addAndMakeVisible(graphViewMenu);
+    graphViewLabel.setText("VIEW", juce::dontSendNotification);
+    graphViewLabel.setBorderSize({});
+    graphViewLabel.setInterceptsMouseClicks(false, false);
+    graphViewLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    graphViewMenu.setComponentID("band_graph_view");
+    graphViewMenu.addItem("Auto: Waveform", 1);
+    graphViewMenu.addItem("Waveform", 2);
+    graphViewMenu.addItem("Transfer", 3);
+    graphViewMenu.addItem("Meters", 4);
+    graphViewMenu.addItem("Stereo", 5);
+    graphViewMenu.setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface0);
+    graphViewMenu.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    graphViewMenu.setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
+    graphViewMenu.setColour(juce::ComboBox::arrowColourId, fire::ui::colours::signalCool);
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    graphViewMenu.configurePopupSession(
+        [safeThis] { return safeThis ? safeThis->graphViewGeneration : 0; },
+        [safeThis]
+        {
+            return safeThis && safeThis->isShowing() && safeThis->isEnabled()
+                && safeThis->graphSelectorStrip.isShowing()
+                && ! (safeThis->selectedInsert >= 0 && safeThis->insertControls.usesFullWidthLayout());
+        },
+        [safeThis](int itemId) { if (safeThis) safeThis->selectGraphView(itemId); });
+    updateGraphViewMenu();
+}
+
+void BandPanel::dismissGraphViewMenu() noexcept
+{
+    ++graphViewGeneration;
+    graphViewMenu.dismissTransientInteraction();
+}
+
+void BandPanel::selectGraphView(int itemId)
+{
+    if (! juce::isPositiveAndBelow(itemId - 1, 5) || ! graphSelectorStrip.isShowing())
+        return;
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    const auto context = graphViewGeneration;
+    if (driveGraphPreviewPhase != DriveGraphPreviewPhase::idle)
+        getDriveKnob()->dismissTransientInteraction();
+    if (! safeThis || graphViewGeneration != context) return;
+    const bool keepZoomed = zoomedGraph != nullptr;
+    clearGraphZoom();
+    if (! safeThis || graphViewGeneration != context) return;
+    dismissGraphViewMenu();
+    if (! safeThis) return;
+    selectedGraphView = itemId;
+    const auto selectionGeneration = graphViewGeneration;
+    applySelectedGraphView();
+    if (! safeThis || graphViewGeneration != selectionGeneration) return;
+    resized();
+    if (! safeThis || graphViewGeneration != selectionGeneration) return;
+    if (keepZoomed)
+        toggleGraphZoom(getSelectedModuleGraph());
+}
+
+void BandPanel::applySelectedGraphView()
+{
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    auto* selected = getSelectedModuleGraph();
+    const bool available = selected != nullptr;
+    if (graphSelectorStrip.isVisible() != available)
+        dismissGraphViewMenu();
+    if (! safeThis) return;
+    const auto context = graphViewGeneration;
+    if (available && driveGraphPreviewPhase != DriveGraphPreviewPhase::idle)
+        selected = &distortionGraph;
+    for (auto* graph : { static_cast<GraphTemplate*>(&oscilloscope),
+                         static_cast<GraphTemplate*>(&distortionGraph),
+                         static_cast<GraphTemplate*>(&vuPanel),
+                         static_cast<GraphTemplate*>(&widthGraph),
+                         static_cast<GraphTemplate*>(&ottGraph) })
+    {
+        graph->setVisible(graph == selected);
+        if (! safeThis || graphViewGeneration != context) return;
+    }
+    graphSelectorStrip.setVisible(available);
+    if (safeThis && graphViewGeneration == context)
+        updateGraphViewMenu();
+}
+
+void BandPanel::updateGraphViewMenu()
+{
+    const auto graphName = [this](GraphTemplate* graph) -> juce::String
+    {
+        if (graph == &distortionGraph) return "Transfer";
+        if (graph == &vuPanel) return "Meters";
+        if (graph == &widthGraph) return "Stereo";
+        if (graph == &ottGraph) return "OTT dynamics";
+        return "Waveform";
+    };
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    graphViewMenu.changeItemText(1, "Auto: " + graphName(getAutomaticModuleGraph()));
+    if (! safeThis) return;
+    const bool previewing = driveGraphPreviewPhase != DriveGraphPreviewPhase::idle;
+    graphViewMenu.setSelectedId(previewing ? 3 : selectedGraphView, juce::dontSendNotification);
+    if (! safeThis) return;
+    graphViewMenu.setTitle("Band " + juce::String(focusBandNum + 1) + " graph view");
+    graphViewMenu.setTooltip(previewing
+        ? "Transfer preview while adjusting Drive. Release to restore your chosen view."
+        : "Choose Waveform, Transfer, Meters or Stereo. Auto follows the selected module.");
+}
+
 void BandPanel::toggleGraphZoom(GraphTemplate* graph)
 {
     const juce::Component::SafePointer<BandPanel> safeThis(this);
@@ -726,6 +848,9 @@ void BandPanel::toggleGraphZoom(GraphTemplate* graph)
         || std::find(graphs.begin(), graphs.end(), graph) == graphs.end()
         || ! graph->isShowing())
         return;
+
+    dismissGraphViewMenu();
+    if (! safeThis) return;
 
     if (zoomedGraph == graph)
     {
@@ -777,7 +902,7 @@ void BandPanel::hideComponentsObscuredByZoom(const GraphTemplate& graph)
     for (int index = 0; index < getNumChildComponents(); ++index)
     {
         auto* component = getChildComponent(index);
-        if (component == &graph || component == nullptr
+        if (component == &graph || component == &graphSelectorStrip || component == nullptr
             || component->getBounds().isEmpty()
             || ! cover.contains(component->getBounds())
             || ! component->isVisible())
@@ -825,7 +950,20 @@ void BandPanel::restoreComponentsObscuredByZoom() noexcept
 
 GraphTemplate* BandPanel::getSelectedModuleGraph() noexcept
 {
-    if (selectedInsert >= 0) return insertControls.usesExpandedLayout() ? nullptr : &oscilloscope;
+    if (selectedInsert >= 0 && insertControls.usesFullWidthLayout()) return nullptr;
+    switch (selectedGraphView)
+    {
+        case 2: return &oscilloscope;
+        case 3: return &distortionGraph;
+        case 4: return &vuPanel;
+        case 5: return &widthGraph;
+        default: return getAutomaticModuleGraph();
+    }
+}
+
+GraphTemplate* BandPanel::getAutomaticModuleGraph() noexcept
+{
+    if (selectedInsert >= 0) return insertControls.usesFullWidthLayout() ? nullptr : &oscilloscope;
     if (ottSwitch.getToggleState()) return &ottGraph;
     if (shapeSwitch.getToggleState())
         return &distortionGraph;
@@ -849,12 +987,17 @@ void BandPanel::restoreDriveGraphPreviewNow() noexcept
     driveGraphPreviewPhase = DriveGraphPreviewPhase::idle;
 
     if (graphToRestore == nullptr || graphToRestore == &distortionGraph)
+    {
+        updateGraphViewMenu();
         return;
+    }
 
     const juce::Component::SafePointer<BandPanel> safeThis(this);
     distortionGraph.setVisible(false);
     if (safeThis != nullptr)
         graphToRestore->setVisible(true);
+    if (safeThis != nullptr)
+        updateGraphViewMenu();
 }
 
 void BandPanel::setAnimatedModuleTarget(int moduleIndex)
@@ -900,7 +1043,7 @@ void BandPanel::selectInsertEffect(int slot)
     if (! safeThis) return;
     insertControls.setActive(true);
     if (! safeThis) return;
-    oscilloscope.setVisible(! insertControls.usesExpandedLayout());
+    applySelectedGraphView();
     if (! safeThis) return;
     modulatableSliderComponents.at(OUTPUT_NAME)->setInteractionOnlyReadout(true);
     modulatableSliderComponents.at(MIX_NAME)->setInteractionOnlyReadout(true);
@@ -917,7 +1060,7 @@ void BandPanel::refreshInsertLayout()
     const juce::Component::SafePointer<BandPanel> safeThis(this);
     clearGraphZoom();
     if (! safeThis || selectedInsert != expectedSlot) return;
-    oscilloscope.setVisible(! insertControls.usesExpandedLayout());
+    applySelectedGraphView();
     if (! safeThis) return;
     resized();
     if (! safeThis) return;
@@ -978,7 +1121,7 @@ void BandPanel::animationTick(float deltaSeconds)
     }
     if (lastOttMeterTimeMs >= 0.0 && juce::Time::getMillisecondCounterHiRes() - lastOttMeterTimeMs > 250.0)
         ottGraph.setLevels(-120.0f, 0.0f);
-    if (isShowing() && ottSwitch.getToggleState())
+    if (ottGraph.isShowing())
     {
         bool reading = spectrumOttInteraction != 0;
         for (auto* name : ParameterIDAndName::ottControlNames)
@@ -1059,6 +1202,8 @@ void BandPanel::dismissButtonInteractions() noexcept
 void BandPanel::dismissTransientInteraction() noexcept
 {
     const juce::Component::SafePointer<BandPanel> safeThis(this);
+    dismissGraphViewMenu();
+    if (! safeThis) return;
     effectNavigation.dismiss();
     if (! safeThis) return;
     insertControls.dismissButtons();
@@ -1082,6 +1227,8 @@ void BandPanel::dismissTransientInteraction() noexcept
 void BandPanel::dismissTransientInteractionForParameterRebind() noexcept
 {
     const juce::Component::SafePointer<BandPanel> safeThis(this);
+    dismissGraphViewMenu();
+    if (! safeThis) return;
     insertControls.dismissButtons();
     if (! safeThis) return;
     for (auto* slider : modulatableSliders)
@@ -1141,6 +1288,18 @@ void BandPanel::visibilityChanged()
         if (safeThis != nullptr)
             safeThis->resized();
     }
+}
+
+void BandPanel::enablementChanged()
+{
+    juce::Component::enablementChanged();
+    dismissGraphViewMenu();
+}
+
+void BandPanel::parentHierarchyChanged()
+{
+    juce::Component::parentHierarchyChanged();
+    dismissGraphViewMenu();
 }
 
 void BandPanel::updateAttachments()
@@ -1243,6 +1402,8 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
         || (clickedButton == &widthSwitch && widthSwitch.getToggleState())
         || (clickedButton == &ottSwitch && ottSwitch.getToggleState()))
     {
+        dismissGraphViewMenu();
+        if (! safeThis) return;
         clearGraphZoom();
         if (safeThis == nullptr)
             return;
@@ -1377,6 +1538,8 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
         selectedInsert = -1;
         effectNavigation.setSelectedSlot(-1);
         insertControls.setActive(false);
+        if (! safeThis) return;
+        applySelectedGraphView();
         if (! safeThis) return;
         modulatableSliderComponents.at(OUTPUT_NAME)->setInteractionOnlyReadout(ottSwitch.getToggleState());
         modulatableSliderComponents.at(MIX_NAME)->setInteractionOnlyReadout(ottSwitch.getToggleState());
@@ -1854,6 +2017,9 @@ void BandPanel::setGraphVisibilityForDriveDrag(bool isDragging)
         if (driveGraphPreviewPhase != DriveGraphPreviewPhase::idle)
             return;
 
+        dismissGraphViewMenu();
+        if (! safeThis) return;
+
         graphBeforeDrivePreview = getSelectedModuleGraph();
         driveGraphPreviewPhase = DriveGraphPreviewPhase::previewing;
 
@@ -1870,6 +2036,7 @@ void BandPanel::setGraphVisibilityForDriveDrag(bool isDragging)
             if (safeThis == nullptr)
                 return;
         }
+        updateGraphViewMenu();
     }
     else
     {

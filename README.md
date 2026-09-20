@@ -510,7 +510,7 @@ OTT settings participate in presets, A/B comparisons and band copying. Older pro
 
 ### Master and Band insert effects
 
-Use **CHAIN → +** in either **Master Lab** or **Band Lab** to add an effect. Each master/band chain has eight independent insert slots and can contain multiple instances of the same effect. The module rail keeps five fixed-height rows visible and scrolls as more effects are added. The selected module scrolls into view automatically.
+Use **CHAIN → +** in either **Master Lab** or **Band Lab** to select an effect. Built-in Drive, Shape, Compressor, OTT, Stereo, Master EQ and Master Lo-Fi entries enable and select their existing module. Additional effects use eight independent insert slots per chain and can have multiple instances. The module rail keeps five fixed-height rows visible and scrolls as more effects are added. The selected module scrolls into view automatically.
 
 | Effect | Controls |
 | --- | --- |
@@ -551,8 +551,35 @@ the sound of old granular presets. Existing Clouds presets keep their values.
 The old engine parameter IDs remain inert reserved slots so later automation
 indices do not move; they cannot select another engine.
 
-The existing **Master Lo-Fi** page retains Rate, Bits, Jitter and Mix, and adds **Tape**, **Wow** and **Flutter**. Tape adds saturation and a softer high-frequency response; Wow introduces slow pitch drift and Flutter adds faster pitch variation. Zero Tape/Wow/Flutter preserves the previous Lo-Fi processing.
+The **Master Lo-Fi** menu entry opens the same built-in page, with Rate, Bits, Jitter, Mix, Tape, Wow and Flutter; it does not create a second Master Lo-Fi variant. Historical Lo-Fi inserts remain editable with their original parameter ranges and use the same two-row control grouping. Tape adds saturation and a softer high-frequency response; Wow introduces slow pitch drift and Flutter adds faster pitch variation. Zero Tape/Wow/Flutter preserves the previous Lo-Fi processing.
 
-Built-in modules and insert effects run in the same freely reorderable list, before the chain's Output/Mix controls. Drag any module, including Drive, Shape, Compressor, Stereo, OTT, Master Filter and Lo-Fi, to change its processing position. Analysis is a movable display page and does not process audio. Older presets retain their original audio order (OTT before Stereo, and Master Lo-Fi before Filter); the list now displays that order. Drive and Shape retain their legacy combined processing when adjacent in that order, and run as separate stages when moved apart. Hover an inserted effect to reveal its remove button, or drag its name/body to reorder it. A floating preview and insertion line indicate the destination; holding near the list edges scrolls to offscreen effects. The new order is committed once on release. Escape, dropping outside the list or changing workspace/band cancels the drag. Removing the selected effect selects its nearest remaining neighbour. The power button bypasses each effect, and the context menu also provides move/remove actions. Reordering retains that slot's parameters and LFO assignments. New effect values fade in while editing; the waveform shows the selected band's output or the master output.
+Built-in modules and insert effects run in the same freely reorderable list, before the chain's Output/Mix controls. Drag any module, including Drive, Shape, Compressor, Stereo, OTT, Master EQ and Lo-Fi, to change its processing position. Analysis is a movable display page and does not process audio. Older presets retain their original audio order (OTT before Stereo, and Master Lo-Fi before EQ); the list now displays that order. Drive and Shape retain their legacy combined processing when adjacent in that order, and run as separate stages when moved apart. Hover an inserted effect to reveal its remove button, or drag its name/body to reorder it. A floating preview and insertion line indicate the destination; holding near the list edges scrolls to offscreen effects. The new order is committed once on release. Escape, dropping outside the list or changing workspace/band cancels the drag. Removing the selected effect selects its nearest remaining neighbour. The power button bypasses each effect, and the context menu also provides move/remove actions. Reordering retains that slot's parameters and LFO assignments. New effect values fade in while editing; the waveform shows the selected band's output or the master output.
 
 Every insert retains its six normalized host controls with effect-specific labels and units in Fire's UI; Clouds adds a separately versioned set of controls. LFO modulation, presets, host state, A/B comparisons and band copying include the new controls. New host parameters are appended with a newer AU version hint, and older projects load empty insert racks with Tape/Wow/Flutter at zero. The insert stages add no reported processing latency; delay, pitch modulation, granular playback and reverb create their intended time offsets and tails in the wet signal. Tail reporting reserves conservative bounds so hosts do not cut long echoes prematurely; a frozen Clouds buffer or maximum feedback reports an infinite tail.
+
+
+### Graph views and interactive EQ
+
+The Band Lab **View** dropdown switches between Waveform, Transfer, Meters and
+Stereo. **Auto** follows the selected module. A manual choice remains selected
+when changing modules or bands; dragging Drive temporarily previews Transfer
+and restores the previous view afterward. Hidden graphs stop their display timers.
+
+Master **EQ** supports up to 12 points. Double-click an empty area of the spectrum
+to add a bell at that frequency and gain, or use the **+** in the EQ panel. Drag a
+point to change frequency/gain; scroll over it for Q. Select a point to show its
+Frequency, Gain, Q, Filter Type and Slope controls. The numbered selected dot in
+the bottom navigation grows smoothly; click another dot, or use left/right arrows
+while a dot has keyboard focus, to change points. **−** removes the selected point;
+Delete/Backspace also removes it when the spectrum has focus.
+
+Types are Bell, Low Cut, High Cut, Low Shelf, High Shelf, Notch and Band Pass.
+Slope is available for cut filters (12/24/36/48 dB per octave); Gain is unavailable
+for Notch and Band Pass. Points can be bypassed individually. The EQ remains
+editable while its global power is off; adding a point enables it for audition.
+
+The original three points keep their parameter IDs, ranges and filter response,
+including the cut filters' gain/Q shaping. New points occupy fixed parameter
+slots: deleting a neighbour does not move automation or LFO assignments. EQ points
+and routing are saved in presets, A/B states and host projects. Adding/removing
+an EQ point leaves other effects' delay tails and Clouds Freeze recordings intact.

@@ -14,6 +14,7 @@
 #include "../../GUI/FireTheme.h"
 #include "../../Utility/Parameters.h"
 #include "DraggableButton.h"
+#include "../../DSP/EqCoefficients.h"
 #include <array>
 #include <memory>
 
@@ -41,6 +42,8 @@ public:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void visibilityChanged() override;
     void dismissTransientInteraction();
+    void mouseDoubleClick(const juce::MouseEvent&) override;
+    bool keyPressed(const juce::KeyPress&) override;
 
 private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
@@ -48,16 +51,13 @@ private:
 #endif
 
     FireAudioProcessor& processor;
+    juce::Component::SafePointer<GlobalPanel> globalPanel;
     juce::Path responseCurve;
     juce::Path responseFillCurve;
     juce::Path lfoResponseCurve;
 
-    using Filter = juce::dsp::IIR::Filter<float>;
-    using CutFilter = juce::dsp::ProcessorChain<Filter, Filter, Filter, Filter>;
-    using MonoChain = juce::dsp::ProcessorChain<CutFilter, Filter, CutFilter, Filter, Filter>;
-    // lowcut, peak, highcut, lowcut Q, highcut Q
-    MonoChain monoChain;
-    MonoChain lfoMonoChain;
+    std::array<fire::eq::Coefficients, fire::eq::maxNodes> eqResponse, modulatedEqResponse;
+    int lastSelectedNode = -1;
 
     void updateResponseCurve();
     void updateChain();
@@ -76,6 +76,7 @@ private:
     void finishFilterDrag();
     void updateDraggableButtonStates();
     int getCurvePointCount() const;
+    DraggableButton& nodeButton(int slot);
 
     bool isAnimationActive = false;
     bool telemetryPresentationActive = false;
@@ -96,6 +97,7 @@ private:
     std::shared_ptr<DragGestureSession> dragGestureSession;
 
     DraggableButton draggableLowButton, draggablePeakButton, draggableHighButton;
+    std::array<DraggableButton, fire::eq::maxNodes - 3> extraNodes;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FilterControl)
 };

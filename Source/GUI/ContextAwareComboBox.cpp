@@ -35,6 +35,18 @@ void ContextAwareComboBox::configurePopupSession(
     getCurrentGeneration = std::move(generationProvider);
     isPopupContextValid = std::move(contextValidator);
     boundParameter = parameter;
+    commitSelection = {};
+}
+
+void ContextAwareComboBox::configurePopupSession(
+    GenerationProvider generationProvider,
+    ContextValidator contextValidator,
+    SelectionCallback selectionCallback)
+{
+    getCurrentGeneration = std::move(generationProvider);
+    isPopupContextValid = std::move(contextValidator);
+    boundParameter = nullptr;
+    commitSelection = std::move(selectionCallback);
 }
 
 void ContextAwareComboBox::capturePopupRequest() noexcept
@@ -88,11 +100,12 @@ bool ContextAwareComboBox::keyPressed(const juce::KeyPress& key)
                 continue;
 
             auto* const parameter = boundParameter;
+            auto selectionCallback = commitSelection;
             const auto normalizedValue = itemCount > 1
                                              ? static_cast<float>(itemIndex)
                                                    / static_cast<float>(itemCount - 1)
                                              : 0.0f;
-            if (parameter == nullptr
+            if ((parameter == nullptr && ! selectionCallback)
                 || ! isContextCurrent(contextGeneration))
                 return true;
 
@@ -101,7 +114,15 @@ bool ContextAwareComboBox::keyPressed(const juce::KeyPress& key)
             // instead of queuing ComboBoxAttachment::comboBoxChanged().
             popupSessionActive = false;
             ++popupSessionRevision;
-            commitNormalizedParameterValue(*parameter, normalizedValue);
+            if (selectionCallback)
+            {
+                const juce::Component::SafePointer<ContextAwareComboBox> safeThis(this);
+                setSelectedId(itemId, juce::dontSendNotification);
+                if (safeThis != nullptr && safeThis->isContextCurrent(contextGeneration))
+                    selectionCallback(itemId);
+            }
+            else
+                commitNormalizedParameterValue(*parameter, normalizedValue);
             return true;
         }
 
@@ -382,6 +403,7 @@ std::function<void(int)> ContextAwareComboBox::createPopupResultHandler(
         const auto selectedIndex = safeThis->indexOfItemId(result);
         const auto itemCount = safeThis->getNumItems();
         auto* const parameter = safeThis->boundParameter;
+        auto selectionCallback = safeThis->commitSelection;
         const auto normalizedValue = itemCount > 1
                                          ? static_cast<float>(selectedIndex)
                                                / static_cast<float>(itemCount - 1)
@@ -390,7 +412,7 @@ std::function<void(int)> ContextAwareComboBox::createPopupResultHandler(
                                && safeThis->isContextCurrent(contextGeneration)
                                && selectedIndex >= 0
                                && safeThis->isItemEnabled(result)
-                               && parameter != nullptr;
+                               && (parameter != nullptr || selectionCallback != nullptr);
 
         // Consume the session before notifying listeners. ComboBoxAttachment
         // synchronously notifies the host and that callback may destroy the UI.
@@ -411,7 +433,14 @@ std::function<void(int)> ContextAwareComboBox::createPopupResultHandler(
         // accessibility notification). It must not own the UI-to-parameter
         // call stack: a synchronous host callback may delete the panel and its
         // attachment during setValueNotifyingHost().
-        commitNormalizedParameterValue(*parameter, normalizedValue);
+        if (selectionCallback)
+        {
+            safeThis->setSelectedId(result, juce::dontSendNotification);
+            if (safeThis != nullptr && safeThis->isContextCurrent(contextGeneration))
+                selectionCallback(result);
+        }
+        else
+            commitNormalizedParameterValue(*parameter, normalizedValue);
     };
 }
 

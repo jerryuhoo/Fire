@@ -121,6 +121,17 @@ TEST_CASE("Clouds appends a separate parameter family without changing original 
             CHECK(reserved->getNormalisableRange().end == 1.0f);
         }
     }
+    // All pre-EQ host indices, IDs and version hints above remain untouched.
+    // Keep an independent append-order contract rather than deriving the
+    // expected sequence from the new parameter-registration helper.
+    CHECK(index == 810);
+    for (const auto* id : {"eqNode1Type", "eqNode1Present", "eqNode2Slope",
+                           "eqNode2Type", "eqNode2Present", "eqNode3Type", "eqNode3Present"})
+        checkParameter(id, 6);
+    for (int node = 4; node <= 12; ++node)
+        for (const auto* suffix : {"Freq", "Gain", "Q", "Slope", "Type", "Present", "Bypassed"})
+            checkParameter("eqNode" + juce::String(node) + suffix, 6);
+    CHECK(index == 880);
     CHECK(index == parameters.size());
     CHECK_FALSE(clouds::isParameterID("masterFx1CloudsBogus"));
     CHECK_FALSE(clouds::isParameterID("bandFx9CloudsEngine1"));

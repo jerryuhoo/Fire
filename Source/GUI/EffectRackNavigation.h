@@ -38,7 +38,7 @@ public:
         addAndMakeVisible(viewport);
         addAndMakeVisible(addButton);
         addButton.setButtonText("+"); addButton.setTitle("Add effect");
-        addButton.setTooltip("Add an effect to this chain (8 insert slots)");
+        addButton.setTooltip("Enable a built-in module or add an effect to this chain (8 insert slots)");
         addButton.setColour(juce::TextButton::buttonColourId, colours::raised);
         addButton.setColour(juce::TextButton::textColourOffId, colours::textSecondary);
         addButton.onClick = [this] { showAddMenu(); };
@@ -72,6 +72,7 @@ public:
 
     void setBuiltins(std::vector<Row> rows)
     {
+        ++generation; // A pending menu must never act on replacement rows.
         builtins = std::move(rows);
         for (size_t node = 0; node < builtins.size(); ++node)
         {
@@ -107,10 +108,19 @@ public:
     }
     void setSelectedSlot(int slot)
     {
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
         selectedSlot = slot;
-        for (int i = 0; i < effects::slotCount; ++i) insertButtons[static_cast<size_t>(i)].setToggleState(i == slot, juce::dontSendNotification);
+        for (int i = 0; i < effects::slotCount; ++i)
+        {
+            insertButtons[static_cast<size_t>(i)].setToggleState(i == slot, juce::dontSendNotification);
+            if (! safe) return;
+        }
         if (slot >= 0)
-            for (auto row : builtins) row.button->setToggleState(false, juce::dontSendNotification);
+            for (auto row : builtins)
+            {
+                row.button->setToggleState(false, juce::dontSendNotification);
+                if (! safe) return;
+            }
         updateSelection(true);
     }
     void refresh()
@@ -231,29 +241,129 @@ public:
     int getRowPitch() const { return rowPitch; }
     juce::Viewport& getViewport() { return viewport; }
     int getScope() const noexcept { return scope; }
+    static constexpr int builtinMenuItemID(int node) noexcept { return 100 + node; }
+
+    // Built-ins own permanent host parameters and already have a rail row.
+    // Selecting one enables that row idempotently; it never consumes a slot.
+    bool activateBuiltin(int node)
+    {
+        if (! isShowing() || ! isEnabled() || dragNode >= 0 || ! isAddableBuiltin(node)) return false;
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        const auto epoch = generation;
+        const auto originalScope = scope;
+        const auto row = builtins[static_cast<size_t>(node)];
+        const juce::Component::SafePointer<juce::TextButton> button(row.button);
+        const juce::Component::SafePointer<juce::ToggleButton> power(row.power);
+        if (! button || ! button->isEnabled() || (power && ! power->isEnabled())) return false;
+        const auto stillCurrent = [&]
+        {
+            return safe && button && safe->generation == epoch && safe->scope == originalScope
+                && safe->isShowing() && safe->isEnabled();
+        };
+        if (power && ! power->getToggleState())
+            power->setToggleState(true, juce::sendNotificationSync);
+        // Parameter/host callbacks may destroy the editor or rebind the band.
+        if (! stillCurrent()) return false;
+        if (! button->getToggleState()) button->triggerClick();
+        if (! stillCurrent()) return false;
+        setSelectedSlot(-1);
+        if (! stillCurrent()) return false;
+        updateSelection(true);
+        return true;
+    }
+
+    juce::PopupMenu createAddMenu() const
+    {
+        juce::PopupMenu menu;
+        bool hasBuiltins = false;
+        const auto addBuiltin = [&](int node, const char* label)
+        {
+            if (! isAddableBuiltin(node)) return;
+            const auto row = builtins[static_cast<size_t>(node)];
+            menu.addItem(builtinMenuItemID(node), label,
+                row.button->isEnabled() && (! row.power || row.power->isEnabled()),
+                row.power && row.power->getToggleState());
+            hasBuiltins = true;
+        };
+        if (scope == 0)
+        {
+            addBuiltin(0, "EQ");
+            addBuiltin(1, "Lo-Fi");
+        }
+        else
+        {
+            addBuiltin(0, "Drive"); addBuiltin(1, "Shape");
+            addBuiltin(2, "Compressor"); addBuiltin(4, "OTT"); addBuiltin(3, "Stereo");
+        }
+        if (hasBuiltins) menu.addSeparator();
+        const bool room = hasInsertRoom();
+        for (int type = 1; type < static_cast<int>(effects::Type::count); ++type)
+        {
+            // Master has one canonical Lo-Fi. Historical insert Lo-Fi rows
+            // remain accessible, but the menu cannot create a duplicate form.
+            if (scope == 0 && type == static_cast<int>(effects::Type::lofi)) continue;
+            menu.addItem(type, effects::name(static_cast<effects::Type>(type)), room);
+        }
+        return menu;
+    }
+
+    std::function<void(int)> createAddMenuResultHandler()
+    {
+        const auto epoch = generation;
+        const auto request = ++addMenuGeneration;
+        const auto originalScope = scope;
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        return [safe, epoch, request, originalScope](int result)
+        {
+            if (! safe || safe->generation != epoch || safe->addMenuGeneration != request
+                || safe->scope != originalScope || ! safe->isShowing() || ! safe->isEnabled()) return;
+            ++safe->addMenuGeneration; // Menu completion is a one-shot action.
+            if (result >= builtinMenuItemID(0) && result <= builtinMenuItemID(4))
+            {
+                safe->activateBuiltin(result - builtinMenuItemID(0));
+                return;
+            }
+            if (result <= 0 || result >= static_cast<int>(effects::Type::count)) return;
+            if (originalScope == 0 && result == static_cast<int>(effects::Type::lofi))
+            {
+                safe->activateBuiltin(1);
+                return;
+            }
+            if (! safe->hasInsertRoom()) return;
+            const auto slot = safe->processor.addInsertEffect(originalScope, static_cast<effects::Type>(result));
+            if (! safe || safe->scope != originalScope || safe->generation != epoch
+                || ! safe->isShowing() || ! safe->isEnabled()) return;
+            safe->refresh();
+            if (! safe || safe->scope != originalScope || ! safe->isShowing() || ! safe->isEnabled()) return;
+            auto callback = safe->onSelectEffect;
+            if (slot >= 0 && callback) callback(slot);
+        };
+    }
+
     void showAddMenu()
     {
         if (! isShowing() || ! isEnabled()) return;
         if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr) return;
-        bool room = false;
-        for (int slot = 0; slot < effects::slotCount; ++slot) room = room || processor.getInsertEffectType(scope, slot) == effects::Type::none;
-        juce::PopupMenu menu;
-        for (int type = 1; type < static_cast<int>(effects::Type::count); ++type)
-            menu.addItem(type, effects::name(static_cast<effects::Type>(type)), room);
-        const auto epoch = generation;
-        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        auto menu = createAddMenu();
         menu.showMenuAsync(prepareContextMenu(menu, addButton, addButton.getScreenBounds().getBottomLeft())
                               .withMinimumWidth(juce::roundToInt(170.0f * scale))
                               .withStandardItemHeight(juce::roundToInt(29.0f * scale)),
-            [safe, epoch](int result) {
-                if (! safe || result <= 0 || safe->generation != epoch || ! safe->isShowing() || ! safe->isEnabled()) return;
-                const auto slot = safe->processor.addInsertEffect(safe->scope, static_cast<effects::Type>(result));
-                if (! safe) return;
-                safe->refresh();
-                if (safe && slot >= 0 && safe->onSelectEffect) safe->onSelectEffect(slot);
-            });
+            createAddMenuResultHandler());
     }
 private:
+    bool isAddableBuiltin(int node) const noexcept
+    {
+        const int count = scope == 0 ? 2 : 5; // Master Analysis is a view, not an effect.
+        return juce::isPositiveAndBelow(node, count)
+            && juce::isPositiveAndBelow(node, static_cast<int>(builtins.size()))
+            && builtins[static_cast<size_t>(node)].button != nullptr;
+    }
+    bool hasInsertRoom() const
+    {
+        for (int slot = 0; slot < effects::slotCount; ++slot)
+            if (processor.getInsertEffectType(scope, slot) == effects::Type::none) return true;
+        return false;
+    }
     class Content final : public juce::Component
     {
     public:
@@ -529,7 +639,7 @@ private:
     int scope = -1, selectedSlot = -1, rowPitch = 1;
     bool selectionInitialised = false;
     float scale = 1;
-    std::uint64_t generation = 0;
+    std::uint64_t generation = 0, addMenuGeneration = 0;
     int hoveredSlot = -1, dragNode = -1, dragTarget = -1, dropBeforeNode = -1;
     std::uint64_t dragGeneration = 0;
     juce::Point<float> dragViewPoint;

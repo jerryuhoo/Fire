@@ -156,6 +156,8 @@ GlobalPanel::~GlobalPanel()
 void GlobalPanel::dismissTransientInteraction() noexcept
 {
     const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    eqControls.dismiss();
+    if (! safeThis) return;
     effectNavigation.dismiss();
     if (! safeThis) return;
     insertControls.dismissButtons();
@@ -205,8 +207,10 @@ void GlobalPanel::dismissTransientInteraction() noexcept
 
 void GlobalPanel::invalidateSlopeInteractions() noexcept
 {
-    ++slopeInteractionGeneration;
     const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    eqControls.dismiss();
+    if (! safeThis) return;
+    ++slopeInteractionGeneration;
     lowcutSlopeMode.dismissTransientInteraction();
     if (safeThis == nullptr)
         return;
@@ -298,6 +302,26 @@ void GlobalPanel::createSliders()
     createAndConfigureSlider(PEAK_FREQ_NAME, "Frequency", filterColour, " Hz");
     createAndConfigureSlider(PEAK_Q_NAME, "Q", filterColour);
     createAndConfigureSlider(PEAK_GAIN_NAME, "Gain", filterColour, " dB");
+
+    EqControlsPanel::Knobs eqKnobs {};
+    constexpr const char* legacyNames[3][3] {
+        {LOWCUT_FREQ_NAME, LOWCUT_GAIN_NAME, LOWCUT_Q_NAME},
+        {PEAK_FREQ_NAME, PEAK_GAIN_NAME, PEAK_Q_NAME},
+        {HIGHCUT_FREQ_NAME, HIGHCUT_GAIN_NAME, HIGHCUT_Q_NAME}
+    };
+    const fire::eq::Field fields[] {fire::eq::Field::frequency, fire::eq::Field::gain, fire::eq::Field::q};
+    const char* labels[] {"Frequency", "Gain", "Q"};
+    const char* suffixes[] {" Hz", " dB", ""};
+    for (int node = 0; node < fire::eq::maxNodes; ++node)
+        for (int control = 0; control < 3; ++control)
+        {
+            const auto name = node < 3 ? juce::String(legacyNames[node][control])
+                                      : fire::eq::parameterID(node, fields[control]);
+            if (node >= 3) createAndConfigureSlider(name, labels[control], filterColour, suffixes[control]);
+            eqKnobs[static_cast<size_t>(node)][static_cast<size_t>(control)] = modulatableSliderComponents.at(name).get();
+        }
+    addChildComponent(eqControls);
+    eqControls.setKnobs(eqKnobs);
 }
 
 void GlobalPanel::createLabels()
@@ -342,7 +366,7 @@ void GlobalPanel::createButtons()
         btn.addListener(this);
     };
 
-    setupSwitch(filterSwitch, "Filter", fire::ui::colours::filter);
+    setupSwitch(filterSwitch, "EQ", fire::ui::colours::filter);
     setupSwitch(downsampleSwitch, "Lo-Fi", fire::ui::colours::loFi);
     setupSwitch(graphSwitch, "Analysis", fire::ui::colours::signalCool);
 
@@ -373,8 +397,8 @@ void GlobalPanel::createButtons()
     };
 
     setSemantics(*filterBypassButton,
-                 "Global filter power",
-                 "Enable or bypass the global filter");
+                 "Global EQ power",
+                 "Enable or bypass the global EQ");
     setSemantics(*downsampleBypassButton,
                  "Global Lo-Fi power",
                  "Enable or bypass global Lo-Fi processing");
@@ -478,10 +502,11 @@ void GlobalPanel::setupComponentGroups()
         &widthGraph
     };
 
-    filterComponents = { &filterLowCutButton, &filterPeakButton, &filterHighCutButton, &filterTypeLabel };
-    filterComponents.addArray(lowcutKnobs);
-    filterComponents.addArray(peakKnobs);
-    filterComponents.addArray(highcutKnobs);
+    filterComponents = { &eqControls };
+    for (auto* oldControl : std::array<juce::Component*, 8> {&filterLowCutButton, &filterPeakButton,
+             &filterHighCutButton, &filterTypeLabel, &lowcutSlopeMode, &highcutSlopeMode,
+             &lowcutSlopeLabel, &highcutSlopeLabel})
+        oldControl->setVisible(false);
 
     downsampleComponents = {
         modulatableSliderComponents.at(DOWNSAMPLE_NAME).get(),
@@ -517,6 +542,16 @@ void GlobalPanel::updateAttachments()
             }
         }
     }
+
+    for (int node = 3; node < fire::eq::maxNodes; ++node)
+        for (auto field : {fire::eq::Field::frequency, fire::eq::Field::gain, fire::eq::Field::q})
+        {
+            const auto id = fire::eq::parameterID(node, field);
+            auto* slider = modulatableSliderComponents.at(id).get();
+            slider->parameterID = id;
+            slider->setComponentID(id);
+            sliderAttachments[id] = std::make_unique<SliderAttachment>(processor.treeState, id, *slider);
+        }
 
     filterLowAttachment = std::make_unique<ButtonAttachment>(processor.treeState, LOW_ID, filterLowCutButton);
     filterBandAttachment = std::make_unique<ButtonAttachment>(processor.treeState, BAND_ID, filterPeakButton);
@@ -631,7 +666,7 @@ void GlobalPanel::resized()
     if (selectedInsert >= 0)
     {
         auto insertArea = knobsColumnArea;
-        if (! insertControls.usesExpandedLayout())
+        if (! insertControls.usesFullWidthLayout())
         {
             auto graphArea = insertArea.removeFromRight(juce::jmin(insertArea.getWidth() / 2, juce::roundToInt(230.0f * uiScale)));
             insertArea.removeFromRight(controlGap);
@@ -654,75 +689,8 @@ void GlobalPanel::resized()
     // --- Main reactor card ---
     if (filterSwitch.getToggleState())
     {
-        auto controlArea = knobsColumnArea;
-        auto utilityArea = controlArea.removeFromLeft(juce::jmin(filterUtilityWidth, controlArea.getWidth()));
-        controlArea.removeFromLeft(juce::jmin(controlGap, controlArea.getWidth()));
-
-        {
-            // Type and Slope share one sizing system.  Explicit label bounds
-            // avoid JUCE's attached-label positioning squeezing the Slope box
-            // against the final Type button at smaller editor scales.
-            const int controlHeight = juce::jmax(1, juce::jmin(
-                juce::roundToInt(28.0f * uiScale),
-                juce::roundToInt(utilityArea.getHeight() / 5.92f)));
-            const int labelHeight = juce::jmax(1, juce::roundToInt(controlHeight * 0.50f));
-            const int itemGap = juce::jmax(1, juce::roundToInt(controlHeight * 0.14f));
-            const int sectionGap = juce::jmax(itemGap * 2,
-                                              juce::roundToInt(controlHeight * 0.36f));
-            const int controlWidth = juce::jmin(utilityArea.getWidth(), juce::roundToInt(
-                juce::jlimit(66.0f * uiScale, 92.0f * uiScale,
-                             utilityArea.getWidth() * 0.78f)));
-            const int blockHeight = labelHeight * 2 + controlHeight * 4
-                                  + itemGap * 4 + sectionGap;
-            const auto utilityLabelFont = fire::ui::labelFont(
-                juce::jmax(10.0f * uiScale, labelHeight * 0.78f));
-            filterTypeLabel.setFont(utilityLabelFont);
-            lowcutSlopeLabel.setFont(utilityLabelFont);
-            highcutSlopeLabel.setFont(utilityLabelFont);
-            auto utilityBlock = juce::Rectangle<int>(0, 0, controlWidth, blockHeight)
-                                    .withCentre(utilityArea.getCentre());
-
-            filterTypeLabel.setBounds(utilityBlock.removeFromTop(labelHeight));
-            utilityBlock.removeFromTop(itemGap);
-            filterLowCutButton.setBounds(utilityBlock.removeFromTop(controlHeight));
-            utilityBlock.removeFromTop(itemGap);
-            filterPeakButton.setBounds(utilityBlock.removeFromTop(controlHeight));
-            utilityBlock.removeFromTop(itemGap);
-            filterHighCutButton.setBounds(utilityBlock.removeFromTop(controlHeight));
-            utilityBlock.removeFromTop(sectionGap);
-
-            const auto slopeLabelBounds = utilityBlock.removeFromTop(labelHeight);
-            lowcutSlopeLabel.setBounds(slopeLabelBounds);
-            highcutSlopeLabel.setBounds(slopeLabelBounds);
-            utilityBlock.removeFromTop(itemGap);
-
-            const auto slopeBounds = utilityBlock.removeFromTop(controlHeight);
-            lowcutSlopeMode.setBounds(slopeBounds);
-            highcutSlopeMode.setBounds(slopeBounds);
-        }
-
-        {
-            auto knobsArea = controlArea.withSizeKeepingCentre(ordinaryKnobSize * 3 + controlGap * 2,
-                                                               ordinaryKnobHeight);
-
-            auto freqBounds = knobsArea.removeFromLeft(ordinaryKnobSize);
-            knobsArea.removeFromLeft(controlGap);
-            auto gainBounds = knobsArea.removeFromLeft(ordinaryKnobSize);
-            knobsArea.removeFromLeft(controlGap);
-            auto qBounds = knobsArea;
-
-            modulatableSliderComponents.at(LOWCUT_FREQ_NAME)->setBounds(freqBounds);
-            modulatableSliderComponents.at(PEAK_FREQ_NAME)->setBounds(freqBounds);
-            modulatableSliderComponents.at(HIGHCUT_FREQ_NAME)->setBounds(freqBounds);
-
-            modulatableSliderComponents.at(LOWCUT_GAIN_NAME)->setBounds(gainBounds);
-            modulatableSliderComponents.at(PEAK_GAIN_NAME)->setBounds(gainBounds);
-            modulatableSliderComponents.at(HIGHCUT_GAIN_NAME)->setBounds(gainBounds);
-
-            modulatableSliderComponents.at(LOWCUT_Q_NAME)->setBounds(qBounds);
-            modulatableSliderComponents.at(PEAK_Q_NAME)->setBounds(qBounds);
-            modulatableSliderComponents.at(HIGHCUT_Q_NAME)->setBounds(qBounds);
-        }
+        eqControls.setScale(uiScale);
+        eqControls.setBounds(knobsColumnArea);
     }
     else if (downsampleSwitch.getToggleState())
     {
@@ -769,6 +737,8 @@ void GlobalPanel::resized()
 void GlobalPanel::animationTick(float deltaSeconds)
 {
     const juce::Component::SafePointer<GlobalPanel> safeOwner(this);
+    eqControls.animationTick(deltaSeconds);
+    if (! safeOwner) return;
     effectNavigation.animationTick(deltaSeconds);
     if (! safeOwner) return;
     insertControls.refresh();
@@ -796,6 +766,7 @@ void GlobalPanel::setScale(float newScale)
         return;
 
     scale = newScale;
+    eqControls.setScale(newScale);
     const std::array<GraphTemplate*, 3> graphs {
         &oscilloscope, &vuPanel, &widthGraph
     };
@@ -859,7 +830,7 @@ void GlobalPanel::rebuildChromeCache(float displayScale)
         return area.removeFromTop(juce::jmin(titleHeight, area.getHeight())).toFloat();
     };
 
-    juce::String sectionTitle { "FILTER" };
+    juce::String sectionTitle { "EQ" };
     if (selectedInsert >= 0)
         sectionTitle = insertControls.usesExpandedLayout() ? "GRANULAR / CLOUDS"
             : fire::effects::name(processor.getInsertEffectType(0, selectedInsert));
@@ -1078,6 +1049,8 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
         effectNavigation.setSelectedSlot(-1);
         insertControls.setActive(false);
         if (! safeThis) return;
+        updateFilterKnobVisibility();
+        if (! safeThis) return;
         modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setInteractionOnlyReadout(downsampleSwitch.getToggleState());
         modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setInteractionOnlyReadout(downsampleSwitch.getToggleState());
         startContentTransition(controlsAreaRect);
@@ -1113,7 +1086,7 @@ void GlobalPanel::selectInsertEffect(int slot)
     if (! safeThis) return;
     insertControls.setActive(true);
     if (! safeThis) return;
-    oscilloscope.setVisible(! insertControls.usesExpandedLayout());
+    oscilloscope.setVisible(! insertControls.usesFullWidthLayout());
     if (! safeThis) return;
     modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setInteractionOnlyReadout(true);
     modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setInteractionOnlyReadout(true);
@@ -1128,7 +1101,7 @@ void GlobalPanel::refreshInsertLayout()
     const juce::Component::SafePointer<GlobalPanel> safeThis(this);
     clearGraphZoom();
     if (! safeThis || selectedInsert != expectedSlot) return;
-    oscilloscope.setVisible(! insertControls.usesExpandedLayout());
+    oscilloscope.setVisible(! insertControls.usesFullWidthLayout());
     if (! safeThis) return;
     resized();
     if (! safeThis) return;
@@ -1138,29 +1111,35 @@ void GlobalPanel::refreshInsertLayout()
 void GlobalPanel::updateFilterKnobVisibility()
 {
     const juce::Component::SafePointer<GlobalPanel> safeThis(this);
-    // Filter type attachments may update from automation or state restore
-    // while another global module is selected. Child visibility is independent
-    // of its siblings, so never let such an update reveal a filter group over
-    // Lo-Fi or Analysis.
-    const bool filterModuleVisible = filterSwitch.getToggleState()
-                                     && ! downsampleSwitch.getToggleState()
-                                     && ! graphSwitch.getToggleState();
-    const bool peakVisible = filterModuleVisible
-                             && filterPeakButton.getToggleState();
-    const bool lowcutVisible = filterModuleVisible
-                               && filterLowCutButton.getToggleState();
-    const bool highcutVisible = filterModuleVisible
-                                && filterHighCutButton.getToggleState();
+    const std::array<bool, 3> legacySelection {filterLowCutButton.getToggleState(),
+                                              filterPeakButton.getToggleState(),
+                                              filterHighCutButton.getToggleState()};
+    if (legacySelection != lastLegacyFilterSelection)
+    {
+        lastLegacyFilterSelection = legacySelection;
+        for (int node = 0; node < 3; ++node)
+            if (legacySelection[static_cast<size_t>(node)])
+            {
+                eqControls.selectNode(node);
+                if (! safeThis) return;
+                break;
+            }
+    }
+    eqControls.setVisible(filterSwitch.getToggleState()
+                          && ! downsampleSwitch.getToggleState()
+                          && ! graphSwitch.getToggleState()
+                          && selectedInsert < 0);
+}
 
-    setVisibility(peakKnobs, peakVisible);
-    if (safeThis == nullptr)
-        return;
-
-    setVisibility(lowcutKnobs, lowcutVisible);
-    if (safeThis == nullptr)
-        return;
-
-    setVisibility(highcutKnobs, highcutVisible);
+void GlobalPanel::selectEqNode(int slot)
+{
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    if (! filterSwitch.getToggleState())
+        filterSwitch.setToggleState(true, juce::sendNotificationSync);
+    if (! safeThis) return;
+    eqControls.selectNode(slot);
+    if (! safeThis) return;
+    updateFilterKnobVisibility();
 }
 
 void GlobalPanel::setVisibility(juce::Array<juce::Component*>& array, bool isVisible)
@@ -1219,17 +1198,11 @@ void GlobalPanel::setBypassState(int index, bool state)
     };
 
     // Simplified logic as the bypass buttons are now separate from the main component groups
-    if (index == 0) // Filter
+    if (index == 0) // EQ can be edited while bypassed.
     {
         invalidateSlopeInteractions();
-        if (safeThis == nullptr)
-            return;
-
-        for (auto* component : filterComponents)
-        {
-            if (! setComponentEnabled(component, state))
-                return;
-        }
+        if (! safeThis) return;
+        eqControls.setEnabled(true);
     }
     else if (index == 1) // Lo-Fi (Downsample)
     {

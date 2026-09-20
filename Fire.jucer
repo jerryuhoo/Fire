@@ -98,6 +98,7 @@
         </GROUP>
       </GROUP>
       <GROUP id="{0204F696-B0DF-CD89-2550-E45618BFEF7E}" name="Utility">
+        <FILE id="eqParam1" name="EqParameters.h" compile="0" resource="0" file="Source/Utility/EqParameters.h"/>
         <FILE id="A4Ogfw" name="AudioHelpers.h" compile="0" resource="0" file="Source/Utility/AudioHelpers.h"/>
         <FILE id="SBsuX3" name="FiltersUtil.h" compile="0" resource="0" file="Source/Utility/FiltersUtil.h"/>
         <FILE id="I9GGUn" name="Parameters.h" compile="0" resource="0" file="Source/Utility/Parameters.h"/>
@@ -107,6 +108,7 @@
         <FILE id="hyj9JI" name="VersionInfo.h" compile="0" resource="0" file="Source/Utility/VersionInfo.h"/>
       </GROUP>
       <GROUP id="{A397A229-19FD-F110-6940-6CC5C037D4D0}" name="GUI">
+        <FILE id="eqUI1" name="EqControlsPanel.h" compile="0" resource="0" file="Source/GUI/EqControlsPanel.h"/>
         <FILE id="ottVis1" name="OttVisuals.h" compile="0" resource="0" file="Source/GUI/OttVisuals.h"/>
         <FILE id="moduleDrag" name="ModuleDragButton.h" compile="0" resource="0" file="Source/GUI/ModuleDragButton.h"/>
         <FILE id="insertUi1" name="EffectRackNavigation.h" compile="0" resource="0" file="Source/GUI/EffectRackNavigation.h"/>
@@ -147,6 +149,8 @@
         <FILE id="h6WIOb" name="ValuePopup.h" compile="0" resource="0" file="Source/GUI/ValuePopup.h"/>
       </GROUP>
       <GROUP id="{6D93BA34-0044-C87D-1644-2333FABFA73D}" name="DSP">
+        <FILE id="eqDsp1" name="EqProcessor.h" compile="0" resource="0" file="Source/DSP/EqProcessor.h"/>
+        <FILE id="eqDsp2" name="EqCoefficients.h" compile="0" resource="0" file="Source/DSP/EqCoefficients.h"/>
         <GROUP id="cloudsDspGroup" name="Clouds">
           <FILE id="cloudsEngineCpp" name="CloudsEngine.cpp" compile="1" resource="0"
                 file="Source/DSP/Clouds/CloudsEngine.cpp"/>

@@ -106,6 +106,12 @@ private:
     void rebuildChromeCache(float displayScale);
     void invalidateChromeCache();
     void configureGraphInteractions();
+    void configureGraphViewMenu();
+    void selectGraphView(int itemId);
+    void applySelectedGraphView();
+    void updateGraphViewMenu();
+    void dismissGraphViewMenu() noexcept;
+    GraphTemplate* getAutomaticModuleGraph() noexcept;
     void toggleGraphZoom(GraphTemplate* graph);
     void clearGraphZoom() noexcept;
     void hideComponentsObscuredByZoom(const GraphTemplate& graph);
@@ -128,6 +134,8 @@ private:
     void updateDistortionGraphFromParameters();
     void timerCallback() override;
     void visibilityChanged() override;
+    void enablementChanged() override;
+    void parentHierarchyChanged() override;
     std::atomic<unsigned int> distortionGraphDirtyMask { 0 };
     double lastGraphTelemetryTimeMs = -1.0;
     static constexpr double graphTelemetryTimeoutMs = 250.0;
@@ -176,6 +184,11 @@ private:
     juce::Rectangle<int> outputAreaRect;
     juce::Rectangle<int> tabAreaRect;
     juce::Rectangle<int> graphAreaRect; // Area for the graphs
+    juce::Component graphSelectorStrip;
+    juce::Label graphViewLabel;
+    ContextAwareComboBox graphViewMenu;
+    int selectedGraphView = 1; // Auto, Waveform, Transfer, Meters, Stereo.
+    std::uint64_t graphViewGeneration = 0;
     juce::Image chromeCache;
     float chromeCacheDisplayScale = 0.0f;
     bool chromeCacheDirty = true;

@@ -9,6 +9,7 @@
 
 #include "FilterControl.h"
 #include "../../GUI/InterfaceDefines.h"
+#include "../ControlPanel/GlobalPanel.h"
 #include <algorithm>
 #include <cmath>
 
@@ -49,7 +50,8 @@ bool isFilterModulationTarget(const juce::String& parameterID)
         || parameterID == LOWCUT_Q_ID || parameterID == PEAK_FREQ_ID
         || parameterID == PEAK_GAIN_ID || parameterID == PEAK_Q_ID
         || parameterID == HIGHCUT_FREQ_ID || parameterID == HIGHCUT_GAIN_ID
-        || parameterID == HIGHCUT_Q_ID;
+        || parameterID == HIGHCUT_Q_ID
+        || fire::eq::isAppendedParameterID(parameterID);
 }
 } // namespace
 
@@ -101,9 +103,11 @@ private:
 
 //==============================================================================
 FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel)
-    : processor(p)
+    : processor(p), globalPanel(&panel)
 {
     setOpaque(false);
+    setWantsKeyboardFocus(true);
+    setTitle("Interactive EQ spectrum");
 
     // The overlay only needs filter parameters. Listening to every processor
     // parameter previously rebuilt the response for unrelated automation.
@@ -125,6 +129,12 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel)
             observedParameters.push_back(parameter);
         }
     }
+    for (const auto& parameterID : fire::eq::appendedParameterIDs())
+        if (auto* parameter = processor.treeState.getParameter(parameterID))
+        {
+            parameter->addListener(this);
+            observedParameters.push_back(parameter);
+        }
 
     processor.addChangeListener(this);
 
@@ -192,6 +202,28 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel)
     setupQControl(draggablePeakButton, PEAK_Q_ID);
     setupQControl(draggableHighButton, HIGHCUT_Q_ID);
 
+    for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
+    {
+        auto& button = nodeButton(slot);
+        if (slot >= 3) addChildComponent(button);
+        button.setComponentID("eqSpectrumPoint" + juce::String(slot + 1));
+        button.onDrag = [this, slot](DraggableButton& point, const juce::MouseEvent& event)
+        {
+            const juce::Component::SafePointer<FilterControl> safe(this);
+            if (globalPanel) globalPanel->selectEqNode(slot);
+            if (! safe) return;
+            const auto state = processor.getEqNodeState(slot);
+            if (! state.present) return;
+            const auto selection = slot == 0 ? LOW_ID : slot == 1 ? BAND_ID : slot == 2 ? HIGH_ID : "";
+            const bool hasGain = state.type != fire::eq::Type::notch && state.type != fire::eq::Type::bandPass;
+            handleFilterDrag(point, event, selection,
+                             fire::eq::parameterID(slot, fire::eq::Field::frequency),
+                             hasGain ? fire::eq::parameterID(slot, fire::eq::Field::gain) : juce::String());
+        };
+        button.onDragFinished = [this] { finishFilterDrag(); };
+        setupQControl(button, fire::eq::parameterID(slot, fire::eq::Field::q));
+    }
+
     responseSampleRate = processor.getSampleRate();
     updateChain();
     updateDraggableButtonStates();
@@ -199,7 +231,41 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel)
     // A processor can outlive several editor instances. Drain packets owned
     // by the previous instance before this control begins a visible session.
     suspendTelemetryPresentation();
-    juce::ignoreUnused(panel);
+}
+
+DraggableButton& FilterControl::nodeButton(int slot)
+{
+    if (slot == 0) return draggableLowButton;
+    if (slot == 1) return draggablePeakButton;
+    if (slot == 2) return draggableHighButton;
+    return extraNodes[static_cast<size_t>(slot - 3)];
+}
+
+void FilterControl::mouseDoubleClick(const juce::MouseEvent& event)
+{
+    if (event.eventComponent != this || ! event.mods.isLeftButtonDown()
+        || event.mods.isPopupMenu() || getWidth() <= 0 || getHeight() <= 0) return;
+    const auto x = juce::jlimit(0.0f, 1.0f, event.position.x / static_cast<float>(getWidth()));
+    const auto frequency = static_cast<float>(juce::jmin(maximumUsableDisplayFrequency(processor.getSampleRate()),
+        juce::mapToLog10(static_cast<double>(x), minimumDisplayFrequency, maximumDisplayFrequency)));
+    const auto gain = juce::jmap(juce::jlimit(0.0f, 1.0f, event.position.y / static_cast<float>(getHeight())), 24.0f, -24.0f);
+    const juce::Component::SafePointer<FilterControl> safe(this);
+    const int slot = processor.addEqNode(frequency, gain);
+    if (! safe || slot < 0) return;
+    if (globalPanel) globalPanel->selectEqNode(slot);
+    if (! safe) return;
+    updateChain(); updateResponseCurve(); setDraggableButtonBounds(); repaint();
+}
+
+bool FilterControl::keyPressed(const juce::KeyPress& key)
+{
+    if (key != juce::KeyPress::deleteKey && key != juce::KeyPress::backspaceKey) return false;
+    const auto slot = globalPanel ? globalPanel->getSelectedEqNode() : -1;
+    if (slot < 0) return false;
+    const juce::Component::SafePointer<FilterControl> safe(this);
+    dismissTransientInteraction();
+    if (safe) processor.removeEqNode(slot);
+    return true;
 }
 
 FilterControl::~FilterControl()
@@ -340,6 +406,13 @@ void FilterControl::animationTick()
     const bool routingChanged = routingStateDirty.exchange(false, std::memory_order_acq_rel);
     bool visualStateChanged = parametersChanged || routingChanged
                            || sampleRateChanged;
+    const auto selectedNode = globalPanel ? globalPanel->getSelectedEqNode() : -1;
+    if (lastSelectedNode != selectedNode)
+    {
+        lastSelectedNode = selectedNode;
+        setDraggableButtonBounds();
+        visualStateChanged = true;
+    }
 
     if (parametersChanged || sampleRateChanged)
     {
@@ -475,6 +548,12 @@ void FilterControl::dismissTransientInteraction()
     if (safeThis == nullptr)
         return;
 
+    for (auto& node : extraNodes)
+    {
+        node.dismissTransientInteraction();
+        if (! safeThis) return;
+    }
+
     dragTooltipVisible = false;
     finishDragParameterGestures();
 }
@@ -508,6 +587,7 @@ void FilterControl::handleFilterDrag(DraggableButton& button,
     const auto maximumX = frequencyToDisplayX(maximumFrequency, getWidth());
     point.x = juce::jlimit(0.0f, maximumX, point.x);
     point.y = juce::jlimit(0.0f, static_cast<float>(getHeight()), point.y);
+    if (gainParameter.isEmpty()) point.y = static_cast<float>(getHeight()) * 0.5f;
 
     const auto buttonSize = juce::jlimit(20.0f, 24.0f,
                                          getWidth() * 0.02f);
@@ -612,107 +692,53 @@ void FilterControl::finishFilterDrag()
 
 void FilterControl::updateDraggableButtonStates()
 {
-    const auto* enableParameter = processor.treeState.getRawParameterValue(FILTER_BYPASS_ID);
-    const bool enabled = enableParameter != nullptr && enableParameter->load() > 0.5f;
-    juce::Component::SafePointer<FilterControl> safeThis(this);
-    draggableLowButton.setState(enabled);
-
-    if (safeThis == nullptr)
-        return;
-
-    draggablePeakButton.setState(enabled);
-
-    if (safeThis == nullptr)
-        return;
-
-    draggableHighButton.setState(enabled);
+    const auto* power = processor.treeState.getRawParameterValue(FILTER_BYPASS_ID);
+    const bool enabled = power != nullptr && power->load() > 0.5f;
+    const juce::Component::SafePointer<FilterControl> safe(this);
+    for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
+    {
+        nodeButton(slot).setState(enabled);
+        if (! safe) return;
+    }
 }
 
 void FilterControl::setDraggableButtonBounds()
 {
-    if (getWidth() <= 0 || getHeight() <= 0)
-        return;
-
-    const auto* lowFrequency = processor.treeState.getRawParameterValue(LOWCUT_FREQ_ID);
-    const auto* peakFrequency = processor.treeState.getRawParameterValue(PEAK_FREQ_ID);
-    const auto* highFrequency = processor.treeState.getRawParameterValue(HIGHCUT_FREQ_ID);
-    const auto* lowGain = processor.treeState.getRawParameterValue(LOWCUT_GAIN_ID);
-    const auto* peakGain = processor.treeState.getRawParameterValue(PEAK_GAIN_ID);
-    const auto* highGain = processor.treeState.getRawParameterValue(HIGHCUT_GAIN_ID);
-
-    if (lowFrequency == nullptr || peakFrequency == nullptr || highFrequency == nullptr
-        || lowGain == nullptr || peakGain == nullptr || highGain == nullptr)
-        return;
-
-    const auto buttonSize = juce::jlimit(20.0f, 24.0f,
-                                         getWidth() * 0.02f);
-    const auto maximumFrequency =
-        maximumUsableDisplayFrequency(processor.getSampleRate());
-    const auto pointForValues = [this, maximumFrequency](float frequency, float gain)
+    if (getWidth() <= 0 || getHeight() <= 0) return;
+    const auto maxFrequency = static_cast<float>(juce::jmax(minimumDisplayFrequency,
+        maximumUsableDisplayFrequency(processor.getSampleRate())));
+    const auto selected = globalPanel ? globalPanel->getSelectedEqNode() : -1;
+    const juce::Component::SafePointer<FilterControl> safe(this);
+    int ordinal = 0;
+    for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
     {
-        frequency = juce::jlimit(static_cast<float>(minimumDisplayFrequency),
-                                 static_cast<float>(juce::jmax(minimumDisplayFrequency,
-                                                               maximumFrequency)),
-                                 frequency);
-        gain = juce::jlimit(static_cast<float>(minimumDisplayDecibels),
-                            static_cast<float>(maximumDisplayDecibels),
-                            gain);
-
-        return juce::Point<float> {
-            frequencyToDisplayX(static_cast<double>(frequency), getWidth()),
-            juce::jmap(gain,
-                       static_cast<float>(maximumDisplayDecibels),
-                       static_cast<float>(minimumDisplayDecibels),
-                       0.0f,
-                       static_cast<float>(getHeight()))
-        };
-    };
-
-    const auto setButtonCentre = [buttonSize](DraggableButton& button, juce::Point<float> centre)
-    {
-        button.setBounds(juce::Rectangle<float>(buttonSize, buttonSize)
-                             .withCentre(centre)
-                             .toNearestInt());
-    };
-
-    setButtonCentre(draggableLowButton, pointForValues(lowFrequency->load(), lowGain->load()));
-    setButtonCentre(draggablePeakButton, pointForValues(peakFrequency->load(), peakGain->load()));
-    setButtonCentre(draggableHighButton, pointForValues(highFrequency->load(), highGain->load()));
+        const auto state = processor.getEqNodeState(slot);
+        auto& button = nodeButton(slot);
+        button.setVisible(state.present);
+        if (! safe) return;
+        if (! state.present) continue;
+        ++ordinal;
+        const auto label = "EQ point " + juce::String(ordinal);
+        button.setTitle(label);
+        button.setTooltip(label + " · " + fire::eq::typeNames[static_cast<size_t>(state.type)]);
+        button.getProperties().set("eqOrdinal", ordinal);
+        button.getProperties().set("eqSelected", slot == selected);
+        button.getProperties().set("eqBypassed", state.bypassed);
+        const auto freq = juce::jlimit(20.0f, maxFrequency, state.frequency);
+        const auto x = frequencyToDisplayX(freq, getWidth());
+        const bool hasGain = state.type != fire::eq::Type::notch && state.type != fire::eq::Type::bandPass;
+        const auto y = juce::jmap(juce::jlimit(-24.0f, 24.0f, hasGain ? state.gainDb : 0.0f), 24.0f, -24.0f, 0.0f, static_cast<float>(getHeight()));
+        const auto size = slot == selected ? 29.0f : 23.0f;
+        button.setBounds(juce::Rectangle<float>(size, size).withCentre({x, y}).toNearestInt());
+        button.repaint();
+    }
 }
 
 void FilterControl::updateChain()
 {
-    auto chainSettings = getChainSettings(processor.treeState);
-    const auto sampleRate = processor.getSampleRate();
-    if (sampleRate <= 0.0)
-        return;
-
-    const auto maximumFilterFrequency =
-        static_cast<float>(maximumUsableDisplayFrequency(sampleRate));
-    if (maximumFilterFrequency <= static_cast<float>(minimumDisplayFrequency))
-        return;
-    chainSettings.lowCutFreq = juce::jlimit(20.0f, maximumFilterFrequency, chainSettings.lowCutFreq);
-    chainSettings.peakFreq = juce::jlimit(20.0f, maximumFilterFrequency, chainSettings.peakFreq);
-    chainSettings.highCutFreq = juce::jlimit(20.0f, maximumFilterFrequency, chainSettings.highCutFreq);
-
-    monoChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
-    monoChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);
-    monoChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
-    monoChain.setBypassed<ChainPositions::LowCutQ>(chainSettings.lowCutBypassed);
-    monoChain.setBypassed<ChainPositions::HighCutQ>(chainSettings.highCutBypassed);
-
-    updateCoefficients(monoChain.get<ChainPositions::Peak>().coefficients,
-                       makePeakFilter(chainSettings, sampleRate));
-    updateCoefficients(monoChain.get<ChainPositions::LowCutQ>().coefficients,
-                       makeLowcutQFilter(chainSettings, sampleRate));
-    updateCoefficients(monoChain.get<ChainPositions::HighCutQ>().coefficients,
-                       makeHighcutQFilter(chainSettings, sampleRate));
-    updateCutFilter(monoChain.get<ChainPositions::LowCut>(),
-                    makeLowCutFilter(chainSettings, sampleRate),
-                    chainSettings.lowCutSlope);
-    updateCutFilter(monoChain.get<ChainPositions::HighCut>(),
-                    makeHighCutFilter(chainSettings, sampleRate),
-                    chainSettings.highCutSlope);
+    for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
+        eqResponse[static_cast<size_t>(slot)] = fire::eq::makeCoefficients(
+            processor.getEqNodeState(slot), processor.getSampleRate());
 }
 
 int FilterControl::getCurvePointCount() const
@@ -738,12 +764,6 @@ void FilterControl::updateResponseCurve()
     if (responseMagnitudes.size() != static_cast<size_t>(pointCount))
         responseMagnitudes.resize(static_cast<size_t>(pointCount));
 
-    auto& lowCut = monoChain.get<ChainPositions::LowCut>();
-    auto& peak = monoChain.get<ChainPositions::Peak>();
-    auto& highCut = monoChain.get<ChainPositions::HighCut>();
-    auto& lowCutQ = monoChain.get<ChainPositions::LowCutQ>();
-    auto& highCutQ = monoChain.get<ChainPositions::HighCutQ>();
-
     for (int i = 0; i < pointCount; ++i)
     {
         const auto proportion = static_cast<double>(i) / static_cast<double>(pointCount - 1);
@@ -752,26 +772,8 @@ void FilterControl::updateResponseCurve()
                                                 maximumFrequency);
         double magnitude = 1.0;
 
-        if (! monoChain.isBypassed<ChainPositions::Peak>())
-            magnitude *= peak.coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-
-        if (! monoChain.isBypassed<ChainPositions::LowCut>())
-        {
-            if (! lowCut.isBypassed<0>()) magnitude *= lowCut.get<0>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            if (! lowCut.isBypassed<1>()) magnitude *= lowCut.get<1>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            if (! lowCut.isBypassed<2>()) magnitude *= lowCut.get<2>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            if (! lowCut.isBypassed<3>()) magnitude *= lowCut.get<3>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            magnitude *= lowCutQ.coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-        }
-
-        if (! monoChain.isBypassed<ChainPositions::HighCut>())
-        {
-            if (! highCut.isBypassed<0>()) magnitude *= highCut.get<0>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            if (! highCut.isBypassed<1>()) magnitude *= highCut.get<1>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            if (! highCut.isBypassed<2>()) magnitude *= highCut.get<2>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            if (! highCut.isBypassed<3>()) magnitude *= highCut.get<3>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            magnitude *= highCutQ.coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-        }
+        for (const auto& coefficients : eqResponse)
+            magnitude *= coefficients.magnitudeAt(frequency, sampleRate);
 
         responseMagnitudes[static_cast<size_t>(i)] = juce::Decibels::gainToDecibels(magnitude);
     }
@@ -811,56 +813,23 @@ void FilterControl::updateResponseCurve()
     responseFillCurve.closeSubPath();
 }
 
-void FilterControl::updateLfoChain(const ModulatedFilterValues& modulatedValues)
+void FilterControl::updateLfoChain(const ModulatedFilterValues& values)
 {
-    ChainSettings settings;
-    settings.lowCutFreq = modulatedValues.lowCutFreq;
-    settings.lowCutGainInDecibels = modulatedValues.lowCutGain;
-    settings.lowCutQuality = modulatedValues.lowCutQ;
-    settings.highCutFreq = modulatedValues.highCutFreq;
-    settings.highCutGainInDecibels = modulatedValues.highCutGain;
-    settings.highCutQuality = modulatedValues.highCutQ;
-    settings.peakFreq = modulatedValues.peakFreq;
-    settings.peakGainInDecibels = modulatedValues.peakGain;
-    settings.peakQuality = modulatedValues.peakQ;
-
-    auto& apvts = processor.treeState;
-    settings.lowCutSlope = static_cast<Slope>(apvts.getRawParameterValue(LOWCUT_SLOPE_ID)->load());
-    settings.highCutSlope = static_cast<Slope>(apvts.getRawParameterValue(HIGHCUT_SLOPE_ID)->load());
-    settings.lowCutBypassed = apvts.getRawParameterValue(LOWCUT_BYPASSED_ID)->load() > 0.5f;
-    settings.peakBypassed = apvts.getRawParameterValue(PEAK_BYPASSED_ID)->load() > 0.5f;
-    settings.highCutBypassed = apvts.getRawParameterValue(HIGHCUT_BYPASSED_ID)->load() > 0.5f;
-
-    const auto sampleRate = processor.getSampleRate();
-    if (sampleRate <= 0.0)
-        return;
-
-    const auto maximumFilterFrequency =
-        static_cast<float>(maximumUsableDisplayFrequency(sampleRate));
-    if (maximumFilterFrequency <= static_cast<float>(minimumDisplayFrequency))
-        return;
-    settings.lowCutFreq = juce::jlimit(20.0f, maximumFilterFrequency, settings.lowCutFreq);
-    settings.peakFreq = juce::jlimit(20.0f, maximumFilterFrequency, settings.peakFreq);
-    settings.highCutFreq = juce::jlimit(20.0f, maximumFilterFrequency, settings.highCutFreq);
-
-    lfoMonoChain.setBypassed<ChainPositions::LowCut>(settings.lowCutBypassed);
-    lfoMonoChain.setBypassed<ChainPositions::Peak>(settings.peakBypassed);
-    lfoMonoChain.setBypassed<ChainPositions::HighCut>(settings.highCutBypassed);
-    lfoMonoChain.setBypassed<ChainPositions::LowCutQ>(settings.lowCutBypassed);
-    lfoMonoChain.setBypassed<ChainPositions::HighCutQ>(settings.highCutBypassed);
-
-    updateCoefficients(lfoMonoChain.get<ChainPositions::Peak>().coefficients,
-                       makePeakFilter(settings, sampleRate));
-    updateCoefficients(lfoMonoChain.get<ChainPositions::LowCutQ>().coefficients,
-                       makeLowcutQFilter(settings, sampleRate));
-    updateCoefficients(lfoMonoChain.get<ChainPositions::HighCutQ>().coefficients,
-                       makeHighcutQFilter(settings, sampleRate));
-    updateCutFilter(lfoMonoChain.get<ChainPositions::LowCut>(),
-                    makeLowCutFilter(settings, sampleRate),
-                    settings.lowCutSlope);
-    updateCutFilter(lfoMonoChain.get<ChainPositions::HighCut>(),
-                    makeHighCutFilter(settings, sampleRate),
-                    settings.highCutSlope);
+    for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
+    {
+        auto state = processor.getEqNodeState(slot);
+        const auto& telemetry = values.eqNodes[static_cast<size_t>(slot)];
+        if (telemetry.present)
+        {
+            state.frequency = telemetry.frequency;
+            state.gainDb = telemetry.gainDb;
+            state.q = telemetry.q;
+        }
+        else if (slot == 0) { state.frequency = values.lowCutFreq; state.gainDb = values.lowCutGain; state.q = values.lowCutQ; }
+        else if (slot == 1) { state.frequency = values.peakFreq; state.gainDb = values.peakGain; state.q = values.peakQ; }
+        else if (slot == 2) { state.frequency = values.highCutFreq; state.gainDb = values.highCutGain; state.q = values.highCutQ; }
+        modulatedEqResponse[static_cast<size_t>(slot)] = fire::eq::makeCoefficients(state, processor.getSampleRate());
+    }
 }
 
 void FilterControl::updateLfoResponseCurve()
@@ -879,12 +848,6 @@ void FilterControl::updateLfoResponseCurve()
     if (lfoMagnitudes.size() != static_cast<size_t>(pointCount))
         lfoMagnitudes.resize(static_cast<size_t>(pointCount));
 
-    auto& lowCut = lfoMonoChain.get<ChainPositions::LowCut>();
-    auto& peak = lfoMonoChain.get<ChainPositions::Peak>();
-    auto& highCut = lfoMonoChain.get<ChainPositions::HighCut>();
-    auto& lowCutQ = lfoMonoChain.get<ChainPositions::LowCutQ>();
-    auto& highCutQ = lfoMonoChain.get<ChainPositions::HighCutQ>();
-
     for (int i = 0; i < pointCount; ++i)
     {
         const auto proportion = static_cast<double>(i) / static_cast<double>(pointCount - 1);
@@ -893,26 +856,8 @@ void FilterControl::updateLfoResponseCurve()
                                                 maximumFrequency);
         double magnitude = 1.0;
 
-        if (! lfoMonoChain.isBypassed<ChainPositions::Peak>())
-            magnitude *= peak.coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-
-        if (! lfoMonoChain.isBypassed<ChainPositions::LowCut>())
-        {
-            if (! lowCut.isBypassed<0>()) magnitude *= lowCut.get<0>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            if (! lowCut.isBypassed<1>()) magnitude *= lowCut.get<1>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            if (! lowCut.isBypassed<2>()) magnitude *= lowCut.get<2>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            if (! lowCut.isBypassed<3>()) magnitude *= lowCut.get<3>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            magnitude *= lowCutQ.coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-        }
-
-        if (! lfoMonoChain.isBypassed<ChainPositions::HighCut>())
-        {
-            if (! highCut.isBypassed<0>()) magnitude *= highCut.get<0>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            if (! highCut.isBypassed<1>()) magnitude *= highCut.get<1>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            if (! highCut.isBypassed<2>()) magnitude *= highCut.get<2>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            if (! highCut.isBypassed<3>()) magnitude *= highCut.get<3>().coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-            magnitude *= highCutQ.coefficients->getMagnitudeForFrequency(frequency, sampleRate);
-        }
+        for (const auto& coefficients : modulatedEqResponse)
+            magnitude *= coefficients.magnitudeAt(frequency, sampleRate);
 
         lfoMagnitudes[static_cast<size_t>(i)] = juce::Decibels::gainToDecibels(magnitude);
     }

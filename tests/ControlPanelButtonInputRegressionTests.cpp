@@ -84,17 +84,25 @@ struct BandPanelModeTestAccess
 
 struct GlobalPanelSlopeTestAccess
 {
-    static ContextAwareComboBox& getSlopeBox(GlobalPanel& panel, bool lowCut)
+    static ContextAwareComboBox& getSlopeBox(GlobalPanel& panel)
     {
-        return lowCut ? panel.lowcutSlopeMode : panel.highcutSlopeMode;
+        auto& controls = panel.getEqControls();
+        const auto id = fire::eq::parameterID(controls.getSelectedNode(), fire::eq::Field::slope);
+        ContextAwareComboBox* result = nullptr;
+        for (auto* child : controls.getChildren())
+            if (auto* menu = dynamic_cast<ContextAwareComboBox*>(child);
+                menu != nullptr && menu->getComponentID() == id)
+                result = menu;
+        REQUIRE(result != nullptr);
+        return *result;
     }
 
     static std::function<void(int)> createPopupResultHandler(
         GlobalPanel& panel,
         bool lowCut)
     {
-        return ContextAwareComboBoxTestAccess::createPopupResultHandler(
-            getSlopeBox(panel, lowCut));
+        REQUIRE(panel.getSelectedEqNode() == (lowCut ? 0 : 2));
+        return ContextAwareComboBoxTestAccess::createPopupResultHandler(getSlopeBox(panel));
     }
 
     static void setFilterEnabled(GlobalPanel& panel, bool enabled)
@@ -112,16 +120,18 @@ struct GlobalPanelSlopeTestAccess
         button->setToggleState(true, juce::sendNotificationSync);
     }
 
-    static std::array<juce::Button*, 5> getIconButtons(
+    static std::array<juce::Button*, 3> getIconButtons(
         GlobalPanel& panel)
     {
         REQUIRE(panel.filterBypassButton != nullptr);
         REQUIRE(panel.downsampleBypassButton != nullptr);
-        return { panel.filterBypassButton.get(),
-                 panel.downsampleBypassButton.get(),
-                 &panel.filterLowCutButton,
-                 &panel.filterPeakButton,
-                 &panel.filterHighCutButton };
+        juce::Button* pointPower = nullptr;
+        for (auto* child : panel.getEqControls().getChildren())
+            if (auto* button = dynamic_cast<juce::Button*>(child);
+                button != nullptr && button->getTitle().endsWith(" power"))
+                pointPower = button;
+        REQUIRE(pointPower != nullptr);
+        return { panel.filterBypassButton.get(), panel.downsampleBypassButton.get(), pointPower };
     }
 };
 
@@ -298,7 +308,7 @@ std::vector<juce::ComboBox*> collectDirectComboBoxes(juce::Component& panel)
 
 void selectGlobalSlopeType(GlobalPanel& panel, bool lowCut)
 {
-    panel.setToggleButtonState(lowCut ? "lowcut" : "highcut");
+    panel.selectEqNode(lowCut ? 0 : 2);
 }
 
 void prepareBandShapePanel(BandPanel& panel)
@@ -319,8 +329,7 @@ void prepareGlobalSlopePanel(GlobalPanel& panel, bool lowCut)
 
 void dismissGlobalSlopePopups(GlobalPanel& panel)
 {
-    GlobalPanelSlopeTestAccess::getSlopeBox(panel, true).hidePopup();
-    GlobalPanelSlopeTestAccess::getSlopeBox(panel, false).hidePopup();
+    GlobalPanelSlopeTestAccess::getSlopeBox(panel).hidePopup();
     juce::PopupMenu::dismissAllActiveMenus();
 }
 
@@ -395,7 +404,7 @@ TEST_CASE("Control-panel buttons reject popup and auxiliary pointer gestures",
     {
         GlobalPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
-        checkPanelButtons(panel, 10);
+        checkPanelButtons(panel, 10 + 3 + EqControlsPanel::capacity);
     }
 }
 
@@ -596,13 +605,14 @@ TEST_CASE("Control-panel buttons discard gestures at panel and host boundaries",
     {
         FireAudioProcessor processor;
         setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
-        setParameterValue(processor, HIGH_ID, 0.0f);
+        setParameterValue(processor, HIGHCUT_BYPASSED_ID, 0.0f);
         GlobalPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
         panel.setVisible(true);
-        auto* button = dynamic_cast<PrimaryTextButton*>(
-            panel.findChildWithID("high_cut"));
-        auto* parameter = processor.treeState.getParameter(HIGH_ID);
+        panel.selectEqNode(2);
+        auto* button = dynamic_cast<PrimaryToggleButton*>(
+            GlobalPanelSlopeTestAccess::getIconButtons(panel)[2]);
+        auto* parameter = processor.treeState.getParameter(HIGHCUT_BYPASSED_ID);
         REQUIRE(button != nullptr);
         REQUIRE(parameter != nullptr);
         ParameterGestureRecorder gestures;
@@ -936,7 +946,7 @@ TEST_CASE("GlobalPanel closes queued slope popups across context ABA",
             {
                 INFO("boundary: " << boundaryName);
                 auto& targetContext =
-                    GlobalPanelSlopeTestAccess::getSlopeBox(panel, lowCut);
+                    GlobalPanelSlopeTestAccess::getSlopeBox(panel);
                 auto& target = static_cast<juce::ComboBox&>(targetContext);
                 REQUIRE(target.keyPressed(
                     juce::KeyPress { juce::KeyPress::returnKey }));
@@ -946,10 +956,7 @@ TEST_CASE("GlobalPanel closes queued slope popups across context ABA",
 
                 CHECK_FALSE(target.isPopupActive());
                 juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
-                CHECK_FALSE(GlobalPanelSlopeTestAccess::getSlopeBox(
-                    panel, true).isPopupActive());
-                CHECK_FALSE(GlobalPanelSlopeTestAccess::getSlopeBox(
-                    panel, false).isPopupActive());
+                CHECK_FALSE(GlobalPanelSlopeTestAccess::getSlopeBox(panel).isPopupActive());
                 CHECK(lowParameter->getValue()
                       == Catch::Approx(initialLowValue));
                 CHECK(highParameter->getValue()
@@ -1025,12 +1032,12 @@ TEST_CASE("GlobalPanel late slope label release cannot reopen a popup",
                 } };
 
                 auto& targetContext =
-                    GlobalPanelSlopeTestAccess::getSlopeBox(panel, lowCut);
+                    GlobalPanelSlopeTestAccess::getSlopeBox(panel);
                 auto& target = static_cast<juce::ComboBox&>(targetContext);
-                auto& other = GlobalPanelSlopeTestAccess::getSlopeBox(
-                    panel, ! lowCut);
                 const auto initialSelectedId = target.getSelectedId();
-                const auto initialOtherSelectedId = other.getSelectedId();
+                auto* otherParameter = lowCut ? highParameter : lowParameter;
+                const int initialOtherSelectedId = juce::roundToInt(
+                    otherParameter->convertFrom0to1(otherParameter->getValue())) + 1;
                 auto* label = findDescendant<juce::Label>(target);
                 REQUIRE(label != nullptr);
                 auto& component = static_cast<juce::Component&>(target);
@@ -1056,9 +1063,8 @@ TEST_CASE("GlobalPanel late slope label release cannot reopen a popup",
                 juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 
                 CHECK_FALSE(target.isPopupActive());
-                CHECK_FALSE(other.isPopupActive());
                 CHECK(target.getSelectedId() == initialSelectedId);
-                CHECK(other.getSelectedId() == initialOtherSelectedId);
+                CHECK(panel.getSelectedEqNode() == (lowCut ? 0 : 2));
                 CHECK(lowParameter->getValue()
                       == Catch::Approx(initialLowValue));
                 CHECK(highParameter->getValue()
@@ -1070,6 +1076,9 @@ TEST_CASE("GlobalPanel late slope label release cannot reopen a popup",
                     juce::KeyPress { juce::KeyPress::returnKey }));
                 CHECK(target.isPopupActive());
                 target.hidePopup();
+                selectGlobalSlopeType(panel, ! lowCut);
+                CHECK(GlobalPanelSlopeTestAccess::getSlopeBox(panel).getSelectedId()
+                      == initialOtherSelectedId);
             }
         }
     }
@@ -1106,18 +1115,17 @@ TEST_CASE("GlobalPanel rejects stale slope results without invalidating a replac
                 REQUIRE(highParameter != nullptr);
                 const auto initialLowValue = lowParameter->getValue();
                 const auto initialHighValue = highParameter->getValue();
-                auto& lowBox = GlobalPanelSlopeTestAccess::getSlopeBox(
-                    panel, true);
-                auto& highBox = GlobalPanelSlopeTestAccess::getSlopeBox(
-                    panel, false);
-                const auto initialLowId = lowBox.getSelectedId();
-                const auto initialHighId = highBox.getSelectedId();
+                // The real EQ slope control is shared by the selected point.
+                // Keep independent model snapshots/listeners for both targets.
+                auto& targetBox = GlobalPanelSlopeTestAccess::getSlopeBox(panel);
+                const auto initialTargetId = targetBox.getSelectedId();
+                auto* otherParameterForUi = lowCut ? highParameter : lowParameter;
+                const int initialOtherId = juce::roundToInt(otherParameterForUi->convertFrom0to1(
+                    otherParameterForUi->getValue())) + 1;
                 ParameterGestureRecorder lowGestures;
                 ParameterGestureRecorder highGestures;
-                int lowChangeCount = 0;
-                int highChangeCount = 0;
-                lowBox.onChange = [&] { ++lowChangeCount; };
-                highBox.onChange = [&] { ++highChangeCount; };
+                int uiChangeCount = 0;
+                targetBox.onChange = [&] { ++uiChangeCount; };
                 lowParameter->addListener(&lowGestures);
                 highParameter->addListener(&highGestures);
                 const juce::ScopeGuard cleanup { [&]
@@ -1169,12 +1177,11 @@ TEST_CASE("GlobalPanel rejects stale slope results without invalidating a replac
                       == Catch::Approx(initialLowValue));
                 CHECK(highParameter->getValue()
                       == Catch::Approx(initialHighValue));
-                CHECK(lowBox.getSelectedId() == initialLowId);
-                CHECK(highBox.getSelectedId() == initialHighId);
+                CHECK(targetBox.getSelectedId() == initialTargetId);
+                CHECK(targetBox.getComponentID() == (lowCut ? LOWCUT_SLOPE_ID : HIGHCUT_SLOPE_ID));
                 CHECK(lowGestures.gestures.empty());
                 CHECK(highGestures.gestures.empty());
-                CHECK(lowChangeCount == 0);
-                CHECK(highChangeCount == 0);
+                CHECK(uiChangeCount == 0);
 
                 currentResult(4);
 
@@ -1189,16 +1196,18 @@ TEST_CASE("GlobalPanel rejects stale slope results without invalidating a replac
                           targetParameter->convertTo0to1(3.0f)));
                 CHECK(otherParameter->getValue()
                       == Catch::Approx(otherInitialValue));
-                CHECK((lowCut ? lowBox : highBox).getSelectedId() == 4);
-                CHECK((lowCut ? highBox : lowBox).getSelectedId()
-                      == (lowCut ? initialHighId : initialLowId));
+                CHECK(targetBox.getSelectedId() == 4);
                 CHECK((lowCut ? lowGestures.gestures
                               : highGestures.gestures)
                       == std::vector<bool> { true, false });
                 CHECK((lowCut ? highGestures.gestures
                               : lowGestures.gestures).empty());
-                CHECK((lowCut ? lowChangeCount : highChangeCount) == 1);
-                CHECK((lowCut ? highChangeCount : lowChangeCount) == 0);
+                CHECK(uiChangeCount == 1);
+                selectGlobalSlopeType(panel, ! lowCut);
+                CHECK(GlobalPanelSlopeTestAccess::getSlopeBox(panel).getSelectedId() == initialOtherId);
+                CHECK(otherParameter->getValue() == Catch::Approx(otherInitialValue));
+                selectGlobalSlopeType(panel, lowCut);
+                CHECK(GlobalPanelSlopeTestAccess::getSlopeBox(panel).getSelectedId() == 4);
             }
         }
     }
@@ -1298,8 +1307,7 @@ TEST_CASE("Global slope direction keys commit before a later context boundary",
                     lowCut ? HIGHCUT_SLOPE_ID : LOWCUT_SLOPE_ID);
                 REQUIRE(targetParameter != nullptr);
                 REQUIRE(otherParameter != nullptr);
-                auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(
-                    panel, lowCut);
+                auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(panel);
                 const auto initialIndex = target.getSelectedItemIndex();
                 const auto nextIndex = initialIndex + 1;
                 REQUIRE(juce::isPositiveAndBelow(nextIndex,
@@ -1395,8 +1403,7 @@ TEST_CASE("Global slope direction keys reject an already invalid context",
                 auto* targetParameter = processor.treeState.getParameter(
                     lowCut ? LOWCUT_SLOPE_ID : HIGHCUT_SLOPE_ID);
                 REQUIRE(targetParameter != nullptr);
-                auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(
-                    panel, lowCut);
+                auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(panel);
                 const auto initialValue = targetParameter->getValue();
                 const auto initialSelectedId = target.getSelectedId();
                 ParameterGestureRecorder gestures;
@@ -1411,7 +1418,12 @@ TEST_CASE("Global slope direction keys reject an already invalid context",
                 if (wrongModule)
                     GlobalPanelSlopeTestAccess::selectModule(panel, 1);
                 else
-                    selectGlobalSlopeType(panel, ! lowCut);
+                {
+                    setParameterValue(processor, fire::eq::parameterID(lowCut ? 0 : 2,
+                        fire::eq::Field::type), 0.0f); // Bell has no slope control.
+                    panel.getEqControls().refresh();
+                    REQUIRE_FALSE(target.isEnabled());
+                }
 
                 auto& comboBox = static_cast<juce::ComboBox&>(target);
                 REQUIRE(comboBox.keyPressed(
@@ -1456,7 +1468,7 @@ TEST_CASE("Context-aware ComboBox rejects auxiliary and mixed pointer presses",
                 processor.treeState.getParameter(LOWCUT_SLOPE_ID);
             REQUIRE(parameter != nullptr);
             auto& target =
-                GlobalPanelSlopeTestAccess::getSlopeBox(panel, true);
+                GlobalPanelSlopeTestAccess::getSlopeBox(panel);
             const auto initialSelectedId = target.getSelectedId();
             const auto initialValue = parameter->getValue();
             ParameterGestureRecorder gestures;
@@ -1503,7 +1515,7 @@ TEST_CASE("Context-aware ComboBox owns and recovers its opener pointer",
 
     auto* parameter = processor.treeState.getParameter(LOWCUT_SLOPE_ID);
     REQUIRE(parameter != nullptr);
-    auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(panel, true);
+    auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(panel);
     auto& component = static_cast<juce::Component&>(target);
     const auto primaryDown = makeMouseEvent(
         component,
@@ -1643,8 +1655,7 @@ TEST_CASE("Context-aware ComboBox never routes mouse wheel input to an attachmen
                 auto* targetParameter = processor.treeState.getParameter(
                     lowCut ? LOWCUT_SLOPE_ID : HIGHCUT_SLOPE_ID);
                 REQUIRE(targetParameter != nullptr);
-                auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(
-                    panel, lowCut);
+                auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(panel);
                 REQUIRE(target.getSelectedItemIndex() == 1);
                 const auto initialValue = targetParameter->getValue();
                 const auto initialSelectedId = target.getSelectedId();
@@ -1773,7 +1784,7 @@ TEST_CASE("Context-aware ComboBox direction sequences remain synchronous and men
 
     auto* parameter = processor.treeState.getParameter(LOWCUT_SLOPE_ID);
     REQUIRE(parameter != nullptr);
-    auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(panel, true);
+    auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(panel);
     ParameterGestureRecorder gestures;
     parameter->addListener(&gestures);
     const juce::ScopeGuard cleanup { [&]
@@ -1844,7 +1855,7 @@ TEST_CASE("Context-aware ComboBox keyboard commits survive synchronous panel des
 
         auto* parameter = processor.treeState.getParameter(LOWCUT_SLOPE_ID);
         REQUIRE(parameter != nullptr);
-        auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(*panel, true);
+        auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(*panel);
         const auto nextIndex = target.getSelectedItemIndex() + 1;
         REQUIRE(juce::isPositiveAndBelow(nextIndex, target.getNumItems()));
         const auto expectedValue = static_cast<float>(nextIndex)
@@ -2005,7 +2016,7 @@ TEST_CASE("Control-panel bulk lifecycle changes survive synchronous panel destru
             std::function<void(ModulatableSlider*)> {},
             std::function<void(ModulatableSlider*)> {});
         panel->setBounds(0, 0, 1000, 500);
-        panel->setToggleButtonState("lowcut");
+        panel->selectEqNode(0);
         panel->addToDesktop(juce::ComponentPeer::windowIsTemporary);
         panel->setVisible(true);
         auto& lowcutFrequency = panel->getLowcutFreqKnob();
@@ -2081,53 +2092,41 @@ TEST_CASE("Control-panel routing menus expose stable accessibility semantics",
                   == nullptr);
     }
 
-    SECTION("Global filter slopes")
+    SECTION("Selected EQ point slope")
     {
         FireAudioProcessor processor;
+        setParameterValue(processor, LOWCUT_SLOPE_ID, 1.0f / 3.0f);
+        setParameterValue(processor, HIGHCUT_SLOPE_ID, 2.0f / 3.0f);
         GlobalPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
-
-        auto& lowCut = GlobalPanelSlopeTestAccess::getSlopeBox(panel, true);
-        auto& highCut = GlobalPanelSlopeTestAccess::getSlopeBox(panel, false);
-        const auto lowCutSelection = lowCut.getSelectedId();
-        const auto highCutSelection = highCut.getSelectedId();
-        CHECK(lowCut.getAccessibilityHandler() == nullptr);
-        CHECK(highCut.getAccessibilityHandler() == nullptr);
-
+        selectGlobalSlopeType(panel, true);
+        auto& slopeBox = GlobalPanelSlopeTestAccess::getSlopeBox(panel);
+        CHECK(slopeBox.getAccessibilityHandler() == nullptr);
         panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
         panel.setVisible(true);
 
-        const std::array<ContextAwareComboBox*, 2> slopeBoxes {
-            &lowCut, &highCut
-        };
-        const std::array<juce::String, 2> expectedTitles {
-            "Low-cut filter slope", "High-cut filter slope"
-        };
-        const std::array<juce::String, 2> expectedHelp {
-            "Select the low-cut filter slope",
-            "Select the high-cut filter slope"
-        };
-
-        for (size_t slopeIndex = 0; slopeIndex < slopeBoxes.size(); ++slopeIndex)
+        // Both parameter identities now use this one visible control. Visit
+        // each target and return to the first to catch stale attachment state.
+        for (bool lowCut : {true, false, true})
         {
-            CAPTURE(slopeIndex);
-            auto& slopeBox = *slopeBoxes[slopeIndex];
-            CHECK(slopeBox.getTitle() == expectedTitles[slopeIndex]);
-            CHECK(slopeBox.getTooltip() == expectedHelp[slopeIndex]);
-
+            CAPTURE(lowCut);
+            selectGlobalSlopeType(panel, lowCut);
+            CHECK(&GlobalPanelSlopeTestAccess::getSlopeBox(panel) == &slopeBox);
+            CHECK(slopeBox.isShowing());
+            CHECK(slopeBox.getComponentID() == (lowCut ? LOWCUT_SLOPE_ID : HIGHCUT_SLOPE_ID));
+            CHECK(slopeBox.getSelectedId() == (lowCut ? 2 : 3));
+            CHECK(slopeBox.getTitle() == "EQ point slope");
+            CHECK(slopeBox.getTooltip() == "Select the slope of the selected low-cut or high-cut point");
             auto* accessibility = slopeBox.getAccessibilityHandler();
             REQUIRE(accessibility != nullptr);
-            CHECK(accessibility->getRole()
-                  == juce::AccessibilityRole::comboBox);
-            CHECK(accessibility->getTitle() == expectedTitles[slopeIndex]);
-            CHECK(accessibility->getHelp() == expectedHelp[slopeIndex]);
+            CHECK(accessibility->getRole() == juce::AccessibilityRole::comboBox);
+            CHECK(accessibility->getTitle() == slopeBox.getTitle());
+            CHECK(accessibility->getHelp() == slopeBox.getTooltip());
         }
-
-        CHECK(lowCut.getSelectedId() == lowCutSelection);
-        CHECK(highCut.getSelectedId() == highCutSelection);
+        CHECK(processor.treeState.getRawParameterValue(LOWCUT_SLOPE_ID)->load() == Catch::Approx(1.0f));
+        CHECK(processor.treeState.getRawParameterValue(HIGHCUT_SLOPE_ID)->load() == Catch::Approx(2.0f));
         panel.removeFromDesktop();
-        CHECK(lowCut.getAccessibilityHandler() == nullptr);
-        CHECK(highCut.getAccessibilityHandler() == nullptr);
+        CHECK(slopeBox.getAccessibilityHandler() == nullptr);
     }
 }
 
@@ -2222,29 +2221,24 @@ TEST_CASE("Control-panel icon buttons expose complete accessibility semantics",
         checkEmptyTextButtons(panel, buttons.size());
     }
 
-    SECTION("Global power and filter-type controls")
+    SECTION("Global power and selected EQ point controls")
     {
         FireAudioProcessor processor;
         GlobalPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
         panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
         panel.setVisible(true);
+        panel.selectEqNode(0);
 
         const auto buttons =
             GlobalPanelSlopeTestAccess::getIconButtons(panel);
-        const std::array<juce::String, 5> titles {
-            "Global filter power",
-            "Global Lo-Fi power",
-            "Low-cut filter type",
-            "Band-pass filter type",
-            "High-cut filter type"
+        const std::array<juce::String, 3> titles {
+            "Global EQ power", "Global Lo-Fi power", "EQ point 1 power"
         };
-        const std::array<juce::String, 5> help {
-            "Enable or bypass the global filter",
+        const std::array<juce::String, 3> help {
+            "Enable or bypass the global EQ",
             "Enable or bypass global Lo-Fi processing",
-            "Select the low-cut filter type",
-            "Select the band-pass filter type",
-            "Select the high-cut filter type"
+            "Enable or bypass the selected EQ point"
         };
 
         for (size_t buttonIndex = 0;
@@ -2263,6 +2257,8 @@ TEST_CASE("Control-panel icon buttons expose complete accessibility semantics",
             CHECK(accessibility->getHelp() == help[buttonIndex]);
         }
 
-        checkEmptyTextButtons(panel, buttons.size());
+        // Retain the tree-wide metadata check, including all navigation
+        // slots and the three hidden legacy selection listeners.
+        checkEmptyTextButtons(panel, 5 + EqControlsPanel::capacity + 1);
     }
 }

@@ -34,6 +34,7 @@ public:
 
 private:
     friend struct VUPanelTestAccess;
+    friend struct GraphViewSelectorTestAccess;
 
     FireAudioProcessor& processor;
     int focusBandNum;

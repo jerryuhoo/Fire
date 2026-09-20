@@ -1,0 +1,437 @@
+#pragma once
+
+#include "../PluginProcessor.h"
+#include "../Utility/EqParameters.h"
+#include "ContextAwareComboBox.h"
+#include "ModulatableSlider.h"
+#include "PrimaryButton.h"
+
+// Only the selected point's controls are presented. Slots keep their parameter
+// identity when other points are removed; the navigation uses visible ordinals.
+class EqControlsPanel final : public juce::Component,
+                              private juce::AudioProcessorParameter::Listener
+{
+public:
+    static constexpr int capacity = 12;
+    using Knobs = std::array<std::array<ModulatableSlider*, 3>, capacity>;
+
+    explicit EqControlsPanel(FireAudioProcessor& p) : processor(p)
+    {
+        setTitle("EQ point controls");
+        addAndMakeVisible(addButton);
+        addAndMakeVisible(removeButton);
+        addAndMakeVisible(powerButton);
+        addAndMakeVisible(typeMenu);
+        addAndMakeVisible(slopeMenu);
+        addButton.setButtonText("+");
+        addButton.setTitle("Add EQ point");
+        addButton.setTooltip("Add a bell point. You can also double-click the spectrum.");
+        removeButton.setButtonText("-");
+        removeButton.setTitle("Remove selected EQ point");
+        removeButton.setTooltip("Remove the selected EQ point");
+        powerButton.getProperties().set("iconType", "power");
+        powerButton.setTitle("Selected EQ point power");
+        powerButton.setTooltip("Enable or bypass the selected EQ point");
+        powerButton.setColour(juce::ToggleButton::tickColourId, fire::ui::colours::filter);
+        for (auto* menu : {&typeMenu, &slopeMenu})
+        {
+            menu->setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface1);
+            menu->setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+            menu->setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
+            menu->setColour(juce::ComboBox::arrowColourId, fire::ui::colours::filter);
+        }
+        const char* types[] {"Bell", "Low cut", "High cut", "Low shelf", "High shelf", "Notch", "Band pass"};
+        for (int i = 0; i < 7; ++i) typeMenu.addItem(types[i], i + 1);
+        for (int i = 0; i < 4; ++i) slopeMenu.addItem(juce::String((i + 1) * 12) + " dB/oct", i + 1);
+        typeMenu.setTitle("EQ point filter type");
+        slopeMenu.setTitle("EQ point slope");
+        typeMenu.setTooltip("Select the filter type for the selected EQ point");
+        slopeMenu.setTooltip("Select the slope of the selected low-cut or high-cut point");
+        const juce::Component::SafePointer<EqControlsPanel> safe(this);
+        addButton.onClick = [safe]
+        {
+            if (! safe) return;
+            const auto slot = safe->processor.addEqNode(1000.0f, 0.0f);
+            if (safe && slot >= 0) safe->selectNode(slot);
+        };
+        removeButton.onClick = [safe]
+        {
+            if (! safe || safe->selected < 0) return;
+            safe->processor.removeEqNode(safe->selected);
+            if (safe) safe->refresh();
+        };
+        powerButton.onClick = [safe]
+        {
+            if (! safe || safe->selected < 0) return;
+            auto* parameter = safe->processor.treeState.getParameter(
+                fire::eq::parameterID(safe->selected, fire::eq::Field::bypassed));
+            const auto value = safe->powerButton.getToggleState() ? 0.0f : 1.0f;
+            if (parameter != nullptr)
+            {
+                const auto expectedGeneration = safe->interactionGeneration();
+                parameter->beginChangeGesture();
+                const juce::ScopeGuard end {[parameter] { parameter->endChangeGesture(); }};
+                if (! safe || safe->interactionGeneration() != expectedGeneration) return;
+                parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+            }
+        };
+        for (int slot = 0; slot < capacity; ++slot)
+        {
+            const auto index = static_cast<size_t>(slot);
+            presentParameters[index] = processor.treeState.getRawParameterValue(fire::eq::parameterID(slot, fire::eq::Field::present));
+            presentParameterObjects[index] = processor.treeState.getParameter(fire::eq::parameterID(slot, fire::eq::Field::present));
+            if (presentParameterObjects[index]) presentParameterObjects[index]->addListener(this);
+            typeParameters[index] = processor.treeState.getRawParameterValue(fire::eq::parameterID(slot, fire::eq::Field::type));
+            bypassParameters[index] = processor.treeState.getRawParameterValue(fire::eq::parameterID(slot, fire::eq::Field::bypassed));
+            auto& point = navigation[static_cast<size_t>(slot)];
+            addChildComponent(point);
+            point.setComponentID("eqPointNavigation" + juce::String(slot + 1));
+            point.setTitle("EQ point " + juce::String(slot + 1));
+            point.setTooltip("Select EQ point " + juce::String(slot + 1));
+            point.onClick = [safe, slot] { if (safe) safe->selectNode(slot); };
+        }
+    }
+
+    ~EqControlsPanel() override
+    {
+        for (auto* parameter : presentParameterObjects) if (parameter) parameter->removeListener(this);
+        dismiss();
+    }
+    std::function<void(int)> onSelectionChanged;
+
+    void setKnobs(Knobs next)
+    {
+        knobs = next;
+        for (auto& node : knobs)
+            for (auto* knob : node)
+                if (knob != nullptr) addChildComponent(knob);
+        refresh();
+    }
+    int getSelectedNode() const noexcept { return selected; }
+    void setScale(float next)
+    {
+        if (juce::approximatelyEqual(scale, next)) return;
+        scale = next; resized();
+    }
+    void selectNode(int slot)
+    {
+        if (slot < 0 || slot >= capacity || ! processor.getEqNodeState(slot).present) return;
+        if (selected == slot) { refresh(); return; }
+        const juce::Component::SafePointer<EqControlsPanel> safe(this);
+        const auto expectedGeneration = interactionGeneration() + 1;
+        dismiss();
+        if (! safe || interactionGeneration() != expectedGeneration) return;
+        selected = slot;
+        bindMenus();
+        if (! safe) return;
+        refresh();
+        if (safe && onSelectionChanged) onSelectionChanged(selected);
+    }
+    void dismiss()
+    {
+        ++generation;
+        const juce::Component::SafePointer<EqControlsPanel> safe(this);
+        typeMenu.dismissTransientInteraction();
+        if (! safe) return;
+        slopeMenu.dismissTransientInteraction();
+        if (! safe) return;
+        for (auto& node : knobs)
+            for (auto* knob : node)
+            {
+                if (knob != nullptr) knob->dismissTransientInteraction();
+                if (! safe) return;
+            }
+        addButton.dismissPointerGesture();
+        if (! safe) return;
+        removeButton.dismissPointerGesture();
+        if (! safe) return;
+        powerButton.dismissPointerGesture();
+        if (! safe) return;
+        for (auto& dot : navigation)
+        {
+            dot.dismissPointerGesture();
+            if (! safe) return;
+        }
+    }
+    void animationTick(float seconds)
+    {
+        if (! isShowing()) return;
+        const juce::Component::SafePointer<EqControlsPanel> safe(this);
+        refresh();
+        if (! safe) return;
+        for (auto& dot : navigation) dot.advance(seconds);
+    }
+    void refresh()
+    {
+        const juce::Component::SafePointer<EqControlsPanel> safe(this);
+        const auto structureEpoch = presenceEpoch.load(std::memory_order_acquire);
+        if (structureEpoch != presentedPresenceEpoch)
+        {
+            presentedPresenceEpoch = structureEpoch;
+            const auto expectedGeneration = interactionGeneration() + 1;
+            dismiss();
+            if (! safe || interactionGeneration() != expectedGeneration) return;
+        }
+        std::array<bool, capacity> nextPresent {};
+        int count = 0;
+        for (int i = 0; i < capacity; ++i)
+        {
+            const auto* value = presentParameters[static_cast<size_t>(i)];
+            nextPresent[static_cast<size_t>(i)] = value != nullptr && value->load(std::memory_order_relaxed) > 0.5f;
+            if (nextPresent[static_cast<size_t>(i)]) ++count;
+        }
+        const bool structureChanged = present != nextPresent;
+        present = nextPresent;
+        if (selected < 0 || ! present[static_cast<size_t>(selected)])
+        {
+            int replacement = -1;
+            for (int i = juce::jmax(0, selected); i < capacity; ++i)
+                if (present[static_cast<size_t>(i)]) { replacement = i; break; }
+            if (replacement < 0)
+                for (int i = capacity - 1; i >= 0; --i)
+                    if (present[static_cast<size_t>(i)]) { replacement = i; break; }
+            if (replacement != selected)
+            {
+                const auto expectedGeneration = interactionGeneration() + 1;
+                dismiss();
+                if (! safe || interactionGeneration() != expectedGeneration) return;
+                selected = replacement;
+                bindMenus();
+                if (! safe) return;
+                if (onSelectionChanged) onSelectionChanged(selected);
+                if (! safe) return;
+            }
+        }
+        const bool selectionChanged = presentedSelection != selected;
+        presentedSelection = selected;
+        int ordinal = 0;
+        for (int i = 0; (structureChanged || selectionChanged) && i < capacity; ++i)
+        {
+            auto& dot = navigation[static_cast<size_t>(i)];
+            dot.setVisible(present[static_cast<size_t>(i)]);
+            if (! safe) return;
+            if (present[static_cast<size_t>(i)])
+            {
+                dot.ordinal = ++ordinal;
+                dot.setTitle("EQ point " + juce::String(ordinal));
+                dot.setTooltip("Select EQ point " + juce::String(ordinal));
+            }
+            dot.setSelectedState(selected == i);
+            for (auto* knob : knobs[static_cast<size_t>(i)])
+            {
+                if (knob != nullptr && knob->isVisible() != (selected == i))
+                {
+                    const auto expectedGeneration = interactionGeneration();
+                    knob->dismissTransientInteraction();
+                    if (! safe || interactionGeneration() != expectedGeneration) return;
+                }
+                if (knob != nullptr) knob->setVisible(selected == i);
+                if (! safe) return;
+            }
+        }
+        addButton.setEnabled(count < capacity);
+        if (! safe) return;
+        if (structureChanged)
+            addButton.setTooltip(count == capacity ? "Maximum 12 EQ points. Remove a point to add another."
+                                                   : "Add a bell point. You can also double-click the spectrum.");
+        removeButton.setEnabled(selected >= 0);
+        if (! safe) return;
+        powerButton.setVisible(selected >= 0);
+        if (! safe) return;
+        typeMenu.setVisible(selected >= 0);
+        if (! safe) return;
+        slopeMenu.setVisible(selected >= 0);
+        if (! safe) return;
+        if (selected >= 0)
+        {
+            const auto index = static_cast<size_t>(selected);
+            const bool bypassed = bypassParameters[index] != nullptr
+                               && bypassParameters[index]->load(std::memory_order_relaxed) > 0.5f;
+            const auto rawType = typeParameters[index] != nullptr ? typeParameters[index]->load(std::memory_order_relaxed) : 0.0f;
+            const int type = std::isfinite(rawType) ? juce::jlimit(0, 6, juce::roundToInt(rawType)) : 0;
+            powerButton.setToggleState(! bypassed, juce::dontSendNotification);
+            powerButton.setTitle("EQ point " + juce::String(navigation[static_cast<size_t>(selected)].ordinal) + " power");
+            const bool cut = type == 1 || type == 2;
+            slopeMenu.setEnabled(cut);
+            if (! safe) return;
+            auto* gain = knobs[static_cast<size_t>(selected)][1];
+            const bool gainEnabled = type != 5 && type != 6;
+            if (gain != nullptr && gain->isEnabled() != gainEnabled)
+            {
+                // JUCE setEnabled continues accessing the component after its
+                // enablement callback. End host gestures before entering it.
+                const auto expectedGeneration = interactionGeneration();
+                gain->dismissTransientInteraction();
+                if (! safe || interactionGeneration() != expectedGeneration) return;
+                gain->setEnabled(gainEnabled);
+            }
+            if (! safe) return;
+            const int signature = selected * 32 + type * 2 + (bypassed ? 1 : 0);
+            if (signature != paintSignature) { paintSignature = signature; repaint(); }
+        }
+        if (structureChanged || selectionChanged) { resized(); repaint(); }
+    }
+    void resized() override
+    {
+        auto area = getLocalBounds().reduced(juce::roundToInt(8 * scale), 0);
+        header = area.removeFromTop(juce::roundToInt(32 * scale));
+        auto actions = header;
+        const int buttonWidth = juce::roundToInt(30 * scale);
+        removeButton.setBounds(actions.removeFromRight(buttonWidth));
+        actions.removeFromRight(juce::roundToInt(4 * scale));
+        addButton.setBounds(actions.removeFromRight(buttonWidth));
+        actions.removeFromRight(juce::roundToInt(8 * scale));
+        powerButton.setBounds(actions.removeFromRight(buttonWidth));
+        auto footer = area.removeFromBottom(juce::roundToInt(38 * scale));
+        int count = 0;
+        for (bool enabled : present) if (enabled) ++count;
+        const auto pitch = juce::jmin(juce::roundToInt(29 * scale), footer.getWidth() / juce::jmax(1, count));
+        auto strip = footer.withSizeKeepingCentre(count * pitch, footer.getHeight());
+        for (int i = 0; i < capacity; ++i)
+            if (present[static_cast<size_t>(i)]) navigation[static_cast<size_t>(i)].setBounds(strip.removeFromLeft(pitch));
+        emptyBounds = area;
+        const int utilityWidth = juce::jmin(juce::roundToInt(145 * scale), area.getWidth() / 3);
+        auto utility = area.removeFromRight(utilityWidth).withSizeKeepingCentre(utilityWidth, juce::roundToInt(112 * scale));
+        typeLabel = utility.removeFromTop(juce::roundToInt(20 * scale));
+        typeMenu.setBounds(utility.removeFromTop(juce::roundToInt(30 * scale)));
+        utility.removeFromTop(juce::roundToInt(9 * scale));
+        slopeLabel = utility.removeFromTop(juce::roundToInt(20 * scale));
+        slopeMenu.setBounds(utility.removeFromTop(juce::roundToInt(30 * scale)));
+        area.removeFromRight(juce::roundToInt(15 * scale));
+        const int gap = juce::roundToInt(10 * scale);
+        const int width = juce::jmax(1, juce::jmin(juce::roundToInt(105 * scale), (area.getWidth() - 2 * gap) / 3));
+        const int height = juce::jmin(area.getHeight(), width + juce::roundToInt(38 * scale));
+        auto row = area.withSizeKeepingCentre(width * 3 + gap * 2, height);
+        for (int control = 0; control < 3; ++control)
+        {
+            const auto bounds = row.removeFromLeft(width);
+            row.removeFromLeft(gap);
+            for (auto& node : knobs) if (node[static_cast<size_t>(control)] != nullptr) node[static_cast<size_t>(control)]->setBounds(bounds);
+        }
+    }
+    void paint(juce::Graphics& g) override
+    {
+        g.setColour(fire::ui::colours::textSecondary);
+        g.setFont(fire::ui::labelFont(11 * scale));
+        auto title = header.withTrimmedRight(juce::roundToInt(115 * scale));
+        if (selected >= 0)
+        {
+            const auto ordinal = navigation[static_cast<size_t>(selected)].ordinal;
+            g.drawText("POINT " + juce::String(ordinal).paddedLeft('0', 2), title, juce::Justification::centredLeft);
+            g.drawText("FILTER TYPE", typeLabel, juce::Justification::centredLeft);
+            if (! slopeMenu.isEnabled()) g.setColour(fire::ui::colours::textMuted.withAlpha(0.55f));
+            g.drawText("SLOPE", slopeLabel, juce::Justification::centredLeft);
+        }
+        else
+        {
+            g.drawText("NO EQ POINTS", title, juce::Justification::centredLeft);
+            g.setFont(fire::ui::bodyFont(13 * scale));
+            g.drawFittedText("Double-click the spectrum or use + to add a point", emptyBounds,
+                             juce::Justification::centred, 2);
+        }
+    }
+    bool keyPressed(const juce::KeyPress& key) override
+    {
+        if (key != juce::KeyPress::leftKey && key != juce::KeyPress::rightKey) return false;
+        bool navigationFocused = false;
+        for (auto& dot : navigation) navigationFocused = navigationFocused || dot.hasKeyboardFocus(false);
+        if (! navigationFocused || selected < 0) return false;
+        const int direction = key == juce::KeyPress::rightKey ? 1 : -1;
+        for (int distance = 1; distance < capacity; ++distance)
+        {
+            const int next = (selected + direction * distance + capacity) % capacity;
+            if (present[static_cast<size_t>(next)])
+            {
+                const juce::Component::SafePointer<EqControlsPanel> safe(this);
+                selectNode(next);
+                if (safe) navigation[static_cast<size_t>(next)].grabKeyboardFocus();
+                return true;
+            }
+        }
+        return true;
+    }
+private:
+    class PointButton final : public PrimaryTextButton
+    {
+    public:
+        int ordinal = 0;
+        void setSelectedState(bool value)
+        {
+            setToggleState(value, juce::dontSendNotification);
+            expansion.setTarget(value ? 1.0f : 0.0f);
+            if (! isShowing()) expansion.snapTo(value ? 1.0f : 0.0f);
+        }
+        void advance(float seconds)
+        {
+            expansion.setTarget(getToggleState() ? 1.0f : 0.0f);
+            if (expansion.advance(seconds, 0.13f)) repaint();
+        }
+        void paint(juce::Graphics& g) override
+        {
+            const float size = juce::jmin(getWidth(), getHeight()) * (0.29f + 0.48f * expansion.current);
+            auto dot = getLocalBounds().toFloat().withSizeKeepingCentre(size, size);
+            const auto colour = getToggleState() ? fire::ui::colours::filter : fire::ui::colours::textMuted;
+            g.setColour(colour.withAlpha(getToggleState() ? 0.20f : (isMouseOver() ? 0.7f : 0.32f)));
+            g.fillEllipse(dot);
+            if (getToggleState() || hasKeyboardFocus(false))
+            {
+                g.setColour(colour.withAlpha(0.9f)); g.drawEllipse(dot, 1.0f);
+            }
+            if (expansion.current > 0.45f)
+            {
+                g.setColour(fire::ui::colours::textPrimary.withAlpha(expansion.current));
+                g.setFont(fire::ui::labelFont(juce::jmax(9.0f, size * 0.51f)));
+                g.drawText(juce::String(ordinal), dot, juce::Justification::centred);
+            }
+        }
+    private:
+        fire::ui::DampedValue expansion;
+    };
+    void bindMenus()
+    {
+        typeAttachment.reset(); slopeAttachment.reset();
+        if (selected < 0) return;
+        const juce::Component::SafePointer<EqControlsPanel> safe(this);
+        for (auto pair : {std::pair{&typeMenu, fire::eq::Field::type}, std::pair{&slopeMenu, fire::eq::Field::slope}})
+        {
+            auto id = fire::eq::parameterID(selected, pair.second);
+            pair.first->setComponentID(id);
+            pair.first->configurePopupSession([safe] { return safe ? safe->interactionGeneration() : 0; },
+                [safe] { return safe && safe->isShowing() && safe->isEnabled() && safe->selected >= 0
+                    && safe->presentParameters[static_cast<size_t>(safe->selected)]->load(std::memory_order_relaxed) > 0.5f; },
+                processor.treeState.getParameter(id));
+            if (! safe) return;
+            auto attachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, id, *pair.first);
+            if (! safe) return;
+            if (pair.second == fire::eq::Field::type) typeAttachment = std::move(attachment);
+            else slopeAttachment = std::move(attachment);
+        }
+    }
+    void visibilityChanged() override
+    {
+        if (! isShowing()) dismiss();
+        else refresh();
+    }
+    void enablementChanged() override { dismiss(); }
+    std::uint64_t interactionGeneration() const noexcept
+    { return generation + presenceEpoch.load(std::memory_order_acquire); }
+    void parameterValueChanged(int, float) override
+    { presenceEpoch.fetch_add(1, std::memory_order_release); }
+    void parameterGestureChanged(int, bool) override {}
+    FireAudioProcessor& processor;
+    Knobs knobs {};
+    std::array<PointButton, capacity> navigation;
+    std::array<bool, capacity> present {};
+    std::array<std::atomic<float>*, capacity> presentParameters {}, typeParameters {}, bypassParameters {};
+    std::array<juce::RangedAudioParameter*, capacity> presentParameterObjects {};
+    PrimaryTextButton addButton, removeButton;
+    PrimaryToggleButton powerButton;
+    ContextAwareComboBox typeMenu, slopeMenu;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> typeAttachment, slopeAttachment;
+    int selected = -1, presentedSelection = -2, paintSignature = -1;
+    float scale = 1.0f;
+    std::uint64_t generation = 0;
+    std::atomic<std::uint64_t> presenceEpoch {0};
+    std::uint64_t presentedPresenceEpoch = 0;
+    juce::Rectangle<int> header, typeLabel, slopeLabel, emptyBounds;
+};

@@ -31,6 +31,7 @@ public:
 
 private:
     friend struct OscilloscopeHistorySourceTestAccess;
+    friend struct GraphViewSelectorTestAccess;
 
     FireAudioProcessor& processor;
 

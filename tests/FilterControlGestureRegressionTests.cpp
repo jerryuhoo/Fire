@@ -815,11 +815,11 @@ TEST_CASE("Filter graph nodes expose distinct names and usable hit targets",
 
     const std::array<std::pair<DraggableButton*, juce::String>, 3> nodes {{
         { &FilterControlTestAccess::lowButton(control),
-          "Low-cut filter frequency" },
+          "EQ point 1" },
         { &FilterControlTestAccess::peakButton(control),
-          "Peak filter frequency" },
+          "EQ point 2" },
         { &FilterControlTestAccess::highButton(control),
-          "High-cut filter frequency" }
+          "EQ point 3" }
     }};
 
     for (const auto& [node, expectedTitle] : nodes)

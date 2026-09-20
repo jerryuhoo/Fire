@@ -164,7 +164,7 @@ TEST_CASE("Master Lo-Fi exposes tape wow and flutter while switching modules hid
         CHECK(p.treeState.getRawParameterValue(id)->load() == Catch::Approx(0.5f));
     }
     save(editor, "master-lofi-tape.png");
-    click(editor, "Filter");
+    click(editor, "EQ");
     for (auto* id : fire::effects::tapeIDs)
         CHECK_FALSE(find<ModulatableSlider>(editor, [&](auto& s) {return s.parameterID == id;})->isShowing());
 }

@@ -12,6 +12,9 @@
 #include "DSP/InsertRack.h"
 #include "DSP/LoudnessMatchState.h"
 #include "Utility/CloudsParameters.h"
+#include "Utility/EqParameters.h"
+#include "DSP/EqCoefficients.h"
+#include "DSP/EqProcessor.h"
 
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "DSP/WidthProcessor.h"
@@ -529,6 +532,10 @@ public:
         ModulatedFilterValues& values,
         std::uint64_t requiredCaptureEpoch = 0);
     std::uint64_t requestFreshModulatedFilterValuesEpoch() noexcept;
+    fire::eq::NodeState getEqNodeState(int slot) const;
+    int addEqNode(float frequency, float gainDb,
+                  fire::eq::Type type = fire::eq::Type::bell);
+    bool removeEqNode(int slot);
     bool getLatestMeterValues(MeterValues& values);
 
     // Getters for meter levels
@@ -735,6 +742,7 @@ private:
         ModulatedParameterSnapshot highCutFrequency;
         ModulatedParameterSnapshot highCutGain;
         ModulatedParameterSnapshot highCutQuality;
+        std::array<fire::eq::Processor::Parameters, fire::eq::maxNodes> eqNodes;
         bool enabled = false;
     };
 
@@ -762,6 +770,7 @@ private:
         HqCallbackContext callbackContext;
         std::array<float, 3> crossoverFrequencies { 200.0f, 1000.0f, 5000.0f };
         std::uint32_t publicationSequence = 0;
+        std::uint32_t dspResetSequence = 0;
         int numBands = 1;
     };
 
@@ -801,6 +810,8 @@ private:
         const juce::AudioBuffer<float>& lfoOutputs,
         int sampleIndex) const noexcept;
     bool hasActiveFilterModulation() const noexcept;
+    bool isLegacyEqNodeActive(int slot) const noexcept;
+    void finishMainStateEdit(bool resetDsp) noexcept;
     void prepareAudioCallbackParameterSnapshot(
         std::uint32_t publicationSequence,
         AudioCallbackParameterSnapshot& snapshot) const;
@@ -809,6 +820,9 @@ private:
     std::array<CachedParameter, 3> crossoverFrequencyParameters;
     std::array<std::atomic<float>*, 4> lfoSmoothParameters {};
     FilterParameterCache filterParameterCache;
+    std::array<std::array<CachedParameter, fire::eq::fieldCount>, fire::eq::maxNodes> eqParameterCache;
+    std::array<std::atomic<std::uint32_t>, fire::eq::maxNodes> eqNodeGenerations {};
+    fire::eq::Processor eqProcessor;
     CachedParameter numBandsParameter;
     CachedParameter hqParameter;
     CachedParameter globalOutputParameter;
@@ -883,6 +897,9 @@ private:
     // Even values identify complete publications; odd values mean a
     // message-thread migration is in progress.
     std::atomic<std::uint32_t> multibandTopologyResetGeneration { 0 };
+    // State coherence and DSP identity are independent: editing Master EQ
+    // publishes a complete state without discarding unrelated band tails.
+    std::atomic<std::uint32_t> multibandDspResetSequence { 0 };
     // Writer-side only. The audio thread never enters this recursive lock; it
     // observes the odd/even publication sequence above.  A writer holds one
     // recursion level from beginMultibandTopologyEdit() until the matching
@@ -890,6 +907,7 @@ private:
     // outer transaction prematurely.
     juce::CriticalSection multibandTopologyWriterLock;
     int multibandTopologyEditDepth = 0;
+    bool mainStateEditRequiresDspReset = false;
     // Registered host-state readers finish copying APVTS before an outer
     // topology writer is allowed to mutate it. The seq_cst handshake with the
     // generation prevents the P->V / V->P listener-lock cycle.

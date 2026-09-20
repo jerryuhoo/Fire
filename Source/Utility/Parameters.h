@@ -12,6 +12,7 @@
 #include "../GUI/InterfaceDefines.h"
 #include "InsertParameters.h"
 #include "CloudsParameters.h"
+#include "EqParameters.h"
 #include "ModuleOrder.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_core/juce_core.h"
@@ -119,6 +120,7 @@ struct ModulatedFilterValues
     float peakFreq { 1000.0f };
     float peakGain { 0.0f };
     float peakQ { 1.0f };
+    std::array<fire::eq::NodeState, fire::eq::maxNodes> eqNodes {};
 };
 
 // =============================================================================
@@ -310,6 +312,12 @@ namespace ParameterIDAndName
                     result.push_back({"Master FX " + juce::String(slot + 1) + " Clouds "
                                           + fire::clouds_params::fieldNames[static_cast<size_t>(field)],
                                       fire::clouds_params::parameterBase(slot, field, true)});
+            for (int slot = 3; slot < fire::eq::maxNodes; ++slot)
+                for (auto field : {fire::eq::Field::frequency, fire::eq::Field::gain, fire::eq::Field::q})
+                    result.push_back({"EQ " + juce::String(slot + 1)
+                                          + (field == fire::eq::Field::frequency ? " Frequency"
+                                             : field == fire::eq::Field::gain ? " Gain" : " Q"),
+                                      fire::eq::parameterID(slot, field)});
             return result;
         }();
         return params;

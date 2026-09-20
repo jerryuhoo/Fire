@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <algorithm>
 
 namespace
 {
@@ -84,6 +85,7 @@ juce::Button* findButtonByText(juce::Component& root,
 TEST_CASE("Global filter mode UI restores every saved APVTS state without changing parameters",
           "[global-panel][filter][state][regression]")
 {
+    juce::ScopedJuceInitialiser_GUI gui;
     for (const auto& filterMode : filterModes)
     {
         DYNAMIC_SECTION(filterMode.name)
@@ -101,6 +103,9 @@ TEST_CASE("Global filter mode UI restores every saved APVTS state without changi
                     processor, parameterIDs[index]);
 
             GlobalPanel panel(processor, {}, {}, {}, {}, {});
+            panel.setBounds(0, 0, 1000, 500);
+            panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            panel.setVisible(true);
 
             std::array<juce::Button*, 3> modeButtons {};
             for (size_t index = 0; index < componentIDs.size(); ++index)
@@ -110,21 +115,26 @@ TEST_CASE("Global filter mode UI restores every saved APVTS state without changi
                 REQUIRE(modeButtons[index] != nullptr);
                 CHECK(modeButtons[index]->getToggleState()
                       == filterMode.enabled[index]);
+                CHECK_FALSE(modeButtons[index]->isVisible());
                 CHECK(getPlainParameter(processor, parameterIDs[index])
                       == Catch::Approx(valuesBeforeConstruction[index]));
             }
 
-            CHECK(panel.getLowcutFreqKnob().isVisible()
+            CHECK(panel.getEqControls().isShowing());
+            CHECK(panel.getSelectedEqNode()
+                  == static_cast<int>(std::distance(filterMode.enabled.begin(),
+                      std::find(filterMode.enabled.begin(), filterMode.enabled.end(), true))));
+            CHECK(panel.getLowcutFreqKnob().isShowing()
                   == filterMode.enabled[0]);
-            CHECK(panel.getPeakFreqKnob().isVisible()
+            CHECK(panel.getPeakFreqKnob().isShowing()
                   == filterMode.enabled[1]);
-            CHECK(panel.getHighcutFreqKnob().isVisible()
+            CHECK(panel.getHighcutFreqKnob().isShowing()
                   == filterMode.enabled[2]);
         }
     }
 }
 
-TEST_CASE("Global filter automation cannot reveal controls outside the Filter module",
+TEST_CASE("Global filter automation cannot reveal controls outside the EQ module",
           "[global-panel][filter][visibility][automation][regression]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
@@ -138,9 +148,12 @@ TEST_CASE("Global filter automation cannot reveal controls outside the Filter mo
             {
                 FireAudioProcessor processor;
                 GlobalPanel panel(processor, {}, {}, {}, {}, {});
+                panel.setBounds(0, 0, 1000, 500);
+                panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+                panel.setVisible(true);
 
                 auto* moduleButton = findButtonByText(panel, moduleName);
-                auto* filterButton = findButtonByText(panel, "Filter");
+                auto* filterButton = findButtonByText(panel, "EQ");
                 REQUIRE(moduleButton != nullptr);
                 REQUIRE(filterButton != nullptr);
 
@@ -158,21 +171,24 @@ TEST_CASE("Global filter automation cannot reveal controls outside the Filter mo
                                     true);
                 juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 
-                CHECK_FALSE(panel.getLowcutFreqKnob().isVisible());
-                CHECK_FALSE(panel.getLowcutGainKnob().isVisible());
-                CHECK_FALSE(panel.getPeakFreqKnob().isVisible());
-                CHECK_FALSE(panel.getPeakGainKnob().isVisible());
-                CHECK_FALSE(panel.getHighcutFreqKnob().isVisible());
-                CHECK_FALSE(panel.getHighcutGainKnob().isVisible());
+                CHECK_FALSE(panel.getEqControls().isShowing());
+                CHECK_FALSE(panel.getLowcutFreqKnob().isShowing());
+                CHECK_FALSE(panel.getLowcutGainKnob().isShowing());
+                CHECK_FALSE(panel.getPeakFreqKnob().isShowing());
+                CHECK_FALSE(panel.getPeakGainKnob().isShowing());
+                CHECK_FALSE(panel.getHighcutFreqKnob().isShowing());
+                CHECK_FALSE(panel.getHighcutGainKnob().isShowing());
 
                 filterButton->setToggleState(true,
                                              juce::sendNotificationSync);
 
-                CHECK(panel.getLowcutFreqKnob().isVisible()
+                CHECK(panel.getEqControls().isShowing());
+                CHECK(panel.getSelectedEqNode() == static_cast<int>(selectedMode));
+                CHECK(panel.getLowcutFreqKnob().isShowing()
                       == (selectedMode == 0));
-                CHECK(panel.getPeakFreqKnob().isVisible()
+                CHECK(panel.getPeakFreqKnob().isShowing()
                       == (selectedMode == 1));
-                CHECK(panel.getHighcutFreqKnob().isVisible()
+                CHECK(panel.getHighcutFreqKnob().isShowing()
                       == (selectedMode == 2));
             }
         }

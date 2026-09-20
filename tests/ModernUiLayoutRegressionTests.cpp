@@ -209,7 +209,7 @@ TEST_CASE("Modern control pages render with live parameter and modulation values
             snapshot(editor, "fire-modern-" + juce::String(module) + "-" + juce::String(width));
         }
         activate(button(editor, "MASTER LAB"));
-        for (const auto* module : { "Filter", "Lo-Fi", "Analysis" })
+        for (const auto* module : { "EQ", "Lo-Fi", "Analysis" })
         {
             activate(button(editor, module));
             checkVisibleControls(editor);

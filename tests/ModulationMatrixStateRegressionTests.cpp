@@ -818,7 +818,7 @@ TEST_CASE("Modulation routing edits stop at the shared capacity",
     {
         const auto before = manager.getModulationRoutingStateSnapshot();
         const auto shapesBefore = manager.getLfoDataCopy();
-        REQUIRE(shapesBefore.size() == 4);
+        REQUIRE(shapesBefore.size() == fire::lfo_bank::capacity);
 
         juce::Array<ModulationRouting> oversized;
         for (int i = 0;
@@ -2832,6 +2832,8 @@ TEST_CASE("Modulation matrix source affordances follow the LFO bank palette",
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
+    for (int slot = fire::lfo_bank::defaultCount; slot < fire::lfo_bank::capacity; ++slot)
+        REQUIRE(processor.addLfo() == slot);
     std::array<std::uint64_t, fire::ui::lfoBankCount> fingerprints {};
 
     for (int sourceIndex = 0;

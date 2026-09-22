@@ -604,7 +604,6 @@ void GlobalPanel::resized()
     const float uiScale = scale;
     // Drive is the sole hero control; every other rotary in the editor uses
     // this quieter common diameter.
-    const int scaledKnobSize = juce::roundToInt(fire::ui::Metrics::knobWidth * uiScale);
     const int outerPadding = juce::roundToInt(10.0f * uiScale);
     const int gap = juce::roundToInt(juce::jlimit(7.0f * uiScale,
                                                  14.0f * uiScale,
@@ -653,16 +652,17 @@ void GlobalPanel::resized()
     const int valueHeight = juce::roundToInt(fire::ui::Metrics::knobValueHeight * uiScale);
     const int masterKnobLimit = juce::jmax(1,
         (outputColumnArea.getWidth() - controlGap) / 2);
-    const int ordinaryKnobSize = juce::jmax(1, std::min({ scaledKnobSize,
-                                                          filterKnobLimit,
-                                                          lofiKnobLimit,
-                                                          masterKnobLimit,
-                                                          knobsColumnArea.getHeight() - valueHeight }));
-    const int ordinaryKnobHeight = ordinaryKnobSize + valueHeight;
+    const int ordinaryKnobSize = fire::ui::ordinaryKnobWidth(uiScale, {
+        filterKnobLimit,
+        lofiKnobLimit,
+        masterKnobLimit,
+        (knobsColumnArea.getHeight() - controlGap) / 2 - valueHeight });
+    const int ordinaryKnobHeight = fire::ui::ordinaryKnobHeight(ordinaryKnobSize, uiScale);
 
     effectNavigation.setBounds(tabAreaRect);
     effectNavigation.setScale(uiScale);
     insertControls.setScale(uiScale);
+    insertControls.setKnobWidth(ordinaryKnobSize);
     if (selectedInsert >= 0)
     {
         auto insertArea = knobsColumnArea;
@@ -690,17 +690,18 @@ void GlobalPanel::resized()
     if (filterSwitch.getToggleState())
     {
         eqControls.setScale(uiScale);
+        eqControls.setKnobWidth(ordinaryKnobSize);
         eqControls.setBounds(knobsColumnArea);
     }
     else if (downsampleSwitch.getToggleState())
     {
-        const auto size = juce::jmax(1, juce::jmin(ordinaryKnobSize, (knobsColumnArea.getHeight() - controlGap) / 2 - valueHeight));
-        auto area = knobsColumnArea.withSizeKeepingCentre(size * 4 + controlGap * 3, (size + valueHeight) * 2 + controlGap);
+        const auto size = ordinaryKnobSize;
+        auto area = knobsColumnArea.withSizeKeepingCentre(size * 4 + controlGap * 3, ordinaryKnobHeight * 2 + controlGap);
         constexpr const char* names[] {DOWNSAMPLE_NAME, BIT_DEPTH_NAME, JITTER_NAME, DOWNSAMPLE_MIX_NAME, "Tape", "Wow", "Flutter"};
         for (int row = 0; row < 2; ++row)
         {
-            auto strip = area.removeFromTop(size + valueHeight); area.removeFromTop(controlGap);
-            if (row == 1) strip = strip.withSizeKeepingCentre(size * 3 + controlGap * 2, size + valueHeight);
+            auto strip = area.removeFromTop(ordinaryKnobHeight); area.removeFromTop(controlGap);
+            if (row == 1) strip = strip.withSizeKeepingCentre(size * 3 + controlGap * 2, ordinaryKnobHeight);
             for (int column = 0; column < (row == 0 ? 4 : 3); ++column)
             {
                 modulatableSliderComponents.at(names[row * 4 + column])->setBounds(strip.removeFromLeft(size));

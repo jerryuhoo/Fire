@@ -11,6 +11,7 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include "../Utility/LfoBankParameters.h"
 #include <cmath>
 
 //==============================================================================
@@ -30,7 +31,7 @@ struct ModulationRouting
 
     void sanitise() noexcept
     {
-        sourceLfoIndex = juce::jlimit(0, 3, sourceLfoIndex);
+        sourceLfoIndex = juce::jlimit(0, fire::lfo_bank::capacity - 1, sourceLfoIndex);
         depth = std::isfinite(depth) ? juce::jlimit(-1.0f, 1.0f, depth) : 0.5f;
     }
 

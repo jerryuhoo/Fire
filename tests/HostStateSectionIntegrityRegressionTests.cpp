@@ -139,7 +139,7 @@ TEST_CASE("Versioned host states reject malformed model sections atomically",
     {
         auto* lfoState = incomingXml->getChildByName("LFO_STATE");
         REQUIRE(lfoState != nullptr);
-        REQUIRE(lfoState->getNumChildElements() == 4);
+        REQUIRE(lfoState->getNumChildElements() == fire::lfo_bank::capacity);
         lfoState->removeChildElement(lfoState->getChildElement(3), true);
     }
 
@@ -209,7 +209,7 @@ TEST_CASE("An empty versioned modulation section explicitly clears routings",
           == Catch::Approx(73.0f));
     CHECK(subject.getLfoManager().getModulationRoutingsCopy().isEmpty());
     const auto shapes = subject.getLfoManager().getLfoDataCopy();
-    REQUIRE(shapes.size() == 4);
+    REQUIRE(shapes.size() == fire::lfo_bank::capacity);
     REQUIRE(shapes[0].points.size() == 3);
     CHECK(shapes[0].points[1].x == Catch::Approx(0.67f));
     CHECK(shapes[0].points[1].y == Catch::Approx(0.19f));
@@ -224,6 +224,12 @@ TEST_CASE("Unversioned host states retain legacy missing-section migration",
     auto legacyXml = parseHostState(serialiseHostState(incoming));
     legacyXml->removeAttribute("stateFormatVersion");
     legacyXml->removeAttribute("savedParameterCount");
+    legacyXml->removeAttribute("lfoBankSchemaVersion");
+    auto* legacyParameters = legacyXml->getChildByName("PARAMETERS");
+    REQUIRE(legacyParameters != nullptr);
+    for (int index = legacyParameters->getNumChildElements(); --index >= 0;)
+        if (fire::lfo_bank::isAppendedParameterID(legacyParameters->getChildElement(index)->getStringAttribute("id")))
+            legacyParameters->removeChildElement(legacyParameters->getChildElement(index), true);
 
     for (const auto* sectionName : {
              "otherState", "LFO_STATE", "MODULATION_STATE", "AB_STATE" })
@@ -238,7 +244,7 @@ TEST_CASE("Unversioned host states retain legacy missing-section migration",
           == Catch::Approx(73.0f));
     CHECK(subject.getLfoManager().getModulationRoutingsCopy().isEmpty());
     const auto shapes = subject.getLfoManager().getLfoDataCopy();
-    REQUIRE(shapes.size() == 4);
+    REQUIRE(shapes.size() == fire::lfo_bank::capacity);
     for (const auto& shape : shapes)
     {
         REQUIRE(shape.points.size() == 2);

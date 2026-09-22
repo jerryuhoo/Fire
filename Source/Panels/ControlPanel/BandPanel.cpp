@@ -500,20 +500,20 @@ void BandPanel::resized()
     const int buttonAreaHeight = juce::jmin(juce::roundToInt(28.0f * uiScale),
                                             juce::jmax(1, outputColumnArea.getHeight() / 4));
     const int valueHeight = juce::roundToInt(fire::ui::Metrics::knobValueHeight * uiScale);
-    const int secondaryKnobSize = juce::jmax(1, std::min({
-        juce::roundToInt(fire::ui::Metrics::knobWidth * uiScale),
+    const int secondaryKnobSize = fire::ui::ordinaryKnobWidth(uiScale, {
         (knobsColumnArea.getWidth() - controlGap * 2) / 3,
         (knobsColumnArea.getHeight() - controlGap) / 2 - valueHeight,
         knobsColumnArea.getHeight() - modeHeight - controlGap - dcReserve - valueHeight,
         (outputColumnArea.getWidth() - controlGap) / 2,
         outputColumnArea.getHeight() - buttonAreaHeight - controlGap - valueHeight
-    }));
+    });
 
-    const int secondaryKnobHeight = secondaryKnobSize + valueHeight;
+    const int secondaryKnobHeight = fire::ui::ordinaryKnobHeight(secondaryKnobSize, uiScale);
 
     effectNavigation.setBounds(tabAreaRect);
     effectNavigation.setScale(uiScale);
     insertControls.setScale(uiScale);
+    insertControls.setKnobWidth(secondaryKnobSize);
     insertControls.setBounds(selectedInsert >= 0 && insertControls.usesFullWidthLayout()
         ? contentArea(knobsAreaRect.getUnion(graphAreaRect)) : knobsColumnArea);
 

@@ -99,6 +99,7 @@
       </GROUP>
       <GROUP id="{0204F696-B0DF-CD89-2550-E45618BFEF7E}" name="Utility">
         <FILE id="eqParam1" name="EqParameters.h" compile="0" resource="0" file="Source/Utility/EqParameters.h"/>
+        <FILE id="lfoBankParam1" name="LfoBankParameters.h" compile="0" resource="0" file="Source/Utility/LfoBankParameters.h"/>
         <FILE id="A4Ogfw" name="AudioHelpers.h" compile="0" resource="0" file="Source/Utility/AudioHelpers.h"/>
         <FILE id="SBsuX3" name="FiltersUtil.h" compile="0" resource="0" file="Source/Utility/FiltersUtil.h"/>
         <FILE id="I9GGUn" name="Parameters.h" compile="0" resource="0" file="Source/Utility/Parameters.h"/>

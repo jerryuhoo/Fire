@@ -13,6 +13,7 @@
 #include "DSP/LoudnessMatchState.h"
 #include "Utility/CloudsParameters.h"
 #include "Utility/EqParameters.h"
+#include "Utility/LfoBankParameters.h"
 #include "DSP/EqCoefficients.h"
 #include "DSP/EqProcessor.h"
 
@@ -551,6 +552,9 @@ public:
 
 
     void lfoDataHasChanged();
+    bool isLfoPresent(int index) const noexcept;
+    int addLfo();
+    bool removeLfo(int index);
     std::uint64_t getModulationUiRevision() const noexcept;
     void addModulationUiChangeListener(juce::ChangeListener* listener);
     void removeModulationUiChangeListener(juce::ChangeListener* listener);
@@ -818,7 +822,7 @@ private:
 
     std::array<BandParameterCache, 4> bandParameterCache;
     std::array<CachedParameter, 3> crossoverFrequencyParameters;
-    std::array<std::atomic<float>*, 4> lfoSmoothParameters {};
+    std::array<std::atomic<float>*, fire::lfo_bank::capacity> lfoSmoothParameters {};
     FilterParameterCache filterParameterCache;
     std::array<std::array<CachedParameter, fire::eq::fieldCount>, fire::eq::maxNodes> eqParameterCache;
     std::array<std::atomic<std::uint32_t>, fire::eq::maxNodes> eqNodeGenerations {};

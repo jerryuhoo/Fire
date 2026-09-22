@@ -11,6 +11,8 @@
 #pragma once
 
 #include "../../DSP/LfoData.h"
+#include "../../Utility/LfoBankParameters.h"
+#include "../SpectrogramPanel/CloseButton.h"
 #include "../../GUI/FocusAwareComboBox.h"
 #include "../../GUI/PrimarySlider.h"
 #include "../../GUI/FireTheme.h"
@@ -381,6 +383,10 @@ public:
     std::function<void()> onDataChanged;
     std::function<void(int lfoIndex)> onAssignButtonClicked;
     std::function<void(int lfoIndex)> onCurrentLfoChanged;
+    std::function<void(int lfoIndex)> onLfoRemoved;
+    int getCurrentLfoIndex() const noexcept { return currentLfoIndex; }
+    juce::Viewport& getBankViewport() noexcept { return bankViewport; }
+    int getBankRowPitch() const noexcept { return bankRowPitch; }
     PrimaryTextButton assignButton;
 
     void refreshLfoDisplay();
@@ -410,19 +416,51 @@ private:
     void showModulationMatrixDialog();
     void setLfo(int newIndex);
     void displayLfoData(int index);
+    void refreshBank(bool force = false);
+    void layoutBank();
+    void removeBankLfo(int index);
+    void revealSelectedLfo();
 
     FireAudioProcessor& processor;
 
     float scale = 1.0f;
 
     // --- Data Model ---
-    // The LfoPanel owns the data for all 4 LFOs.
+    // A stable slot identity survives deletion of its neighbours.
     int currentLfoIndex = 0;
 
     // --- UI Components ---
     LfoEditor lfoEditor;
 
-    std::array<std::unique_ptr<PrimaryTextButton>, 4> lfoSelectButtons;
+    std::array<std::unique_ptr<PrimaryTextButton>, fire::lfo_bank::capacity> lfoSelectButtons;
+    std::array<CloseButton, fire::lfo_bank::capacity> removeLfoButtons;
+    class BankContent final : public juce::Component
+    {
+    public:
+        explicit BankContent(LfoPanel& p) : owner(p) {}
+        void paint(juce::Graphics& g) override
+        {
+            owner.paintSelection(g);
+            for (int slot : owner.visibleLfoSlots)
+            {
+                const auto bounds = owner.lfoSelectButtons[static_cast<size_t>(slot)]->getBounds().toFloat();
+                g.setColour(fire::ui::lfoBankColour(slot).withAlpha(slot == owner.currentLfoIndex ? 1.0f : 0.5f));
+                g.fillEllipse(bounds.getX() + 13 * owner.scale, bounds.getCentreY() - 2 * owner.scale,
+                              4 * owner.scale, 4 * owner.scale);
+            }
+        }
+    private:
+        LfoPanel& owner;
+    } bankContent {*this};
+    juce::Viewport bankViewport;
+    PrimaryTextButton addLfoButton { "+" };
+    juce::Label emptyBankLabel;
+    std::array<bool, fire::lfo_bank::capacity> bankPresence {};
+    std::vector<int> visibleLfoSlots;
+    std::atomic<bool> bankRefreshPending {true};
+    std::atomic<std::uint64_t> bankEpoch {0};
+    std::uint64_t presentedBankEpoch = 0, selectionGeneration = 0;
+    int bankRowPitch = 1;
 
     // --- UI Components for mode selection ---
     PrimaryTextButton editModeButton { "Edit Mode" };
@@ -456,8 +494,8 @@ private:
     bool isDraggingPhaseSlider = false;
     std::atomic<bool> pendingRateSliderUpdate { false };
     std::atomic<unsigned int> pendingSmoothnessUpdates { 0 };
-    std::array<juce::String, 4> syncParameterIDs;
-    std::array<juce::String, 4> smoothParameterIDs;
+    std::array<juce::String, fire::lfo_bank::capacity> syncParameterIDs;
+    std::array<juce::String, fire::lfo_bank::capacity> smoothParameterIDs;
 
     juce::Component::SafePointer<juce::DialogWindow> modulationMatrixDialog;
     std::uint64_t modulationMatrixDialogSessionGeneration = 0;

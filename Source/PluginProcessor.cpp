@@ -193,20 +193,19 @@ int countDirectChildrenWithTagName(const juce::XmlElement& parent,
     return count;
 }
 
-bool isValidVersionedHostLfoState(const juce::XmlElement& lfoState) noexcept
+bool isValidVersionedHostLfoState(const juce::XmlElement& lfoState, int expectedCount) noexcept
 {
     if (! lfoState.hasTagName("LFO_STATE")
-        || lfoState.getNumChildElements() != 4)
+        || lfoState.getNumChildElements() != expectedCount)
         return false;
 
-    std::array<bool, 4> seenIndices {};
+    std::array<bool, fire::lfo_bank::capacity> seenIndices {};
     for (auto* lfo : lfoState.getChildIterator())
     {
         int index = -1;
         if (! lfo->hasTagName("LFO")
             || ! parseStrictNonNegativeIntegerAttribute(*lfo, "index", index)
-            || ! juce::isPositiveAndBelow(index,
-                                          static_cast<int>(seenIndices.size()))
+            || ! juce::isPositiveAndBelow(index, expectedCount)
             || seenIndices[static_cast<size_t>(index)])
         {
             return false;
@@ -272,7 +271,8 @@ bool isValidVersionedHostLfoState(const juce::XmlElement& lfoState) noexcept
 
 bool isValidVersionedHostRoutingState(
     const juce::XmlElement& routingState,
-    juce::AudioProcessorValueTreeState& parameterState) noexcept
+    juce::AudioProcessorValueTreeState& parameterState,
+    int sourceCount) noexcept
 {
     if (! routingState.hasTagName("MODULATION_STATE")
         || routingState.getNumChildElements()
@@ -290,7 +290,7 @@ bool isValidVersionedHostRoutingState(
             || ! parseStrictNonNegativeIntegerAttribute(*routing,
                                                         "source",
                                                         source)
-            || ! juce::isPositiveAndBelow(source, 4)
+            || ! juce::isPositiveAndBelow(source, sourceCount)
             || ! routing->hasAttribute("target")
             || ! hasStrictFiniteAttributeInRange(*routing,
                                                  "depth",
@@ -1315,7 +1315,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
 
     dryBuffer.setSize(numChannels, maximumBlockSize);
     dcFilterDryBuffer.setSize(numChannels, maximumBlockSize);
-    upsampledLfoOutputs.setSize(4, maximumBlockSize * 4);
+    upsampledLfoOutputs.setSize(fire::lfo_bank::capacity, maximumBlockSize * 4);
     safePeakEnvelopeBuffer.setSize(1, maximumBlockSize);
     safePeakEnvelopeBuffer.clear();
 
@@ -1721,23 +1721,35 @@ void BandProcessor::processDriveShapeStage(juce::AudioBuffer<float>& buffer,
         auto oversampledBlock = oversampling->processSamplesUp(block);
 
         // --- LFO Upsampling ---
-        upsampledLfoOutputs.setSize(lfoOutputs.getNumChannels(),
+        upsampledLfoOutputs.setSize(juce::jmin(fire::lfo_bank::capacity, lfoOutputs.getNumChannels()),
                                     static_cast<int>(oversampledBlock.getNumSamples()),
                                     false,
                                     false,
                                     true);
-        upsampledLfoOutputs.clear();
-        if (lfoOutputs.getNumSamples() > 0 && upsampledLfoOutputs.getNumSamples() > 0)
+        if (upsampledLfoOutputs.getNumSamples() > 0)
         {
+            std::array<bool, fire::lfo_bank::capacity> neededSources {};
+            for (const int source : {params.driveLfoSourceIndex, params.biasLfoSourceIndex,
+                                     params.recLfoSourceIndex, params.shapeMixLfoSourceIndex})
+                if (juce::isPositiveAndBelow(source, upsampledLfoOutputs.getNumChannels()))
+                    neededSources[static_cast<size_t>(source)] = true;
             const int baseSamplesInChunk = buffer.getNumSamples();
             const int oversamplingRatio = baseSamplesInChunk > 0
                                               ? upsampledLfoOutputs.getNumSamples() / baseSamplesInChunk
                                               : 1;
             const int safeOversamplingRatio = juce::jmax(1, oversamplingRatio);
 
-            for (int channel = 0; channel < lfoOutputs.getNumChannels(); ++channel)
+            for (int channel = 0; channel < upsampledLfoOutputs.getNumChannels(); ++channel)
             {
+                // Only these four providers run at the oversampled rate.
+                // Unassigned/dormant bank channels are never read by this stage.
+                if (! neededSources[static_cast<size_t>(channel)]) continue;
                 auto* dest = upsampledLfoOutputs.getWritePointer(channel);
+                if (lfoOutputs.getNumSamples() <= 0)
+                {
+                    juce::FloatVectorOperations::clear(dest, upsampledLfoOutputs.getNumSamples());
+                    continue;
+                }
                 const auto* src = lfoOutputs.getReadPointer(channel);
 
                 if (lfoOutputs.getNumSamples() == 1)
@@ -2851,8 +2863,9 @@ void FireAudioProcessor::initialiseParameterCache()
         parameters.mix = indexed(MIX_ID, i);
         parameters.shapeMix = indexed(SHAPE_MIX_ID, i);
 
-        lfoSmoothParameters[static_cast<size_t>(i)] = indexed(LFO_SMOOTH_ID, i).raw;
     }
+    for (int i = 0; i < fire::lfo_bank::capacity; ++i)
+        lfoSmoothParameters[static_cast<size_t>(i)] = indexed(LFO_SMOOTH_ID, i).raw;
 
     for (int i = 0; i < static_cast<int>(crossoverFrequencyParameters.size()); ++i)
         crossoverFrequencyParameters[static_cast<size_t>(i)] = indexed(FREQ_ID, i);
@@ -3499,7 +3512,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     mWetBuffer.clear();
     hostBypassWetBuffer.setSize(outputChannels, maximumBlockSize);
     hostBypassWetBuffer.clear();
-    lfoOutputBuffer.setSize(4, maximumBlockSize);
+    lfoOutputBuffer.setSize(fire::lfo_bank::capacity, maximumBlockSize);
     lfoOutputBuffer.clear();
     lofiDryBuffer.setSize(outputChannels, maximumBlockSize);
     lofiDryBuffer.clear();
@@ -5052,7 +5065,7 @@ void FireAudioProcessor::processWetBlock(
         multibandTopologyResetGeneration.load(std::memory_order_acquire);
     lastAudioCallbackGenerationAtStart = topologySequenceAtCallbackStart;
 
-    lfoOutputBuffer.setSize(4, numSamples, false, false, true);
+    lfoOutputBuffer.setSize(fire::lfo_bank::capacity, numSamples, false, false, true);
     lfoOutputBuffer.clear();
 
     // Routes, staged shapes and every scalar DSP recipe are selected under
@@ -5336,6 +5349,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("moduleOrderSchemaVersion", 1);
     xmlState.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xmlState.setAttribute("eqSchemaVersion", 1);
+    xmlState.setAttribute("lfoBankSchemaVersion", fire::lfo_bank::schemaVersion);
     xmlState.setAttribute("savedParameterCount",
                           mainState.parameterState.getNumChildren());
 
@@ -5507,6 +5521,22 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
              && (! parseStrictNonNegativeIntegerAttribute(*xmlState, "eqSchemaVersion", version) || version != 1))
             || eqParameterCount != fire::eq::appendedParameterCount) return;
     }
+    int lfoBankParameterCount = 0;
+    for (const auto& id : incomingParameterIDs)
+        if (fire::lfo_bank::isAppendedParameterID(id)) ++lfoBankParameterCount;
+    const bool hasLfoBankState = xmlState->hasAttribute("lfoBankSchemaVersion") || lfoBankParameterCount > 0;
+    const int lfoCountInState = hasLfoBankState ? fire::lfo_bank::capacity : fire::lfo_bank::defaultCount;
+    if (hasLfoBankState)
+    {
+        int version = fire::lfo_bank::schemaVersion;
+        const auto* lfoState = xmlState->getChildByName("LFO_STATE");
+        if ((xmlState->hasAttribute("lfoBankSchemaVersion")
+             && (! parseStrictNonNegativeIntegerAttribute(*xmlState, "lfoBankSchemaVersion", version)
+                 || version != fire::lfo_bank::schemaVersion))
+            || lfoBankParameterCount != fire::lfo_bank::appendedParameterCount
+            || lfoState == nullptr || countDirectChildrenWithTagName(*xmlState, "LFO_STATE") != 1
+            || ! isValidVersionedHostLfoState(*lfoState, lfoCountInState)) return;
+    }
     if (hasStateFormatVersion != hasSavedParameterCount)
         return;
 
@@ -5529,9 +5559,9 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             || countDirectChildrenWithTagName(*xmlState, "LFO_STATE") != 1
             || countDirectChildrenWithTagName(*xmlState,
                                               "MODULATION_STATE") != 1
-            || ! isValidVersionedHostLfoState(*versionedLfoState)
+            || ! isValidVersionedHostLfoState(*versionedLfoState, lfoCountInState)
             || ! isValidVersionedHostRoutingState(*versionedRoutingState,
-                                                  treeState)
+                                                  treeState, lfoCountInState)
             || xmlState->getChildByName("AB_STATE") == nullptr)
         {
             return;
@@ -5571,7 +5601,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     const auto parameterStateTemplate = treeState.copyState();
     juce::ValueTree treeToLoad(parameterStateTemplate.getType());
     juce::StringArray loadedParameterIDs;
-    std::array<bool, 4> smoothnessPresentInParameterState {};
+    std::array<bool, fire::lfo_bank::capacity> smoothnessPresentInParameterState {};
 
     const auto findParameterState = [](juce::ValueTree& state, const juce::String& parameterID)
     {
@@ -5704,9 +5734,9 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             shapeState.setProperty("value", legacyShapeValue, nullptr);
     }
 
-    std::array<LfoData, 4> loadedLfoData;
-    std::array<bool, 4> loadedLfoSmoothnessFromXml {};
-    std::array<bool, 4> loadedLfoIndices {};
+    std::array<LfoData, fire::lfo_bank::capacity> loadedLfoData;
+    std::array<bool, fire::lfo_bank::capacity> loadedLfoSmoothnessFromXml {};
+    std::array<bool, fire::lfo_bank::capacity> loadedLfoIndices {};
     if (auto* lfoState = xmlState->getChildByName("LFO_STATE"))
     {
         for (auto* lfoXml : lfoState->getChildIterator())
@@ -6860,6 +6890,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
             else if (field == Field::q)
                 parameters.push_back(std::make_unique<PFloat>(id, name + "Q", juce::NormalisableRange<float>(0.1f, 18.0f, 0.01f), 0.70710678f));
         }
+
+    // Keep all historical timing parameter positions intact. New timing groups
+    // and presence controls form one append-only AU v7 family.
+    for (int index = fire::lfo_bank::defaultCount; index < fire::lfo_bank::capacity; ++index)
+    {
+        using namespace fire::lfo_bank;
+        const auto prefix = "LFO " + juce::String(index + 1) + " ";
+        parameters.push_back(std::make_unique<PBool>(juce::ParameterID {parameterID(index, Field::syncMode), 7}, prefix + "Sync", true));
+        parameters.push_back(std::make_unique<PChoice>(juce::ParameterID {parameterID(index, Field::rateSync), 7}, prefix + "Synced Rate", lfoRateSyncDivisions, 8));
+        parameters.push_back(std::make_unique<PFloat>(juce::ParameterID {parameterID(index, Field::rateHz), 7}, prefix + "Rate",
+            juce::NormalisableRange<float>(0.01f, 100.0f, 0.01f, 0.3f), 1.0f, "Hz"));
+        parameters.push_back(std::make_unique<PFloat>(juce::ParameterID {parameterID(index, Field::smoothness), 7}, prefix + "Smoothness",
+            juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+        parameters.push_back(std::make_unique<PFloat>(juce::ParameterID {parameterID(index, Field::phase), 7}, prefix + "Phase",
+            juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    }
+    for (int index = 0; index < fire::lfo_bank::capacity; ++index)
+        parameters.push_back(std::make_unique<PBool>(
+            juce::ParameterID {fire::lfo_bank::presentParameterID(index), 7},
+            "LFO " + juce::String(index + 1) + " Present", fire::lfo_bank::defaultPresent(index)));
 
     return { parameters.begin(), parameters.end() };
 }
@@ -8866,7 +8916,7 @@ FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParam
     {
         if (routing.targetParameterID == parameterID)
         {
-            if (juce::isPositiveAndBelow(routing.sourceLfoIndex, 4))
+            if (isLfoPresent(routing.sourceLfoIndex))
             {
                 const float unipolarLfoValue = lfoManager->getLfoOutput(routing.sourceLfoIndex);
                 float finalLfoValue = routing.isBipolar ? (unipolarLfoValue * 2.0f - 1.0f) : unipolarLfoValue;
@@ -9019,6 +9069,69 @@ void FireAudioProcessor::lfoDataHasChanged()
     updateHostDisplay(
         juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
     modulationUiChangeBroadcaster.sendChangeMessage();
+}
+
+bool FireAudioProcessor::isLfoPresent(int index) const noexcept
+{
+    return lfoManager->isLfoPresent(index);
+}
+
+int FireAudioProcessor::addLfo()
+{
+    int slot = -1;
+    {
+        beginMultibandTopologyEdit();
+        const juce::ScopeGuard publish { [this] { finishMainStateEdit(false); } };
+        for (int index = 0; index < fire::lfo_bank::capacity; ++index)
+            if (! isLfoPresent(index)) { slot = index; break; }
+        if (slot < 0) return -1;
+        // Invalidate old menus/editor contexts before the first synchronous
+        // parameter notification can re-enter the UI for this reused slot.
+        lfoManager->resetLfoSlot(slot);
+        for (int field = 0; field < fire::lfo_bank::timingFieldCount; ++field)
+            if (auto* parameter = treeState.getParameter(fire::lfo_bank::parameterID(
+                    slot, static_cast<fire::lfo_bank::Field>(field))))
+            {
+                parameter->beginChangeGesture();
+                parameter->setValueNotifyingHost(parameter->getDefaultValue());
+                parameter->endChangeGesture();
+            }
+        if (auto* present = treeState.getParameter(fire::lfo_bank::presentParameterID(slot)))
+        {
+            present->beginChangeGesture();
+            present->setValueNotifyingHost(1.0f);
+            present->endChangeGesture();
+        }
+    }
+    lfoDataHasChanged();
+    return slot;
+}
+
+bool FireAudioProcessor::removeLfo(int index)
+{
+    if (! fire::lfo_bank::validIndex(index)) return false;
+    {
+        beginMultibandTopologyEdit();
+        const juce::ScopeGuard publish { [this] { finishMainStateEdit(false); } };
+        if (! isLfoPresent(index)) return false;
+        lfoManager->resetLfoSlot(index);
+        if (auto* present = treeState.getParameter(fire::lfo_bank::presentParameterID(index)))
+        {
+            present->beginChangeGesture();
+            present->setValueNotifyingHost(0.0f);
+            present->endChangeGesture();
+        }
+        for (int field = 0; field < fire::lfo_bank::timingFieldCount; ++field)
+            if (auto* parameter = treeState.getParameter(fire::lfo_bank::parameterID(
+                    index, static_cast<fire::lfo_bank::Field>(field))))
+            {
+                parameter->beginChangeGesture();
+                parameter->setValueNotifyingHost(parameter->getDefaultValue());
+                parameter->endChangeGesture();
+            }
+    }
+    lfoDataHasChanged();
+    return true;
 }
 
 std::uint64_t FireAudioProcessor::getModulationUiRevision() const noexcept
@@ -9323,10 +9436,10 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
     // comparing XML text. Older presets omit attributes whose loader defaults
     // are well-defined, and decimal formatting is not part of the preset's
     // audible state.
-    std::array<LfoData, 4> expectedLfoData;
-    std::array<bool, 4> expectedSmoothnessFromLfoXml {};
-    std::array<bool, 4> expectedSmoothnessFromParameter {};
-    std::array<bool, 4> loadedLfoIndices {};
+    std::array<LfoData, fire::lfo_bank::capacity> expectedLfoData;
+    std::array<bool, fire::lfo_bank::capacity> expectedSmoothnessFromLfoXml {};
+    std::array<bool, fire::lfo_bank::capacity> expectedSmoothnessFromParameter {};
+    std::array<bool, fire::lfo_bank::capacity> loadedLfoIndices {};
     for (int i = 0; i < static_cast<int>(expectedSmoothnessFromParameter.size()); ++i)
         expectedSmoothnessFromParameter[static_cast<size_t>(i)] = presetXml.hasAttribute(
             ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i));

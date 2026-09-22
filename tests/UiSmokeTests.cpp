@@ -153,16 +153,15 @@ juce::Button* findButtonWithText(juce::Component& root, const juce::String& text
     return nullptr;
 }
 
-juce::Slider* findSliderAttachedToLabel(juce::Component& root, const juce::String& labelText)
+juce::Slider* findSliderWithTitle(juce::Component& root, const juce::String& title)
 {
-    if (auto* label = dynamic_cast<juce::Label*>(&root);
-        label != nullptr && label->getText() == labelText)
-        return dynamic_cast<juce::Slider*>(label->getAttachedComponent());
+    if (auto* slider = dynamic_cast<juce::Slider*>(&root);
+        slider != nullptr && slider->getTitle() == title)
+        return slider;
 
-    for (int childIndex = 0; childIndex < root.getNumChildComponents(); ++childIndex)
-        if (auto* child = root.getChildComponent(childIndex))
-            if (auto* slider = findSliderAttachedToLabel(*child, labelText))
-                return slider;
+    for (auto* child : root.getChildren())
+        if (auto* slider = findSliderWithTitle(*child, title))
+            return slider;
 
     return nullptr;
 }
@@ -248,7 +247,7 @@ void setParameterValue(FireAudioProcessor& processor,
     parameter->setValueNotifyingHost(parameter->convertTo0to1(plainValue));
 }
 
-void checkLfoSelectionClosesSliderGesture(const juce::String& labelText,
+void checkLfoSelectionClosesSliderGesture(const juce::String& sliderTitle,
                                           const juce::String& parameterBase)
 {
     FireAudioProcessor processor;
@@ -263,7 +262,7 @@ void checkLfoSelectionClosesSliderGesture(const juce::String& labelText,
     panel.setBounds(0, 0, 1000, 500);
     panel.setVisible(true);
     auto* slider = dynamic_cast<PrimarySlider*>(
-        findSliderAttachedToLabel(panel, labelText));
+        findSliderWithTitle(panel, sliderTitle));
     auto* lfoTwoButton = findButtonWithText(panel, "LFO 2");
     const auto oldParameterID =
         ParameterIDAndName::getIDString(parameterBase, 0);
@@ -741,7 +740,7 @@ TEST_CASE("LFO Rate text entry is available only in Free Hz mode",
     LfoPanel lfoPanel(processor);
     lfoPanel.setBounds(0, 0, 1000, 500);
 
-    auto* rateSlider = findSliderAttachedToLabel(lfoPanel, "Rate");
+    auto* rateSlider = findSliderWithTitle(lfoPanel, "LFO rate");
     REQUIRE(rateSlider != nullptr);
     REQUIRE(rateSlider->getTextBoxPosition() == juce::Slider::TextBoxBelow);
     CHECK_FALSE(rateSlider->isTextBoxEditable());
@@ -788,7 +787,7 @@ TEST_CASE("LFO Rate defers Sync attachment changes until the active host gesture
     LfoPanel lfoPanel(processor);
     lfoPanel.setBounds(0, 0, 1000, 500);
 
-    auto* rateSlider = findSliderAttachedToLabel(lfoPanel, "Rate");
+    auto* rateSlider = findSliderWithTitle(lfoPanel, "LFO rate");
     auto* freeRate = processor.treeState.getParameter(freeRateID);
     auto* syncRate = processor.treeState.getParameter(syncRateID);
     REQUIRE(rateSlider != nullptr);
@@ -842,9 +841,9 @@ TEST_CASE("LFO Rate defers Sync attachment changes until the active host gesture
 TEST_CASE("LFO selection closes old Slider gestures before rebinding attachments",
           "[ui][lfo][gesture][attachment][lifecycle]")
 {
-    checkLfoSelectionClosesSliderGesture("Rate", LFO_RATE_HZ_ID);
-    checkLfoSelectionClosesSliderGesture("Smooth", LFO_SMOOTH_ID);
-    checkLfoSelectionClosesSliderGesture("Phase", LFO_PHASE_ID);
+    checkLfoSelectionClosesSliderGesture("LFO rate", LFO_RATE_HZ_ID);
+    checkLfoSelectionClosesSliderGesture("LFO smoothness", LFO_SMOOTH_ID);
+    checkLfoSelectionClosesSliderGesture("LFO phase", LFO_PHASE_ID);
 }
 
 TEST_CASE("LFO selection discards text that belongs to the old attachment",
@@ -873,7 +872,7 @@ TEST_CASE("LFO selection discards text that belongs to the old attachment",
         [&] { panel.removeFromDesktop(); }
     };
     auto* rateSlider = dynamic_cast<PrimarySlider*>(
-        findSliderAttachedToLabel(panel, "Rate"));
+        findSliderWithTitle(panel, "LFO rate"));
     auto* lfoTwoButton = findButtonWithText(panel, "LFO 2");
     REQUIRE(rateSlider != nullptr);
     REQUIRE(lfoTwoButton != nullptr);
@@ -915,7 +914,7 @@ TEST_CASE("LFO Slider gestures close at panel and editor lifecycle boundaries",
         panel->setBounds(0, 0, 1000, 500);
         panel->setVisible(true);
         auto* slider = dynamic_cast<PrimarySlider*>(
-            findSliderAttachedToLabel(*panel, "Smooth"));
+            findSliderWithTitle(*panel, "LFO smoothness"));
         auto* parameter = processor.treeState.getParameter(
             ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 0));
         REQUIRE(slider != nullptr);
@@ -947,7 +946,7 @@ TEST_CASE("LFO Slider gestures close at panel and editor lifecycle boundaries",
         auto panel = std::make_unique<LfoPanel>(processor);
         panel->setBounds(0, 0, 1000, 500);
         auto* slider = dynamic_cast<PrimarySlider*>(
-            findSliderAttachedToLabel(*panel, "Phase"));
+            findSliderWithTitle(*panel, "LFO phase"));
         auto* parameter = processor.treeState.getParameter(
             ParameterIDAndName::getIDString(LFO_PHASE_ID, 0));
         REQUIRE(slider != nullptr);
@@ -985,7 +984,7 @@ TEST_CASE("LFO Slider gestures close at panel and editor lifecycle boundaries",
         selectWorkspace(*editor, "MOD FORGE");
 
         auto* slider = dynamic_cast<PrimarySlider*>(
-            findSliderAttachedToLabel(*editor, "Rate"));
+            findSliderWithTitle(*editor, "LFO rate"));
         auto* parameter = processor.treeState.getParameter(
             ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, 0));
         REQUIRE(slider != nullptr);

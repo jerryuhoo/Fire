@@ -408,7 +408,8 @@ public:
             layout.sliderBounds = { 0, top, slider.getWidth(), juce::jmax(1, bottom - top) };
             return layout;
         }
-        if (dynamic_cast<ModulatableSlider*>(&slider) == nullptr)
+        if (dynamic_cast<ModulatableSlider*>(&slider) == nullptr
+            && ! static_cast<bool>(slider.getProperties().getWithDefault("fireOrdinaryKnob", false)))
             return juce::LookAndFeel_V4::getSliderLayout(slider);
 
         juce::Slider::SliderLayout layout;

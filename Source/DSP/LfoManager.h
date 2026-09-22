@@ -17,10 +17,12 @@
 #include "LfoData.h"
 #include "LfoEngine.h"
 #include "ModulationRouting.h"
+#include "../Utility/LfoBankParameters.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <memory>
 
 class LfoManager
 {
@@ -62,9 +64,16 @@ public:
             float freeRate = 1.0f;
             float phaseOffset = 0.0f;
             float smoothness = 0.0f;
+            bool present = false;
+            std::uint32_t generation = 0;
         };
 
-        std::array<Parameters, 4> lfos {};
+        std::array<Parameters, fire::lfo_bank::capacity> lfos {};
+        AudioThreadParameterSnapshot()
+        {
+            for (int index = 0; index < fire::lfo_bank::defaultCount; ++index)
+                lfos[static_cast<size_t>(index)].present = true;
+        }
     };
 
     /** Captures the fixed LFO timing/smoothness controls from APVTS atomics.
@@ -223,11 +232,18 @@ public:
         std::uint64_t expectedRevision,
         std::uint64_t& resultingRevision);
     bool replaceLfoDataAndRoutings(
-        const std::array<LfoData, 4>& newLfoData,
+        const std::array<LfoData, fire::lfo_bank::capacity>& newLfoData,
         juce::Array<ModulationRouting> newRoutings);
+    bool replaceLfoDataAndRoutings(
+        const std::array<LfoData, fire::lfo_bank::defaultCount>& newLfoData,
+        juce::Array<ModulationRouting> newRoutings);
+    bool isLfoPresent(int index) const noexcept;
+    // Message-thread slot lifecycle, called inside the processor's coherent
+    // parameter transaction after the five timing values have been reset.
+    void resetLfoSlot(int index);
 
     // Allow access to LFO engines for UI phase display
-    const std::array<LfoEngine, 4>& getLfoEngines() const { return lfoEngines; }
+    const std::array<LfoEngine, fire::lfo_bank::capacity>& getLfoEngines() const { return lfoEngines; }
     float getLfoPhase(int lfoIndex) const;
     bool isDawPlaying() const { return isPlaying.load(std::memory_order_relaxed); }
     const juce::StringArray& getLfoRateSyncDivisions() const;
@@ -248,6 +264,7 @@ private:
         std::atomic<float>* freeRate = nullptr;
         std::atomic<float>* phaseOffset = nullptr;
         std::atomic<float>* smoothness = nullptr;
+        std::atomic<float>* present = nullptr;
     };
 
     struct RuntimeRouting
@@ -296,11 +313,18 @@ private:
 
     juce::AudioProcessorValueTreeState& treeState;
 
-    std::array<LfoEngine, 4> lfoEngines;
-    std::array<LfoParameterPointers, 4> lfoParameters;
-    std::array<juce::String, 4> smoothnessParameterIDs;
+    // Each engine owns prebuilt smoothing tables. Keep the fixed bank on the
+    // heap so standalone/stack-owned managers do not exceed thread stack size.
+    using EngineBank = std::array<LfoEngine, fire::lfo_bank::capacity>;
+    std::unique_ptr<EngineBank> engineStorage = std::make_unique<EngineBank>();
+    EngineBank& lfoEngines = *engineStorage;
+    std::array<LfoParameterPointers, fire::lfo_bank::capacity> lfoParameters;
+    std::array<juce::String, fire::lfo_bank::capacity> smoothnessParameterIDs;
     std::vector<LfoData> lfoData;
-    std::array<std::uint64_t, 4> lfoDataRevisions {};
+    std::array<std::uint64_t, fire::lfo_bank::capacity> lfoDataRevisions {};
+    std::array<std::atomic<std::uint32_t>, fire::lfo_bank::capacity> slotGenerations {};
+    std::array<std::uint32_t, fire::lfo_bank::capacity> appliedSlotGenerations {};
+    std::array<bool, fire::lfo_bank::capacity> previouslyPresent {};
 
     juce::CriticalSection dataAccessLock;
 
@@ -327,16 +351,16 @@ private:
     // Audio-thread-owned bookkeeping for Phase while no absolute host timeline
     // is available. The knob is an offset, so changes are applied as a delta
     // instead of being added again at every callback boundary.
-    std::array<float, 4> appliedPhaseOffsets {};
-    std::array<bool, 4> phaseOffsetInitialised {};
+    std::array<float, fire::lfo_bank::capacity> appliedPhaseOffsets {};
+    std::array<bool, fire::lfo_bank::capacity> phaseOffsetInitialised {};
 
     // Audio-thread-only signature of the timing recipe used on the previous
     // callback. It distinguishes a real live parameter/transport change from
     // the host's ordinary absolute re-anchor at every block boundary.
-    std::array<bool, 4> timingSignatureInitialised {};
-    std::array<bool, 4> previousSyncModes {};
-    std::array<float, 4> previousActiveRateKeys {};
-    std::array<bool, 4> usedAbsoluteTimelineLastBlock {};
+    std::array<bool, fire::lfo_bank::capacity> timingSignatureInitialised {};
+    std::array<bool, fire::lfo_bank::capacity> previousSyncModes {};
+    std::array<float, fire::lfo_bank::capacity> previousActiveRateKeys {};
+    std::array<bool, fire::lfo_bank::capacity> usedAbsoluteTimelineLastBlock {};
 
     std::atomic<bool> isPlaying { false };
 

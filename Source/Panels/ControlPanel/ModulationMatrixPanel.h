@@ -57,6 +57,7 @@ public:
 
 private:
     friend struct ModulationMatrixRoutingComboBoxTestAccess;
+    friend struct LfoBankUiTestAccess;
 
     bool keyPressed(const juce::KeyPress& key) override;
     void mouseDown(const juce::MouseEvent& event) override;

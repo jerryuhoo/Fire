@@ -113,6 +113,12 @@ public:
         if (juce::approximatelyEqual(scale, next)) return;
         scale = next; resized();
     }
+    void setKnobWidth(int width)
+    {
+        if (knobWidth == width) return;
+        knobWidth = width;
+        resized();
+    }
     void selectNode(int slot)
     {
         if (slot < 0 || slot >= capacity || ! processor.getEqNodeState(slot).present) return;
@@ -299,8 +305,11 @@ public:
         slopeMenu.setBounds(utility.removeFromTop(juce::roundToInt(30 * scale)));
         area.removeFromRight(juce::roundToInt(15 * scale));
         const int gap = juce::roundToInt(10 * scale);
-        const int width = juce::jmax(1, juce::jmin(juce::roundToInt(105 * scale), (area.getWidth() - 2 * gap) / 3));
-        const int height = juce::jmin(area.getHeight(), width + juce::roundToInt(38 * scale));
+        const int width = fire::ui::ordinaryKnobWidth(scale, {
+            knobWidth > 0 ? knobWidth : fire::ui::ordinaryKnobWidth(scale),
+            (area.getWidth() - 2 * gap) / 3,
+            area.getHeight() - juce::roundToInt(fire::ui::Metrics::knobValueHeight * scale)});
+        const int height = fire::ui::ordinaryKnobHeight(width, scale);
         auto row = area.withSizeKeepingCentre(width * 3 + gap * 2, height);
         for (int control = 0; control < 3; ++control)
         {
@@ -430,6 +439,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> typeAttachment, slopeAttachment;
     int selected = -1, presentedSelection = -2, paintSignature = -1;
     float scale = 1.0f;
+    int knobWidth = 0;
     std::uint64_t generation = 0;
     std::atomic<std::uint64_t> presenceEpoch {0};
     std::uint64_t presentedPresenceEpoch = 0;

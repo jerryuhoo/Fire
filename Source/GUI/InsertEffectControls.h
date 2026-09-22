@@ -141,20 +141,28 @@ public:
         scale = std::isfinite(value) && value > 0.0f ? value : 1.0f;
         resized();
     }
+    void setKnobWidth(int width)
+    {
+        if (knobWidth == width) return;
+        knobWidth = width;
+        resized();
+    }
     void resized() override
     {
         const auto gap = juce::roundToInt(8.0f * scale);
         const auto footer = juce::roundToInt(fire::ui::Metrics::knobValueHeight * scale);
         auto bounds = getLocalBounds();
         const int columns = usesExpandedLayout() ? 6 : 3;
-        const auto size = juce::jmax(1, std::min({juce::roundToInt(fire::ui::Metrics::knobWidth * scale),
+        const auto size = fire::ui::ordinaryKnobWidth(scale, {
+            knobWidth > 0 ? knobWidth : fire::ui::ordinaryKnobWidth(scale),
             (bounds.getWidth() - gap * (columns - 1)) / columns,
-            (bounds.getHeight() - gap) / 2 - footer}));
-        auto area = bounds.withSizeKeepingCentre(size * columns + gap * (columns - 1), (size + footer) * 2 + gap);
+            (bounds.getHeight() - gap) / 2 - footer});
+        const auto height = fire::ui::ordinaryKnobHeight(size, scale);
+        auto area = bounds.withSizeKeepingCentre(size * columns + gap * (columns - 1), height * 2 + gap);
         if (usesExpandedLayout())
         {
             const std::array<size_t, 6> order { 3, 0, 2, 1, 4, 5 };
-            auto top = area.removeFromTop(size + footer);
+            auto top = area.removeFromTop(height);
             area.removeFromTop(gap);
             for (auto index : order)
             {
@@ -179,7 +187,7 @@ public:
                 : std::array<size_t, 6> { 0, 1, 2, 3, 4, 5 };
             for (size_t row = 0; row < 2; ++row)
             {
-                auto strip = area.removeFromTop(size + footer); area.removeFromTop(gap);
+                auto strip = area.removeFromTop(height); area.removeFromTop(gap);
                 for (size_t column = 0; column < 3; ++column)
                 {
                     if (auto* slider = sliders[order[row * 3 + column]]) slider->setBounds(strip.removeFromLeft(size));
@@ -264,4 +272,5 @@ private:
     fire::effects::Type type = fire::effects::Type::none;
     bool active = false;
     float scale = 1.0f;
+    int knobWidth = 0;
 };

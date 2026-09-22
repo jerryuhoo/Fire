@@ -131,6 +131,7 @@ private:
     friend struct MeterFreshnessTestAccess;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct ModulationUiDispatchTestAccess;
+    friend struct LfoBankUiTestAccess;
     friend struct EditorUpdateCheckLifecycleTestAccess;
     friend struct EditorHiddenSessionTestAccess;
     friend struct EditorBackgroundCacheTestAccess;
@@ -221,6 +222,9 @@ private:
 
     bool isLfoAssignMode = false;
     int lfoSourceForAssignment = 0;
+    std::uint64_t lfoAssignmentSourceRevision = 0;
+    std::uint64_t lfoAssignmentSessionGeneration = 0;
+    std::uint32_t displayedLfoPresenceMask = (1u << fire::lfo_bank::defaultCount) - 1u;
     float assignModePulseAlpha = 0.0f;
     float assignModePulseAngle = 0.0f;
 

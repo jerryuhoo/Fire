@@ -11,6 +11,7 @@
 #include "Preset.h"
 #include "../../PluginProcessor.h"
 #include "../../Utility/StrictNumberParser.h"
+#include "../../Utility/LfoBankParameters.h"
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -90,19 +91,21 @@ bool isStrictNumberInRange(const juce::XmlElement& xml,
            && parsed <= maximum;
 }
 
-bool isValidLfoState(const juce::XmlElement& lfoState) noexcept
+bool isValidLfoState(const juce::XmlElement& lfoState, bool legacyBank) noexcept
 {
+    const int expectedCount = legacyBank ? fire::lfo_bank::defaultCount
+                                         : fire::lfo_bank::capacity;
     if (! lfoState.hasTagName("LFO_STATE")
-        || lfoState.getNumChildElements() != 4)
+        || lfoState.getNumChildElements() != expectedCount)
         return false;
 
-    std::array<bool, 4> seenIndices {};
+    std::array<bool, fire::lfo_bank::capacity> seenIndices {};
     for (auto* lfo : lfoState.getChildIterator())
     {
         int index = -1;
         if (! lfo->hasTagName("LFO")
             || ! readStrictIntegerAttribute(*lfo, "index", index)
-            || ! juce::isPositiveAndBelow(index, 4)
+            || ! juce::isPositiveAndBelow(index, expectedCount)
             || seenIndices[static_cast<size_t>(index)]
             || lfo->getNumChildElements() > 2)
             return false;
@@ -146,7 +149,8 @@ bool isValidLfoState(const juce::XmlElement& lfoState) noexcept
 }
 
 bool isValidRoutingState(const juce::XmlElement& routingState,
-                         const juce::AudioProcessor& processor) noexcept
+                         const juce::AudioProcessor& processor,
+                         bool legacyBank) noexcept
 {
     if (! routingState.hasTagName("MODULATION_STATE")
         || routingState.getNumChildElements()
@@ -159,7 +163,8 @@ bool isValidRoutingState(const juce::XmlElement& routingState,
         int source = -1;
         if (! routing->hasTagName("ROUTING")
             || ! readStrictIntegerAttribute(*routing, "source", source)
-            || ! juce::isPositiveAndBelow(source, 4)
+            || ! juce::isPositiveAndBelow(source, legacyBank ? fire::lfo_bank::defaultCount
+                                                             : fire::lfo_bank::capacity)
             || ! isStrictNumberInRange(*routing, "depth", -1.0, 1.0)
             || routing->getNumChildElements() != 0)
             return false;
@@ -250,6 +255,10 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
     bool legacyWithoutEq = false;
     if (! validateParameterFamily(snapshot, processor, legacyWithoutEq, "eqSchemaVersion", fire::eq::isAppendedParameterID))
         return false;
+    bool legacyWithoutLfoBank = false;
+    if (! validateParameterFamily(snapshot, processor, legacyWithoutLfoBank, "lfoBankSchemaVersion",
+                                  fire::lfo_bank::isAppendedParameterID, fire::lfo_bank::schemaVersion))
+        return false;
 
     int expectedParameterCount = 0;
     for (const auto* parameter : processor.getParameters())
@@ -267,6 +276,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (legacyWithoutClouds && fire::clouds_params::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutEq && fire::eq::isAppendedParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutLfoBank && fire::lfo_bank::isAppendedParameterID(parameterWithID->paramID))
             continue;
         ++expectedParameterCount;
         if (! snapshot.hasAttribute(parameterWithID->paramID))
@@ -286,13 +297,13 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (child->hasTagName("LFO_STATE") && ! hasLfoState)
         {
             hasLfoState = true;
-            if (! isValidLfoState(*child))
+            if (! isValidLfoState(*child, legacyWithoutLfoBank))
                 return false;
         }
         else if (child->hasTagName("MODULATION_STATE") && ! hasRoutingState)
         {
             hasRoutingState = true;
-            if (! isValidRoutingState(*child, processor))
+            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank))
                 return false;
         }
         else
@@ -323,6 +334,10 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     bool legacyWithoutEq = false;
     if (! validateParameterFamily(xml, processor, legacyWithoutEq, "eqSchemaVersion", fire::eq::isAppendedParameterID))
         return false;
+    bool legacyWithoutLfoBank = false;
+    if (! validateParameterFamily(xml, processor, legacyWithoutLfoBank, "lfoBankSchemaVersion",
+                                  fire::lfo_bank::isAppendedParameterID, fire::lfo_bank::schemaVersion))
+        return false;
     // Unversioned and v1 files predate complete model snapshots. Preserve
     // their historical default/migration behaviour. A v2 document is an
     // explicit complete snapshot, so accepting a sparse or truncated one
@@ -351,6 +366,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
             continue;
         if (legacyWithoutEq && fire::eq::isAppendedParameterID(parameterWithID->paramID))
             continue;
+        if (legacyWithoutLfoBank && fire::lfo_bank::isAppendedParameterID(parameterWithID->paramID))
+            continue;
         ++parameterCount;
         if (! isStrictNumberInRange(xml, parameterWithID->paramID, 0.0, 1.0))
             return false;
@@ -366,13 +383,13 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         if (child->hasTagName("LFO_STATE") && ! hasLfoState)
         {
             hasLfoState = true;
-            if (! isValidLfoState(*child))
+            if (! isValidLfoState(*child, legacyWithoutLfoBank))
                 return false;
         }
         else if (child->hasTagName("MODULATION_STATE") && ! hasRoutingState)
         {
             hasRoutingState = true;
-            if (! isValidRoutingState(*child, processor))
+            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank))
                 return false;
         }
         else
@@ -400,6 +417,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("insertEffectsSchemaVersion", 1);
     xml.setAttribute("moduleOrderSchemaVersion", 1);
     xml.setAttribute("eqSchemaVersion", 1);
+    xml.setAttribute("lfoBankSchemaVersion", fire::lfo_bank::schemaVersion);
     xml.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xml.setAttribute("pluginVersion", VERSION);
 
@@ -562,7 +580,8 @@ namespace state
                     // value even though its APVTS raw value snaps to 0/1.
                     // Canonicalise this new family so Freeze/Engine, the
                     // saved snapshot and preset-equivalence checks agree.
-                    if (fire::clouds_params::isParameterID(p->paramID))
+                    if (fire::clouds_params::isParameterID(p->paramID)
+                        || fire::lfo_bank::isPresentParameterID(p->paramID))
                         if (auto* ranged = fireProc.treeState.getParameter(p->paramID))
                             valueToLoad = ranged->convertTo0to1(
                                 ranged->convertFrom0to1(valueToLoad));
@@ -571,10 +590,10 @@ namespace state
                 }
             }
 
-        std::array<LfoData, 4> lfoDataToLoad;
-        std::array<bool, 4> loadedLfoSmoothness {};
-        std::array<bool, 4> loadedSmoothnessParameter {};
-        std::array<bool, 4> loadedLfoIndices {};
+        std::array<LfoData, fire::lfo_bank::capacity> lfoDataToLoad;
+        std::array<bool, fire::lfo_bank::capacity> loadedLfoSmoothness {};
+        std::array<bool, fire::lfo_bank::capacity> loadedSmoothnessParameter {};
+        std::array<bool, fire::lfo_bank::capacity> loadedLfoIndices {};
         for (int i = 0; i < static_cast<int>(loadedSmoothnessParameter.size()); ++i)
             loadedSmoothnessParameter[static_cast<size_t>(i)] = xml.hasAttribute(
                 ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i));
@@ -639,7 +658,13 @@ namespace state
                     continue;
 
                 auto routing = ModulationRouting::readFromXml(*routingXml);
-                routing.sourceLfoIndex = juce::jlimit(0, 3, routing.sourceLfoIndex);
+                // Legacy snapshots had exactly four source identities. New
+                // snapshots keep all fixed slots and never retarget a missing source.
+                const bool extendedBank = xml.hasAttribute("lfoBankSchemaVersion")
+                    || xml.hasAttribute(fire::lfo_bank::presentParameterID(0));
+                const int sourceLimit = extendedBank ? fire::lfo_bank::capacity
+                                                      : fire::lfo_bank::defaultCount;
+                routing.sourceLfoIndex = juce::jlimit(0, sourceLimit - 1, routing.sourceLfoIndex);
                 routing.depth = std::isfinite(routing.depth) ? juce::jlimit(-1.0f, 1.0f, routing.depth) : 0.5f;
 
                 bool targetAlreadyUsed = false;
@@ -1694,7 +1719,7 @@ namespace state
             }
 
             fireProc.getLfoManager().replaceLfoDataAndRoutings(
-                std::array<LfoData, 4> {}, {});
+                std::array<LfoData, fire::lfo_bank::capacity> {}, {});
         }
         fireProc.sendChangeMessage();
         pluginProcessor.updateHostDisplay(

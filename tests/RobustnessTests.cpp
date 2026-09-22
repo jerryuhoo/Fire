@@ -1274,7 +1274,7 @@ TEST_CASE("Headless LFO smooth automation reaches the DSP state", "[lfo][state][
     processor.processBlock(buffer, midi);
 
     const auto lfoData = processor.getLfoManager().getLfoDataCopy();
-    REQUIRE(lfoData.size() == 4);
+    REQUIRE(lfoData.size() == fire::lfo_bank::capacity);
     CHECK(lfoData[1].smoothness == Catch::Approx(0.73f));
 
     LfoEngine referenceEngine;
@@ -1300,7 +1300,7 @@ TEST_CASE("Stopped LFO smoothness survives host and preset state round-trips", "
     // Deliberately do not run processBlock: this is the stopped-transport path
     // where APVTS used to be newer than the duplicated LFO_STATE value.
     const auto stoppedCopy = source.getLfoManager().getLfoDataCopy();
-    REQUIRE(stoppedCopy.size() == 4);
+    REQUIRE(stoppedCopy.size() == fire::lfo_bank::capacity);
     CHECK(stoppedCopy[2].smoothness == Catch::Approx(0.73f));
 
     juce::MemoryBlock hostState;
@@ -1313,7 +1313,7 @@ TEST_CASE("Stopped LFO smoothness survives host and preset state round-trips", "
     juce::MidiBuffer hostMidi;
     hostRestored.processBlock(hostBuffer, hostMidi);
     const auto hostRestoredData = hostRestored.getLfoManager().getLfoDataCopy();
-    REQUIRE(hostRestoredData.size() == 4);
+    REQUIRE(hostRestoredData.size() == fire::lfo_bank::capacity);
     CHECK(hostRestoredData[2].smoothness == Catch::Approx(0.73f));
 
     juce::XmlElement presetState { "PRESET" };
@@ -1326,7 +1326,7 @@ TEST_CASE("Stopped LFO smoothness survives host and preset state round-trips", "
     juce::MidiBuffer presetMidi;
     presetRestored.processBlock(presetBuffer, presetMidi);
     const auto presetRestoredData = presetRestored.getLfoManager().getLfoDataCopy();
-    REQUIRE(presetRestoredData.size() == 4);
+    REQUIRE(presetRestoredData.size() == fire::lfo_bank::capacity);
     CHECK(presetRestoredData[2].smoothness == Catch::Approx(0.73f));
 }
 
@@ -1440,7 +1440,7 @@ TEST_CASE("State round-trip preserves LFO data and upgrades legacy shape state",
     restored.processBlock(restoredBuffer, restoredMidi);
 
     const auto restoredLfos = restored.getLfoManager().getLfoDataCopy();
-    REQUIRE(restoredLfos.size() == 4);
+    REQUIRE(restoredLfos.size() == fire::lfo_bank::capacity);
     REQUIRE(restoredLfos[2].points.size() == 3);
     CHECK(restoredLfos[2].points[1].x == Catch::Approx(0.5f));
     CHECK(restoredLfos[2].points[1].y == Catch::Approx(0.9f));
@@ -1476,7 +1476,7 @@ TEST_CASE("State round-trip preserves LFO data and upgrades legacy shape state",
     juce::MidiBuffer legacySmoothMidi;
     legacySmoothRestored.processBlock(legacySmoothBuffer, legacySmoothMidi);
     const auto legacySmoothLfos = legacySmoothRestored.getLfoManager().getLfoDataCopy();
-    REQUIRE(legacySmoothLfos.size() == 4);
+    REQUIRE(legacySmoothLfos.size() == fire::lfo_bank::capacity);
     CHECK(legacySmoothLfos[2].smoothness == Catch::Approx(0.4f));
 
     const auto restoredRoutings = restored.getLfoManager().getModulationRoutingsCopy();
@@ -1494,6 +1494,12 @@ TEST_CASE("State round-trip preserves LFO data and upgrades legacy shape state",
     // Simulate an older state written before the per-band shape enable
     // parameters existed. Loading must enable Shape to preserve the old sound.
     auto legacyParameterState = source.treeState.copyState();
+    // This fixture also predates the extended bank, whose presence would
+    // correctly require a complete sixteen-shape LFO_STATE section.
+    for (int child = legacyParameterState.getNumChildren(); --child >= 0;)
+        if (fire::lfo_bank::isAppendedParameterID(
+                legacyParameterState.getChild(child).getProperty("id").toString()))
+            legacyParameterState.removeChild(child, nullptr);
     for (int band = 0; band < 4; ++band)
     {
         const auto parameterID = ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, band);

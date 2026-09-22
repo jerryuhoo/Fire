@@ -888,7 +888,7 @@ TEST_CASE("Preset files round-trip parameters, multiband state, LFOs and routing
     CHECK(getPlainParameter(processor, driveID) == Catch::Approx(24.0f));
 
     const auto restoredShapes = processor.getLfoManager().getLfoDataCopy();
-    REQUIRE(restoredShapes.size() == 4);
+    REQUIRE(restoredShapes.size() == fire::lfo_bank::capacity);
     REQUIRE(restoredShapes[2].points.size() == 3);
     CHECK(restoredShapes[2].points[1].x == Catch::Approx(0.42f));
     CHECK(restoredShapes[2].points[1].y == Catch::Approx(0.91f));
@@ -3062,7 +3062,7 @@ TEST_CASE("Versioned presets reject incomplete snapshots atomically",
         CHECK(getPlainParameter(processor, driveID) == Catch::Approx(27.0f));
 
         const auto shapes = processor.getLfoManager().getLfoDataCopy();
-        REQUIRE(shapes.size() == 4);
+        REQUIRE(shapes.size() == fire::lfo_bank::capacity);
         REQUIRE(shapes[2].points.size() == expectedShape.points.size());
         CHECK(shapes[2].points[1].x == Catch::Approx(expectedShape.points[1].x));
         CHECK(shapes[2].points[1].y == Catch::Approx(expectedShape.points[1].y));
@@ -3125,7 +3125,7 @@ TEST_CASE("Corrupt host state without a valid APVTS tree is rejected atomically"
     CHECK(processor.stateAB.isCurrentA());
 
     const auto shapes = processor.getLfoManager().getLfoDataCopy();
-    REQUIRE(shapes.size() == 4);
+    REQUIRE(shapes.size() == fire::lfo_bank::capacity);
     REQUIRE(shapes[1].points.size() == 3);
     CHECK(shapes[1].points[1].x == Catch::Approx(0.38f));
     CHECK(shapes[1].points[1].y == Catch::Approx(0.88f));
@@ -3212,7 +3212,7 @@ TEST_CASE("Sparse host parameter trees are rejected atomically",
     CHECK(processor.statePresets.getCurrentPresetId() == 7);
 
     const auto shapes = processor.getLfoManager().getLfoDataCopy();
-    REQUIRE(shapes.size() == 4);
+    REQUIRE(shapes.size() == fire::lfo_bank::capacity);
     REQUIRE(shapes[1].points.size() == 3);
     CHECK(shapes[1].points[1].x == Catch::Approx(0.38f));
     CHECK(shapes[1].points[1].y == Catch::Approx(0.88f));
@@ -3444,7 +3444,7 @@ TEST_CASE("LFO shape writes preserve APVTS smoothness authority",
     CHECK(getPlainParameter(processor, smoothnessID)
           == Catch::Approx(automatedSmoothness));
     const auto lfoData = processor.getLfoManager().getLfoDataCopy();
-    REQUIRE(lfoData.size() == 4);
+    REQUIRE(lfoData.size() == fire::lfo_bank::capacity);
     CHECK(lfoData[0].points == incomingShape.points);
     CHECK(lfoData[0].curvatures == incomingShape.curvatures);
     CHECK(lfoData[0].smoothness == Catch::Approx(automatedSmoothness));
@@ -3483,7 +3483,7 @@ TEST_CASE("Host saves pair LFO shapes with authoritative smoothness",
     restored.setStateInformation(savedState.getData(),
                                  static_cast<int>(savedState.getSize()));
     const auto restoredData = restored.getLfoManager().getLfoDataCopy();
-    REQUIRE(restoredData.size() == 4);
+    REQUIRE(restoredData.size() == fire::lfo_bank::capacity);
     CHECK(restoredData[0].points == publishedShape.points);
     CHECK(restoredData[0].curvatures == publishedShape.curvatures);
     CHECK(restoredData[0].smoothness
@@ -3527,7 +3527,7 @@ TEST_CASE("Host loading promotes legacy LFO-only smoothness into APVTS",
     CHECK(getPlainParameter(restored, smoothnessID)
           == Catch::Approx(legacySmoothness));
     const auto restoredData = restored.getLfoManager().getLfoDataCopy();
-    REQUIRE(restoredData.size() == 4);
+    REQUIRE(restoredData.size() == fire::lfo_bank::capacity);
     CHECK(restoredData[0].points == shape.points);
     CHECK(restoredData[0].curvatures == shape.curvatures);
     CHECK(restoredData[0].smoothness == Catch::Approx(legacySmoothness));
@@ -3586,14 +3586,14 @@ TEST_CASE("Completed LFO automation remains authoritative after shape edits",
     restored.setStateInformation(savedAfterAutomation.getData(),
                                  static_cast<int>(savedAfterAutomation.getSize()));
     const auto restoredData = restored.getLfoManager().getLfoDataCopy();
-    REQUIRE(restoredData.size() == 4);
+    REQUIRE(restoredData.size() == fire::lfo_bank::capacity);
     CHECK(restoredData[0].points == publishedShape.points);
     CHECK(restoredData[0].curvatures == publishedShape.curvatures);
     CHECK(restoredData[0].smoothness
           == Catch::Approx(automatedSmoothness));
 
     const auto finalData = manager.getLfoDataCopy();
-    REQUIRE(finalData.size() == 4);
+    REQUIRE(finalData.size() == fire::lfo_bank::capacity);
     CHECK(finalData[0].points == publishedShape.points);
     CHECK(finalData[0].curvatures == publishedShape.curvatures);
     CHECK(finalData[0].smoothness
@@ -3640,7 +3640,7 @@ TEST_CASE("LFO snapshots use the parameter-quantised smoothness",
     restored.setStateInformation(host.state.getData(),
                                  static_cast<int>(host.state.getSize()));
     const auto restoredData = restored.getLfoManager().getLfoDataCopy();
-    REQUIRE(restoredData.size() == 4);
+    REQUIRE(restoredData.size() == fire::lfo_bank::capacity);
     CHECK(restoredData[0].points == publishedShape.points);
     CHECK(restoredData[0].curvatures == publishedShape.curvatures);
     CHECK(restoredData[0].smoothness
@@ -3664,7 +3664,7 @@ TEST_CASE("Shape edits cannot overwrite later smoothness automation",
     manager.setLfoData(0, laterShape);
 
     const auto finalData = manager.getLfoDataCopy();
-    REQUIRE(finalData.size() == 4);
+    REQUIRE(finalData.size() == fire::lfo_bank::capacity);
     const auto* finalSmoothness = processor.treeState.getRawParameterValue(smoothnessID);
     REQUIRE(finalSmoothness != nullptr);
     CHECK(finalData[0].points == laterShape.points);
@@ -3689,7 +3689,7 @@ TEST_CASE("Host and preset snapshots take LFO smoothness from APVTS authority",
     manager.setLfoData(0, shapeWithStaleSmoothness);
 
     const auto liveData = manager.getLfoDataCopy();
-    REQUIRE(liveData.size() == 4);
+    REQUIRE(liveData.size() == fire::lfo_bank::capacity);
     CHECK(liveData[0].points == shapeWithStaleSmoothness.points);
     CHECK(liveData[0].curvatures == shapeWithStaleSmoothness.curvatures);
     CHECK(liveData[0].smoothness == Catch::Approx(authoritativeSmoothness));
@@ -3728,7 +3728,7 @@ TEST_CASE("Host and preset snapshots take LFO smoothness from APVTS authority",
     restored.setStateInformation(hostState.getData(),
                                  static_cast<int>(hostState.getSize()));
     const auto restoredData = restored.getLfoManager().getLfoDataCopy();
-    REQUIRE(restoredData.size() == 4);
+    REQUIRE(restoredData.size() == fire::lfo_bank::capacity);
     CHECK(restoredData[0].points == shapeWithStaleSmoothness.points);
     CHECK(restoredData[0].curvatures == shapeWithStaleSmoothness.curvatures);
     CHECK(restoredData[0].smoothness
@@ -4016,7 +4016,7 @@ TEST_CASE("Invalid known host parameters reject the complete state transaction",
         CHECK(processor.statePresets.getCurrentPresetId() == 4);
 
         const auto shapes = processor.getLfoManager().getLfoDataCopy();
-        REQUIRE(shapes.size() == 4);
+        REQUIRE(shapes.size() == fire::lfo_bank::capacity);
         REQUIRE(shapes[1].points.size() == 3);
         CHECK(shapes[1].points[1].x == Catch::Approx(0.36f));
         CHECK(shapes[1].points[1].y == Catch::Approx(0.86f));
@@ -4360,7 +4360,7 @@ TEST_CASE("Host sessions preserve the inactive A-B snapshot and active side",
     {
         CHECK(getPlainParameter(processor, driveID) == Catch::Approx(expectedDrive));
         const auto shapes = processor.getLfoManager().getLfoDataCopy();
-        REQUIRE(shapes.size() == 4);
+        REQUIRE(shapes.size() == fire::lfo_bank::capacity);
         REQUIRE(shapes[0].points.size() == 3);
         CHECK(shapes[0].points[1].x == Catch::Approx(expectedMiddleX));
 

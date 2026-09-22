@@ -11,6 +11,7 @@
 #pragma once
 
 #include "GuardedSliderAccessibility.h"
+#include "../Utility/LfoBankParameters.h"
 #include "InterfaceDefines.h"
 #include "PrimaryButton.h"
 #include "juce_gui_basics/juce_gui_basics.h"
@@ -107,6 +108,20 @@ public:
     std::function<void(const juce::String&)> onBipolarModeToggled;
     std::function<void()> onModulationReset;
     std::function<void(const juce::String&)> onClickInAssignMode;
+    struct LfoSourceMenuState
+    {
+        std::uint32_t presentMask = (1u << fire::lfo_bank::defaultCount) - 1u;
+        std::uint64_t revision = 0;
+
+        bool contains(int index) const noexcept
+        {
+            return fire::lfo_bank::validIndex(index) && (presentMask & (1u << index)) != 0;
+        }
+    };
+    // Capture stable slot identities and a routing revision when opening a menu.
+    // Re-checking the provider rejects a removed/re-created source before any
+    // queued UI notification has had a chance to update this control.
+    std::function<LfoSourceMenuState()> getLfoSourceMenuState;
     std::function<void(int, const juce::String&)> onLfoAssignmentRequested;
     std::function<void(const juce::String&)> onModulationCleared;
     std::function<void(const juce::String&)> onModulationInverted;
@@ -157,6 +172,7 @@ private:
     float readoutOpacity = 1.0f;
     void valueChanged() override;
     friend struct ModulatableSliderTestAccess;
+    friend struct LfoBankUiTestAccess;
     friend struct ModulatableSliderInteractionTestAccess;
 
     enum class PointerGesture
@@ -178,8 +194,10 @@ private:
 
     std::function<void(int)> createModulationMenuResultHandler(
         juce::String targetParameterIDAtOpen = {});
+    juce::PopupMenu createLfoAssignmentMenu(const LfoSourceMenuState&) const;
     std::function<void(int)> createLfoAssignmentMenuResultHandler(
-        juce::String targetParameterIDAtOpen = {});
+        juce::String targetParameterIDAtOpen = {},
+        std::optional<LfoSourceMenuState> sourceStateAtOpen = std::nullopt);
     void executeModulationMenuCommand(ModulationMenuCommand command,
                                       const juce::String& targetParameterID);
 

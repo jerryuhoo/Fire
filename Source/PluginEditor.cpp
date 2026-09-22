@@ -139,24 +139,31 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
         }
         else
         {
+            if (! processor.isLfoPresent(lfoIndex))
+                return;
             // --- Enter assignment mode ---
+            lfoAssignmentSourceRevision = processor.getLfoManager()
+                                              .getModulationRoutingStateSnapshot().revision;
             isLfoAssignMode = true;
             lfoSourceForAssignment = lfoIndex;
             lfoPanel.showAssignArmed(lfoIndex);
 
             // Define the callback function to be executed when a slider is clicked.
-            auto sliderClickCallback = [this](const juce::String& parameterID)
+            auto sliderClickCallback = [this, assignmentSession = ++lfoAssignmentSessionGeneration](const juce::String& parameterID)
             {
-                if (isLfoAssignMode) // Check again just in case.
+                if (isLfoAssignMode && assignmentSession == lfoAssignmentSessionGeneration)
                 {
                     const auto sourceLfoIndex = lfoSourceForAssignment;
+                    const bool sourceSessionCurrent = processor.isLfoPresent(sourceLfoIndex)
+                        && processor.getLfoManager().getModulationRoutingStateSnapshot().revision
+                               == lfoAssignmentSourceRevision;
                     const juce::Component::SafePointer<
                         FireAudioProcessorEditor> safeThis(this);
                     // This callback runs on the message thread, so complete the
                     // one-shot assignment interaction here instead of relying on
                     // a broad parameter-listener notification.
                     exitAssignMode(false);
-                    if (safeThis == nullptr)
+                    if (safeThis == nullptr || ! sourceSessionCurrent)
                         return;
 
                     const auto result = processor.assignLfoToTarget(
@@ -187,9 +194,27 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     {
         if (isLfoAssignMode)
         {
+            if (! processor.isLfoPresent(lfoIndex)
+                || ! processor.isLfoPresent(lfoSourceForAssignment)
+                || processor.getLfoManager().getModulationRoutingStateSnapshot().revision
+                       != lfoAssignmentSourceRevision)
+            {
+                exitAssignMode();
+                return;
+            }
             lfoSourceForAssignment = lfoIndex;
             lfoPanel.showAssignArmed(lfoIndex);
         }
+    };
+    lfoPanel.onLfoRemoved = [this](int lfoIndex)
+    {
+        const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
+        if (isLfoAssignMode && lfoSourceForAssignment == lfoIndex)
+            exitAssignMode();
+        if (safeThis == nullptr)
+            return;
+        modulationSnapshotFramesRemaining = 0;
+        updateModulationStates();
     };
 
     lfoPanel.setOnDataChangedCallback([this]
@@ -309,10 +334,20 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                 valueEntryPopup.grabKeyboardFocus();
         };
 
+        slider->getLfoSourceMenuState = [this]
+        {
+            ModulatableSlider::LfoSourceMenuState state;
+            state.presentMask = 0;
+            state.revision = processor.getLfoManager().getModulationRoutingStateSnapshot().revision;
+            for (int index = 0; index < fire::lfo_bank::capacity; ++index)
+                if (processor.isLfoPresent(index))
+                    state.presentMask |= 1u << index;
+            return state;
+        };
         slider->onLfoAssignmentRequested = [this](int lfoIndex,
                                                    const juce::String& targetParameterID)
         {
-            if (! juce::isPositiveAndBelow(lfoIndex, 4)
+            if (! processor.isLfoPresent(lfoIndex)
                 || targetParameterID.isEmpty())
                 return;
 
@@ -1569,6 +1604,8 @@ void FireAudioProcessorEditor::timerCallback()
 
     if (--modulationSnapshotFramesRemaining <= 0)
         refreshModulationSnapshot();
+    if (safeThis == nullptr)
+        return;
     applyModulationSnapshot();
 
     const int currentBand = bandPanel.getFocusBandNum();
@@ -2221,6 +2258,7 @@ void FireAudioProcessorEditor::exitAssignMode(bool showCancellationFeedback)
         return;
 
     isLfoAssignMode = false;
+    ++lfoAssignmentSessionGeneration;
     if (showCancellationFeedback)
         lfoPanel.showAssignCancelled();
     else
@@ -2254,6 +2292,13 @@ void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* s
         consumedModulationUiRevision = revision;
         const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(
             this);
+        if (isLfoAssignMode
+            && (! processor.isLfoPresent(lfoSourceForAssignment)
+                || processor.getLfoManager().getModulationRoutingStateSnapshot().revision
+                       != lfoAssignmentSourceRevision))
+            exitAssignMode();
+        if (safeThis == nullptr)
+            return;
         stateComponent.markAsDirty();
         if (safeThis == nullptr)
             return;
@@ -2276,6 +2321,13 @@ void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* s
         const bool resetFocusAfterStateLoad =
             stateComponent.consumeFocusResetAfterStateLoad();
 
+        if (isLfoAssignMode
+            && (! processor.isLfoPresent(lfoSourceForAssignment)
+                || processor.getLfoManager().getModulationRoutingStateSnapshot().revision
+                       != lfoAssignmentSourceRevision))
+            exitAssignMode(false);
+        if (safeThis == nullptr)
+            return;
         modulationSnapshotFramesRemaining = 0;
         stateComponent.synchronisePresetSelectionFromManager();
         if (safeThis == nullptr)
@@ -2428,12 +2480,32 @@ const std::vector<ModulatableSlider*>& FireAudioProcessorEditor::getAllModulatab
 
 void FireAudioProcessorEditor::updateModulationStates()
 {
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
     refreshModulationSnapshot();
-    applyModulationSnapshot();
+    if (safeThis != nullptr)
+        applyModulationSnapshot();
 }
 
 void FireAudioProcessorEditor::refreshModulationSnapshot()
 {
+    std::uint32_t presenceMask = 0;
+    for (int index = 0; index < fire::lfo_bank::capacity; ++index)
+        if (processor.isLfoPresent(index))
+            presenceMask |= 1u << index;
+    if (presenceMask != displayedLfoPresenceMask)
+    {
+        displayedLfoPresenceMask = presenceMask;
+        const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
+        juce::PopupMenu::dismissAllActiveMenus();
+        if (safeThis == nullptr)
+            return;
+        for (auto* slider : allModulatableSliders)
+        {
+            slider->dismissTransientInteraction();
+            if (safeThis == nullptr)
+                return;
+        }
+    }
     modulationRoutingSnapshot = processor.getLfoManager().getModulationRoutingsCopy();
     modulationRoutingIndexBySlider.assign(allModulatableSliders.size(), -1);
 
@@ -2447,7 +2519,7 @@ void FireAudioProcessorEditor::refreshModulationSnapshot()
         {
             const auto& routing = modulationRoutingSnapshot.getReference(routingIndex);
             if (routing.targetParameterID == slider->getParamID()
-                && juce::isPositiveAndBelow(routing.sourceLfoIndex, 4))
+                && processor.isLfoPresent(routing.sourceLfoIndex))
             {
                 modulationRoutingIndexBySlider[sliderIndex] = routingIndex;
                 break;
@@ -2460,7 +2532,7 @@ void FireAudioProcessorEditor::refreshModulationSnapshot()
 
 void FireAudioProcessorEditor::applyModulationSnapshot()
 {
-    std::array<float, 4> lfoOutputs {};
+    std::array<float, fire::lfo_bank::capacity> lfoOutputs {};
     for (int i = 0; i < static_cast<int>(lfoOutputs.size()); ++i)
         lfoOutputs[static_cast<size_t>(i)] = processor.getLfoManager().getLfoOutput(i);
 
@@ -2482,7 +2554,7 @@ void FireAudioProcessorEditor::applyModulationSnapshot()
                                     ? matchedRouting->sourceLfoIndex
                                     : -1;
         const bool isModulated = juce::isPositiveAndBelow(
-            sourceIndex, static_cast<int>(lfoOutputs.size()));
+            sourceIndex, static_cast<int>(lfoOutputs.size())) && processor.isLfoPresent(sourceIndex);
         const float rawLfo = isModulated ? lfoOutputs[static_cast<size_t>(sourceIndex)] : 0.0f;
         const double displayLfo = isModulated && matchedRouting->isBipolar
                                       ? static_cast<double>(rawLfo * 2.0f - 1.0f)

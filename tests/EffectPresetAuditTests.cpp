@@ -2,6 +2,7 @@
 #include <Panels/TopPanel/Preset.h>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <vector>
 
 namespace
 {
@@ -55,6 +56,13 @@ void configure(FireAudioProcessor& p, int variant)
         const float value = static_cast<float>((++index * 17 + variant * 11) % 101) / 100.0f;
         ranged->setValueNotifyingHost(ranged->convertTo0to1(ranged->convertFrom0to1(value)));
     }
+    // Presence is itself part of the all-parameter audit. Keep its randomised
+    // values, and assign routes only to the sources actually present in this
+    // variant instead of assuming that slots 1..4 are always enabled.
+    std::vector<int> activeSources;
+    for (int source = 0; source < fire::lfo_bank::capacity; ++source)
+        if (p.isLfoPresent(source)) activeSources.push_back(source);
+    REQUIRE_FALSE(activeSources.empty());
     plain(p, NUM_BANDS_ID, 4);
     for (int i = 0; i < 3; ++i)
     {
@@ -75,7 +83,8 @@ void configure(FireAudioProcessor& p, int variant)
                 if (control == 0 || control == 5)
                 {
                     p.clearModulationForParameter(id);
-                    REQUIRE(p.assignLfoToTarget((slot + scope + variant) % 4, id) == LfoManager::AssignmentResult::changed);
+                    const auto source = activeSources[static_cast<size_t>(slot + scope + variant) % activeSources.size()];
+                    REQUIRE(p.assignLfoToTarget(source, id) == LfoManager::AssignmentResult::changed);
                     p.setModulationDepth(id, (slot % 2 == 0 ? -1.0f : 1.0f) * (0.1f + static_cast<float>(scope) * 0.2f));
                     if (slot % 3 == 0) p.getLfoManager().toggleBypassForRouting(id);
                     if (slot % 2 == 0) p.toggleBipolarMode(id);
@@ -86,10 +95,10 @@ void configure(FireAudioProcessor& p, int variant)
         p.moveModuleBefore(scope, 5 + variant, 0);
         p.moveModuleBefore(scope, scope == 0 ? 1 : 2, 0);
     }
-    for (int source = 0; source < 4; ++source)
+    for (int source = 0; source < fire::lfo_bank::capacity; ++source)
     {
         LfoData shape;
-        shape.points = {{0, 0.2f}, {0.2f + static_cast<float>(source) * 0.1f, 0.9f}, {1, 0.3f}};
+        shape.points = {{0, 0.2f}, {0.2f + static_cast<float>(source % 4) * 0.1f, 0.9f}, {1, 0.3f}};
         shape.curvatures = {0.4f, -0.7f};
         p.getLfoManager().setLfoData(source, shape);
     }

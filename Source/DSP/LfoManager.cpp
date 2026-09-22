@@ -35,17 +35,18 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
         return juce::String(baseId) + juce::String(index + 1);
     };
 
-    // Initialize LFO data containers for 4 LFOs
-    lfoData.resize(4);
+    // Stable slots retain their shape and timing identity across deletions.
+    lfoData.resize(fire::lfo_bank::capacity);
+    for (auto& generation : slotGenerations) generation.store(0u, std::memory_order_relaxed);
     // Define the string representations for synced LFO rates
     lfoRateSyncDivisions = {
         "1/64", "1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/8", "1/4T", "1/4", "1/2T", "1/2", "1 Bar", "2 Bars", "4 Bars"
     };
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < fire::lfo_bank::defaultCount; ++i)
         modulationRoutings.add({});
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < fire::lfo_bank::capacity; ++i)
     {
         const auto lfoIndex = static_cast<size_t>(i);
         const auto smoothnessId = indexedParameterId(LFO_SMOOTH_ID, i);
@@ -56,7 +57,8 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
             treeState.getRawParameterValue(indexedParameterId(LFO_RATE_SYNC_ID, i)),
             treeState.getRawParameterValue(indexedParameterId(LFO_RATE_HZ_ID, i)),
             treeState.getRawParameterValue(indexedParameterId(LFO_PHASE_ID, i)),
-            treeState.getRawParameterValue(smoothnessId)
+            treeState.getRawParameterValue(smoothnessId),
+            treeState.getRawParameterValue(fire::lfo_bank::presentParameterID(i))
         };
 
         if (const auto* smoothness = lfoParameters[lfoIndex].smoothness)
@@ -85,7 +87,7 @@ void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
     // Keep the prepared capacity. Smaller blocks no longer resize this buffer on the audio thread.
     const auto safeMaximumBlockSize = static_cast<int>(juce::jmin<uint64_t>(
         spec.maximumBlockSize, static_cast<uint64_t>(std::numeric_limits<int>::max())));
-    lfoOutputBuffer.setSize(4, juce::jmax(1, safeMaximumBlockSize), false, true, false);
+    lfoOutputBuffer.setSize(fire::lfo_bank::capacity, juce::jmax(1, safeMaximumBlockSize), false, true, false);
 }
 
 void LfoManager::reset()
@@ -100,6 +102,8 @@ void LfoManager::reset()
     previousSyncModes.fill(false);
     previousActiveRateKeys.fill(0.0f);
     usedAbsoluteTimelineLastBlock.fill(false);
+    previouslyPresent.fill(false);
+    appliedSlotGenerations.fill(0u);
     isPlaying.store(false, std::memory_order_relaxed);
     modulatedValueCount = 0;
     lfoOutputBuffer.clear();
@@ -112,13 +116,41 @@ bool LfoManager::isModulationActive() const
     if (lock.isLocked())
     {
         for (const auto& routing : modulationRoutings)
-            if (routing.targetParameterID.isNotEmpty())
+            if (routing.targetParameterID.isNotEmpty() && isLfoPresent(routing.sourceLfoIndex))
                 return true;
 
         return false;
     }
 
     return hasPublishedRouting.load(std::memory_order_relaxed);
+}
+
+bool LfoManager::isLfoPresent(int index) const noexcept
+{
+    if (! fire::lfo_bank::validIndex(index)) return false;
+    if (const auto* present = lfoParameters[static_cast<size_t>(index)].present)
+    {
+        const auto value = present->load(std::memory_order_relaxed);
+        if (std::isfinite(value)) return value > 0.5f;
+    }
+    // Standalone legacy users can still supply only the original timing IDs.
+    return fire::lfo_bank::defaultPresent(index);
+}
+
+void LfoManager::resetLfoSlot(int index)
+{
+    if (! fire::lfo_bank::validIndex(index)) return;
+    const juce::ScopedLock lock(dataAccessLock);
+    const auto slot = static_cast<size_t>(index);
+    for (int route = modulationRoutings.size(); --route >= 0;)
+        if (modulationRoutings.getReference(route).sourceLfoIndex == index)
+            modulationRoutings.remove(route);
+    lfoData[slot] = LfoData {};
+    lfoEngines[slot].stageShape(lfoData[slot]);
+    ++lfoDataRevisions[slot];
+    slotGenerations[slot].fetch_add(1u, std::memory_order_relaxed);
+    // Slot deletion/reuse invalidates popups even when no routes existed.
+    advanceModulationRoutingRevisionLocked();
 }
 
 // =============================================================================
@@ -151,6 +183,9 @@ LfoManager::captureAudioThreadParameterSnapshot() const noexcept
         destination.freeRate = loadParameter(source.freeRate, 1.0f);
         destination.phaseOffset = loadParameter(source.phaseOffset, 0.0f);
         destination.smoothness = loadParameter(source.smoothness, 0.0f);
+        destination.present = loadParameter(source.present,
+            fire::lfo_bank::defaultPresent(static_cast<int>(index)) ? 1.0f : 0.0f) > 0.5f;
+        destination.generation = slotGenerations[index].load(std::memory_order_relaxed);
     }
 
     return snapshot;
@@ -204,7 +239,8 @@ void LfoManager::renderBlock(
     // audio-thread safe; the snapshot overload deliberately does not revisit
     // APVTS while an outer state transaction may be in progress.
     for (size_t i = 0; i < lfoEngines.size(); ++i)
-        lfoEngines[i].setSmoothness(parameterSnapshot.lfos[i].smoothness);
+        if (parameterSnapshot.lfos[i].present)
+            lfoEngines[i].setSmoothness(parameterSnapshot.lfos[i].smoothness);
 
     const int samplesToProcess = juce::jlimit(0, outputBuffer.getNumSamples(), numSamples);
     if (samplesToProcess <= 0)
@@ -220,7 +256,7 @@ void LfoManager::renderBlock(
         return;
     }
 
-    std::array<float, 4> firstLfoValues {};
+    std::array<float, fire::lfo_bank::capacity> firstLfoValues {};
     const int channelsToCopy = juce::jmin(outputBuffer.getNumChannels(),
                                           lfoOutputBuffer.getNumChannels());
     int sampleOffset = 0;
@@ -258,7 +294,8 @@ void LfoManager::renderBlock(
     for (size_t routingIndex = 0; routingIndex < runtimeRoutingCount; ++routingIndex)
     {
         const auto& routing = runtimeRoutings[routingIndex];
-        if (routing.parameter == nullptr || ! juce::isPositiveAndBelow(routing.sourceLfoIndex, 4))
+        if (routing.parameter == nullptr || ! fire::lfo_bank::validIndex(routing.sourceLfoIndex)
+            || ! parameterSnapshot.lfos[static_cast<size_t>(routing.sourceLfoIndex)].present)
             continue;
 
         // Use the first sample of the LFO output as the representative value for the whole block.
@@ -456,12 +493,12 @@ bool LfoManager::captureRuntimeRoutings(
 
     for (const auto& routing : modulationRoutings)
     {
-        if (routing.targetParameterID.isEmpty())
+        if (routing.targetParameterID.isEmpty() || ! isLfoPresent(routing.sourceLfoIndex))
             continue;
 
         hasAnyRouting = true;
         if (routing.isBypassed
-            || ! juce::isPositiveAndBelow(routing.sourceLfoIndex, 4)
+            || ! fire::lfo_bank::validIndex(routing.sourceLfoIndex)
             || destinationCount >= destination.size())
         {
             continue;
@@ -514,7 +551,7 @@ void LfoManager::updatePublishedRoutingState() noexcept
     bool hasAnyRouting = false;
     for (const auto& routing : modulationRoutings)
     {
-        if (routing.targetParameterID.isNotEmpty())
+        if (routing.targetParameterID.isNotEmpty() && isLfoPresent(routing.sourceLfoIndex))
         {
             hasAnyRouting = true;
             break;
@@ -584,10 +621,32 @@ void LfoManager::generateLfoOutput(
         return std::abs(difference);
     };
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < fire::lfo_bank::capacity; ++i)
     {
         const auto lfoIndex = static_cast<size_t>(i);
         const auto& parameters = parameterSnapshot.lfos[lfoIndex];
+        const bool identityChanged = parameters.generation != appliedSlotGenerations[lfoIndex];
+        if (identityChanged || parameters.present != previouslyPresent[lfoIndex])
+        {
+            // Delete/add/rebind can complete between callbacks, leaving the
+            // target's source/depth/polarity recipe unchanged. Retain the
+            // staged shape crossfade in that case, and restart canonical phase
+            // with the existing correction bridge instead of hard-cutting the
+            // still-audible source to its new default output.
+            if (identityChanged && parameters.present && previouslyPresent[lfoIndex])
+                lfoEngines[lfoIndex].setPhaseWithCorrection(0.0f);
+            else
+                lfoEngines[lfoIndex].reset();
+            appliedPhaseOffsets[lfoIndex] = 0.0f;
+            phaseOffsetInitialised[lfoIndex] = false;
+            timingSignatureInitialised[lfoIndex] = false;
+            usedAbsoluteTimelineLastBlock[lfoIndex] = false;
+            appliedSlotGenerations[lfoIndex] = parameters.generation;
+            previouslyPresent[lfoIndex] = parameters.present;
+            if (! parameters.present)
+                lfoOutputBuffer.clear(i, 0, lfoOutputBuffer.getNumSamples());
+        }
+        if (! parameters.present) continue;
         const float syncMode = std::isfinite(parameters.syncMode)
                                    ? parameters.syncMode
                                    : 1.0f;
@@ -799,7 +858,7 @@ void LfoManager::onLfoShapeChanged(int lfoIndex)
         for (size_t i = 0; i < lfoEngines.size(); ++i)
             lfoEngines[i].stageShape(lfoData[i]);
     }
-    else if (juce::isPositiveAndBelow(lfoIndex, 4))
+    else if (fire::lfo_bank::validIndex(lfoIndex))
     {
         const auto index = static_cast<size_t>(lfoIndex);
         lfoEngines[index].stageShape(lfoData[index]);
@@ -891,12 +950,13 @@ LfoManager::assignModulationRoutingIfRevisionMatches(
     const juce::String& targetParameterID)
 {
     if (targetParameterID.isNotEmpty()
-        && (! juce::isPositiveAndBelow(sourceLfoIndex, 4)
+        && (! fire::lfo_bank::validIndex(sourceLfoIndex)
             || treeState.getParameter(targetParameterID) == nullptr))
         return {};
 
-    const int safeSourceIndex = juce::jlimit(0, 3, sourceLfoIndex);
+    const int safeSourceIndex = juce::jlimit(0, fire::lfo_bank::capacity - 1, sourceLfoIndex);
     const juce::ScopedLock lock(dataAccessLock);
+    if (targetParameterID.isNotEmpty() && ! isLfoPresent(safeSourceIndex)) return {};
     ModulationRoutingEditResult result;
     result.revision = modulationRoutingRevision;
     if (modulationRoutingRevision != expectedRevision
@@ -1101,13 +1161,14 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
     int sourceLfoIndex,
     const juce::String& targetParameterID)
 {
-    if (! juce::isPositiveAndBelow(sourceLfoIndex, 4) || targetParameterID.isEmpty())
+    if (! fire::lfo_bank::validIndex(sourceLfoIndex) || targetParameterID.isEmpty())
     {
         jassertfalse;
         return AssignmentResult::invalidRequest;
     }
 
     const juce::ScopedLock sl(dataAccessLock);
+    if (! isLfoPresent(sourceLfoIndex)) return AssignmentResult::invalidRequest;
     // 1. First, check if the target parameter is already being modulated.
     //    If so, just update its LFO source.
     for (auto& routing : modulationRoutings)
@@ -1304,7 +1365,7 @@ bool LfoManager::setLfoDataIfRevisionMatches(
 }
 
 bool LfoManager::replaceLfoDataAndRoutings(
-    const std::array<LfoData, 4>& newLfoData,
+    const std::array<LfoData, fire::lfo_bank::capacity>& newLfoData,
     juce::Array<ModulationRouting> newRoutings)
 {
     if (newRoutings.size() > maximumModulationRoutings)
@@ -1348,4 +1409,13 @@ bool LfoManager::replaceLfoDataAndRoutings(
     }
 
     return true;
+}
+
+bool LfoManager::replaceLfoDataAndRoutings(
+    const std::array<LfoData, fire::lfo_bank::defaultCount>& newLfoData,
+    juce::Array<ModulationRouting> newRoutings)
+{
+    std::array<LfoData, fire::lfo_bank::capacity> expanded;
+    std::copy(newLfoData.begin(), newLfoData.end(), expanded.begin());
+    return replaceLfoDataAndRoutings(expanded, std::move(newRoutings));
 }

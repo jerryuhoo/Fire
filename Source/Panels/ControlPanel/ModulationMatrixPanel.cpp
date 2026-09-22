@@ -1067,14 +1067,16 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     sourceMenu.setComponentID("matrix_source");
     sourceMenu.setTooltip("Select the LFO source for modulation routing "
                           + routingNumber);
-    for (int sourceNumber = 1;
-         sourceNumber <= fire::ui::lfoBankCount;
-         ++sourceNumber)
-        sourceMenu.getRootMenu()->addColouredItem(
-            sourceNumber,
-            "LFO " + juce::String(sourceNumber),
-            fire::ui::lfoBankColourForSource(sourceNumber));
-    sourceMenu.setSelectedId(routing.sourceLfoIndex + 1, juce::dontSendNotification);
+    for (int sourceIndex = 0; sourceIndex < fire::lfo_bank::capacity; ++sourceIndex)
+        if (processor.isLfoPresent(sourceIndex))
+            sourceMenu.getRootMenu()->addColouredItem(
+                sourceIndex + 1,
+                "LFO " + juce::String(sourceIndex + 1),
+                fire::ui::lfoBankColour(sourceIndex));
+    sourceMenu.setTextWhenNothingSelected("Choose source");
+    sourceMenu.setSelectedId(processor.isLfoPresent(routing.sourceLfoIndex)
+                                 ? routing.sourceLfoIndex + 1 : 0,
+                             juce::dontSendNotification);
     sourceMenu.addListener(this);
     sourceMenu.setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface0);
     sourceMenu.setColour(juce::ComboBox::outlineColourId,
@@ -1504,7 +1506,7 @@ void ModulationMatrixRow::commitComboBoxSelection(
 
     if (&comboBox == &sourceMenu)
     {
-        if (! juce::isPositiveAndBelow(selectedId - 1, 4))
+        if (! processor.isLfoPresent(selectedId - 1))
         {
             requestParentRebuild();
             return;
@@ -1608,6 +1610,7 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
     setLookAndFeel(&fireLookAndFeel);
     setTitle("Modulation matrix");
     processor.addChangeListener(this);
+    processor.addModulationUiChangeListener(this);
     addAndMakeVisible(header);
     addAndMakeVisible(viewport);
     viewport.setScrollBarsShown(true, false);
@@ -1646,6 +1649,7 @@ ModulationMatrixPanel::~ModulationMatrixPanel()
 {
     dismissTransientInteractions();
     processor.removeChangeListener(this);
+    processor.removeModulationUiChangeListener(this);
     cancelPendingUpdate();
     addButton.removeListener(this);
     setLookAndFeel(nullptr);
@@ -1805,9 +1809,19 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
         processor.getLfoManager().getModulationRoutingStateSnapshot();
     activeRouteCount = static_cast<int>(std::count_if(routingState.routings.begin(), routingState.routings.end(),
                                     [](const auto& routing) { return ! routing.isBypassed; }));
-    addButton.setEnabled(
-        routingState.routings.size()
-        < LfoManager::maximumModulationRoutings);
+    bool hasSource = false;
+    for (int sourceIndex = 0; sourceIndex < fire::lfo_bank::capacity; ++sourceIndex)
+        hasSource = hasSource || processor.isLfoPresent(sourceIndex);
+    addButton.setEnabled(hasSource && routingState.routings.size()
+                                      < LfoManager::maximumModulationRoutings);
+    if (safePanel == nullptr)
+        return;
+    emptyDescription.setText(hasSource
+                                 ? "Add a routing to connect an LFO to a control."
+                                 : "Add an LFO in Mod Forge to create a routing.",
+                             juce::dontSendNotification);
+    if (safePanel == nullptr)
+        return;
     routingEditSession = std::make_shared<ModulationRoutingEditSession>();
     routingEditSession->revision = routingState.revision;
     const auto editSession = routingEditSession;
@@ -1878,6 +1892,15 @@ void ModulationMatrixPanel::changeListenerCallback(juce::ChangeBroadcaster* sour
 {
     if (source == &processor)
         requestUiRebuild();
+    else if (processor.isModulationUiChangeSource(source))
+    {
+        // Shape edits and this panel's current depth gesture must keep their
+        // existing rows. A bank edit or external routing edit invalidates the
+        // session even when deletion/re-creation reused the same source slot.
+        const auto state = processor.getLfoManager().getModulationRoutingStateSnapshot();
+        if (routingEditSession == nullptr || state.revision != routingEditSession->revision)
+            requestUiRebuild();
+    }
 }
 
 void ModulationMatrixPanel::handleAsyncUpdate()

@@ -15,8 +15,10 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "../Utility/LfoBankParameters.h"
 #include <array>
 #include <cmath>
+#include <initializer_list>
 
 namespace fire::ui
 {
@@ -61,7 +63,7 @@ inline const juce::Colour loFi { 0xff9b6cff };
 inline const juce::Colour limiter { 0xff7f8cff };
 } // namespace colours
 
-inline constexpr int lfoBankCount = 4;
+inline constexpr int lfoBankCount = fire::lfo_bank::capacity;
 
 // Keep every source-specific modulation affordance on the same ordered
 // palette. Model/routing indices are zero-based, while the small badges shown
@@ -70,7 +72,19 @@ inline const std::array<juce::Colour, lfoBankCount> lfoBankColours {
     colours::modulation,
     colours::signalCool,
     colours::positive,
-    colours::gold
+    colours::gold,
+    juce::Colour {0xffe79590},
+    juce::Colour {0xff98a8e8},
+    juce::Colour {0xff87cbbb},
+    juce::Colour {0xffcfb393},
+    juce::Colour {0xffbe9ed1},
+    juce::Colour {0xff90b7d0},
+    juce::Colour {0xffbbc780},
+    juce::Colour {0xffce93b2},
+    juce::Colour {0xff81bfba},
+    juce::Colour {0xffd8a176},
+    juce::Colour {0xff9f9ad0},
+    juce::Colour {0xff9db6a0}
 };
 
 inline bool isValidLfoBankIndex(int zeroBasedIndex) noexcept
@@ -114,6 +128,20 @@ struct Metrics
     static constexpr float radius = 8.0f;
     static constexpr float radiusLarge = 12.0f;
 };
+
+// A normal rotary includes its title and value row. Keep the same box in every
+// workspace so the shared LookAndFeel also produces the same dial diameter.
+inline int ordinaryKnobWidth(float scale, std::initializer_list<int> limits = {}) noexcept
+{
+    auto width = juce::roundToInt(Metrics::knobWidth * scale);
+    for (const auto limit : limits) width = juce::jmin(width, limit);
+    return juce::jmax(1, width);
+}
+
+inline int ordinaryKnobHeight(int width, float scale) noexcept
+{
+    return width + juce::roundToInt(Metrics::knobValueHeight * scale);
+}
 
 struct Motion
 {

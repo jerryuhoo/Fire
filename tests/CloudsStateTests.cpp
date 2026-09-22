@@ -132,6 +132,12 @@ TEST_CASE("Clouds appends a separate parameter family without changing original 
         for (const auto* suffix : {"Freq", "Gain", "Q", "Slope", "Type", "Present", "Bypassed"})
             checkParameter("eqNode" + juce::String(node) + suffix, 6);
     CHECK(index == 880);
+    for (int source = 5; source <= 16; ++source)
+        for (const auto* base : {"lfoSyncMode", "lfoRateSync", "lfoRateHz", "lfoSmooth", "lfoPhase"})
+            checkParameter(juce::String(base) + juce::String(source), 7);
+    for (int source = 1; source <= 16; ++source)
+        checkParameter("lfoPresent" + juce::String(source), 7);
+    CHECK(index == 956);
     CHECK(index == parameters.size());
     CHECK_FALSE(clouds::isParameterID("masterFx1CloudsBogus"));
     CHECK_FALSE(clouds::isParameterID("bandFx9CloudsEngine1"));

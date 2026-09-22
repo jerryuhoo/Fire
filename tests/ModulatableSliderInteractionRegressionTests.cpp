@@ -337,16 +337,16 @@ juce::Button* findButtonWithText(juce::Component& root,
     return nullptr;
 }
 
-juce::Slider* findSliderAttachedToLabel(juce::Component& root,
-                                        const juce::String& labelText)
+juce::Slider* findSliderWithTitle(juce::Component& root,
+                                  const juce::String& title)
 {
-    if (auto* label = dynamic_cast<juce::Label*>(&root);
-        label != nullptr && label->getText() == labelText)
-        return dynamic_cast<juce::Slider*>(label->getAttachedComponent());
+    if (auto* slider = dynamic_cast<juce::Slider*>(&root);
+        slider != nullptr && slider->getTitle() == title)
+        return slider;
 
     for (int index = 0; index < root.getNumChildComponents(); ++index)
         if (auto* child = root.getChildComponent(index))
-            if (auto* slider = findSliderAttachedToLabel(*child, labelText))
+            if (auto* slider = findSliderWithTitle(*child, title))
                 return slider;
 
     return nullptr;
@@ -2044,7 +2044,7 @@ TEST_CASE("Panel gesture cleanup survives synchronous owner deletion",
     {
         auto panel = std::make_unique<LfoPanel>(processor);
         panel->setBounds(0, 0, 1000, 500);
-        auto* slider = findSliderAttachedToLabel(*panel, "Rate");
+        auto* slider = findSliderWithTitle(*panel, "LFO rate");
         REQUIRE(slider != nullptr);
         DeleteOwnerOnGestureEnd<LfoPanel> deleteOnEnd(processor, panel);
         beginPrimaryGesture(*slider);
@@ -2062,7 +2062,7 @@ TEST_CASE("Panel gesture cleanup survives synchronous owner deletion",
     {
         auto panel = std::make_unique<LfoPanel>(processor);
         panel->setBounds(0, 0, 1000, 500);
-        auto* slider = findSliderAttachedToLabel(*panel, "Rate");
+        auto* slider = findSliderWithTitle(*panel, "LFO rate");
         auto* button = findButtonWithText(*panel, "LFO 2");
         REQUIRE(slider != nullptr);
         REQUIRE(button != nullptr);
@@ -2082,7 +2082,7 @@ TEST_CASE("Panel gesture cleanup survives synchronous owner deletion",
         auto panel = std::make_unique<LfoPanel>(processor);
         panel->setBounds(0, 0, 1000, 500);
         panel->setVisible(true);
-        auto* slider = findSliderAttachedToLabel(*panel, "Rate");
+        auto* slider = findSliderWithTitle(*panel, "LFO rate");
         REQUIRE(slider != nullptr);
         DeleteOwnerOnGestureEnd<LfoPanel> deleteOnEnd(processor, panel);
         beginPrimaryGesture(*slider);
@@ -2137,7 +2137,7 @@ TEST_CASE("Editor gesture cleanup survives synchronous owner deletion",
         REQUIRE(lfoPanel != nullptr);
 
         performPrimaryClick(*lfoButton);
-        auto* rateSlider = findSliderAttachedToLabel(*lfoPanel, "Rate");
+        auto* rateSlider = findSliderWithTitle(*lfoPanel, "LFO rate");
         REQUIRE(rateSlider != nullptr);
         beginPrimaryGesture(*rateSlider);
         REQUIRE(deleteOnEnd.beginCount == 1);

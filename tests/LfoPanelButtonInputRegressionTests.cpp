@@ -177,23 +177,31 @@ void performPrimaryClick(juce::Button& button)
     endPrimaryClick(button);
 }
 
-PrimaryTextButton* findDirectButton(LfoPanel& panel,
-                                    const juce::String& text)
+PrimaryTextButton* findPanelButton(juce::Component& parent,
+                                  const juce::String& text)
 {
-    for (auto* child : panel.getChildren())
+    for (auto* child : parent.getChildren())
+    {
         if (auto* button = dynamic_cast<PrimaryTextButton*>(child);
             button != nullptr && button->getButtonText() == text)
             return button;
+        if (auto* button = findPanelButton(*child, text)) return button;
+    }
 
     return nullptr;
 }
 
-std::vector<PrimaryTextButton*> collectDirectButtons(LfoPanel& panel)
+std::vector<PrimaryTextButton*> collectVisiblePanelButtons(juce::Component& parent)
 {
     std::vector<PrimaryTextButton*> buttons;
-    for (auto* child : panel.getChildren())
+    for (auto* child : parent.getChildren())
+    {
+        if (! child->isVisible()) continue;
         if (auto* button = dynamic_cast<PrimaryTextButton*>(child))
             buttons.push_back(button);
+        const auto nested = collectVisiblePanelButtons(*child);
+        buttons.insert(buttons.end(), nested.begin(), nested.end());
+    }
 
     return buttons;
 }
@@ -221,13 +229,31 @@ std::vector<juce::Component*> collectVisibleInteractiveChildren(
     std::vector<juce::Component*> controls;
     auto* editor = &LfoPanelBrushTestAccess::getEditor(panel);
 
-    for (auto* child : panel.getChildren())
-        if (child->isVisible()
-            && (child == editor
-                || dynamic_cast<juce::Button*>(child) != nullptr
+    const auto collect = [&](auto&& self, juce::Component& parent) -> void
+    {
+        for (auto* child : parent.getChildren())
+        {
+            if (! child->isVisible()) continue;
+            // Per-row close affordances deliberately overlay their row's
+            // trailing area. Row activation and these overlays are exercised
+            // separately by the bank lifecycle tests.
+            if (dynamic_cast<CloseButton*>(child) != nullptr) continue;
+            if (child == editor
+                || dynamic_cast<PrimaryTextButton*>(child) != nullptr
                 || dynamic_cast<juce::Slider*>(child) != nullptr
-                || dynamic_cast<juce::ComboBox*>(child) != nullptr))
-            controls.push_back(child);
+                || dynamic_cast<juce::ComboBox*>(child) != nullptr)
+            {
+                controls.push_back(child);
+                continue;
+            }
+            if (auto* viewport = dynamic_cast<juce::Viewport*>(child))
+            {
+                if (auto* content = viewport->getViewedComponent()) self(self, *content);
+            }
+            else self(self, *child);
+        }
+    };
+    collect(collect, panel);
 
     return controls;
 }
@@ -252,8 +278,8 @@ TEST_CASE("LFO panel actions use primary-only pointer buttons",
     panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
     panel.setVisible(true);
 
-    auto buttons = collectDirectButtons(panel);
-    REQUIRE(buttons.size() == 9);
+    auto buttons = collectVisiblePanelButtons(panel);
+    REQUIRE(buttons.size() == 10);
 
     std::map<juce::String, int> counts;
     for (auto* button : buttons)
@@ -266,6 +292,12 @@ TEST_CASE("LFO panel actions use primary-only pointer buttons",
     CHECK(counts["Assign"] == 1);
     CHECK(counts["Matrix"] == 1);
     CHECK(counts["BPM"] == 1);
+    CHECK(counts["+"] == 1);
+    for (int lfoIndex = 5; lfoIndex <= 16; ++lfoIndex)
+        CHECK(counts["LFO " + juce::String(lfoIndex)] == 0);
+    auto* secondBank = findPanelButton(panel, "LFO 2");
+    REQUIRE(secondBank != nullptr);
+    CHECK(secondBank->getParentComponent() == panel.getBankViewport().getViewedComponent());
 
     for (auto* button : buttons)
     {
@@ -302,8 +334,8 @@ TEST_CASE("LFO selection cancels a Sync click before rebinding its attachment",
     panel.setBounds(0, 0, 1000, 500);
     panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
     panel.setVisible(true);
-    auto* syncButton = findDirectButton(panel, "BPM");
-    auto* lfoTwoButton = findDirectButton(panel, "LFO 2");
+    auto* syncButton = findPanelButton(panel, "BPM");
+    auto* lfoTwoButton = findPanelButton(panel, "LFO 2");
     auto* oldParameter = processor.treeState.getParameter(oldSyncID);
     auto* newParameter = processor.treeState.getParameter(newSyncID);
     REQUIRE(syncButton != nullptr);
@@ -620,6 +652,54 @@ TEST_CASE("LFO mode switch stops after synchronous owner deletion",
     CHECK(panel == nullptr);
 }
 
+TEST_CASE("LFO bank refresh stops when replacement selection deletes the panel",
+          "[lfo-bank][lfo][ui][lifecycle][reentrancy][self-delete]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto panel = std::make_unique<LfoPanel>(processor);
+    panel->setBounds(0, 0, 984, 258);
+    REQUIRE(panel->getCurrentLfoIndex() == 0);
+    int deliveredSelection = -1;
+    panel->onCurrentLfoChanged = [&](int selected)
+    {
+        deliveredSelection = selected;
+        panel.reset();
+    };
+    REQUIRE(processor.removeLfo(0));
+    REQUIRE(panel != nullptr);
+    SECTION("explicit display refresh")
+    {
+        panel->refreshLfoDisplay();
+    }
+    SECTION("animation tick applies the pending bank refresh")
+    {
+        panel->animationTick(1.0f / 60.0f);
+    }
+    CHECK(deliveredSelection == 1);
+    CHECK(panel == nullptr);
+}
+
+TEST_CASE("Clearing LFO selection survives destruction from the empty-bank callback",
+          "[lfo-bank][lfo-button][lfo][ui][lifecycle][self-delete]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    auto panel = std::make_unique<LfoPanel>(processor);
+    auto& selected = LfoPanelBrushTestAccess::getLfoSelectButton(*panel, 0);
+    REQUIRE(selected.getToggleState());
+    panel->onCurrentLfoChanged = [&](int index)
+    {
+        CHECK(index == -1);
+        CHECK_FALSE(selected.getToggleState());
+        CHECK_FALSE(panel->assignButton.isEnabled());
+        panel.reset();
+    };
+    LfoPanelBrushTestAccess::setLfo(*panel, -1);
+    CHECK(panel == nullptr);
+}
+
 TEST_CASE("LFO panel preserves interactive layout at narrow and scaled sizes",
           "[lfo][ui][layout][resize][scale]")
 {
@@ -638,19 +718,20 @@ TEST_CASE("LFO panel preserves interactive layout at narrow and scaled sizes",
                                              LfoEditMode::BrushPaint);
 
         auto controls = collectVisibleInteractiveChildren(panel);
-        REQUIRE(controls.size() == 16);
+        REQUIRE(controls.size() == 17);
         for (size_t first = 0; first < controls.size(); ++first)
         {
-            CAPTURE(first, controls[first]->getBounds().toString());
-            REQUIRE_FALSE(controls[first]->getBounds().isEmpty());
-            CHECK(panel.getLocalBounds().contains(controls[first]->getBounds()));
+            const auto firstBounds = panel.getLocalArea(controls[first], controls[first]->getLocalBounds());
+            CAPTURE(first, firstBounds.toString());
+            REQUIRE_FALSE(firstBounds.isEmpty());
+            CHECK(panel.getLocalBounds().contains(firstBounds));
 
             for (size_t second = first + 1;
                  second < controls.size(); ++second)
             {
-                CAPTURE(second, controls[second]->getBounds().toString());
-                CHECK_FALSE(controls[first]->getBounds().intersects(
-                    controls[second]->getBounds()));
+                const auto secondBounds = panel.getLocalArea(controls[second], controls[second]->getLocalBounds());
+                CAPTURE(second, secondBounds.toString());
+                CHECK_FALSE(firstBounds.intersects(secondBounds));
             }
         }
     };
@@ -696,6 +777,7 @@ TEST_CASE("LFO bank selection colours its editor controls consistently",
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
     processor.hasUpdateCheckBeenPerformed = true;
+    for (int index = 4; index < 16; ++index) REQUIRE(processor.addLfo() == index);
     LfoPanel panel(processor);
 
     for (int selectedBank = 0;

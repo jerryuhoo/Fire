@@ -583,3 +583,20 @@ including the cut filters' gain/Q shaping. New points occupy fixed parameter
 slots: deleting a neighbour does not move automation or LFO assignments. EQ points
 and routing are saved in presets, A/B states and host projects. Adding/removing
 an EQ point leaves other effects' delay tails and Clouds Freeze recordings intact.
+
+### LFO bank and control sizing
+
+The **LFO BANK** rail uses the same width and row spacing as the Band Lab chain.
+Use **+** to add a source (up to 16), and hover or focus a row to reveal its remove
+button. The rail scrolls without shrinking its rows and brings the selected
+source into view. All sources may be removed; the empty bank offers **+** to
+start again.
+
+Slots keep their identities: deleting LFO 2 does not renumber LFO 3 or move its
+routes. Removing a source clears its routes; other sources and audio-effect tails
+continue. Reusing a slot starts with a fresh shape and timing settings. Only
+present sources appear in Assign and Matrix menus. Old projects retain their
+original four sources; presets, A/B and host state save the expanded bank.
+
+EQ, LFO, insert, band and master ordinary rotaries share the same control and dial
+sizes at each UI scale. The main Drive control retains its larger emphasis size.

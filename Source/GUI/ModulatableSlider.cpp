@@ -682,20 +682,16 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
         else if (completedPopupTarget == PopupMenuTarget::mainSlider
                  && completedPopupParameterID.isNotEmpty())
         {
-            menu.addSectionHeader("Assign modulation");
-            for (int lfoIndex = 0; lfoIndex < fire::ui::lfoBankCount;
-                 ++lfoIndex)
-                menu.addColouredItem(
-                    lfoIndex + 1,
-                    "LFO " + juce::String(lfoIndex + 1),
-                    fire::ui::lfoBankColour(lfoIndex),
-                    true,
-                    isModulated && lfoSource == lfoIndex + 1);
-
+            const juce::Component::SafePointer<ModulatableSlider> safeThis(this);
+            auto stateProvider = getLfoSourceMenuState;
+            const auto sourceState = stateProvider ? stateProvider() : LfoSourceMenuState {};
+            if (! safeThis)
+                return;
+            menu = createLfoAssignmentMenu(sourceState);
             menu.showMenuAsync(fire::ui::prepareContextMenu(
                                    menu, *this, event.getScreenPosition()),
                                createLfoAssignmentMenuResultHandler(
-                                   completedPopupParameterID));
+                                   completedPopupParameterID, sourceState));
         }
 
         return;
@@ -1019,24 +1015,50 @@ std::function<void(int)> ModulatableSlider::createModulationMenuResultHandler(
     };
 }
 
-std::function<void(int)> ModulatableSlider::createLfoAssignmentMenuResultHandler(
-    juce::String targetParameterIDAtOpen)
+juce::PopupMenu ModulatableSlider::createLfoAssignmentMenu(const LfoSourceMenuState& state) const
 {
+    juce::PopupMenu menu;
+    menu.addSectionHeader("Assign modulation");
+    for (int lfoIndex = 0; lfoIndex < fire::lfo_bank::capacity; ++lfoIndex)
+        if (state.contains(lfoIndex))
+            menu.addColouredItem(lfoIndex + 1,
+                                 "LFO " + juce::String(lfoIndex + 1),
+                                 fire::ui::lfoBankColour(lfoIndex), true,
+                                 isModulated && lfoSource == lfoIndex + 1);
+    if (state.presentMask == 0)
+        menu.addItem(0, "Add an LFO in Mod Forge", false);
+    return menu;
+}
+
+std::function<void(int)> ModulatableSlider::createLfoAssignmentMenuResultHandler(
+    juce::String targetParameterIDAtOpen,
+    std::optional<LfoSourceMenuState> sourceStateAtOpen)
+{
+    const juce::Component::SafePointer<ModulatableSlider> safeThis(this);
     if (targetParameterIDAtOpen.isEmpty())
         targetParameterIDAtOpen = parameterID;
 
+    auto stateProvider = getLfoSourceMenuState;
+    const auto sourceState = sourceStateAtOpen.has_value() ? *sourceStateAtOpen
+                             : stateProvider ? stateProvider() : LfoSourceMenuState {};
+    if (! safeThis)
+        return {};
     const auto sessionRevision = ++contextMenuRevision;
-    return [safeThis = juce::Component::SafePointer<ModulatableSlider>(this),
-            sessionRevision,
+    return [safeThis, sessionRevision, sourceState,
             frozenTargetParameterID = std::move(targetParameterIDAtOpen)](int result)
     {
-        if (! safeThis
-            || safeThis->contextMenuRevision != sessionRevision)
+        if (! safeThis || safeThis->contextMenuRevision != sessionRevision)
             return;
 
         ++safeThis->contextMenuRevision;
-        if (! juce::isPositiveAndBelow(result - 1, 4)
-            || frozenTargetParameterID.isEmpty())
+        if (! sourceState.contains(result - 1) || frozenTargetParameterID.isEmpty())
+            return;
+
+        auto currentStateProvider = safeThis->getLfoSourceMenuState;
+        const auto currentState = currentStateProvider ? currentStateProvider() : LfoSourceMenuState {};
+        if (! safeThis || safeThis->contextMenuRevision != sessionRevision + 1
+            || currentState.revision != sourceState.revision
+            || ! currentState.contains(result - 1))
             return;
 
         auto callback = safeThis->onLfoAssignmentRequested;

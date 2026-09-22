@@ -2649,7 +2649,7 @@ void LfoBrushSelector::showPopup()
 LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 {
     setOpaque(true);
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < fire::lfo_bank::capacity; ++i)
     {
         syncParameterIDs[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i);
         smoothParameterIDs[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i);
@@ -2659,6 +2659,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
         [this](const LfoEditor::DataContext& context)
         {
             return context.lfoIndex == currentLfoIndex
+                && processor.isLfoPresent(context.lfoIndex)
                 && processor.getLfoManager().isLfoDataRevisionCurrent(
                     context.lfoIndex, context.revision);
         });
@@ -2712,15 +2713,55 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     };
 
     // Create UI Components
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < fire::lfo_bank::capacity; ++i)
     {
         lfoSelectButtons[i] = std::make_unique<PrimaryTextButton>("LFO " + juce::String(i + 1));
-        addAndMakeVisible(lfoSelectButtons[i].get());
+        bankContent.addChildComponent(lfoSelectButtons[i].get());
         lfoSelectButtons[i]->setRadioGroupId(1);
         lfoSelectButtons[i]->getProperties().set("fireAnimatedSelection", true);
+        lfoSelectButtons[i]->getProperties().set("fireModuleRail", true);
+        lfoSelectButtons[i]->setComponentID("lfoBankSelect" + juce::String(i + 1));
+        lfoSelectButtons[i]->setTitle("Select LFO " + juce::String(i + 1));
+        lfoSelectButtons[i]->setTooltip("Edit LFO " + juce::String(i + 1));
+        auto& remove = removeLfoButtons[static_cast<size_t>(i)];
+        bankContent.addChildComponent(remove);
+        remove.setComponentID("lfoBankRemove" + juce::String(i + 1));
+        remove.setTitle("Remove LFO " + juce::String(i + 1));
+        remove.setTooltip("Remove this LFO and its modulation routings");
+        remove.onClick = [safe = juce::Component::SafePointer<LfoPanel>(this), i]
+        { if (safe && safe->isShowing() && safe->isEnabled()) safe->removeBankLfo(i); };
         styleLfoSelectButton(*lfoSelectButtons[i], fire::ui::lfoBankColour(i));
         lfoSelectButtons[i]->addListener(this);
     }
+    bankViewport.setViewedComponent(&bankContent, false);
+    bankViewport.setScrollBarsShown(true, false);
+    bankViewport.setScrollOnDragMode(juce::Viewport::ScrollOnDragMode::never);
+    bankViewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, fire::ui::colours::textMuted.withAlpha(0.25f));
+    addAndMakeVisible(bankViewport);
+    addAndMakeVisible(addLfoButton);
+    addLfoButton.setComponentID("addLfo");
+    addLfoButton.setTitle("Add LFO");
+    addLfoButton.setTooltip("Add a modulation source (up to 16 LFOs)");
+    addLfoButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::raised);
+    addLfoButton.onClick = [safe = juce::Component::SafePointer<LfoPanel>(this)]
+    {
+        if (! safe || ! safe->isShowing() || ! safe->isEnabled()) return;
+        const auto generation = safe->selectionGeneration + 1;
+        const auto epoch = safe->bankEpoch.load(std::memory_order_acquire);
+        safe->dismissTransientInteraction();
+        if (! safe || ! safe->isShowing() || ! safe->isEnabled()
+            || safe->selectionGeneration != generation
+            || safe->bankEpoch.load(std::memory_order_acquire) != epoch) return;
+        const auto index = safe->processor.addLfo();
+        if (! safe || index < 0) return;
+        safe->refreshBank(true);
+        if (safe) safe->setLfo(index);
+    };
+    addChildComponent(emptyBankLabel);
+    emptyBankLabel.setText("Add an LFO to start modulating", juce::dontSendNotification);
+    emptyBankLabel.setJustificationType(juce::Justification::centred);
+    emptyBankLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    emptyBankLabel.setInterceptsMouseClicks(false, false);
     lfoSelectButtons[0]->setToggleState(true, juce::dontSendNotification);
     lfoSelectionPosition.snapTo(0.0f);
 
@@ -2819,8 +2860,9 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     gridYLabel.setText("Y", juce::dontSendNotification);
 
     // Register as a parameter listener for each of the LFO sync mode parameters.
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < fire::lfo_bank::capacity; ++i)
     {
+        processor.treeState.addParameterListener(fire::lfo_bank::presentParameterID(i), this);
         processor.treeState.addParameterListener(syncParameterIDs[static_cast<size_t>(i)], this);
         processor.treeState.addParameterListener(smoothParameterIDs[static_cast<size_t>(i)], this);
     }
@@ -2867,7 +2909,9 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     lfoPhaseLabel.setJustificationType(juce::Justification::centred);
 
     // Attachments
-    setLfo(currentLfoIndex); // Call helper to set up all attachments for the initial LFO.
+    for (auto* knob : {&rateSlider, &lfoSmoothSlider, &lfoPhaseSlider})
+        knob->getProperties().set("fireOrdinaryKnob", true);
+    refreshBank(true);
 
 }
 
@@ -2895,13 +2939,101 @@ LfoPanel::~LfoPanel()
     rateSlider.removeListener(this);
     lfoPhaseSlider.removeListener(this);
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < fire::lfo_bank::capacity; ++i)
     {
+        processor.treeState.removeParameterListener(fire::lfo_bank::presentParameterID(i), this);
         processor.treeState.removeParameterListener(syncParameterIDs[static_cast<size_t>(i)], this);
         processor.treeState.removeParameterListener(smoothParameterIDs[static_cast<size_t>(i)], this);
     }
 
     cancelPendingUpdate();
+    bankViewport.setViewedComponent(nullptr, false);
+}
+
+void LfoPanel::refreshBank(bool force)
+{
+    std::array<bool, fire::lfo_bank::capacity> next {};
+    for (int slot = 0; slot < fire::lfo_bank::capacity; ++slot)
+        next[static_cast<size_t>(slot)] = processor.isLfoPresent(slot);
+    const auto epoch = bankEpoch.load(std::memory_order_acquire);
+    if (! force && next == bankPresence && epoch == presentedBankEpoch) return;
+    const juce::Component::SafePointer<LfoPanel> safe(this);
+    const auto expectedGeneration = selectionGeneration + 1;
+    dismissTransientInteraction();
+    if (! safe || selectionGeneration != expectedGeneration
+        || epoch != bankEpoch.load(std::memory_order_acquire)) return;
+    bankPresence = next;
+    presentedBankEpoch = epoch;
+    bankRefreshPending.store(false, std::memory_order_release);
+    visibleLfoSlots.clear();
+    for (int slot = 0; slot < fire::lfo_bank::capacity; ++slot)
+    {
+        const bool present = next[static_cast<size_t>(slot)];
+        if (present) visibleLfoSlots.push_back(slot);
+        lfoSelectButtons[static_cast<size_t>(slot)]->setVisible(present);
+        if (! safe) return;
+        removeLfoButtons[static_cast<size_t>(slot)].setVisible(present);
+        if (! safe) return;
+    }
+    addLfoButton.setEnabled(visibleLfoSlots.size() < static_cast<size_t>(fire::lfo_bank::capacity));
+    if (! safe) return;
+    addLfoButton.setTooltip(visibleLfoSlots.size() == static_cast<size_t>(fire::lfo_bank::capacity)
+        ? "All 16 LFO slots are in use" : "Add a modulation source (up to 16 LFOs)");
+    int selection = currentLfoIndex;
+    if (selection < 0 || ! next[static_cast<size_t>(selection)])
+    {
+        const auto following = std::lower_bound(visibleLfoSlots.begin(), visibleLfoSlots.end(), selection);
+        selection = following != visibleLfoSlots.end() ? *following
+                  : visibleLfoSlots.empty() ? -1 : visibleLfoSlots.back();
+    }
+    layoutBank();
+    setLfo(selection);
+    if (! safe) return;
+    lfoSelectionPosition.snapTo(lfoSelectionPosition.target);
+    bankContent.repaint();
+}
+
+void LfoPanel::layoutBank()
+{
+    bankRowPitch = juce::jmax(1, bankViewport.getHeight() / 5);
+    const auto width = juce::jmax(1, bankViewport.getWidth() - juce::roundToInt(6 * scale));
+    bankContent.setSize(width, juce::jmax(bankViewport.getHeight(), bankRowPitch * static_cast<int>(visibleLfoSlots.size())));
+    const auto margin = juce::jmax(1, juce::roundToInt(2 * scale));
+    for (size_t row = 0; row < visibleLfoSlots.size(); ++row)
+    {
+        const auto slot = static_cast<size_t>(visibleLfoSlots[row]);
+        auto bounds = juce::Rectangle<int>(0, static_cast<int>(row) * bankRowPitch, width, bankRowPitch).reduced(margin);
+        lfoSelectButtons[slot]->setBounds(bounds);
+        const auto side = juce::jmin(bounds.getHeight(), juce::roundToInt(24 * scale));
+        lfoSelectButtons[slot]->getProperties().set("fireModuleTrailingSpace", side + 5 * scale);
+        removeLfoButtons[slot].setBounds(bounds.removeFromRight(side).withSizeKeepingCentre(side, side));
+    }
+    revealSelectedLfo();
+}
+
+void LfoPanel::revealSelectedLfo()
+{
+    if (currentLfoIndex < 0 || ! bankPresence[static_cast<size_t>(currentLfoIndex)]) return;
+    const auto bounds = lfoSelectButtons[static_cast<size_t>(currentLfoIndex)]->getBounds();
+    const auto top = bankViewport.getViewPositionY();
+    if (bounds.getY() < top) bankViewport.setViewPosition(0, bounds.getY());
+    else if (bounds.getBottom() > top + bankViewport.getHeight())
+        bankViewport.setViewPosition(0, bounds.getBottom() - bankViewport.getHeight());
+}
+
+void LfoPanel::removeBankLfo(int index)
+{
+    if (! processor.isLfoPresent(index)) return;
+    const juce::Component::SafePointer<LfoPanel> safe(this);
+    const auto generation = selectionGeneration + 1;
+    const auto epoch = bankEpoch.load(std::memory_order_acquire);
+    dismissTransientInteraction();
+    if (! safe || ! isShowing() || ! isEnabled() || selectionGeneration != generation
+        || bankEpoch.load(std::memory_order_acquire) != epoch || ! processor.isLfoPresent(index)) return;
+    const bool removed = processor.removeLfo(index);
+    if (! safe || ! removed) return;
+    if (onLfoRemoved) onLfoRemoved(index);
+    if (safe) refreshBank(true);
 }
 
 void LfoPanel::paint(juce::Graphics& g)
@@ -2923,13 +3055,11 @@ void LfoPanel::paint(juce::Graphics& g)
         paintChrome(cacheGraphics);
     }
     g.drawImage(chromeCache, getLocalBounds().toFloat());
-    paintSelection(g);
 }
 
 void LfoPanel::paintChrome(juce::Graphics& g) const
 {
     fire::ui::drawCanvas(g, getLocalBounds().toFloat());
-    fire::ui::drawPanel(g, leftColumnArea.toFloat(), fire::ui::colours::modulation, false);
     fire::ui::drawPanel(g, centerColumnArea.toFloat(), fire::ui::colours::modulation, false);
     fire::ui::drawPanel(g, rightColumnArea.toFloat(), fire::ui::colours::flame, false);
 
@@ -2943,7 +3073,11 @@ void LfoPanel::paintChrome(juce::Graphics& g) const
         g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, titleHeight * 0.46f)));
         g.drawText(title, titleArea, juce::Justification::centredLeft);
     };
-    drawPlainTitle(leftColumnArea, "LFO BANK");
+    auto bankTitle = leftColumnArea.reduced(juce::roundToInt(8.0f * scale))
+        .removeFromTop(juce::roundToInt(22.0f * scale));
+    g.setColour(fire::ui::colours::textSecondary.withAlpha(0.82f));
+    g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, bankTitle.getHeight() * 0.46f)));
+    g.drawText("LFO BANK", bankTitle.withTrimmedRight(juce::roundToInt(25 * scale)), juce::Justification::centredLeft);
     drawPlainTitle(centerColumnArea, "SHAPE FORGE");
     drawPlainTitle(rightColumnArea, "MOTION");
 
@@ -2956,13 +3090,14 @@ void LfoPanel::paintChrome(juce::Graphics& g) const
 
 void LfoPanel::paintSelection(juce::Graphics& g)
 {
-    if (lfoSelectButtons.empty() || lfoSelectButtons.front() == nullptr)
-        return;
-
-    const auto position = juce::jlimit(-0.2f, 3.2f, lfoSelectionPosition.current);
-    const auto lowerIndex = juce::jlimit(0, 2, static_cast<int>(std::floor(position)));
-    const auto upperIndex = juce::jmin(3, lowerIndex + 1);
-    const auto blend = position - static_cast<float>(lowerIndex);
+    if (visibleLfoSlots.empty()) return;
+    const auto last = static_cast<int>(visibleLfoSlots.size()) - 1;
+    const auto position = juce::jlimit(0.0f, static_cast<float>(last), lfoSelectionPosition.current);
+    const auto lowerRow = juce::jlimit(0, last, static_cast<int>(std::floor(position)));
+    const auto upperRow = juce::jmin(last, lowerRow + 1);
+    const auto lowerIndex = visibleLfoSlots[static_cast<size_t>(lowerRow)];
+    const auto upperIndex = visibleLfoSlots[static_cast<size_t>(upperRow)];
+    const auto blend = position - static_cast<float>(lowerRow);
     const auto lowerBounds = lfoSelectButtons[static_cast<size_t>(lowerIndex)]->getBounds().toFloat();
     const auto upperBounds = lfoSelectButtons[static_cast<size_t>(upperIndex)]->getBounds().toFloat();
 
@@ -2983,8 +3118,8 @@ void LfoPanel::resized()
 {
     chromeCache = {};
     const auto uiScale = scale;
-    const auto outer = juce::jmax(2, juce::roundToInt(7.0f * uiScale));
-    const auto gap = juce::jmax(2, juce::roundToInt(7.0f * uiScale));
+    const auto outer = juce::jmax(2, juce::roundToInt(10.0f * uiScale));
+    const auto gap = juce::roundToInt(juce::jlimit(7.0f * uiScale, 14.0f * uiScale, getWidth() * 0.01f));
     const auto titleHeight = juce::jmax(9, juce::roundToInt(21.0f * uiScale));
     const auto contentInset = uiScale >= 1.0f
                                   ? juce::jmax(4, outer / 2)
@@ -2993,14 +3128,14 @@ void LfoPanel::resized()
 
     auto mainArea = getLocalBounds().reduced(outer);
     const auto availableColumnWidth = juce::jmax(0, mainArea.getWidth() - 2 * gap);
-    const auto leftMinimum = juce::jmax(1, juce::roundToInt(104.0f * uiScale));
+    const auto leftMinimum = juce::jmax(1, juce::roundToInt(120.0f * uiScale));
     const auto leftMaximum = juce::jmax(leftMinimum,
-                                         juce::roundToInt(150.0f * uiScale));
+                                         juce::roundToInt(165.0f * uiScale));
     const auto rightMinimum = juce::jmax(1, juce::roundToInt(248.0f * uiScale));
     const auto rightMaximum = juce::jmax(rightMinimum,
                                           juce::roundToInt(340.0f * uiScale));
     auto leftWidth = juce::jlimit(leftMinimum, leftMaximum,
-                                  juce::roundToInt(mainArea.getWidth() * 0.14f));
+                                  juce::roundToInt(getWidth() * 0.14f));
     auto rightWidth = juce::jlimit(rightMinimum, rightMaximum,
                                    juce::roundToInt(mainArea.getWidth() * 0.29f));
 
@@ -3027,15 +3162,13 @@ void LfoPanel::resized()
     mainArea.removeFromRight(gap);
     centerColumnArea = mainArea;
 
-    auto leftContent = leftColumnArea.reduced(contentInset);
-    leftContent.removeFromTop(titleHeight);
-    juce::FlexBox lfoSelectBox;
-    lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
-    lfoSelectBox.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
-    for (const auto& button : lfoSelectButtons)
-        lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f)
-                                   .withMargin(juce::FlexItem::Margin(2.0f * uiScale)));
-    lfoSelectBox.performLayout(leftContent);
+    auto leftContent = leftColumnArea.reduced(juce::roundToInt(8 * uiScale));
+    auto bankTitle = leftContent.removeFromTop(juce::roundToInt(22 * uiScale));
+    const auto side = juce::jmin(bankTitle.getHeight(), juce::roundToInt(21 * uiScale));
+    addLfoButton.setBounds(bankTitle.getRight() - side, bankTitle.getY() - juce::roundToInt(3 * uiScale), side, side);
+    bankViewport.setScrollBarThickness(juce::jmax(3, juce::roundToInt(4 * uiScale)));
+    bankViewport.setBounds(leftContent);
+    layoutBank();
 
     auto centreContent = centerColumnArea.reduced(contentInset);
     centreContent.removeFromTop(titleHeight);
@@ -3052,6 +3185,7 @@ void LfoPanel::resized()
     centreContent.removeFromTop(juce::jmin(centreContent.getHeight(),
                                            topRowGap));
     lfoEditor.setBounds(centreContent);
+    emptyBankLabel.setBounds(centreContent);
 
     const auto layoutTopRow = [uiScale](
                                   juce::Rectangle<int> row,
@@ -3109,14 +3243,13 @@ void LfoPanel::resized()
     using Track = juce::Grid::TrackInfo;
 
     const auto knobGap = juce::jmax(1, juce::roundToInt(3.0f * uiScale));
-    const auto desiredKnobSize =
-        juce::jmax(1, juce::roundToInt(fire::ui::Metrics::knobWidth * uiScale));
+    const auto desiredKnobSize = fire::ui::ordinaryKnobWidth(uiScale);
     const auto widthLimitedKnobSize =
         juce::jmax(1, (knobsArea.getWidth() - knobGap * 2) / 3);
     const auto scaledKnobSize = juce::jmax(
         1, juce::jmin(desiredKnobSize,
                       widthLimitedKnobSize,
-                      juce::jmax(1, knobsArea.getHeight())));
+                      juce::jmax(1, knobsArea.getHeight() - juce::roundToInt(fire::ui::Metrics::knobValueHeight * uiScale))));
     const auto textBoxWidth = juce::jmin(
         scaledKnobSize,
         juce::jmax(12, juce::roundToInt(TEXTBOX_WIDTH * uiScale)));
@@ -3154,7 +3287,7 @@ void LfoPanel::resized()
         Track(juce::Grid::Px(scaledKnobSize))
     };
 
-    knobGrid.templateRows = { Track(juce::Grid::Px(scaledKnobSize + juce::roundToInt(12.0f * uiScale))) };
+    knobGrid.templateRows = { Track(juce::Grid::Px(fire::ui::ordinaryKnobHeight(scaledKnobSize, uiScale))) };
 
     knobGrid.items.add(juce::GridItem(&rateSlider));
     knobGrid.items.add(juce::GridItem());
@@ -3174,12 +3307,12 @@ void LfoPanel::resized()
         .withHeight(juce::jmax(1.0f, juce::jmin(KNOB_FONT_SIZE * uiScale,
                             fire::ui::Metrics::knobTitleHeight * uiScale * 0.68f)))
         .withStyle("Plain") };
-    const auto updateTitle = [&titleFont](juce::Label& label, juce::Slider& slider)
+    const auto updateTitle = [&titleFont, uiScale](juce::Label& label, juce::Slider& slider)
     {
         label.setFont(titleFont);
-        // Attached labels calculate their bounds from the font. Refresh that
-        // position even when a host changes scale without changing bounds.
-        label.attachToComponent(&slider, false);
+        label.attachToComponent(nullptr, false);
+        label.setBounds(slider.getBounds().removeFromTop(juce::roundToInt(fire::ui::Metrics::knobTitleHeight * uiScale)));
+        label.setInterceptsMouseClicks(false, false);
     };
     updateTitle(rateLabel, rateSlider);
     updateTitle(lfoSmoothLabel, lfoSmoothSlider);
@@ -3188,9 +3321,11 @@ void LfoPanel::resized()
 
 void LfoPanel::animationTick(float deltaSeconds)
 {
-    if (pendingRateSliderUpdate.load(std::memory_order_acquire)
+    const juce::Component::SafePointer<LfoPanel> safeThis(this);
+    if (bankRefreshPending.load(std::memory_order_acquire) || pendingRateSliderUpdate.load(std::memory_order_acquire)
         || pendingSmoothnessUpdates.load(std::memory_order_acquire) != 0)
         handleAsyncUpdate();
+    if (! safeThis) return;
 
     if (! isShowing())
     {
@@ -3215,8 +3350,18 @@ void LfoPanel::animationTick(float deltaSeconds)
     const auto previousSelectionPosition = lfoSelectionPosition.current;
     lfoSelectionPosition.advance(deltaSeconds);
     if (! juce::approximatelyEqual(previousSelectionPosition, lfoSelectionPosition.current))
-        repaint(leftColumnArea);
+        bankContent.repaint();
 
+    for (int index : visibleLfoSlots)
+    {
+        auto& remove = removeLfoButtons[static_cast<size_t>(index)];
+        auto& button = *lfoSelectButtons[static_cast<size_t>(index)];
+        const bool reveal = button.isMouseOver() || button.hasKeyboardFocus(false)
+                         || remove.isMouseOver() || remove.hasKeyboardFocus(false);
+        remove.setPresented(reveal);
+        if (remove.advanceAnimation(deltaSeconds)) remove.repaint();
+    }
+    if (currentLfoIndex < 0) return;
     if (processor.isDawPlaying())
     {
         // If the DAW is playing, get the current phase and show the playhead.
@@ -3234,7 +3379,7 @@ void LfoPanel::showAssignArmed(int lfoIndex)
 {
     assignFeedback = AssignFeedback::armed;
     assignFeedbackSecondsRemaining = 0.0f;
-    assignButton.setButtonText("Assign LFO " + juce::String(juce::jlimit(0, 3, lfoIndex) + 1));
+    assignButton.setButtonText("Assign LFO " + juce::String(juce::jlimit(0, fire::lfo_bank::capacity - 1, lfoIndex) + 1));
     assignButton.setToggleState(true, juce::dontSendNotification);
 }
 
@@ -3242,7 +3387,7 @@ void LfoPanel::showAssignCompleted(int lfoIndex)
 {
     assignFeedback = AssignFeedback::completed;
     assignFeedbackSecondsRemaining = 1.1f;
-    assignButton.setButtonText("LFO " + juce::String(juce::jlimit(0, 3, lfoIndex) + 1)
+    assignButton.setButtonText("LFO " + juce::String(juce::jlimit(0, fire::lfo_bank::capacity - 1, lfoIndex) + 1)
                                + " Assigned");
     assignButton.setToggleState(false, juce::dontSendNotification);
 }
@@ -3252,7 +3397,7 @@ void LfoPanel::showAssignUnchanged(int lfoIndex)
     assignFeedback = AssignFeedback::unchanged;
     assignFeedbackSecondsRemaining = 1.1f;
     assignButton.setButtonText(
-        "LFO " + juce::String(juce::jlimit(0, 3, lfoIndex) + 1)
+        "LFO " + juce::String(juce::jlimit(0, fire::lfo_bank::capacity - 1, lfoIndex) + 1)
         + " Already Assigned");
     assignButton.setToggleState(false, juce::dontSendNotification);
 }
@@ -3284,6 +3429,7 @@ void LfoPanel::clearAssignFeedback()
 void LfoPanel::buttonClicked(juce::Button* button)
 {
     // Mode Switching
+    if (button == &assignButton && currentLfoIndex < 0) return;
     if (button == &assignButton)
     {
         if (onAssignButtonClicked)
@@ -3332,37 +3478,76 @@ void LfoPanel::buttonClicked(juce::Button* button)
 
 void LfoPanel::setLfo(int newIndex)
 {
-    if (! juce::isPositiveAndBelow(newIndex, static_cast<int>(lfoSelectButtons.size())))
-        return;
+    if (newIndex != -1 && (! juce::isPositiveAndBelow(newIndex, static_cast<int>(lfoSelectButtons.size()))
+        || ! processor.isLfoPresent(newIndex))) return;
 
     const juce::Component::SafePointer<LfoPanel> safeThis(this);
+    const auto expectedGeneration = selectionGeneration + 1;
+    const auto expectedEpoch = bankEpoch.load(std::memory_order_acquire);
+    const auto contextCurrent = [safeThis, expectedGeneration, expectedEpoch]
+    {
+        return safeThis && safeThis->selectionGeneration == expectedGeneration
+            && safeThis->bankEpoch.load(std::memory_order_acquire) == expectedEpoch;
+    };
 
     // This must precede changing currentLfoIndex, editor data, or resetting an
     // attachment. A stale drag/text editor belongs exclusively to the LFO that
     // was visible when the interaction began.
     dismissTransientInteraction();
 
-    if (safeThis == nullptr)
+    if (safeThis == nullptr || selectionGeneration != expectedGeneration
+        || bankEpoch.load(std::memory_order_acquire) != expectedEpoch)
         return;
 
     const bool selectionChanged = currentLfoIndex != newIndex;
+    syncButtonAttachment.reset(); rateSliderAttachment.reset();
+    lfoSmoothAttachment.reset(); lfoPhaseAttachment.reset();
+    for (auto* component : std::array<juce::Component*, 10> {&lfoEditor, &editModeButton, &brushModeButton, &brushSelector,
+            &assignButton, &syncButton, &rateSlider, &lfoSmoothSlider, &lfoPhaseSlider, &gridXSlider})
+    {
+        component->setEnabled(newIndex >= 0);
+        if (! contextCurrent()) return;
+    }
+    gridYSlider.setEnabled(newIndex >= 0);
+    if (! contextCurrent()) return;
+    lfoEditor.setVisible(newIndex >= 0);
+    if (! contextCurrent()) return;
+    emptyBankLabel.setVisible(newIndex < 0);
+    if (! contextCurrent()) return;
+    if (newIndex < 0)
+    {
+        currentLfoIndex = -1;
+        clearAssignFeedback();
+        for (auto& button : lfoSelectButtons)
+        {
+            button->setToggleState(false, juce::dontSendNotification);
+            if (! contextCurrent()) return;
+        }
+        if (selectionChanged && onCurrentLfoChanged) onCurrentLfoChanged(-1);
+        return;
+    }
+
 
     // Update the current LFO index and tell the editor to display the new data.
     currentLfoIndex = newIndex;
-    lfoSelectionPosition.setTarget(static_cast<float>(currentLfoIndex));
+    const auto row = std::find(visibleLfoSlots.begin(), visibleLfoSlots.end(), currentLfoIndex);
+    lfoSelectionPosition.setTarget(static_cast<float>(std::distance(visibleLfoSlots.begin(), row)));
+    revealSelectedLfo();
     const auto accent = fire::ui::lfoBankColour(currentLfoIndex);
     for (auto* motionSlider : { &rateSlider,
                                 &lfoSmoothSlider,
                                 &lfoPhaseSlider })
         motionSlider->setColour(juce::Slider::rotarySliderFillColourId,
                                 accent);
-    repaint(leftColumnArea);
+    bankContent.repaint();
     displayLfoData(currentLfoIndex);
+    if (! contextCurrent()) return;
 
     // Explicitly set the toggle state for all buttons in the group.
     for (int i = 0; i < lfoSelectButtons.size(); ++i)
     {
         lfoSelectButtons[i]->setToggleState(i == currentLfoIndex, juce::dontSendNotification);
+        if (! contextCurrent()) return;
     }
 
     // Reset and re-create all attachments to point to the new LFO's parameters.
@@ -3381,6 +3566,7 @@ void LfoPanel::setLfo(int newIndex)
         processor.treeState, ParameterIDAndName::getIDString(LFO_PHASE_ID, currentLfoIndex), lfoPhaseSlider);
     // This must be called after attachments are updated.
     updateRateSlider();
+    if (! contextCurrent()) return;
 
     if (selectionChanged && onCurrentLfoChanged)
         onCurrentLfoChanged(currentLfoIndex);
@@ -3389,6 +3575,15 @@ void LfoPanel::setLfo(int newIndex)
 void LfoPanel::dismissTransientInteraction()
 {
     const juce::Component::SafePointer<LfoPanel> safeThis(this);
+
+    ++selectionGeneration;
+    addLfoButton.dismissPointerGesture();
+    if (! safeThis) return;
+    for (auto& remove : removeLfoButtons)
+    {
+        remove.setPresented(false, false);
+        if (! safeThis) return;
+    }
 
     // Cancel the editor first. Slider dismissal may synchronously notify
     // listeners, while LFO editing cancellation is deliberately callback-free.
@@ -3635,7 +3830,7 @@ void LfoPanel::setOnDataChangedCallback(std::function<void()> callback)
 
 void LfoPanel::displayLfoData(int index)
 {
-    if (! juce::isPositiveAndBelow(index, 4))
+    if (! juce::isPositiveAndBelow(index, fire::lfo_bank::capacity))
     {
         jassertfalse;
         return;
@@ -3654,6 +3849,7 @@ void LfoPanel::displayLfoData(int index)
 
 void LfoPanel::updateRateSlider()
 {
+    if (currentLfoIndex < 0 || ! processor.isLfoPresent(currentLfoIndex)) return;
     // A SliderAttachment owns the begin/end gesture pair for its parameter.
     // Replacing it while the slider is down strands the old parameter's begin
     // gesture and sends the eventual end gesture to the new parameter. Keep
@@ -3726,9 +3922,17 @@ void LfoPanel::updateRateSlider()
 
 void LfoPanel::parameterChanged(const juce::String& parameterID, float /*newValue*/)
 {
+    if (fire::lfo_bank::isPresentParameterID(parameterID))
+    {
+        bankEpoch.fetch_add(1, std::memory_order_release);
+        bankRefreshPending.store(true, std::memory_order_release);
+        triggerAsyncUpdate();
+        return;
+    }
+
     // This callback may run on the audio thread. Avoid reading message-thread
     // UI state here; any sync-mode change can coalesce into one UI refresh.
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < fire::lfo_bank::capacity; ++i)
     {
         if (parameterID == syncParameterIDs[static_cast<size_t>(i)])
         {
@@ -3737,7 +3941,7 @@ void LfoPanel::parameterChanged(const juce::String& parameterID, float /*newValu
         }
     }
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < fire::lfo_bank::capacity; ++i)
     {
         if (parameterID == smoothParameterIDs[static_cast<size_t>(i)])
         {
@@ -3883,7 +4087,10 @@ void LfoPanel::styleButton(juce::Button& button, bool isToggle)
 
 void LfoPanel::refreshLfoDisplay()
 {
-    displayLfoData(currentLfoIndex);
+    const juce::Component::SafePointer<LfoPanel> safeThis(this);
+    refreshBank();
+    if (! safeThis) return;
+    if (currentLfoIndex >= 0) displayLfoData(currentLfoIndex);
 }
 
 void LfoEditor::selectAllPoints()
@@ -4005,13 +4212,15 @@ void LfoEditor::invertShape(bool invertX, bool invertY)
 
 void LfoPanel::handleAsyncUpdate()
 {
-    // This function is guaranteed to be called on the main UI thread.
+    const juce::Component::SafePointer<LfoPanel> safe(this);
+    if (bankRefreshPending.exchange(false, std::memory_order_acq_rel)) refreshBank();
+    if (! safe) return;
     // It is now safe to update the slider and its attachment here.
     if (pendingRateSliderUpdate.exchange(false, std::memory_order_acquire))
         updateRateSlider();
 
     const auto smoothnessUpdates = pendingSmoothnessUpdates.exchange(0, std::memory_order_acquire);
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < fire::lfo_bank::capacity; ++i)
     {
         if ((smoothnessUpdates & (1u << static_cast<unsigned int>(i))) == 0)
             continue;

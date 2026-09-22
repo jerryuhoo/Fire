@@ -576,12 +576,15 @@ void performOwnedPrimaryDoubleClick(LfoEditor& editor,
     editor.mouseDoubleClick(completedRelease);
 }
 
-PrimaryTextButton* findDirectButton(LfoPanel& panel,
-                                    const juce::String& text)
+PrimaryTextButton* findButtonWithText(juce::Component& root,
+                                      const juce::String& text)
 {
-    for (auto* child : panel.getChildren())
-        if (auto* button = dynamic_cast<PrimaryTextButton*>(child);
-            button != nullptr && button->getButtonText() == text)
+    if (auto* button = dynamic_cast<PrimaryTextButton*>(&root);
+        button != nullptr && button->getButtonText() == text)
+        return button;
+
+    for (auto* child : root.getChildren())
+        if (auto* button = findButtonWithText(*child, text))
             return button;
 
     return nullptr;
@@ -1546,8 +1549,8 @@ TEST_CASE("LFO panel invalidates menu sessions on dismissal and slot rebinding",
 
     SECTION("LFO zero-to-one-to-zero rebinding defeats local ABA")
     {
-        auto* lfoOneButton = findDirectButton(panel, "LFO 1");
-        auto* lfoTwoButton = findDirectButton(panel, "LFO 2");
+        auto* lfoOneButton = findButtonWithText(panel, "LFO 1");
+        auto* lfoTwoButton = findButtonWithText(panel, "LFO 2");
         REQUIRE(lfoOneButton != nullptr);
         REQUIRE(lfoTwoButton != nullptr);
 

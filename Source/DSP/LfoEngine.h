@@ -65,6 +65,9 @@ public:
 
     float getPhase() const;
     float getLastOutput() const;
+    /** Audio thread only. Lookup phase of the most recently rendered sample,
+        including the live phase-correction bridge; -1 before rendering. */
+    float getLastRenderedPhaseForAudioThread() const noexcept { return lastRenderedPhase; }
 
 private:
     static constexpr size_t wavetableSize = 1024;
@@ -81,6 +84,7 @@ private:
     float phase = 0.0f;
     float phaseDelta = 0.0f;
     float lastOutput = 0.0f;
+    float lastRenderedPhase = -1.0f;
 
     // Live timing changes keep the canonical host phase immediately correct,
     // while this shortest wrapped offset makes the audible lookup continuous.

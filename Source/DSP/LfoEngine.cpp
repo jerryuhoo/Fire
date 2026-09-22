@@ -20,6 +20,7 @@ void LfoEngine::reset()
     phaseCorrectionStep = 0.0f;
     phaseCorrectionRemaining = 0;
     lastOutput = 0.0f;
+    lastRenderedPhase = -1.0f;
     publishedPhase.store(phase, std::memory_order_relaxed);
     publishedOutput.store(lastOutput, std::memory_order_relaxed);
     transitionSamplesProcessed = transitionLengthSamples;
@@ -28,6 +29,7 @@ void LfoEngine::reset()
 
 void LfoEngine::prepare(const juce::dsp::ProcessSpec& spec)
 {
+    lastRenderedPhase = -1.0f;
     jassert(std::isfinite(spec.sampleRate) && spec.sampleRate > 0.0);
     const double safeSampleRate = std::isfinite(spec.sampleRate) && spec.sampleRate > 0.0
                                       ? spec.sampleRate
@@ -247,6 +249,7 @@ float LfoEngine::process()
         audiblePhase -= std::floor(audiblePhase);
         safePhase = juce::jlimit(0.0f, 1.0f, audiblePhase);
     }
+    lastRenderedPhase = safePhase;
     const auto& table = wavetableBanks[static_cast<size_t>(activeBank)]
                                       [static_cast<size_t>(activeSmoothnessStep)];
     float unipolarOutput = lookupTable(table, safePhase);

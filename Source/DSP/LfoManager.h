@@ -238,6 +238,14 @@ public:
         const std::array<LfoData, fire::lfo_bank::defaultCount>& newLfoData,
         juce::Array<ModulationRouting> newRoutings);
     bool isLfoPresent(int index) const noexcept;
+    struct VisualState
+    {
+        float phase = -1.0f;
+        // Monotonic publication sequence, including lifecycle invalidations.
+        // Zero means no coherent snapshot was available; retain the previous UI frame.
+        std::uint64_t renderSequence = 0;
+    };
+    VisualState getLfoVisualState(int index) const noexcept;
     // Message-thread slot lifecycle, called inside the processor's coherent
     // parameter transaction after the five timing values have been reset.
     void resetLfoSlot(int index);
@@ -303,6 +311,7 @@ private:
         size_t& destinationCount) const;
     bool refreshRuntimeStateIfAvailable();
     void updatePublishedRoutingState() noexcept;
+    void publishVisualState(const AudioThreadParameterSnapshot* parameters) noexcept;
 
     float mapRateSyncIndexToBeatMultiplier(int index) const;
     float getSyncCycleLengthInQuarterNotes(int index, float quarterNotesPerBar) const noexcept;
@@ -325,6 +334,10 @@ private:
     std::array<std::atomic<std::uint32_t>, fire::lfo_bank::capacity> slotGenerations {};
     std::array<std::uint32_t, fire::lfo_bank::capacity> appliedSlotGenerations {};
     std::array<bool, fire::lfo_bank::capacity> previouslyPresent {};
+    std::array<std::atomic<float>, fire::lfo_bank::capacity> visualPhases {};
+    static_assert(std::atomic<std::uint64_t>::is_always_lock_free,
+                  "LFO visual publication must remain lock-free");
+    std::atomic<std::uint64_t> visualSequence { 0 };
 
     juce::CriticalSection dataAccessLock;
 

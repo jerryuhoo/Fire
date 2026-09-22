@@ -431,6 +431,7 @@ public:
     SerializablePresetStateSnapshot captureSerializablePresetStateSnapshot() const;
     bool isDawPlaying() const;
     float getLfoPhase(int lfoIndex) const;
+    LfoManager::VisualState getLfoVisualState(int lfoIndex) const noexcept;
     std::unique_ptr<LfoManager> lfoManager;
 private:
     // StateAB snapshots itself while later processor members (notably

@@ -600,3 +600,12 @@ original four sources; presets, A/B and host state save the expanded bank.
 
 EQ, LFO, insert, band and master ordinary rotaries share the same control and dial
 sizes at each UI scale. The main Drive control retains its larger emphasis size.
+
+The large Drive dial uses a single proportional pointer; its modulation range
+and source badge stay visible without extra pointer marks. In Shape Forge, a
+short gradient highlight follows the LFO curve with a soft trailing glow. It uses
+the phase actually read by the audio engine, including phase offsets and timing
+corrections. The glow wraps across the cycle boundary, stays below edit handles,
+and follows free-running audio even when transport is stopped. When audio
+callbacks stop, it holds the last real position and fades out. Waveform and glow
+masks are cached; movement redraws only the old and new highlight regions.

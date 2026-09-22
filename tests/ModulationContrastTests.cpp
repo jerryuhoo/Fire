@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <array>
 #include <cmath>
+#include <vector>
 
 namespace
 {
@@ -173,7 +174,139 @@ void writeSpecimen(const juce::File& directory, int deviceScale)
     REQUIRE(stream->truncate().wasOk());
     CHECK(juce::PNGImageFormat().writeImageToStream(image, *stream));
 }
+
+struct PointerPixels
+{
+    int segments = 0;
+    int width = 0;
+    int length = 0;
+};
+
+PointerPixels measureUprightPointer(const juce::Image& image)
+{
+    // With a midpoint value the pointer is upright. Inspect the inner face,
+    // excluding labels and the value arc, and count separate bright marks.
+    const int centreX = image.getWidth() / 2;
+    const int firstY = juce::roundToInt(image.getHeight() * 0.14f);
+    const int lastY = image.getHeight() / 2;
+    PointerPixels result;
+    int start = -1, longestStart = 0;
+    for (int y = firstY; y <= lastY; ++y)
+    {
+        const bool bright = y < lastY && brightness(image.getPixelAt(centreX, y)) > 0.65f;
+        if (bright && start < 0) { start = y; ++result.segments; }
+        if (! bright && start >= 0)
+        {
+            if (y - start > result.length) { result.length = y - start; longestStart = start; }
+            start = -1;
+        }
+    }
+    const int middleY = longestStart + result.length / 2;
+    for (int x = centreX - image.getWidth() / 8; x <= centreX + image.getWidth() / 8; ++x)
+        if (brightness(image.getPixelAt(x, middleY)) > 0.65f) ++result.width;
+    return result;
+}
+
+bool samePixels(const juce::Image& first, const juce::Image& second)
+{
+    if (first.getBounds() != second.getBounds()) return false;
+    for (int y = 0; y < first.getHeight(); ++y)
+        for (int x = 0; x < first.getWidth(); ++x)
+            if (first.getPixelAt(x, y) != second.getPixelAt(x, y)) return false;
+    return true;
+}
+
+void writeDriveSpecimen(const juce::File& directory, int deviceScale)
+{
+    constexpr int width = 1040, height = 800;
+    juce::Image image(juce::Image::ARGB, width * deviceScale, height * deviceScale, true);
+    juce::Graphics graphics(image);
+    graphics.fillAll(fire::ui::colours::canvas);
+    graphics.addTransform(juce::AffineTransform::scale(static_cast<float>(deviceScale)));
+    graphics.setColour(fire::ui::colours::textPrimary);
+    graphics.setFont(fire::ui::labelFont(18.0f));
+    graphics.drawText("Drive / one proportional pointer", 20, 12, 1000, 28, juce::Justification::centredLeft);
+    graphics.setFont(fire::ui::bodyFont(12.0f));
+    graphics.setColour(fire::ui::colours::textSecondary);
+    graphics.drawText("Top: no LFO. Bottom: assigned LFO with a range arc and source badge.",
+                      20, 43, 1000, 22, juce::Justification::centredLeft);
+    constexpr std::array<int, 3> sizes {160, 240, 320};
+    for (int row = 0; row < 2; ++row)
+        for (size_t column = 0; column < sizes.size(); ++column)
+        {
+            const auto size = sizes[column];
+            const auto uiScale = static_cast<float>(size) / 160.0f;
+            DialFixture fixture(size, uiScale);
+            fixture.slider.setComponentID("drive");
+            fixture.slider.setLabel("DRIVE", fire::ui::colours::drive);
+            fixture.slider.setColour(juce::Slider::rotarySliderFillColourId, fire::ui::colours::drive);
+            fixture.slider.isModulated = row != 0;
+            const int x = 20 + static_cast<int>(column) * 340;
+            const int y = 80 + row * 350;
+            graphics.setColour(fire::ui::colours::textSecondary);
+            graphics.setFont(fire::ui::bodyFont(12.0f));
+            graphics.drawText(juce::String(size) + " px / UI " + juce::String(uiScale, 1) + "x",
+                              x, y, 320, 20, juce::Justification::centred);
+            juce::Graphics::ScopedSaveState state(graphics);
+            graphics.addTransform(juce::AffineTransform::translation(
+                static_cast<float>(x + (320 - size) / 2), static_cast<float>(y + 24 + (320 - size) / 2)));
+            fixture.slider.paintEntireComponent(graphics, true);
+        }
+    auto stream = directory.getChildFile("drive-pointer-" + juce::String(deviceScale) + "x.png").createOutputStream();
+    REQUIRE(stream != nullptr);
+    REQUIRE(stream->setPosition(0));
+    REQUIRE(stream->truncate().wasOk());
+    CHECK(juce::PNGImageFormat().writeImageToStream(image, *stream));
+}
 } // namespace
+
+TEST_CASE("Drive has one bright pointer with or without LFO and its width follows the dial size",
+          "[drive-pointer][modulation-contrast][ui][render]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    std::vector<PointerPixels> measurements;
+    // Keep UI scale fixed while changing the dial, so a fixed stroke multiplied
+    // only by UI scale cannot satisfy the proportional-width check.
+    for (int size : {160, 240, 320})
+    {
+        CAPTURE(size);
+        DialFixture fixture(size);
+        fixture.slider.setComponentID("drive");
+        fixture.slider.isModulated = false;
+        const auto plain = measureUprightPointer(fixture.render(false, 2));
+        REQUIRE(plain.segments == 1);
+        REQUIRE(plain.width > 0);
+        REQUIRE(plain.length > 0);
+        measurements.push_back(plain);
+        fixture.slider.isModulated = true;
+        fixture.slider.lfoValue = 0.0;
+        const auto coincidentImage = fixture.render(false, 2);
+        const auto assigned = measureUprightPointer(coincidentImage);
+        CHECK(assigned.segments == 1);
+        CHECK(assigned.width == plain.width);
+        CHECK(assigned.length == plain.length);
+        fixture.slider.lfoValue = 0.6;
+        CHECK(samePixels(coincidentImage, fixture.render(false, 2)));
+    }
+    const auto& small = measurements.front();
+    const auto& large = measurements.back();
+    CHECK(large.width >= small.width * 1.8f);
+    CHECK(large.width <= small.width * 2.4f);
+    CHECK(large.length >= small.length * 1.8f);
+    CHECK(large.length <= small.length * 2.4f);
+}
+
+TEST_CASE("Drive pointer specimen covers plain and modulated dials at multiple scales",
+          "[drive-pointer][modulation-specimen][ui][render]")
+{
+    const auto path = juce::SystemStats::getEnvironmentVariable("FIRE_MODULATION_SNAPSHOT_DIR", {});
+    if (path.isEmpty()) return;
+    juce::ScopedJuceInitialiser_GUI gui;
+    const juce::File directory(path);
+    REQUIRE(directory.createDirectory().wasOk());
+    writeDriveSpecimen(directory, 1);
+    writeDriveSpecimen(directory, 2);
+}
 
 TEST_CASE("LFO range remains subordinate to live position and base origin for every bank",
           "[modulation-contrast][modulation][ui][render]")

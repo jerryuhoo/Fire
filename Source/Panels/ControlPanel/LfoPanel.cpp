@@ -609,9 +609,22 @@ void LfoEditor::paint(juce::Graphics& g)
         juce::Graphics cacheGraphics(waveCache);
         cacheGraphics.addTransform(juce::AffineTransform::scale(imageScale));
         drawWaveform(cacheGraphics, accent);
+
+        // A reusable alpha mask keeps the moving glow independent of the
+        // expensive curve rasterisation. Only its small gradient window moves.
+        flowMask = juce::Image(juce::Image::ARGB, waveCache.getWidth(), waveCache.getHeight(), true);
+        juce::Graphics glow(flowMask);
+        glow.addTransform(juce::AffineTransform::scale(imageScale));
+        for (auto layer : {std::pair{9.0f, 0.07f}, std::pair{5.0f, 0.20f}, std::pair{2.8f, 0.95f}})
+        {
+            glow.setColour(juce::Colours::white.withAlpha(layer.second));
+            glow.strokePath(cachedWavePath, juce::PathStrokeType(layer.first,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
     }
     g.setOpacity(1.0f);
     g.drawImage(waveCache, getLocalBounds().toFloat());
+    drawFlow(g, accent);
 
     // Draw control points, with visual feedback for selection.
     for (int i = 0; i < activeLfoData.points.size(); ++i)
@@ -667,19 +680,6 @@ void LfoEditor::paint(juce::Graphics& g)
         g.drawRoundedRectangle(rectToDraw.toFloat(), 2.0f, 1.0f);
     }
 
-    // Draw playhead
-    if (playheadPos >= 0.0f)
-    {
-        const auto x = static_cast<float>(getWidth()) * playheadPos;
-        juce::ColourGradient playhead(fire::ui::colours::whiteHot.withAlpha(0.92f), x, 0.0f,
-                                      fire::ui::colours::ember.withAlpha(0.18f), x,
-                                      static_cast<float>(getHeight()), false);
-        g.setGradientFill(playhead);
-        g.fillRect(x - 0.5f, 0.0f, 1.0f, static_cast<float>(getHeight()));
-        g.setColour(fire::ui::colours::whiteHot);
-        g.fillEllipse(x - 2.5f, 2.0f, 5.0f, 5.0f);
-    }
-
     // Draw phase offset line when dragging
     if (phaseOffsetPosition >= 0.0f)
     {
@@ -694,6 +694,7 @@ void LfoEditor::resized()
 {
     gridCache = {};
     waveCache = {};
+    flowMask = {};
     cachedWavePathSignature = 0;
 }
 
@@ -829,12 +830,69 @@ void LfoEditor::setGridDivisions(int horizontal, int vertical)
 
 void LfoEditor::setPlayheadPosition(float position)
 {
+    position = std::isfinite(position) && position >= 0.0f && position <= 1.0f
+        ? (position == 1.0f ? 0.0f : position) : -1.0f;
     if (! juce::approximatelyEqual(playheadPos, position))
     {
         const auto previous = playheadPos;
         playheadPos = position;
-        repaintCursor(previous);
-        repaintCursor(playheadPos);
+        repaintFlow(previous);
+        repaintFlow(playheadPos);
+    }
+}
+
+void LfoEditor::setPlayheadOpacity(float opacity)
+{
+    opacity = std::isfinite(opacity) ? juce::jlimit(0.0f, 1.0f, opacity) : 0.0f;
+    if (juce::approximatelyEqual(playheadOpacity, opacity)) return;
+    playheadOpacity = opacity;
+    repaintFlow(playheadPos);
+}
+
+float LfoEditor::flowTrailWidth() const noexcept
+{
+    return juce::jmin(static_cast<float>(getWidth()) * 0.30f,
+                      juce::jlimit(24.0f, 100.0f, static_cast<float>(getWidth()) * 0.09f));
+}
+
+void LfoEditor::repaintFlow(float position)
+{
+    if (! std::isfinite(position) || position < 0 || getWidth() <= 0) return;
+    const auto width = static_cast<float>(getWidth());
+    const auto trail = flowTrailWidth();
+    for (int wrap = -1; wrap <= 1; ++wrap)
+    {
+        const auto x = position * width + static_cast<float>(wrap) * width;
+        const auto damage = juce::Rectangle<float>(x - trail - 2.0f, 0.0f,
+            trail * 1.20f + 4.0f, static_cast<float>(getHeight()))
+            .getSmallestIntegerContainer().getIntersection(getLocalBounds());
+        if (! damage.isEmpty()) repaint(damage);
+    }
+}
+
+void LfoEditor::drawFlow(juce::Graphics& g, juce::Colour accent) const
+{
+    if (playheadPos < 0 || playheadOpacity <= 0.0f || flowMask.isNull() || getWidth() <= 0) return;
+    const auto width = static_cast<float>(getWidth());
+    const auto trail = flowTrailWidth();
+    const auto lead = trail * 0.20f;
+    for (int wrap = -1; wrap <= 1; ++wrap)
+    {
+        const auto x = playheadPos * width + static_cast<float>(wrap) * width;
+        auto window = juce::Rectangle<float>(x - trail, 0.0f, trail + lead, static_cast<float>(getHeight()));
+        if (! window.intersects(getLocalBounds().toFloat())) continue;
+        const juce::Graphics::ScopedSaveState saved(g);
+        g.reduceClipRegion(window.expanded(1.0f, 0.0f).getSmallestIntegerContainer());
+        const auto light = accent.interpolatedWith(fire::ui::colours::whiteHot, 0.86f);
+        juce::ColourGradient gradient(accent.withAlpha(0.0f), x - trail, 0.0f,
+                                      accent.withAlpha(0.0f), x + lead, 0.0f, false);
+        gradient.addColour(0.18, accent.withAlpha(0.07f * playheadOpacity));
+        gradient.addColour(0.48, accent.withAlpha(0.40f * playheadOpacity));
+        gradient.addColour(0.70, light.withAlpha(0.78f * playheadOpacity));
+        gradient.addColour(1.0 / 1.20, fire::ui::colours::whiteHot.withAlpha(0.98f * playheadOpacity));
+        gradient.addColour(0.94, light.withAlpha(0.36f * playheadOpacity));
+        g.setGradientFill(gradient);
+        g.drawImage(flowMask, getLocalBounds().toFloat(), juce::RectanglePlacement::stretchToFit, true);
     }
 }
 
@@ -3327,7 +3385,7 @@ void LfoPanel::animationTick(float deltaSeconds)
         handleAsyncUpdate();
     if (! safeThis) return;
 
-    if (! isShowing())
+    if (! isShowing() || ! isEnabled())
     {
         // Hiding MOD FORGE is only a workspace change, not the end of the
         // editor session. Preserve completed/cancelled feedback and its
@@ -3335,6 +3393,7 @@ void LfoPanel::animationTick(float deltaSeconds)
         // FireAudioProcessorEditor explicitly clears this state when the
         // actual editor session is hidden or disabled.
         lfoSelectionPosition.snapTo(lfoSelectionPosition.target);
+        resetFlowPresentation();
         return;
     }
 
@@ -3362,17 +3421,47 @@ void LfoPanel::animationTick(float deltaSeconds)
         if (remove.advanceAnimation(deltaSeconds)) remove.repaint();
     }
     if (currentLfoIndex < 0) return;
-    if (processor.isDawPlaying())
+    updateFlowPresentation(deltaSeconds);
+}
+
+void LfoPanel::resetFlowPresentation()
+{
+    lastFlowSequence = processor.getLfoVisualState(currentLfoIndex).renderSequence;
+    flowIdleSeconds = 0.0f;
+    flowHasFreshAudio = false;
+    lfoEditor.setPlayheadPosition(-1.0f);
+    lfoEditor.setPlayheadOpacity(0.0f);
+}
+
+void LfoPanel::updateFlowPresentation(float deltaSeconds)
+{
+    const auto visual = processor.getLfoVisualState(currentLfoIndex);
+    if (! processor.isLfoPresent(currentLfoIndex)
+        || (visual.renderSequence != 0 && visual.phase < 0.0f))
     {
-        // If the DAW is playing, get the current phase and show the playhead.
-        const float currentPhase = processor.getLfoPhase(currentLfoIndex);
-        lfoEditor.setPlayheadPosition(currentPhase);
+        resetFlowPresentation();
+        return;
     }
-    else
+    if (visual.renderSequence != 0 && visual.renderSequence != lastFlowSequence)
     {
-        // If the DAW is stopped, pass a special value (-1.0f) to hide the playhead.
-        lfoEditor.setPlayheadPosition(-1.0f);
+        lastFlowSequence = visual.renderSequence;
+        flowIdleSeconds = 0.0f;
+        flowHasFreshAudio = true;
+        lfoEditor.setPlayheadPosition(visual.phase);
     }
+    else if (flowHasFreshAudio && std::isfinite(deltaSeconds) && deltaSeconds > 0.0f)
+    {
+        flowIdleSeconds += deltaSeconds;
+    }
+    // Follow the audio even while transport is stopped (free-running LFOs).
+    // If the host stops callbacks, hold the last real phase and fade away.
+    const auto sampleRate = processor.getSampleRate();
+    const auto blockHold = sampleRate > 0.0
+        ? static_cast<float>(2.0 * processor.getBlockSize() / sampleRate) : 0.0f;
+    const auto holdSeconds = juce::jmax(0.15f, blockHold);
+    const auto opacity = flowHasFreshAudio
+        ? juce::jlimit(0.0f, 1.0f, 1.0f - (flowIdleSeconds - holdSeconds) / 0.20f) : 0.0f;
+    lfoEditor.setPlayheadOpacity(opacity);
 }
 
 void LfoPanel::showAssignArmed(int lfoIndex)
@@ -3517,6 +3606,7 @@ void LfoPanel::setLfo(int newIndex)
     if (newIndex < 0)
     {
         currentLfoIndex = -1;
+        resetFlowPresentation();
         clearAssignFeedback();
         for (auto& button : lfoSelectButtons)
         {
@@ -3530,6 +3620,7 @@ void LfoPanel::setLfo(int newIndex)
 
     // Update the current LFO index and tell the editor to display the new data.
     currentLfoIndex = newIndex;
+    resetFlowPresentation();
     const auto row = std::find(visibleLfoSlots.begin(), visibleLfoSlots.end(), currentLfoIndex);
     lfoSelectionPosition.setTarget(static_cast<float>(std::distance(visibleLfoSlots.begin(), row)));
     revealSelectedLfo();
@@ -3575,6 +3666,7 @@ void LfoPanel::setLfo(int newIndex)
 void LfoPanel::dismissTransientInteraction()
 {
     const juce::Component::SafePointer<LfoPanel> safeThis(this);
+    resetFlowPresentation();
 
     ++selectionGeneration;
     addLfoButton.dismissPointerGesture();
@@ -3796,6 +3888,7 @@ void LfoPanel::visibilityChanged()
     if (safeThis == nullptr)
         return;
 
+    resetFlowPresentation();
     if (! isShowing())
     {
         dismissTransientInteraction();
@@ -3812,6 +3905,7 @@ void LfoPanel::enablementChanged()
     const juce::Component::SafePointer<LfoPanel> safeThis(this);
     juce::Component::enablementChanged();
 
+    if (safeThis != nullptr) resetFlowPresentation();
     if (safeThis != nullptr && ! isEnabled())
     {
         dismissTransientInteraction();

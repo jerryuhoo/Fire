@@ -6977,6 +6977,11 @@ float FireAudioProcessor::getLfoPhase(int lfoIndex) const
     return lfoManager->getLfoPhase(lfoIndex);
 }
 
+LfoManager::VisualState FireAudioProcessor::getLfoVisualState(int lfoIndex) const noexcept
+{
+    return lfoManager->getLfoVisualState(lfoIndex);
+}
+
 bool FireAudioProcessor::updateParameters(
     const juce::AudioBuffer<float>& lfoOutputs,
     std::uint32_t topologySequenceAtCallbackStart,

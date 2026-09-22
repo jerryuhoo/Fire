@@ -21,6 +21,16 @@ struct LfoEditorTestAccess
         return editor.gridCache;
     }
 
+    static juce::Image waveCache(const LfoEditor& editor)
+    {
+        return editor.waveCache;
+    }
+
+    static juce::Image flowMask(const LfoEditor& editor)
+    {
+        return editor.flowMask;
+    }
+
     static int hoveredPoint(const LfoEditor& editor) noexcept
     {
         return editor.hoveredPointIndex;
@@ -3258,7 +3268,7 @@ TEST_CASE("LFO editor point hover and focus feedback animate only while visible"
     CHECK(LfoEditorTestAccess::hoverAmount(editor) == 0.0f);
 }
 
-TEST_CASE("LFO cursor updates repaint narrow strips without leaving stale pixels",
+TEST_CASE("LFO flow and phase offset updates repaint bounded strips without stale pixels",
           "[lfo][editor][ui][repaint][regression]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
@@ -3271,20 +3281,27 @@ TEST_CASE("LFO cursor updates repaint narrow strips without leaving stale pixels
                                                { 0.36f, 0.72f },
                                                { 1.0f, 0.82f } }));
         editor.setVisible(true);
+        editor.setPlayheadOpacity(1.0f);
         auto* recorder = new RepaintRecorder(editor);
         editor.setCachedComponentImage(recorder);
         auto image = renderRepaintTestComponent(editor, scale);
         auto previousFullFrame = image.createCopy();
         const auto initialGridCache = LfoEditorTestAccess::gridCache(editor);
+        const auto initialWaveCache = LfoEditorTestAccess::waveCache(editor);
+        const auto initialFlowMask = LfoEditorTestAccess::flowMask(editor);
+        REQUIRE_FALSE(initialFlowMask.isNull());
 
-        const auto checkUpdate = [&]
+        const auto checkUpdate = [&](float maximumAreaFraction = 0.35f)
         {
             CHECK(recorder->fullInvalidations == 0);
             REQUIRE_FALSE(recorder->dirtyAreas.isEmpty());
             int dirtyPixels = 0;
             for (const auto& area : recorder->dirtyAreas)
                 dirtyPixels += area.getWidth() * area.getHeight();
-            CHECK(dirtyPixels < editor.getWidth() * editor.getHeight() / 10);
+            // A jump invalidates both trail windows (9% tail plus a short
+            // front edge and antialiasing padding). 35% leaves room for both
+            // windows while still rejecting a full-width animation repaint.
+            CHECK(dirtyPixels < editor.getWidth() * editor.getHeight() * maximumAreaFraction);
             const auto nextFullFrame = renderRepaintTestComponent(editor, scale);
             juce::RectangleList<int> physicalDamage;
             for (const auto& area : recorder->dirtyAreas)
@@ -3308,10 +3325,12 @@ TEST_CASE("LFO cursor updates repaint narrow strips without leaving stale pixels
                 CHECK(repaintTestImagesMatch(image, nextFullFrame));
             }
             CHECK(LfoEditorTestAccess::gridCache(editor) == initialGridCache);
+            CHECK(LfoEditorTestAccess::waveCache(editor) == initialWaveCache);
+            CHECK(LfoEditorTestAccess::flowMask(editor) == initialFlowMask);
         };
 
-        // Include subpixel movement, a wrap from right to left, and transport
-        // stop. The previous cap and line must disappear in every case.
+        // Include subpixel movement, a long jump, wrap from right to left,
+        // and hiding the flow. Every pixel of the old trail must disappear.
         for (const auto position : { 0.36f, 0.363f, 0.999f, 0.001f, -1.0f })
         {
             INFO("playhead: " << position);
@@ -3323,12 +3342,26 @@ TEST_CASE("LFO cursor updates repaint narrow strips without leaving stale pixels
             CHECK(recorder->dirtyAreas.isEmpty());
         }
 
+        recorder->clear();
+        editor.setPlayheadPosition(0.54f);
+        checkUpdate();
+        for (const auto opacity : { 0.55f, 0.2f, 0.0f, 1.0f })
+        {
+            INFO("flow opacity: " << opacity);
+            recorder->clear();
+            editor.setPlayheadOpacity(opacity);
+            checkUpdate();
+            recorder->clear();
+            editor.setPlayheadOpacity(opacity);
+            CHECK(recorder->dirtyAreas.isEmpty());
+        }
+
         for (const auto position : { 0.36f, 0.9f, 0.1f, -1.0f })
         {
             INFO("phase offset: " << position);
             recorder->clear();
             editor.setPhaseOffsetLinePosition(position);
-            checkUpdate();
+            checkUpdate(0.10f);
         }
     }
 }

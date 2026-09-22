@@ -38,6 +38,7 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
     // Stable slots retain their shape and timing identity across deletions.
     lfoData.resize(fire::lfo_bank::capacity);
     for (auto& generation : slotGenerations) generation.store(0u, std::memory_order_relaxed);
+    for (auto& phase : visualPhases) phase.store(-1.0f, std::memory_order_relaxed);
     // Define the string representations for synced LFO rates
     lfoRateSyncDivisions = {
         "1/64", "1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/8", "1/4T", "1/4", "1/2T", "1/2", "1 Bar", "2 Bars", "4 Bars"
@@ -88,6 +89,7 @@ void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
     const auto safeMaximumBlockSize = static_cast<int>(juce::jmin<uint64_t>(
         spec.maximumBlockSize, static_cast<uint64_t>(std::numeric_limits<int>::max())));
     lfoOutputBuffer.setSize(fire::lfo_bank::capacity, juce::jmax(1, safeMaximumBlockSize), false, true, false);
+    publishVisualState(nullptr);
 }
 
 void LfoManager::reset()
@@ -107,6 +109,42 @@ void LfoManager::reset()
     isPlaying.store(false, std::memory_order_relaxed);
     modulatedValueCount = 0;
     lfoOutputBuffer.clear();
+    publishVisualState(nullptr);
+}
+
+void LfoManager::publishVisualState(const AudioThreadParameterSnapshot* parameters) noexcept
+{
+    // One audio/lifecycle writer, atomic payload, no reader locks or clock
+    // calls. Release payload stores let the reader's acquire fence observe
+    // the odd version whenever it sees any sample from this new publication.
+    const auto previous = visualSequence.fetch_add(1u, std::memory_order_acq_rel);
+    jassert((previous & 1u) == 0u);
+    juce::ignoreUnused(previous);
+    for (size_t index = 0; index < visualPhases.size(); ++index)
+    {
+        const auto phase = parameters != nullptr && parameters->lfos[index].present
+                               ? lfoEngines[index].getLastRenderedPhaseForAudioThread() : -1.0f;
+        visualPhases[index].store(phase, std::memory_order_release);
+    }
+    visualSequence.fetch_add(1u, std::memory_order_release);
+}
+
+LfoManager::VisualState LfoManager::getLfoVisualState(int index) const noexcept
+{
+    if (! fire::lfo_bank::validIndex(index)) return {};
+    for (int attempt = 0; attempt < 4; ++attempt)
+    {
+        const auto before = visualSequence.load(std::memory_order_acquire);
+        if ((before & 1u) != 0u) continue;
+        const auto phase = visualPhases[static_cast<size_t>(index)].load(std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_acquire);
+        const auto after = visualSequence.load(std::memory_order_relaxed);
+        if (before == after)
+            return { std::isfinite(phase) && phase >= 0.0f && phase <= 1.0f ? phase : -1.0f, after };
+    }
+    // Sequence zero means no coherent read, not an inactive source. The UI
+    // retains its previous phase until a complete publication is available.
+    return {};
 }
 
 bool LfoManager::isModulationActive() const
@@ -289,6 +327,8 @@ void LfoManager::renderBlock(
 
         sampleOffset += samplesInRange;
     }
+
+    publishVisualState(&parameterSnapshot);
 
     // 4. Iterate through all modulation routings to calculate final parameter values.
     for (size_t routingIndex = 0; routingIndex < runtimeRoutingCount; ++routingIndex)

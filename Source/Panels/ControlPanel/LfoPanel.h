@@ -86,6 +86,7 @@ public:
 
     void setGridDivisions(int horizontal, int vertical);
     void setPlayheadPosition(float position);
+    void setPlayheadOpacity(float opacity);
     void setPhaseOffsetLinePosition(float position);
     void setSmoothness(float smoothness);
     /** Invalidates this editor's async menu result without using JUCE's
@@ -112,6 +113,7 @@ private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct LfoEditorTestAccess;
     friend struct LfoPanelBrushTestAccess;
+    friend struct LfoFlowTestAccess;
 #endif
 
     enum class PointerGesture
@@ -150,6 +152,7 @@ private:
     void startAnimationIfNeeded() noexcept;
     float getPointVisualRadius() const noexcept;
     void repaintCursor(float position);
+    void repaintFlow(float position);
     static bool isCompletePrimaryDown(
         const juce::MouseEvent& event) noexcept;
     static bool isStandalonePopupDown(
@@ -197,11 +200,14 @@ private:
     void rebuildGridCache(float physicalScale);
     void rebuildWavePath();
     void drawWaveform(juce::Graphics& g, juce::Colour accent) const;
+    void drawFlow(juce::Graphics& g, juce::Colour accent) const;
+    float flowTrailWidth() const noexcept;
     uint64_t getWavePathSignature() const noexcept;
     juce::Colour getCurrentLfoAccent() const noexcept;
     juce::Image gridCache;
     juce::Path cachedWavePath;
     juce::Image waveCache;
+    juce::Image flowMask;
     juce::Colour cachedWaveColour;
     float cachedWaveScale = 0.0f;
     uint64_t cachedWavePathSignature = 0;
@@ -234,6 +240,7 @@ private:
     int hGridDivs = 4;
     int vGridDivs = 4;
     float playheadPos = -1.0f;
+    float playheadOpacity = 1.0f;
     float phaseOffsetPosition = -1.0f;
 
     const int maxPoints = 64;
@@ -399,6 +406,7 @@ public:
 private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct LfoPanelDialogTestAccess;
+    friend struct LfoFlowTestAccess;
     friend struct LfoPanelBrushTestAccess;
 #endif
 
@@ -420,6 +428,8 @@ private:
     void layoutBank();
     void removeBankLfo(int index);
     void revealSelectedLfo();
+    void resetFlowPresentation();
+    void updateFlowPresentation(float deltaSeconds);
 
     FireAudioProcessor& processor;
 
@@ -461,6 +471,9 @@ private:
     std::atomic<std::uint64_t> bankEpoch {0};
     std::uint64_t presentedBankEpoch = 0, selectionGeneration = 0;
     int bankRowPitch = 1;
+    std::uint64_t lastFlowSequence = 0;
+    float flowIdleSeconds = 0.0f;
+    bool flowHasFreshAudio = false;
 
     // --- UI Components for mode selection ---
     PrimaryTextButton editModeButton { "Edit Mode" };

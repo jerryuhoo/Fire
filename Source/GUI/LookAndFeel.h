@@ -1061,8 +1061,10 @@ private:
         g.setColour(colours::textPrimary.withAlpha(0.08f));
         g.drawEllipse(disc.reduced(0.5f), 1.0f);
 
-        const auto indicatorLength = disc.getHeight() * 0.31f;
+        const auto indicatorLength = disc.getHeight() * (isDrive ? 0.33f : 0.31f);
         const auto indicatorStart = disc.getHeight() * 0.08f;
+        const auto indicatorWidth = isDrive ? disc.getHeight() * 0.035f
+                                           : juce::jmax(1.2f, 1.8f * scale);
         juce::Path indicator;
         indicator.startNewSubPath(0.0f, -indicatorStart);
         indicator.lineTo(0.0f, -indicatorLength);
@@ -1072,7 +1074,7 @@ private:
                               : colours::whiteHot;
         g.setColour(tickColour.withMultipliedAlpha(slider.isEnabled() ? 0.96f : 0.3f));
         g.strokePath(indicator,
-                     juce::PathStrokeType(juce::jmax(1.2f, 1.8f * scale),
+                     juce::PathStrokeType(indicatorWidth,
                                           juce::PathStrokeType::curved,
                                           juce::PathStrokeType::rounded),
                      juce::AffineTransform::rotation(valueAngle).translated(centre.x, centre.y));
@@ -1085,6 +1087,7 @@ private:
                         ModulatableSlider& slider)
     {
         using namespace fire::ui;
+        const bool isDrive = slider.getComponentID() == "drive";
         const auto margin = juce::jmax(5.0f, 7.0f * scale);
         bounds = bounds.reduced(margin);
         const auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
@@ -1136,7 +1139,7 @@ private:
                                                     juce::PathStrokeType::curved,
                                                     juce::PathStrokeType::rounded));
 
-            if (! slider.isBypassed)
+            if (! isDrive && ! slider.isBypassed)
             {
                 const auto signal = slider.isBipolar ? slider.lfoValue * 0.5 : slider.lfoValue;
                 const auto current = juce::jlimit(0.0, 1.0, base + signal * slider.lfoAmount);
@@ -1154,26 +1157,29 @@ private:
                 g.fillEllipse(pointBounds);
             }
 
-            // Extend the base pointer with an inner origin notch. It sits
-            // inward of the live dot, including when both values coincide.
-            const auto baseAngle = startAngle
-                                   + static_cast<float>(base) * (endAngle - startAngle);
-            const juce::Point<float> baseDirection {
-                std::sin(baseAngle), -std::cos(baseAngle)
-            };
-            const auto originOuter = modRadius - pointDiameter * 0.5f - pointBorder
-                                     - juce::jmin(0.7f * scale, discRadius * 0.045f);
-            const auto originInner = originOuter
-                                     - juce::jmin(3.0f * scale, discRadius * 0.20f);
-            const juce::Line<float> origin {
-                centre + baseDirection * originInner,
-                centre + baseDirection * originOuter
-            };
-            const auto originWidth = juce::jmin(1.3f * scale, discRadius * 0.09f);
-            g.setColour(colours::canvas.withAlpha(0.92f));
-            g.drawLine(origin, originWidth + pointBorder * 2.0f);
-            g.setColour(colours::whiteHot.withAlpha(slider.isBypassed ? 0.48f : 0.96f));
-            g.drawLine(origin, originWidth);
+            if (! isDrive)
+            {
+                // Ordinary controls retain a separate origin marker. Drive's
+                // larger main pointer is its sole position indicator.
+                const auto baseAngle = startAngle
+                                       + static_cast<float>(base) * (endAngle - startAngle);
+                const juce::Point<float> baseDirection {
+                    std::sin(baseAngle), -std::cos(baseAngle)
+                };
+                const auto originOuter = modRadius - pointDiameter * 0.5f - pointBorder
+                                         - juce::jmin(0.7f * scale, discRadius * 0.045f);
+                const auto originInner = originOuter
+                                         - juce::jmin(3.0f * scale, discRadius * 0.20f);
+                const juce::Line<float> origin {
+                    centre + baseDirection * originInner,
+                    centre + baseDirection * originOuter
+                };
+                const auto originWidth = juce::jmin(1.3f * scale, discRadius * 0.09f);
+                g.setColour(colours::canvas.withAlpha(0.92f));
+                g.drawLine(origin, originWidth + pointBorder * 2.0f);
+                g.setColour(colours::whiteHot.withAlpha(slider.isBypassed ? 0.48f : 0.96f));
+                g.drawLine(origin, originWidth);
+            }
         }
 
         if (slider.isModulated)

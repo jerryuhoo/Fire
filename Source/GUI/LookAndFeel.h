@@ -10,6 +10,7 @@
 #pragma once
 
 #include "FireTheme.h"
+#include "FireIcons.h"
 #include "FocusAwareComboBox.h"
 #include "InterfaceDefines.h"
 #include "ModulatableSlider.h"
@@ -544,6 +545,36 @@ public:
         if (accent.isTransparent() || accent == juce::Colours::black)
             accent = colours::flame;
 
+        if (static_cast<bool>(button.getProperties().getWithDefault("fireToolButton", false)))
+        {
+            accent = button.findColour(juce::TextButton::textColourOnId);
+            const int status = button.getProperties().getWithDefault("fireToolStatus", 0);
+            if (status == 2) accent = colours::positive;
+            else if (status == 3) accent = colours::warning;
+            const bool active = button.getToggleState();
+            const auto radius = juce::jmin(bounds.getHeight() * 0.25f, Metrics::radius * scale);
+            const auto opacity = 1.0f - disabledAmount * 0.7f;
+            g.setColour(colours::surface0.interpolatedWith(colours::surface2,
+                (active ? 0.55f : 0.10f) + pressAmount * 0.25f));
+            g.fillRoundedRectangle(bounds, radius);
+            const float wash = (active ? 0.11f : 0.0f) + focusAmount * 0.06f + hoverAmount * 0.035f;
+            g.setGradientFill(juce::ColourGradient(accent.withAlpha(wash * opacity),
+                bounds.getCentreX(), bounds.getY(), accent.withAlpha(0.0f), bounds.getCentreX(), bounds.getBottom(), false));
+            g.fillRoundedRectangle(bounds, radius);
+            const auto edge = status == 1 ? 0.62f : active ? 0.30f : 0.06f;
+            g.setColour(accent.withAlpha(juce::jlimit(0.0f, 1.0f,
+                (edge + hoverAmount * 0.18f + focusAmount * 0.24f) * opacity)));
+            g.drawRoundedRectangle(bounds, radius, juce::jmax(0.8f, scale));
+            if (active)
+            {
+                const auto mark = bounds.withSizeKeepingCentre(7 * scale, 1.5f * scale)
+                    .withBottomY(bounds.getBottom() - 2.5f * scale);
+                g.setColour(accent.withAlpha(0.8f * opacity));
+                g.fillRoundedRectangle(mark, scale);
+            }
+            return;
+        }
+
         if (isHeaderControl)
         {
             const auto headerAccent = button.findColour(juce::TextButton::textColourOnId);
@@ -628,6 +659,31 @@ public:
         highlighted = animation.hover > 0.001f;
         down = animation.press > 0.001f;
         const auto id = button.getComponentID();
+        const auto icon = static_cast<Icon>(static_cast<int>(button.getProperties().getWithDefault("fireToolIcon", 0)));
+        if (icon != Icon::none)
+        {
+            const bool labelled = static_cast<bool>(button.getProperties().getWithDefault("fireToolLabel", false));
+            const int status = button.getProperties().getWithDefault("fireToolStatus", 0);
+            auto colour = button.findColour(button.getToggleState() ? juce::TextButton::textColourOnId
+                                                                    : juce::TextButton::textColourOffId);
+            if (status == 2) colour = colours::positive;
+            else if (status == 3) colour = colours::warning;
+            colour = colour.interpolatedWith(colours::textPrimary, animation.hover * 0.25f)
+                .withMultipliedAlpha(1.0f - animation.disabled * 0.68f);
+            auto area = button.getLocalBounds().toFloat().reduced(8 * scale, 3 * scale);
+            auto iconBounds = labelled ? area.removeFromLeft(20 * scale) : area;
+            const auto side = juce::jmin(19 * scale, iconBounds.getHeight());
+            drawIcon(g, status == 2 ? Icon::check : icon,
+                iconBounds.withSizeKeepingCentre(side, side).translated(0, animation.press * scale), colour);
+            if (labelled)
+            {
+                area.removeFromLeft(5 * scale);
+                g.setColour(colour);
+                g.setFont(fire::ui::labelFont(juce::jmin(12 * scale, button.getHeight() * 0.38f)));
+                g.drawFittedText(button.getButtonText(), area.toNearestInt(), juce::Justification::centredLeft, 1);
+            }
+            return;
+        }
         if (id == "zoom" || id == "slider_up_arrow" || id == "slider_down_arrow"
             || id == "left_arrow" || id == "right_arrow"
             || id == "header_previous" || id == "header_next" || id == "header_menu"

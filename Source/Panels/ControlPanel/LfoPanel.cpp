@@ -1,4 +1,5 @@
 #include "LfoPanel.h"
+#include "../../GUI/FireIcons.h"
 #include "../../DSP/LfoShapeGenerator.h"
 #include "../../GUI/FireTheme.h"
 #include "../../PluginProcessor.h"
@@ -2865,6 +2866,31 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     syncButton.setButtonText("BPM");
     styleButton(syncButton, true);
 
+    const auto configureTool = [](juce::TextButton& button, const char* id,
+                                   fire::ui::Icon icon, const char* title,
+                                   const char* help, bool labelled, int focusOrder)
+    {
+        button.setComponentID(id);
+        button.setTitle(title);
+        button.setTooltip(help);
+        button.setHelpText(help);
+        button.setExplicitFocusOrder(focusOrder);
+        button.getProperties().set("fireToolButton", true);
+        button.getProperties().set("fireToolIcon", static_cast<int>(icon));
+        button.getProperties().set("fireToolLabel", labelled);
+    };
+    configureTool(matrixButton, "lfo_matrix", fire::ui::Icon::matrix, "Modulation matrix",
+                  "Open the modulation matrix", false, 1);
+    configureTool(syncButton, "lfo_sync", fire::ui::Icon::none, "Tempo sync",
+                  "Sync the LFO rate to the host tempo", true, 2);
+    configureTool(assignButton, "lfo_assign", fire::ui::Icon::assign, "Assign LFO",
+                  "Arm Assign, then select a destination knob", true, 3);
+    configureTool(editModeButton, "lfo_edit_mode", fire::ui::Icon::points, "Edit LFO points",
+                  "Edit points and curve segments", false, 4);
+    configureTool(brushModeButton, "lfo_brush_mode", fire::ui::Icon::brush, "Brush LFO shape",
+                  "Paint the selected shape onto the LFO curve", false, 5);
+    brushSelector.setExplicitFocusOrder(6);
+
     addAndMakeVisible(rateSlider);
     rateSlider.setTitle("LFO rate");
     rateSlider.setTooltip("Set the selected LFO rate");
@@ -2969,7 +2995,9 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     // Attachments
     for (auto* knob : {&rateSlider, &lfoSmoothSlider, &lfoPhaseSlider})
         knob->getProperties().set("fireOrdinaryKnob", true);
+    toolbarReady = true;
     refreshBank(true);
+    updateToolbarAppearance();
 
 }
 
@@ -3233,8 +3261,10 @@ void LfoPanel::resized()
     const auto topControlHeight =
         juce::jmax(16, juce::roundToInt(34.0f * uiScale));
     const auto topRowGap = juce::jmax(1, gap / 2);
-    const bool useTwoTopRows =
-        centreContent.getWidth() < juce::roundToInt(460.0f * uiScale);
+    // Keep buttons and the curve stationary when switching editing modes.
+    // The hidden picker consumes no horizontal slot, but never changes rows.
+    const auto requestedToolWidth = juce::roundToInt(478.0f * uiScale);
+    const bool useTwoTopRows = centreContent.getWidth() < requestedToolWidth;
     const auto topRowsHeight = useTwoTopRows
                                    ? topControlHeight * 2 + topRowGap
                                    : topControlHeight;
@@ -3245,37 +3275,35 @@ void LfoPanel::resized()
     lfoEditor.setBounds(centreContent);
     emptyBankLabel.setBounds(centreContent);
 
-    const auto layoutTopRow = [uiScale](
-                                  juce::Rectangle<int> row,
-                                  std::initializer_list<juce::Component*> controls)
+    const auto layoutTools = [uiScale](juce::Rectangle<int> row,
+                                         std::initializer_list<std::pair<juce::Component*, float>> items)
     {
-        juce::FlexBox box;
-        box.flexDirection = juce::FlexBox::Direction::row;
-        box.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
-        box.alignItems = juce::FlexBox::AlignItems::stretch;
-        for (auto* control : controls)
-            box.items.add(juce::FlexItem(*control).withFlex(1.0f)
-                              .withMargin(juce::FlexItem::Margin(
-                                  0.0f, 1.5f * uiScale,
-                                  0.0f, 1.5f * uiScale)));
-        box.performLayout(row);
+        const int gap = juce::jmax(1, juce::roundToInt(4 * uiScale));
+        float requested = 0;
+        int visibleCount = 0;
+        for (auto item : items)
+            if (item.first->isVisible()) { requested += item.second * uiScale; ++visibleCount; }
+        const auto available = juce::jmax(0, row.getWidth() - gap * juce::jmax(0, visibleCount - 1));
+        const auto fit = requested > 0 ? juce::jmin(1.0f, available / requested) : 1.0f;
+        for (auto item : items)
+        {
+            if (! item.first->isVisible()) continue;
+            const auto width = juce::jmin(row.getWidth(), juce::roundToInt(item.second * uiScale * fit));
+            item.first->setBounds(row.removeFromLeft(juce::jmax(0, width)));
+            row.removeFromLeft(juce::jmin(gap, row.getWidth()));
+        }
     };
-
     if (useTwoTopRows)
     {
         auto rows = topRowArea;
-        auto firstRow = rows.removeFromTop(
-            juce::jmin(topControlHeight, rows.getHeight()));
+        auto first = rows.removeFromTop(juce::jmin(topControlHeight, rows.getHeight()));
         rows.removeFromTop(juce::jmin(topRowGap, rows.getHeight()));
-        layoutTopRow(firstRow, { &matrixButton, &syncButton, &assignButton });
-        layoutTopRow(rows, { &editModeButton, &brushModeButton, &brushSelector });
+        layoutTools(first, {{&matrixButton, 34}, {&syncButton, 48}, {&assignButton, 184}});
+        layoutTools(rows, {{&editModeButton, 34}, {&brushModeButton, 34}, {&brushSelector, 120}});
     }
     else
-    {
-        layoutTopRow(topRowArea,
-                     { &matrixButton, &syncButton, &assignButton,
-                       &editModeButton, &brushModeButton, &brushSelector });
-    }
+        layoutTools(topRowArea, {{&matrixButton, 34}, {&syncButton, 48}, {&assignButton, 184},
+                                {&editModeButton, 34}, {&brushModeButton, 34}, {&brushSelector, 120}});
 
     auto rightColumnWorkArea = rightColumnArea.reduced(contentInset);
     rightColumnWorkArea.removeFromTop(titleHeight);
@@ -3464,12 +3492,29 @@ void LfoPanel::updateFlowPresentation(float deltaSeconds)
     lfoEditor.setPlayheadOpacity(opacity);
 }
 
+void LfoPanel::updateToolbarAppearance()
+{
+    const auto accent = currentLfoIndex >= 0 ? fire::ui::lfoBankColour(currentLfoIndex) : fire::ui::colours::modulation;
+    for (auto* button : {&matrixButton, &syncButton, &assignButton, &editModeButton, &brushModeButton})
+        button->setColour(juce::TextButton::textColourOnId, accent);
+    const int status = assignFeedback == AssignFeedback::armed ? 1
+        : (assignFeedback == AssignFeedback::completed || assignFeedback == AssignFeedback::unchanged) ? 2
+        : assignFeedback == AssignFeedback::capacityReached ? 3 : 0;
+    assignButton.getProperties().set("fireToolStatus", status);
+    const auto help = assignFeedback == AssignFeedback::idle
+        ? juce::String("Arm Assign, then select a destination knob") : assignButton.getButtonText();
+    assignButton.setTooltip(help);
+    assignButton.setHelpText(help);
+    assignButton.repaint();
+}
+
 void LfoPanel::showAssignArmed(int lfoIndex)
 {
     assignFeedback = AssignFeedback::armed;
     assignFeedbackSecondsRemaining = 0.0f;
     assignButton.setButtonText("Assign LFO " + juce::String(juce::jlimit(0, fire::lfo_bank::capacity - 1, lfoIndex) + 1));
     assignButton.setToggleState(true, juce::dontSendNotification);
+    updateToolbarAppearance();
 }
 
 void LfoPanel::showAssignCompleted(int lfoIndex)
@@ -3479,6 +3524,7 @@ void LfoPanel::showAssignCompleted(int lfoIndex)
     assignButton.setButtonText("LFO " + juce::String(juce::jlimit(0, fire::lfo_bank::capacity - 1, lfoIndex) + 1)
                                + " Assigned");
     assignButton.setToggleState(false, juce::dontSendNotification);
+    updateToolbarAppearance();
 }
 
 void LfoPanel::showAssignUnchanged(int lfoIndex)
@@ -3489,6 +3535,7 @@ void LfoPanel::showAssignUnchanged(int lfoIndex)
         "LFO " + juce::String(juce::jlimit(0, fire::lfo_bank::capacity - 1, lfoIndex) + 1)
         + " Already Assigned");
     assignButton.setToggleState(false, juce::dontSendNotification);
+    updateToolbarAppearance();
 }
 
 void LfoPanel::showAssignCapacityReached()
@@ -3497,6 +3544,7 @@ void LfoPanel::showAssignCapacityReached()
     assignFeedbackSecondsRemaining = 1.1f;
     assignButton.setButtonText("Mod Matrix Full");
     assignButton.setToggleState(false, juce::dontSendNotification);
+    updateToolbarAppearance();
 }
 
 void LfoPanel::showAssignCancelled()
@@ -3505,6 +3553,7 @@ void LfoPanel::showAssignCancelled()
     assignFeedbackSecondsRemaining = 0.85f;
     assignButton.setButtonText("Assign Cancelled");
     assignButton.setToggleState(false, juce::dontSendNotification);
+    updateToolbarAppearance();
 }
 
 void LfoPanel::clearAssignFeedback()
@@ -3513,6 +3562,7 @@ void LfoPanel::clearAssignFeedback()
     assignFeedbackSecondsRemaining = 0.0f;
     assignButton.setButtonText("Assign");
     assignButton.setToggleState(false, juce::dontSendNotification);
+    updateToolbarAppearance();
 }
 
 void LfoPanel::buttonClicked(juce::Button* button)
@@ -3625,6 +3675,7 @@ void LfoPanel::setLfo(int newIndex)
     lfoSelectionPosition.setTarget(static_cast<float>(std::distance(visibleLfoSlots.begin(), row)));
     revealSelectedLfo();
     const auto accent = fire::ui::lfoBankColour(currentLfoIndex);
+    updateToolbarAppearance();
     for (auto* motionSlider : { &rateSlider,
                                 &lfoSmoothSlider,
                                 &lfoPhaseSlider })
@@ -4161,6 +4212,7 @@ void LfoPanel::setEditMode(LfoEditMode newMode)
 
     // 5. IMPORTANT: Tell the LfoEditor view to change its behavior
     lfoEditor.setEditMode(newMode);
+    if (safeThis && toolbarReady) resized();
 }
 
 void LfoPanel::styleButton(juce::Button& button, bool isToggle)

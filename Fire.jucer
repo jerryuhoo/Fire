@@ -109,6 +109,7 @@
         <FILE id="hyj9JI" name="VersionInfo.h" compile="0" resource="0" file="Source/Utility/VersionInfo.h"/>
       </GROUP>
       <GROUP id="{A397A229-19FD-F110-6940-6CC5C037D4D0}" name="GUI">
+        <FILE id="fireIcon1" name="FireIcons.h" compile="0" resource="0" file="Source/GUI/FireIcons.h"/>
         <FILE id="eqUI1" name="EqControlsPanel.h" compile="0" resource="0" file="Source/GUI/EqControlsPanel.h"/>
         <FILE id="ottVis1" name="OttVisuals.h" compile="0" resource="0" file="Source/GUI/OttVisuals.h"/>
         <FILE id="moduleDrag" name="ModuleDragButton.h" compile="0" resource="0" file="Source/GUI/ModuleDragButton.h"/>

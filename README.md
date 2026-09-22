@@ -231,9 +231,9 @@ Match off. Closing the editor retains the comparison state in the processor.
 
 ### 3.4. LFO / Modulation
 
-『Fire』 includes four fully customizable LFOs that can be used to modulate various parameters.
+『Fire』 starts with four fully customizable LFOs and supports up to 16 sources.
 
-- **LFO Selection**: On the left, click the "LFO 1" through "LFO 4" buttons to select which LFO you are editing.
+- **LFO Selection**: Select a source in the scrollable left rail. Use **+** to add a source, or its remove button to delete it.
 - **Rate & Sync**: The **Rate** knob controls the LFO speed. Click the **BPM** button to toggle synchronization with your DAW's tempo.
 - **Smooth**: Adjusts the smoothness of the LFO shape.
 - **Phase**: Adjusts the starting point (phase) of the LFO shape.
@@ -609,3 +609,25 @@ corrections. The glow wraps across the cycle boundary, stays below edit handles,
 and follows free-running audio even when transport is stopped. When audio
 callbacks stop, it holds the last real position and fades out. Waveform and glow
 masks are cached; movement redraws only the old and new highlight regions.
+
+### Light, motion and analysis displays
+
+Shape Forge uses a compact icon toolbar: a grid opens **Matrix**, connected
+points select **Edit Mode**, and a brush selects **Brush Mode**. **Assign** keeps
+its routing icon and a text confirmation so the armed, assigned and full states
+remain explicit. Hover tooltips, keyboard focus and accessible names explain
+each control. Active tools pick up the selected LFO colour; switching edit modes
+keeps the toolbar and curve in place.
+
+Waveforms use warm left and cool right traces, a restrained glow and a bright
+live endpoint. Pixel buckets retain the extrema in the available display
+history, preserving brief transients that point sampling could miss. Both
+channels share a bounded display gain, so quiet signals stay quiet and the
+stereo balance remains visible. Silent sections return to faint reference lines.
+
+The spectrum uses a fine bright edge with a subtle fill and a slower release.
+Peak-preserving pixel reduction keeps narrow peaks aligned with their dB
+readouts. Traces settle below the display floor, and bypass clears held peaks as
+well as live data. Graph cards use a soft hover edge and an expand/restore icon.
+All motion follows signal data or interaction; static geometry is cached and
+hidden displays stop their animation timers.

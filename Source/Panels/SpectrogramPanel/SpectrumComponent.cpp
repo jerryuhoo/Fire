@@ -23,6 +23,13 @@ float magnitudeToDb(float magnitude, int numberOfBins)
                                                 magnitude / static_cast<float>(juce::jmax(1, numberOfBins)));
     return juce::Decibels::gainToDecibels(normalisedMagnitude, minDisplayDb);
 }
+
+bool hasVisibleEnergy(const std::array<float, 1024>& magnitudes, int numberOfBins)
+{
+    const auto floor = static_cast<float>(juce::jmax(1, numberOfBins)) * 1.0e-5f; // -100 dB.
+    return std::any_of(magnitudes.begin(), magnitudes.begin() + numberOfBins,
+                       [floor](float magnitude) { return magnitude > floor; });
+}
 } // namespace
 
 SpectrumComponent::SpectrumComponent()
@@ -107,8 +114,10 @@ void SpectrumComponent::timerCallback()
     {
         if (presentationOpacity.isSettled()
             && presentationOpacity.current <= 0.001f
-            && ! renderedDataIsClear)
+            && (! renderedDataIsClear || isPeakLineVisible))
         {
+            // A held peak can outlive a silent live trace. Bypass closes both
+            // presentations, even when live data already reached the floor.
             resetRenderedData();
             visualStateChanged = true;
         }
@@ -143,8 +152,18 @@ void SpectrumComponent::timerCallback()
 
             if (std::abs(difference) > 1.0e-5f)
             {
-                displayData[static_cast<size_t>(i)] += difference * interpolationFactor;
-                stillInterpolating = true;
+                // A descending trace carries the recent energy briefly; its
+                // motion is driven entirely by the newest FFT frame.
+                const auto factor = difference < 0.0f ? releaseFactor : interpolationFactor;
+                auto& displayed = displayData[static_cast<size_t>(i)];
+                const auto next = displayed + difference * factor;
+                if (next == displayed)
+                    displayed = targetData[static_cast<size_t>(i)];
+                else
+                {
+                    displayed = next;
+                    stillInterpolating = true;
+                }
             }
             else
             {
@@ -152,6 +171,17 @@ void SpectrumComponent::timerCallback()
             }
         }
 
+        if (! hasVisibleEnergy(displayData, numberOfBins)
+            && ! hasVisibleEnergy(targetData, numberOfBins))
+        {
+            // Once below the plotted floor there is no visible release left.
+            // Keep held hover measurements separately, without a bright
+            // horizontal trace or an inaudible interpolation tail at silence.
+            displayData = targetData;
+            stillInterpolating = false;
+            renderedDataIsClear = true;
+            spectrumDataChanged = true;
+        }
         interpolationActive = stillInterpolating;
     }
 
@@ -228,7 +258,8 @@ void SpectrumComponent::rebuildPaths()
     geometryDirty = false;
 
     const auto bounds = getLocalBounds().toFloat();
-    if (renderedDataIsClear || bounds.isEmpty()
+    const bool drawPeak = mDrawPeak && isPeakLineVisible && hasVisibleEnergy(maxData, numberOfBins);
+    if ((renderedDataIsClear && ! drawPeak) || bounds.isEmpty()
         || numberOfBins < 2 || mBinWidth <= 0.0f)
         return;
 
@@ -238,17 +269,6 @@ void SpectrumComponent::rebuildPaths()
 
     spectrumLinePath.preallocateSpace(juce::jmax(64, getWidth() * 4));
     peakLinePath.preallocateSpace(juce::jmax(64, getWidth() * 4));
-
-    for (int i = 0; i < numberOfBins; ++i)
-    {
-        if (i == 0 || i == numberOfBins - 1)
-            smoothedData[static_cast<size_t>(i)] = displayData[static_cast<size_t>(i)];
-        else
-            smoothedData[static_cast<size_t>(i)] = (displayData[static_cast<size_t>(i - 1)]
-                                                    + displayData[static_cast<size_t>(i)] * 2.0f
-                                                    + displayData[static_cast<size_t>(i + 1)])
-                                                   * 0.25f;
-    }
 
     int currentBucket = -1;
     float currentBucketY = bounds.getBottom();
@@ -277,17 +297,17 @@ void SpectrumComponent::rebuildPaths()
 
         const float x = juce::jlimit(bounds.getX(), bounds.getRight(),
                                      static_cast<float>(bucket) + 0.5f);
-        if (! hasSpectrumPoint)
+        if (! renderedDataIsClear && ! hasSpectrumPoint)
         {
             spectrumLinePath.startNewSubPath(x, currentBucketY);
             hasSpectrumPoint = true;
         }
-        else
+        else if (! renderedDataIsClear)
         {
             spectrumLinePath.lineTo(x, currentBucketY);
         }
 
-        if (mDrawPeak && isPeakLineVisible)
+        if (drawPeak)
         {
             if (! hasPeakPoint)
             {
@@ -301,13 +321,14 @@ void SpectrumComponent::rebuildPaths()
         }
     };
 
-    const bool drawPeak = mDrawPeak && isPeakLineVisible;
     for (int position = 0; position < visibleFrequencyBins; ++position)
     {
         const auto& binPosition = frequencyLayout[static_cast<size_t>(position)];
         const int i = binPosition.bin;
         const int bucket = binPosition.bucket;
-        const float currentDb = magnitudeToDb(smoothedData[static_cast<size_t>(i)], numberOfBins);
+        // Temporal interpolation already supplies continuity. Averaging
+        // neighbouring bins here would lower an isolated peak by 6 dB.
+        const float currentDb = magnitudeToDb(displayData[static_cast<size_t>(i)], numberOfBins);
         const float currentY = dbToY(currentDb);
         const float peakDb = drawPeak ? magnitudeToDb(maxData[static_cast<size_t>(i)], numberOfBins)
                                      : minDisplayDb;
@@ -352,7 +373,7 @@ void SpectrumComponent::paint(juce::Graphics& g)
     const auto bounds = getLocalBounds().toFloat();
     const auto opacity = juce::jlimit(0.0f, 1.0f, presentationOpacity.current);
     const auto hover = juce::jlimit(0.0f, 1.0f, hoverOpacity.current);
-    if (bounds.isEmpty() || spectrumLinePath.isEmpty() || opacity <= 0.001f)
+    if (bounds.isEmpty() || (spectrumLinePath.isEmpty() && peakLinePath.isEmpty()) || opacity <= 0.001f)
         return;
 
     const juce::Graphics::ScopedSaveState state(g);
@@ -364,38 +385,38 @@ void SpectrumComponent::paint(juce::Graphics& g)
     if (mStyle == 1)
     {
         juce::ColourGradient fill(fire::ui::colours::flame.withAlpha(
-                                      presentedSpectrumAlpha(0.16f)),
+                                      presentedSpectrumAlpha(0.10f)),
                                   bounds.getX(), bounds.getY(),
                                   fire::ui::colours::ember.withAlpha(0.0f),
                                   bounds.getX(), bounds.getBottom(), false);
         fill.addColour(0.42, fire::ui::colours::ember.withAlpha(
-                                 presentedSpectrumAlpha(0.09f)));
+                                 presentedSpectrumAlpha(0.045f)));
         g.setGradientFill(fill);
         g.fillPath(spectrumFillPath);
 
         g.setColour(fire::ui::colours::ember.withAlpha(
-            presentedSpectrumAlpha(0.13f)));
+            presentedSpectrumAlpha(0.08f)));
         g.strokePath(spectrumLinePath,
-                     juce::PathStrokeType(4.0f, juce::PathStrokeType::curved,
+                     juce::PathStrokeType(2.8f, juce::PathStrokeType::curved,
                                           juce::PathStrokeType::rounded));
 
         juce::ColourGradient heat(fire::ui::colours::whiteHot.withAlpha(
-                                      presentedSpectrumAlpha(0.90f)),
+                                      presentedSpectrumAlpha(0.94f)),
                                   bounds.getX(), bounds.getY(),
                                   fire::ui::colours::ember.withAlpha(
-                                      presentedSpectrumAlpha(0.88f)),
+                                      presentedSpectrumAlpha(0.84f)),
                                   bounds.getX(), bounds.getBottom(), false);
         heat.addColour(0.55, fire::ui::colours::flame.withAlpha(
                                  presentedSpectrumAlpha(0.94f)));
         g.setGradientFill(heat);
         g.strokePath(spectrumLinePath,
-                     juce::PathStrokeType(1.8f, juce::PathStrokeType::curved,
+                     juce::PathStrokeType(1.35f, juce::PathStrokeType::curved,
                                           juce::PathStrokeType::rounded));
     }
     else
     {
         g.setColour(fire::ui::colours::textSecondary.withAlpha(
-            presentedSpectrumAlpha(0.035f)));
+            presentedSpectrumAlpha(0.018f)));
         g.fillPath(spectrumFillPath);
         g.setColour(fire::ui::colours::textSecondary.withAlpha(
             presentedSpectrumAlpha(0.42f)));
@@ -524,7 +545,6 @@ void SpectrumComponent::resetRenderedData()
 {
     targetData.fill(0.0f);
     displayData.fill(0.0f);
-    smoothedData.fill(0.0f);
     resetPeakData();
     isPeakLineVisible = false;
     interpolationActive = false;
@@ -563,6 +583,12 @@ bool SpectrumComponent::consumePendingFrame(bool startFromSilence)
     numberOfBins = pendingNumberOfBins;
     mBinWidth = pendingBinWidth;
     consumedGeneration = generation;
+    if (renderedDataIsClear && ! hasVisibleEnergy(targetData, numberOfBins))
+    {
+        displayData = targetData;
+        interpolationActive = false;
+        return true;
+    }
     interpolationActive = true;
     geometryDirty = geometryDirty || renderedDataIsClear || frequencyLayoutDirty;
     renderedDataIsClear = false;
@@ -662,7 +688,7 @@ void SpectrumComponent::updateAnimationTimer()
     // removed. Retain the inexpensive 60 Hz liveness check while a hover
     // session is active, so peer detach clears it within one frame even when
     // audio/FFT publication has stopped and the fade itself has settled.
-    const bool hoverSessionIsActive = mDrawPeak && mouseOver;
+    const bool hoverSessionIsActive = mDrawPeak && mouseOver && ! hostBypassed && ! awaitingFreshFrame;
     const bool canPresentPendingFrame = hasPendingFrame && ! hostBypassed;
     if (isShowing() && (canPresentPendingFrame || interpolationActive
                         || peakIsDecaying || opacityIsAnimating

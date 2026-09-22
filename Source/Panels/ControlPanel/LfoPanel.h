@@ -430,6 +430,7 @@ private:
     void revealSelectedLfo();
     void resetFlowPresentation();
     void updateFlowPresentation(float deltaSeconds);
+    void updateToolbarAppearance();
 
     FireAudioProcessor& processor;
 
@@ -542,6 +543,7 @@ private:
     float assignFeedbackSecondsRemaining = 0.0f;
     juce::Rectangle<int> separatorLine;
     juce::Rectangle<int> topRowArea;
+    bool toolbarReady = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LfoPanel)
 };

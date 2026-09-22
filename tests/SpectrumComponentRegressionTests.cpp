@@ -1,4 +1,5 @@
 #include <Panels/SpectrogramPanel/SpectrumComponent.h>
+#include <Panels/SpectrogramPanel/SpectrumBackground.h>
 #include <Panels/SpectrogramPanel/FFTProcessor.h>
 #include <Panels/SpectrogramPanel/OttBandControls.h>
 #include "helpers/RepaintRecorder.h"
@@ -107,6 +108,9 @@ struct SpectrumComponentTestAccess
     {
         return component.spectrumLinePath;
     }
+
+    static float peakReadoutDb(const SpectrumComponent& component) { return component.maxDecibelValue; }
+    static float peakReadoutFrequency(const SpectrumComponent& component) { return component.maxFreq; }
 };
 
 namespace
@@ -130,6 +134,187 @@ std::uint64_t renderedAlphaSum(SpectrumComponent& component,
     return total;
 }
 } // namespace
+
+TEST_CASE("Spectrum preserves isolated FFT peaks at their measured frequency and level",
+          "[spectrum][spectrum-flow][ui][peak][measurement][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    constexpr int bins = 1024;
+    constexpr float binWidth = 48000.0f / 2048.0f;
+    constexpr float peakDb = -12.0f;
+    for (int width : {320, 1000})
+        for (int bin : {2, 43, 427, 850})
+        {
+            CAPTURE(width, bin);
+            SpectrumComponent spectrum {1, true};
+            spectrum.setSize(width, 240);
+            spectrum.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            spectrum.setVisible(true);
+            const juce::ScopeGuard cleanup {[&] { spectrum.removeFromDesktop(); }};
+            SpectrumComponentTestAccess::setInterpolationFactor(spectrum, 1.0f);
+            std::array<float, bins> frame {};
+            frame[static_cast<size_t>(bin)] = bins * juce::Decibels::decibelsToGain(peakDb);
+            spectrum.updateSpectrum(frame.data(), bins, binWidth);
+            SpectrumComponentTestAccess::tick(spectrum);
+            const auto frequency = bin * binWidth;
+            const auto expectedX = std::log10(frequency / 20.0f) / 3.0f * width;
+            const auto expectedY = -peakDb / 100.0f * spectrum.getHeight();
+            juce::Point<float> highest {-1.0f, 1000.0f};
+            juce::Path::Iterator path(SpectrumComponentTestAccess::spectrumPath(spectrum));
+            while (path.next())
+                if ((path.elementType == juce::Path::Iterator::startNewSubPath
+                     || path.elementType == juce::Path::Iterator::lineTo) && path.y1 < highest.y)
+                    highest = {path.x1, path.y1};
+            CHECK(highest.x == Catch::Approx(expectedX).margin(0.51f));
+            CHECK(highest.y == Catch::Approx(expectedY).margin(0.001f));
+            SpectrumComponentTestAccess::setMouseOver(spectrum, true);
+            CHECK(SpectrumComponentTestAccess::peakReadoutDb(spectrum) == Catch::Approx(peakDb).margin(0.001f));
+            CHECK(SpectrumComponentTestAccess::peakReadoutFrequency(spectrum) == Catch::Approx(frequency));
+        }
+}
+
+TEST_CASE("Spectrum release follows the input monotonically then stops at silent presentation",
+          "[spectrum][spectrum-flow][ui][release][repaint][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    SpectrumComponent spectrum {1, false};
+    spectrum.setSize(800, 240);
+    spectrum.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    spectrum.setVisible(true);
+    const juce::ScopeGuard cleanup {[&] { spectrum.removeFromDesktop(); }};
+    auto* recorder = new RepaintRecorder(spectrum);
+    spectrum.setCachedComponentImage(recorder);
+    std::array<float, 1024> frame {};
+    frame[43] = 100.0f;
+    spectrum.updateSpectrum(frame.data(), static_cast<int>(frame.size()), 48000.0f / 2048.0f);
+    SpectrumComponentTestAccess::tick(spectrum);
+    const auto firstAttack = SpectrumComponentTestAccess::displayedMagnitude(spectrum, 43);
+    REQUIRE(firstAttack > 0.0f);
+    REQUIRE(firstAttack < 100.0f);
+    for (int tick = 0; tick < 120; ++tick) SpectrumComponentTestAccess::tick(spectrum);
+    REQUIRE_FALSE(SpectrumComponentTestAccess::isTimerRunning(spectrum));
+
+    frame.fill(0.0f);
+    spectrum.updateSpectrum(frame.data(), static_cast<int>(frame.size()), 48000.0f / 2048.0f);
+    SpectrumComponentTestAccess::tick(spectrum);
+    auto previous = SpectrumComponentTestAccess::displayedMagnitude(spectrum, 43);
+    CHECK(previous > 100.0f - firstAttack); // Release is slower than attack.
+    CHECK(previous < 100.0f);
+    for (int tick = 0; tick < 180; ++tick)
+    {
+        SpectrumComponentTestAccess::tick(spectrum);
+        const auto current = SpectrumComponentTestAccess::displayedMagnitude(spectrum, 43);
+        CHECK(current <= previous);
+        CHECK(current >= 0.0f);
+        previous = current;
+    }
+    CHECK(SpectrumComponentTestAccess::renderedDataIsClear(spectrum));
+    CHECK_FALSE(SpectrumComponentTestAccess::hasSpectrumPath(spectrum));
+    CHECK_FALSE(SpectrumComponentTestAccess::isTimerRunning(spectrum));
+    CHECK(renderedAlphaSum(spectrum, spectrum.getLocalBounds()) == 0u);
+    recorder->clear();
+    for (int frameIndex = 0; frameIndex < 40; ++frameIndex)
+    {
+        spectrum.updateSpectrum(frame.data(), static_cast<int>(frame.size()), 48000.0f / 2048.0f);
+        SpectrumComponentTestAccess::tick(spectrum);
+    }
+    CHECK(recorder->dirtyAreas.isEmpty());
+    CHECK_FALSE(SpectrumComponentTestAccess::isTimerRunning(spectrum));
+}
+
+TEST_CASE("A held spectrum peak survives live silence but cannot keep a bypass timer running",
+          "[spectrum][spectrum-flow][ui][peak][host-bypass][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    SpectrumComponent spectrum {1, true};
+    spectrum.setSize(800, 240);
+    spectrum.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    spectrum.setVisible(true);
+    const juce::ScopeGuard cleanup {[&] { spectrum.removeFromDesktop(); }};
+    std::array<float, 1024> frame {};
+    frame[43] = 100.0f;
+    spectrum.updateSpectrum(frame.data(), static_cast<int>(frame.size()), 48000.0f / 2048.0f);
+    for (int tick = 0; tick < 120; ++tick) SpectrumComponentTestAccess::tick(spectrum);
+    SpectrumComponentTestAccess::setMouseOver(spectrum, true);
+    const auto measuredDb = SpectrumComponentTestAccess::peakReadoutDb(spectrum);
+    frame.fill(0.0f);
+    spectrum.updateSpectrum(frame.data(), static_cast<int>(frame.size()), 48000.0f / 2048.0f);
+    for (int tick = 0; tick < 180; ++tick) SpectrumComponentTestAccess::tick(spectrum);
+    CHECK_FALSE(SpectrumComponentTestAccess::hasSpectrumPath(spectrum));
+    CHECK(SpectrumComponentTestAccess::isPeakVisible(spectrum));
+    CHECK(SpectrumComponentTestAccess::peakReadoutDb(spectrum) == Catch::Approx(measuredDb));
+    CHECK(renderedAlphaSum(spectrum, spectrum.getLocalBounds()) > 0u);
+    spectrum.setHostBypassed(true);
+    for (int tick = 0; tick < 180; ++tick) SpectrumComponentTestAccess::tick(spectrum);
+    CHECK_FALSE(SpectrumComponentTestAccess::isTimerRunning(spectrum));
+    CHECK_FALSE(SpectrumComponentTestAccess::isPeakVisible(spectrum));
+    CHECK(SpectrumComponentTestAccess::heldPeak(spectrum, 43) == 0.0f);
+    CHECK(SpectrumComponentTestAccess::peakReadoutDb(spectrum) == -100.0f);
+    CHECK(renderedAlphaSum(spectrum, spectrum.getLocalBounds()) == 0u);
+}
+
+TEST_CASE("Spectrum energy and release snapshots use actual FFT frames",
+          "[spectrum][spectrum-flow][ui][render][specimen]")
+{
+    const auto path = juce::SystemStats::getEnvironmentVariable("FIRE_SPECTRUM_SNAPSHOT_DIR", {});
+    if (path.isEmpty()) return;
+    juce::ScopedJuceInitialiser_GUI gui;
+    const juce::File directory(path);
+    REQUIRE(directory.createDirectory().wasOk());
+    juce::Component canvas;
+    SpectrumBackground background;
+    SpectrumComponent original {0, false}, processed {1, false};
+    canvas.setSize(1000, 230);
+    for (auto* component : std::array<juce::Component*, 3> {&background, &original, &processed})
+    {
+        canvas.addAndMakeVisible(component);
+        component->setBounds(canvas.getLocalBounds());
+    }
+    canvas.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    canvas.setVisible(true);
+    const juce::ScopeGuard cleanup {[&] { canvas.removeFromDesktop(); }};
+    original.setSpecAlpha(0.5f);
+    SpectrumProcessor fft;
+    std::array<float, SpectrumProcessor::fftBufferSize> input {}, output {};
+    juce::Random noise(0x53504543);
+    for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+    {
+        const float phase = juce::MathConstants<float>::twoPi * sample / 48000.0f;
+        input[static_cast<size_t>(sample)] = 0.30f * std::sin(phase * 220.0f)
+            + 0.20f * std::sin(phase * 440.0f) + 0.12f * std::sin(phase * 1800.0f)
+            + 0.07f * std::sin(phase * 6200.0f) + (noise.nextFloat() - 0.5f) * 0.025f;
+        output[static_cast<size_t>(sample)] = std::tanh(input[static_cast<size_t>(sample)] * 2.0f) * 0.75f;
+    }
+    REQUIRE(fft.doProcessing(input.data(), static_cast<int>(input.size())));
+    REQUIRE(fft.doProcessing(output.data(), static_cast<int>(output.size())));
+    original.updateSpectrum(input.data(), SpectrumProcessor::numBins, 48000.0f / SpectrumProcessor::fftSize);
+    processed.updateSpectrum(output.data(), SpectrumProcessor::numBins, 48000.0f / SpectrumProcessor::fftSize);
+    const auto tick = [&]
+    {
+        SpectrumComponentTestAccess::tick(original);
+        SpectrumComponentTestAccess::tick(processed);
+    };
+    const auto save = [&](const juce::String& name)
+    {
+        for (int deviceScale : {1, 2})
+        {
+            auto stream = directory.getChildFile("spectrum-" + name + "-" + juce::String(deviceScale) + "x.png").createOutputStream();
+            REQUIRE(stream != nullptr);
+            stream->setPosition(0); stream->truncate();
+            CHECK(juce::PNGImageFormat().writeImageToStream(
+                canvas.createComponentSnapshot(canvas.getLocalBounds(), true, static_cast<float>(deviceScale)), *stream));
+        }
+    };
+    for (int frameIndex = 0; frameIndex < 120; ++frameIndex) tick();
+    save("live");
+    input.fill(0.0f);
+    original.updateSpectrum(input.data(), SpectrumProcessor::numBins, 48000.0f / SpectrumProcessor::fftSize);
+    processed.updateSpectrum(input.data(), SpectrumProcessor::numBins, 48000.0f / SpectrumProcessor::fftSize);
+    for (int frameIndex = 0; frameIndex < 6; ++frameIndex) tick();
+    save("release-100ms");
+    for (int frameIndex = 0; frameIndex < 18; ++frameIndex) tick();
+    save("release-400ms");
+}
 
 TEST_CASE("Spectrum frequency layout stays correct across size and FFT grid changes",
           "[spectrum][ui][layout][sample-rate][regression]")

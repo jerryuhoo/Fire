@@ -5,8 +5,8 @@
     Created: 2 Oct 2025
     Author:  Yifeng Yu
  
-    MODIFIED to implement timer-based interpolation and spatial smoothing for
-    a more fluid visual experience.
+    Message-thread presentation of FFT bins with bounded attack/release and
+    cached, peak-preserving frequency geometry.
 
   ==============================================================================
 */
@@ -86,7 +86,6 @@ private:
     std::array<float, 1024> pendingData {};
     std::array<float, 1024> targetData {};
     std::array<float, 1024> displayData {};
-    std::array<float, 1024> smoothedData {};
     std::array<float, 1024> maxData {};
     int pendingNumberOfBins = 1024;
     float pendingBinWidth = 44100.0f / 2048.0f;
@@ -95,6 +94,7 @@ private:
     std::uint64_t consumedGeneration = 0;
 
     float interpolationFactor = 0.2f;
+    static constexpr float releaseFactor = 0.12f;
     bool interpolationActive = false;
     bool geometryDirty = true;
     bool renderedDataIsClear = true;

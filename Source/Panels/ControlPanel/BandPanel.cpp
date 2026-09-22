@@ -619,6 +619,7 @@ void BandPanel::resized()
         selectorArea = zoomedGraph->getBounds().reduced(juce::roundToInt(7.0f * uiScale),
                                                        juce::roundToInt(5.0f * uiScale));
         selectorArea = selectorArea.removeFromTop(juce::roundToInt(23.0f * uiScale));
+        selectorArea.removeFromRight(juce::roundToInt(24.0f * uiScale));
         selectorArea = selectorArea.removeFromRight(juce::jmin(selectorArea.getWidth(), juce::roundToInt(216.0f * uiScale)));
     }
     graphSelectorStrip.setBounds(selectorArea);

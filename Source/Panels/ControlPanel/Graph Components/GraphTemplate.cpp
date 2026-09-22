@@ -9,6 +9,7 @@
 */
 
 #include "GraphTemplate.h"
+#include "../../../GUI/FireIcons.h"
 
 #include <utility>
 
@@ -93,9 +94,20 @@ void GraphTemplate::paint(juce::Graphics& g)
     if (emphasis > 0.001f)
     {
         auto bounds = getLocalBounds().toFloat().reduced(1.0f + press * scale);
-        g.setColour(fire::ui::colours::raised.withAlpha(emphasis * 0.24f
-                                                      * (1.0f - disabled * 0.72f)));
+        const auto accent = getGraphAccent();
+        g.setGradientFill(juce::ColourGradient(accent.withAlpha(emphasis * 0.055f * (1 - disabled * 0.72f)),
+            bounds.getCentreX(), bounds.getY(), accent.withAlpha(0.0f), bounds.getCentreX(), bounds.getBottom(), false));
         g.fillRoundedRectangle(bounds, fire::ui::Metrics::radius);
+        g.setColour(accent.withAlpha(emphasis * 0.25f * (1 - disabled * 0.72f)));
+        g.drawRoundedRectangle(bounds, fire::ui::Metrics::radius, juce::jmax(0.8f, scale));
+    }
+    if (onZoomRequested)
+    {
+        auto header = getGraphHeaderBounds();
+        const auto icon = header.removeFromRight(18 * scale).withSizeKeepingCentre(14 * scale, 14 * scale);
+        fire::ui::drawIcon(g, mZoomState ? fire::ui::Icon::restore : fire::ui::Icon::expand,
+                          icon, fire::ui::colours::textMuted.interpolatedWith(getGraphAccent(), emphasis)
+                              .withAlpha((0.6f + emphasis * 0.35f) * (1 - disabled * 0.65f)));
     }
 }
 
@@ -539,5 +551,6 @@ void GraphTemplate::rebuildStaticLayer(float displayScale)
                                    plotBounds.getBottom());
 
     auto headerBounds = getGraphHeaderBounds();
+    headerBounds.removeFromRight(20 * scale);
     fire::ui::drawSectionTitle(cacheGraphics, headerBounds, graphTitle, accent);
 }

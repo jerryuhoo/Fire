@@ -54,7 +54,8 @@ TEST_CASE("OTT parameters append to the existing automation list with new AU hin
         const auto* parameter = dynamic_cast<juce::AudioProcessorParameterWithID*>(parameters[index]);
         REQUIRE(parameter != nullptr);
         CHECK(ParameterIDAndName::isOttParameterID(parameter->paramID) == (index >= firstOtt && index < firstOtt + 28));
-        CHECK(parameter->getVersionHint() == (fire::modulation_fx::isParameterID(parameter->paramID) ? 8
+        CHECK(parameter->getVersionHint() == (fire::resonator_params::isParameterID(parameter->paramID) ? 9
+            : fire::modulation_fx::isParameterID(parameter->paramID) ? 8
                                               : fire::lfo_bank::isAppendedParameterID(parameter->paramID) ? 7
             : fire::eq::isAppendedParameterID(parameter->paramID) ? 6
             : fire::clouds_params::isParameterID(parameter->paramID) ? 5

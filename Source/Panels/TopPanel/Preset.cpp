@@ -248,6 +248,10 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
     if (! validateParameterFamily(snapshot, processor, legacyWithoutModulationEffects, "modulationEffectsSchemaVersion",
                                   fire::modulation_fx::isParameterID, fire::modulation_fx::schemaVersion))
         return false;
+    bool legacyWithoutResonator = false;
+    if (! validateParameterFamily(snapshot, processor, legacyWithoutResonator, "resonatorSchemaVersion",
+                                  fire::resonator_params::isParameterID, fire::resonator_params::schemaVersion))
+        return false;
     bool legacyWithoutModuleOrder = false;
     if (! validateParameterFamily(snapshot, processor, legacyWithoutModuleOrder, "moduleOrderSchemaVersion", fire::module_order::isParameterID))
         return false;
@@ -276,6 +280,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (legacyWithoutInserts && fire::effects::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutModulationEffects && fire::modulation_fx::isParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutResonator && fire::resonator_params::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutModuleOrder && fire::module_order::isParameterID(parameterWithID->paramID))
             continue;
@@ -334,6 +340,10 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     if (! validateParameterFamily(xml, processor, legacyWithoutModulationEffects, "modulationEffectsSchemaVersion",
                                   fire::modulation_fx::isParameterID, fire::modulation_fx::schemaVersion))
         return false;
+    bool legacyWithoutResonator = false;
+    if (! validateParameterFamily(xml, processor, legacyWithoutResonator, "resonatorSchemaVersion",
+                                  fire::resonator_params::isParameterID, fire::resonator_params::schemaVersion))
+        return false;
     bool legacyWithoutModuleOrder = false;
     if (! validateParameterFamily(xml, processor, legacyWithoutModuleOrder, "moduleOrderSchemaVersion", fire::module_order::isParameterID))
         return false;
@@ -371,6 +381,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         if (legacyWithoutInserts && fire::effects::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutModulationEffects && fire::modulation_fx::isParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutResonator && fire::resonator_params::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutModuleOrder && fire::module_order::isParameterID(parameterWithID->paramID))
             continue;
@@ -428,6 +440,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("ottSchemaVersion", 1);
     xml.setAttribute("insertEffectsSchemaVersion", 1);
     xml.setAttribute("modulationEffectsSchemaVersion", fire::modulation_fx::schemaVersion);
+    xml.setAttribute("resonatorSchemaVersion", fire::resonator_params::schemaVersion);
     xml.setAttribute("moduleOrderSchemaVersion", 1);
     xml.setAttribute("eqSchemaVersion", 1);
     xml.setAttribute("lfoBankSchemaVersion", fire::lfo_bank::schemaVersion);
@@ -594,6 +607,7 @@ namespace state
                     // Canonicalise this new family so Freeze/Engine, the
                     // saved snapshot and preset-equivalence checks agree.
                     if (fire::clouds_params::isParameterID(p->paramID)
+                        || fire::resonator_params::isParameterID(p->paramID)
                         || fire::lfo_bank::isPresentParameterID(p->paramID))
                         if (auto* ranged = fireProc.treeState.getParameter(p->paramID))
                             valueToLoad = ranged->convertTo0to1(

@@ -13,6 +13,7 @@
 #include "InsertParameters.h"
 #include "CloudsParameters.h"
 #include "ModulationEffectParameters.h"
+#include "ResonatorParameters.h"
 #include "EqParameters.h"
 #include "ModuleOrder.h"
 #include "juce_audio_processors/juce_audio_processors.h"
@@ -409,6 +410,9 @@ namespace ParameterIDAndName
             for (int slot = 0; slot < fire::modulation_fx::slotCount; ++slot)
                 result.push_back({"FX " + juce::String(slot + 1) + " Modulation Type",
                                   fire::modulation_fx::parameterBase(slot, false)});
+            for (int slot = 0; slot < fire::resonator_params::slotCount; ++slot)
+                result.push_back({"FX " + juce::String(slot + 1) + " Chord Resonator",
+                                  fire::resonator_params::parameterBase(slot, false)});
             return result;
         }();
         return params;

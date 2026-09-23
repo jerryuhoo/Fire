@@ -56,6 +56,7 @@ inline const juce::Colour ottPress { 0xffb29ae8 };
 inline const juce::Colour chorus { 0xffb9a6dd };
 inline const juce::Colour flanger { 0xff91bcb2 };
 inline const juce::Colour phaser { 0xffc5a3bc };
+inline const juce::Colour chordResonator { 0xffcdbb91 };
 inline const juce::Colour delay { 0xff80b8c7 };
 inline const juce::Colour reverb { 0xff8e9fce };
 inline const juce::Colour granular { 0xffd2ab88 };

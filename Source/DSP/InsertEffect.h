@@ -2,6 +2,7 @@
 
 #include "ModulatedValueProvider.h"
 #include "Clouds/CloudsEngine.h"
+#include "ChordResonator.h"
 #include <juce_dsp/juce_dsp.h>
 #include <array>
 #include <limits>
@@ -10,7 +11,7 @@
 namespace fire::effects
 {
 enum class Type { none = 0, chorus = 1, delay = 2, reverb = 3, granular = 4, lofi = 5,
-                  flanger = 6, phaser = 7, count = 8 };
+                  flanger = 6, phaser = 7, chordResonator = 8, count = 9 };
 inline constexpr size_t controlCount = 6;
 
 struct Control
@@ -42,6 +43,7 @@ inline const char* name(Type type) noexcept
         case Type::lofi: return "Lo-Fi";
         case Type::flanger: return "Flanger";
         case Type::phaser: return "Phaser";
+        case Type::chordResonator: return "Chord Resonator";
         case Type::none: case Type::count: return "Empty";
     }
     return "Empty";
@@ -84,6 +86,11 @@ inline const std::array<Control, controlCount>& controls(Type type)
         {"Center", " Hz", 40, 6000, 900, 0.36f}, {"Feedback", " %", -85, 85, 30},
         {"Width", " %", 0, 100, 75}, {"Mix", " %", 0, 100, 50}
     }};
+    static const std::array<Control, controlCount> chordResonator {{
+        {"Root", "", 36, 72, 48}, {"Chord", "", 0, 7, 3},
+        {"Color", " %", 0, 100, 55}, {"Decay", " s", 0.05f, 3, 0.6f, 0.42f},
+        {"Width", " %", 0, 100, 70}, {"Mix", " %", 0, 100, 35}
+    }};
     switch (type)
     {
         case Type::delay: return delay;
@@ -92,6 +99,7 @@ inline const std::array<Control, controlCount>& controls(Type type)
         case Type::lofi: return lofi;
         case Type::flanger: return flanger;
         case Type::phaser: return phaser;
+        case Type::chordResonator: return chordResonator;
         case Type::chorus: case Type::none: case Type::count: return chorus;
     }
     return chorus;
@@ -231,6 +239,7 @@ public:
         tape.prepare(sampleRate);
         reverb.setSampleRate(sampleRate);
         cloudsEngine.prepare(sampleRate);
+        chordEngine.prepare(sampleRate);
         gate.reset(sampleRate, 0.02);
         for (auto& smoother : bases) smoother.reset(sampleRate, 0.02);
         for (auto& route : routes) route.blend.reset(sampleRate, 0.01);
@@ -281,8 +290,12 @@ public:
             std::array<float, controlCount> value;
             for (size_t i = 0; i < controlCount; ++i)
             {
-                const auto base = bases[i].getNextValue();
+                const auto smoothedBase = bases[i].getNextValue();
                 if (! matches()) { value[i] = lastValues[i]; continue; }
+                // Note/chord selections must not sweep through intermediate
+                // menu items. Their engine owns a bounded retuning crossfade.
+                const bool discrete = currentType == Type::chordResonator && i < 2;
+                const auto base = discrete ? baseValue(parameters, i) : smoothedBase;
                 const auto modulated = parameters.values[i].get(offset + static_cast<int>(sample), base);
                 // Keep nonlinear control mappings sample accurate, while
                 // avoiding pow() when an unmodulated value has settled.
@@ -303,8 +316,11 @@ public:
                 mappedValues[i] = value[i];
                 auto& route = routes[i];
                 const auto blend = route.blend.getCurrentValue();
-                if (blend <= 0.0f) value[i] = route.anchor;
-                else if (blend < 1.0f) value[i] = route.anchor + blend * (value[i] - route.anchor);
+                if (! discrete)
+                {
+                    if (blend <= 0.0f) value[i] = route.anchor;
+                    else if (blend < 1.0f) value[i] = route.anchor + blend * (value[i] - route.anchor);
+                }
                 lastValues[i] = value[i];
                 route.blend.getNextValue();
             }
@@ -419,6 +435,7 @@ private:
     {
         history.reset(); tape.reset(); reverb.reset();
         cloudsEngine.reset();
+        chordEngine.reset();
         feedback.fill(0); highPassInput.fill(0); highPassOutput.fill(0);
         held.fill(0); holdRemaining = 0; holdResidual = 0;
         phase = 0;
@@ -600,6 +617,13 @@ private:
             if (phase >= 1.0) phase -= std::floor(phase);
             processPhaser(left, right, p, stereo);
         }
+        else if (currentType == Type::chordResonator)
+        {
+            fire::chord_resonator::Parameters parameters;
+            parameters.root = p[0]; parameters.chord = p[1];
+            parameters.color = p[2] * 0.01f; parameters.decay = p[3]; parameters.width = p[4] * 0.01f;
+            chordEngine.process(left, right, parameters, stereo);
+        }
         else if (currentType == Type::delay)
         {
             constexpr float beats[] {0, 0.25f, 0.5f, 0.75f, 1, 1.5f, 2, 4};
@@ -678,6 +702,7 @@ private:
     Type currentType = Type::none;
     bool dormant = true, currentNormalised = false;
     CloudsEngine cloudsEngine;
+    fire::chord_resonator::Engine chordEngine;
     CloudsParameters cloudsState;
     std::array<juce::SmoothedValue<float>, 3> cloudsBases;
     std::array<Route, 3> cloudsRoutes;

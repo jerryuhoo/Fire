@@ -660,3 +660,38 @@ Existing effect Type automation retains its six original choices and values.
 The new algorithms use an appended **Modulation Type** host selector
 (Standard / Flanger / Phaser); the plugin's CHAIN menu handles it automatically.
 Old presets and projects load with Standard selected.
+
+### Chord Resonator
+
+Add **Chord Resonator** from the CHAIN **+** menu in **Band Lab** or **Master
+Lab** to excite a tuned harmonic bank with the incoming audio. Multiple
+instances can be reordered, bypassed and saved independently, just like other
+inserts. Band instances listen to their selected band's signal; Master listens
+to the complete signal at its position in the chain.
+
+Choose **Root** (C2–C5; middle C is C4) and **Chord** from the two selectors.
+The eight voicings are Major, Minor, Major 7, Minor 7, Sus 2, Sus 4, Fifth and
+Octave. The note readout shows the chosen voicing. Four ordinary rotaries shape
+the result:
+
+- **Color** sets the balance of the fundamental and upper harmonics.
+- **Decay** sets the nominal time for the resonances to decay by 60 dB
+  (0.05–3 seconds).
+- **Width** spreads the resonant voices in stereo; zero gives each voice equal
+  left/right gain while retaining the input's stereo channels.
+- **Mix** blends the dry attack with the resonant sound.
+
+Start with a harmonically rich bass or a rhythmic noise/percussion source and
+the default C3 Minor 7 voicing. To keep the sub intact, place the effect on a
+mid/high band. It colours frequencies excited by the input; it does not
+automatically detect a key or retune arbitrary audio. No MIDI or external
+carrier is needed. Root/chord changes crossfade, while continuous parameters
+support LFO modulation and host automation. The effect adds no fixed processing
+latency, and silence produces only the existing decaying tail.
+The wet path removes DC bias, and controlled gain transitions prevent stored
+harmonics from causing a sudden level jump when Color or Width is increased.
+
+The previous Type and Modulation Type host selectors retain their ranges and
+automation positions. A new per-slot **Chord Resonator** flag selects this
+algorithm; the CHAIN menu manages it automatically. Older presets and projects
+load with these flags off.

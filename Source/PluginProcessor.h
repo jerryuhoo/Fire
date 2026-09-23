@@ -13,6 +13,7 @@
 #include "DSP/LoudnessMatchState.h"
 #include "Utility/CloudsParameters.h"
 #include "Utility/ModulationEffectParameters.h"
+#include "Utility/ResonatorParameters.h"
 #include "Utility/EqParameters.h"
 #include "Utility/LfoBankParameters.h"
 #include "DSP/EqCoefficients.h"
@@ -842,6 +843,7 @@ private:
     std::array<CachedParameter, 3> tapeParameters;
     std::array<std::array<std::array<CachedParameter, fire::effects::fieldCount>, fire::effects::slotCount>, fire::effects::scopeCount> insertParameters;
     std::array<std::array<CachedParameter, fire::modulation_fx::slotCount>, fire::modulation_fx::scopeCount> modulationEffectParameters;
+    std::array<std::array<CachedParameter, fire::resonator_params::slotCount>, fire::resonator_params::scopeCount> resonatorParameters;
     std::array<std::array<std::array<CachedParameter, fire::clouds_params::fieldCount>, fire::clouds_params::slotCount>, fire::clouds_params::scopeCount> cloudsParameters;
     fire::effects::InsertRack masterInserts;
     std::array<std::array<CachedParameter, fire::module_order::capacity>, fire::effects::scopeCount> moduleOrderParameters;

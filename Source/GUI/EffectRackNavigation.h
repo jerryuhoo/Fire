@@ -13,6 +13,7 @@ inline juce::Colour effectColour(effects::Type type)
         case effects::Type::chorus: return colours::chorus;
         case effects::Type::flanger: return colours::flanger;
         case effects::Type::phaser: return colours::phaser;
+        case effects::Type::chordResonator: return colours::chordResonator;
         case effects::Type::delay: return colours::delay;
         case effects::Type::reverb: return colours::reverb;
         case effects::Type::granular: return colours::granular;
@@ -153,7 +154,8 @@ public:
             if (cachedTypes[i] != static_cast<int>(type)) changed = true;
             if (cachedTypes[i] != static_cast<int>(type))
             {
-                insertButtons[i].setButtonText(effects::name(type));
+                insertButtons[i].setButtonText(type == effects::Type::chordResonator ? "Resonator" : effects::name(type));
+                insertButtons[i].setTitle(effects::name(type));
                 insertButtons[i].setTooltip(juce::String(effects::name(type)) + " · slot " + juce::String(slot + 1) + ". Drag to reorder. Hover to remove.");
                 powerButtons[i].setColour(juce::ToggleButton::tickColourId, effectColour(type));
                 powerButtons[i].setColour(juce::ToggleButton::tickDisabledColourId, colours::disabled);

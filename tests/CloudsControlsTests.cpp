@@ -144,7 +144,7 @@ TEST_CASE("Clouds pages expose full controls without changing the six existing p
         }
         auto& freeze = buttonByID(*controls, fire::clouds_params::parameterID(scope, slot, fire::clouds_params::freezeField));
         visible.push_back(&freeze);
-        CHECK(find<juce::ComboBox>(*controls, [](auto&) { return true; }) == nullptr);
+        CHECK(find<juce::ComboBox>(*controls, [](auto& combo) { return combo.isShowing(); }) == nullptr);
 
         for (auto size : {juce::Point<int>(1000, 500), juce::Point<int>(1400, 700), juce::Point<int>(2000, 1000)})
         {

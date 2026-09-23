@@ -1,8 +1,14 @@
 #pragma once
 #include "EffectRackNavigation.h"
+#include "ContextAwareComboBox.h"
+#include "../DSP/ChordResonator.h"
+#include <atomic>
 #include "../Utility/CloudsParameters.h"
+#include "../Utility/ModulationEffectParameters.h"
+#include "../Utility/ResonatorParameters.h"
 
-class InsertEffectControls final : public juce::Component
+class InsertEffectControls final : public juce::Component,
+                                   private juce::AudioProcessorParameter::Listener
 {
 public:
     static constexpr size_t cloudsExtraCount = 3;
@@ -19,8 +25,45 @@ public:
         freezeButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::granular.withAlpha(0.25f));
         freezeButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
         freezeButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::whiteHot);
+        for (auto* menu : {&rootMenu, &chordMenu})
+        {
+            addChildComponent(menu);
+            menu->setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface0);
+            menu->setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+            menu->setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
+            menu->setColour(juce::ComboBox::arrowColourId, fire::ui::colours::chordResonator);
+        }
+        for (int midi = fire::chord_resonator::minimumRoot; midi <= fire::chord_resonator::maximumRoot; ++midi)
+            rootMenu.addItem(fire::chord_resonator::rootName(midi), midi - fire::chord_resonator::minimumRoot + 1);
+        for (size_t chord = 0; chord < fire::chord_resonator::chordNames.size(); ++chord)
+            chordMenu.addItem(fire::chord_resonator::chordNames[chord], static_cast<int>(chord + 1));
+        rootMenu.setTitle("Chord Resonator root note");
+        rootMenu.setTooltip("Root note of the resonating chord. C3 is MIDI note 48.");
+        chordMenu.setTitle("Chord Resonator chord");
+        chordMenu.setTooltip("Choose the intervals that resonate above the root note.");
+        rootMenu.setHelpText(rootMenu.getTooltip());
+        chordMenu.setHelpText(chordMenu.getTooltip());
+        rootMenu.setExplicitFocusOrder(1);
+        chordMenu.setExplicitFocusOrder(2);
+        rootLabel.setText("Root", juce::dontSendNotification);
+        chordLabel.setText("Chord", juce::dontSendNotification);
+        chordNotes.setTitle("Selected chord notes");
+        chordNotes.setTooltip("Notes in the selected chord before LFO modulation.");
+        chordNotes.setHelpText(chordNotes.getTooltip());
+        for (auto* label : {&rootLabel, &chordLabel, &chordNotes})
+        {
+            addChildComponent(label);
+            label->setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+            label->setInterceptsMouseClicks(false, false);
+            label->setJustificationType(juce::Justification::centredLeft);
+        }
     }
-    ~InsertEffectControls() override { onLayoutChanged = nullptr; dismiss(); }
+    ~InsertEffectControls() override
+    {
+        onLayoutChanged = nullptr;
+        unobserveType();
+        dismiss();
+    }
     void setControls(const std::array<ModulatableSlider*, fire::effects::controlCount>& controls)
     {
         sliders = controls;
@@ -55,6 +98,8 @@ public:
         // Closing a host gesture may re-enter bind for another band/slot.
         // Let that newer request win even when this component is still alive.
         if (! safe || request != bindingGeneration) return;
+        unobserveType();
+        for (auto& attachment : chordAttachments) attachment.reset();
         for (auto& attachment : attachments) attachment.reset();
         for (auto& attachment : cloudsAttachments) attachment.reset();
         freezeAttachment.reset();
@@ -74,7 +119,8 @@ public:
             attachments[i] = std::move(attachment);
             configureSlider(*slider, definitions[i], colour,
                             type == fire::effects::Type::delay && i == 4,
-                            usesExpandedLayout() && i == 1, modulationEffect && i == 0);
+                            usesExpandedLayout() && i == 1,
+                            (modulationEffect && i == 0) || (usesChordSelectors() && i == 3));
             if (! isCurrent()) return;
             if (modulationEffect)
             {
@@ -90,6 +136,16 @@ public:
                 };
                 slider->setTooltip(juce::String(fire::effects::name(type)) + " " + definitions[i].name
                                    + ": " + help[i]);
+            }
+            if (usesChordSelectors() && i >= 2)
+            {
+                const std::array<const char*, 4> help {
+                    "Balance the fundamental body and brighter overtones of the chord.",
+                    "How long the resonances ring after the incoming sound excites them.",
+                    "Stereo spread of the chord's resonances.",
+                    "Blend of the incoming sound and the ringing chord."
+                };
+                slider->setTooltip(juce::String("Chord Resonator ") + definitions[i].name + ": " + help[i - 2]);
             }
             if (usesExpandedLayout() && i == 3)
                 slider->setTooltip("Position in the recorded buffer: turn clockwise to select older audio.");
@@ -124,6 +180,11 @@ public:
         {
             for (auto* slider : cloudsSliders) if (slider) slider->parameterID.clear();
         }
+        if (usesChordSelectors())
+        {
+            bindChordSelectors(request);
+            if (! isCurrent()) return;
+        }
         updateVisibility();
         if (! isCurrent()) return;
         resized();
@@ -134,6 +195,12 @@ public:
     void refresh() { if (scope >= 0 && slot >= 0) bind(scope, slot); }
     void dismissButtons()
     {
+        const juce::Component::SafePointer<InsertEffectControls> safe(this);
+        choiceGeneration.fetch_add(1, std::memory_order_release);
+        rootMenu.dismissTransientInteraction();
+        if (! safe) return;
+        chordMenu.dismissTransientInteraction();
+        if (! safe) return;
         freezeButton.dismissPointerGesture();
     }
     void dismiss()
@@ -175,7 +242,37 @@ public:
             (bounds.getHeight() - gap) / 2 - footer});
         const auto height = fire::ui::ordinaryKnobHeight(size, scale);
         auto area = bounds.withSizeKeepingCentre(size * columns + gap * (columns - 1), height * 2 + gap);
-        if (usesExpandedLayout())
+        if (usesChordSelectors())
+        {
+            const auto selectorWidth = juce::jmax(1, juce::jmin(juce::roundToInt(112.0f * scale),
+                bounds.getWidth() - size * 2 - gap * 2));
+            area = bounds.withSizeKeepingCentre(selectorWidth + size * 2 + gap * 2, height * 2 + gap);
+            auto choices = area.removeFromLeft(selectorWidth);
+            area.removeFromLeft(gap);
+            const auto titleHeight = juce::roundToInt(20.0f * scale);
+            const auto menuHeight = juce::roundToInt(30.0f * scale);
+            rootLabel.setBounds(choices.removeFromTop(titleHeight));
+            rootMenu.setBounds(choices.removeFromTop(menuHeight));
+            choices.removeFromTop(gap);
+            chordLabel.setBounds(choices.removeFromTop(titleHeight));
+            chordMenu.setBounds(choices.removeFromTop(menuHeight));
+            choices.removeFromTop(gap);
+            chordNotes.setBounds(choices);
+            rootLabel.setFont(fire::ui::labelFont(11.0f * scale));
+            chordLabel.setFont(fire::ui::labelFont(11.0f * scale));
+            chordNotes.setFont(fire::ui::bodyFont(10.5f * scale));
+            for (size_t row = 0; row < 2; ++row)
+            {
+                auto strip = area.removeFromTop(height);
+                area.removeFromTop(gap);
+                for (size_t column = 0; column < 2; ++column)
+                {
+                    if (auto* slider = sliders[2 + row * 2 + column]) slider->setBounds(strip.removeFromLeft(size));
+                    strip.removeFromLeft(gap);
+                }
+            }
+        }
+        else if (usesExpandedLayout())
         {
             const std::array<size_t, 6> order { 3, 0, 2, 1, 4, 5 };
             auto top = area.removeFromTop(height);
@@ -215,10 +312,108 @@ public:
     std::function<void()> onLayoutChanged;
 
 private:
+    bool usesChordSelectors() const noexcept { return type == fire::effects::Type::chordResonator; }
+    void unobserveType()
+    {
+        for (auto*& parameter : observedTypes)
+        {
+            if (parameter != nullptr) parameter->removeListener(this);
+            parameter = nullptr;
+        }
+    }
+    void parameterValueChanged(int, float) override
+    {
+        // Type notifications may arrive on the audio thread. Invalidate only
+        // the interaction epoch here; the normal panel clock performs rebinds.
+        choiceGeneration.fetch_add(1, std::memory_order_release);
+    }
+    void parameterGestureChanged(int, bool) override {}
+    void updateChordChoice(size_t index, float normalized, std::uint64_t binding)
+    {
+        if (binding != bindingGeneration || ! usesChordSelectors()) return;
+        const juce::Component::SafePointer<InsertEffectControls> safe(this);
+        auto& menu = index == 0 ? rootMenu : chordMenu;
+        const auto selected = std::isfinite(normalized)
+            ? juce::jlimit(0, menu.getNumItems() - 1,
+                juce::roundToInt(juce::jlimit(0.0f, 1.0f, normalized) * (menu.getNumItems() - 1)))
+            : index == 0 ? fire::chord_resonator::defaultRoot - fire::chord_resonator::minimumRoot
+                         : fire::chord_resonator::defaultChord;
+        menu.setSelectedItemIndex(selected, juce::dontSendNotification);
+        if (safe && binding == bindingGeneration) updateChordNotes();
+    }
+    void updateChordNotes()
+    {
+        // The root and chord helper data are shared with the audio engine.
+        const auto root = fire::chord_resonator::minimumRoot + juce::jmax(0, rootMenu.getSelectedItemIndex());
+        const auto chord = juce::jlimit(0, static_cast<int>(fire::chord_resonator::chordDefinitions.size() - 1),
+                                      chordMenu.getSelectedItemIndex());
+        const auto& definition = fire::chord_resonator::chordDefinitions[static_cast<size_t>(chord)];
+        juce::String notes;
+        for (int note = 0; note < definition.count; ++note)
+        {
+            if (note != 0) notes += note == 2 ? "\n" : "  ";
+            notes += fire::chord_resonator::rootName(root + definition.intervals[static_cast<size_t>(note)]);
+        }
+        chordNotes.setText(notes, juce::dontSendNotification);
+    }
+    void bindChordSelectors(std::uint64_t binding)
+    {
+        const juce::Component::SafePointer<InsertEffectControls> safe(this);
+        observedTypes = {
+            processor.treeState.getParameter(fire::effects::parameterID(scope, slot, fire::effects::typeField)),
+            processor.treeState.getParameter(fire::modulation_fx::parameterID(scope, slot)),
+            processor.treeState.getParameter(fire::resonator_params::parameterID(scope, slot))
+        };
+        for (auto* parameter : observedTypes) if (parameter) parameter->addListener(this);
+        for (size_t index = 0; index < chordAttachments.size(); ++index)
+        {
+            auto& menu = index == 0 ? rootMenu : chordMenu;
+            const auto id = fire::effects::parameterID(scope, slot, static_cast<int>(index));
+            auto* parameter = processor.treeState.getParameter(id);
+            menu.setComponentID(id);
+            const auto valid = [safe, binding, index]
+            {
+                if (! safe || safe->bindingGeneration != binding || ! safe->active || ! safe->isEnabled()
+                    || ! safe->isShowing() || ! safe->usesChordSelectors()) return false;
+                const auto& selector = index == 0 ? safe->rootMenu : safe->chordMenu;
+                return selector.isShowing() && selector.isEnabled()
+                    && safe->processor.getInsertEffectType(safe->scope, safe->slot) == safe->type;
+            };
+            menu.configurePopupSession([safe] { return safe ? safe->choiceGeneration.load(std::memory_order_acquire) : 0; },
+                valid, [safe, parameter, binding, index, valid](int item)
+                {
+                    if (! parameter || ! valid()) return;
+                    const auto count = index == 0 ? fire::chord_resonator::maximumRoot - fire::chord_resonator::minimumRoot + 1
+                                                  : static_cast<int>(fire::chord_resonator::chordNames.size());
+                    if (! juce::isPositiveAndBelow(item - 1, count)) return;
+                    const auto value = static_cast<float>(item - 1) / static_cast<float>(count - 1);
+                    if (juce::approximatelyEqual(value, parameter->getValue())) return;
+                    const auto generation = safe->choiceGeneration.load(std::memory_order_acquire);
+                    parameter->beginChangeGesture();
+                    const juce::ScopeGuard end {[parameter] { parameter->endChangeGesture(); }};
+                    if (! valid() || safe->choiceGeneration.load(std::memory_order_acquire) != generation)
+                    {
+                        if (safe) safe->updateChordChoice(index, parameter->getValue(), binding);
+                        return;
+                    }
+                    // No UI state is touched after this host notification.
+                    parameter->setValueNotifyingHost(value);
+                });
+            if (! safe || binding != bindingGeneration) return;
+            if (parameter != nullptr)
+            {
+                chordAttachments[index] = std::make_unique<juce::ParameterAttachment>(*parameter,
+                    [safe, binding, index](float value)
+                    { if (safe) safe->updateChordChoice(index, value, binding); }, nullptr);
+                chordAttachments[index]->sendInitialUpdate();
+                if (! safe || binding != bindingGeneration) return;
+            }
+        }
+    }
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
     void configureSlider(ModulatableSlider& slider, fire::effects::Control definition,
-                         juce::Colour colour, bool delaySync, bool cloudsDensity, bool preciseRate = false)
+                         juce::Colour colour, bool delaySync, bool cloudsDensity, bool fineLowValues = false)
     {
         const juce::Component::SafePointer<ModulatableSlider> safeSlider(&slider);
         slider.setLabel(definition.name, colour);
@@ -229,7 +424,7 @@ private:
         slider.setTooltip(cloudsDensity
             ? "Density: left is Regular and right is Random. The centre (-6% to +6%) is Off: no new grains."
             : slider.getTitle() + " - insert slot " + juce::String(slot + 1));
-        slider.textFromValueFunction = [definition, delaySync, cloudsDensity, preciseRate](double value)
+        slider.textFromValueFunction = [definition, delaySync, cloudsDensity, fineLowValues](double value)
         {
             const auto physical = definition.fromNormalised(static_cast<float>(value));
             if (delaySync)
@@ -238,7 +433,7 @@ private:
                 return divisions[juce::jlimit(0, 7, juce::roundToInt(physical))];
             }
             if (cloudsDensity && std::abs(physical) <= 6.0f) return juce::String("Off");
-            const int decimals = preciseRate && physical < 1.0f ? 2 : physical >= 100.0f ? 0 : 1;
+            const int decimals = fineLowValues && physical < 1.0f ? 2 : physical >= 100.0f ? 0 : 1;
             return juce::String(physical, decimals) + definition.unit;
         };
         slider.valueFromTextFunction = [definition, delaySync, cloudsDensity](const juce::String& text)
@@ -262,9 +457,14 @@ private:
         const auto request = visibilityGeneration;
         const auto binding = bindingGeneration;
         const auto current = [&] { return safe && request == safe->visibilityGeneration && binding == safe->bindingGeneration; };
-        for (auto* slider : sliders)
+        for (size_t index = 0; index < sliders.size(); ++index)
         {
-            if (slider) slider->setVisible(active);
+            if (auto* slider = sliders[index]) slider->setVisible(active && (! usesChordSelectors() || index >= 2));
+            if (! current()) return;
+        }
+        for (auto* component : std::array<juce::Component*, 5> {&rootMenu, &chordMenu, &rootLabel, &chordLabel, &chordNotes})
+        {
+            component->setVisible(active && usesChordSelectors());
             if (! current()) return;
         }
         for (auto* slider : cloudsSliders)
@@ -280,6 +480,11 @@ private:
     std::array<ModulatableSlider*, fire::effects::controlCount> sliders {};
     std::array<ModulatableSlider*, cloudsExtraCount> cloudsSliders {};
     PrimaryTextButton freezeButton;
+    ContextAwareComboBox rootMenu, chordMenu;
+    juce::Label rootLabel, chordLabel, chordNotes;
+    std::array<juce::RangedAudioParameter*, 3> observedTypes {};
+    std::atomic<std::uint64_t> choiceGeneration {0};
+    std::array<std::unique_ptr<juce::ParameterAttachment>, 2> chordAttachments;
     // Destroy attachments while their local and parent-owned controls still exist.
     std::array<std::unique_ptr<SliderAttachment>, fire::effects::controlCount> attachments;
     std::array<std::unique_ptr<SliderAttachment>, cloudsExtraCount> cloudsAttachments;

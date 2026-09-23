@@ -2899,6 +2899,10 @@ void FireAudioProcessor::initialiseParameterCache()
         for (int slot = 0; slot < fire::modulation_fx::slotCount; ++slot)
             modulationEffectParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)]
                 = cacheParameter(fire::modulation_fx::parameterID(scope, slot));
+    for (int scope = 0; scope < fire::resonator_params::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::resonator_params::slotCount; ++slot)
+            resonatorParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)]
+                = cacheParameter(fire::resonator_params::parameterID(scope, slot));
 
     filterParameterCache.lowCutFrequency = cacheParameter(LOWCUT_FREQ_ID);
     filterParameterCache.lowCutGain = cacheParameter(LOWCUT_GAIN_ID);
@@ -3072,6 +3076,7 @@ double FireAudioProcessor::getTailLengthSeconds() const
             else if (type == fire::effects::Type::chorus) tail += 2.0;
             else if (type == fire::effects::Type::flanger) tail += 2.0;
             else if (type == fire::effects::Type::phaser) tail += 8.0;
+            else if (type == fire::effects::Type::chordResonator) tail += 8.0;
             else if (type == fire::effects::Type::lofi) tail += 0.05;
         }
         if (scope == 0) master = tail; else bandsTail = juce::jmax(bandsTail, tail);
@@ -3083,6 +3088,8 @@ fire::effects::Type FireAudioProcessor::getInsertEffectType(int scope, int slot)
 {
     if (! juce::isPositiveAndBelow(scope, fire::effects::scopeCount) || ! juce::isPositiveAndBelow(slot, fire::effects::slotCount))
         return fire::effects::Type::none;
+    if (loadCachedParameter(resonatorParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)]) > 0.5f)
+        return fire::effects::Type::chordResonator;
     const auto extension = juce::roundToInt(loadCachedParameter(
         modulationEffectParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)]));
     if (extension == 1) return fire::effects::Type::flanger;
@@ -3293,11 +3300,16 @@ int FireAudioProcessor::addInsertEffect(int scope, fire::effects::Type type)
     write(freeSlot, orderField, static_cast<float>(active.size() + 1));
     write(freeSlot, enabledField, 1);
     const int extension = type == Type::flanger ? 1 : type == Type::phaser ? 2 : 0;
-    write(freeSlot, typeField, extension == 0 ? static_cast<float>(type) : 0.0f);
+    const bool isResonator = type == Type::chordResonator;
+    write(freeSlot, typeField, extension == 0 && ! isResonator ? static_cast<float>(type) : 0.0f);
     auto* extendedType = treeState.getParameter(fire::modulation_fx::parameterID(scope, freeSlot));
     extendedType->beginChangeGesture();
     extendedType->setValueNotifyingHost(extendedType->convertTo0to1(static_cast<float>(extension)));
     extendedType->endChangeGesture();
+    auto* resonator = treeState.getParameter(fire::resonator_params::parameterID(scope, freeSlot));
+    resonator->beginChangeGesture();
+    resonator->setValueNotifyingHost(isResonator ? 1.0f : 0.0f);
+    resonator->endChangeGesture();
     // Reused storage slots still append to the visible chain, irrespective of
     // where their previous instance was located.
     auto nodes = visibleModuleOrder(scope);
@@ -3333,6 +3345,8 @@ void FireAudioProcessor::removeInsertEffect(int scope, int slot)
     parameter->beginChangeGesture(); parameter->setValueNotifyingHost(0); parameter->endChangeGesture();
     auto* extendedType = treeState.getParameter(fire::modulation_fx::parameterID(scope, slot));
     extendedType->beginChangeGesture(); extendedType->setValueNotifyingHost(0); extendedType->endChangeGesture();
+    auto* resonator = treeState.getParameter(fire::resonator_params::parameterID(scope, slot));
+    resonator->beginChangeGesture(); resonator->setValueNotifyingHost(0); resonator->endChangeGesture();
 }
 
 void FireAudioProcessor::moveInsertEffect(int scope, int slot, int direction)
@@ -5364,6 +5378,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("ottSchemaVersion", 1);
     xmlState.setAttribute("insertEffectsSchemaVersion", 1);
     xmlState.setAttribute("modulationEffectsSchemaVersion", fire::modulation_fx::schemaVersion);
+    xmlState.setAttribute("resonatorSchemaVersion", fire::resonator_params::schemaVersion);
     xmlState.setAttribute("moduleOrderSchemaVersion", 1);
     xmlState.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xmlState.setAttribute("eqSchemaVersion", 1);
@@ -5523,6 +5538,24 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 double value = 0;
                 if (! parseStrictFiniteDouble(child.getProperty("value").toString(), value)
                     || value < 0 || value > 2 || value != std::floor(value)) return;
+            }
+    }
+    int resonatorCount = 0;
+    for (const auto& id : incomingParameterIDs) if (fire::resonator_params::isParameterID(id)) ++resonatorCount;
+    if (xmlState->hasAttribute("resonatorSchemaVersion") || resonatorCount > 0)
+    {
+        int version = fire::resonator_params::schemaVersion;
+        if ((xmlState->hasAttribute("resonatorSchemaVersion")
+             && (! parseStrictNonNegativeIntegerAttribute(*xmlState, "resonatorSchemaVersion", version)
+                 || version != fire::resonator_params::schemaVersion))
+            || resonatorCount != fire::resonator_params::parameterCount)
+            return;
+        for (const auto& child : incomingParameterState)
+            if (fire::resonator_params::isParameterID(child.getProperty("id").toString()))
+            {
+                double value = 0;
+                if (! parseStrictFiniteDouble(child.getProperty("value").toString(), value)
+                    || (value != 0.0 && value != 1.0)) return;
             }
     }
     int moduleOrderCount = 0;
@@ -6956,6 +6989,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
                 (scope == 0 ? juce::String("Master") : "Band " + juce::String(scope))
                     + " FX " + juce::String(slot + 1) + " Modulation Type",
                 juce::StringArray {"Standard", "Flanger", "Phaser"}, 0));
+
+    // Independent flags preserve both existing effect-choice ranges.
+    for (int scope = 0; scope < fire::resonator_params::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::resonator_params::slotCount; ++slot)
+            parameters.push_back(std::make_unique<PBool>(
+                juce::ParameterID {fire::resonator_params::parameterID(scope, slot), 9},
+                (scope == 0 ? juce::String("Master") : "Band " + juce::String(scope))
+                    + " FX " + juce::String(slot + 1) + " Chord Resonator", false));
 
     return { parameters.begin(), parameters.end() };
 }

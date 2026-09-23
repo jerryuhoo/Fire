@@ -2663,6 +2663,8 @@ TEST_CASE("Band move/reset parameter contract covers every per-band processor pa
             expectedBaseIDs.insert("bandFx" + juce::String(slot) + field);
     for (int slot = 1; slot <= 8; ++slot)
         expectedBaseIDs.insert("bandFx" + juce::String(slot) + "ModulationType");
+    for (int slot = 1; slot <= 8; ++slot)
+        expectedBaseIDs.insert("bandFx" + juce::String(slot) + "Resonator");
 
     std::set<juce::String> actualBaseIDs;
     for (const auto& parameter : ParameterIDAndName::getBandParameterInfo())

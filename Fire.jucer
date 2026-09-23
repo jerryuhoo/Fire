@@ -187,6 +187,7 @@
         <FILE id="insertFx2" name="InsertRack.h" compile="0" resource="0" file="Source/DSP/InsertRack.h"/>
         <FILE id="insertFx3" name="InsertParameters.h" compile="0" resource="0" file="Source/Utility/InsertParameters.h"/>
         <FILE id="cloudsParams" name="CloudsParameters.h" compile="0" resource="0" file="Source/Utility/CloudsParameters.h"/>
+        <FILE id="modFxParams" name="ModulationEffectParameters.h" compile="0" resource="0" file="Source/Utility/ModulationEffectParameters.h"/>
         <FILE id="clapTail" name="ClapTail.h" compile="0" resource="0" file="Source/Utility/ClapTail.h"/>
         <FILE id="moduleOrder1" name="ModuleOrder.h" compile="0" resource="0" file="Source/Utility/ModuleOrder.h"/>
         <FILE id="y9Kac2" name="SampleAccurateCompressor.h" compile="0" resource="0"

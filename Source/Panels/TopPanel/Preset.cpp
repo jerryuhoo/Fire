@@ -244,6 +244,10 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
     bool legacyWithoutInserts = false;
     if (! validateParameterFamily(snapshot, processor, legacyWithoutInserts, "insertEffectsSchemaVersion", fire::effects::isParameterID))
         return false;
+    bool legacyWithoutModulationEffects = false;
+    if (! validateParameterFamily(snapshot, processor, legacyWithoutModulationEffects, "modulationEffectsSchemaVersion",
+                                  fire::modulation_fx::isParameterID, fire::modulation_fx::schemaVersion))
+        return false;
     bool legacyWithoutModuleOrder = false;
     if (! validateParameterFamily(snapshot, processor, legacyWithoutModuleOrder, "moduleOrderSchemaVersion", fire::module_order::isParameterID))
         return false;
@@ -270,6 +274,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (legacyWithoutOtt && ParameterIDAndName::isOttParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutInserts && fire::effects::isParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutModulationEffects && fire::modulation_fx::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutModuleOrder && fire::module_order::isParameterID(parameterWithID->paramID))
             continue;
@@ -324,6 +330,10 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     bool legacyWithoutInserts = false;
     if (! validateParameterFamily(xml, processor, legacyWithoutInserts, "insertEffectsSchemaVersion", fire::effects::isParameterID))
         return false;
+    bool legacyWithoutModulationEffects = false;
+    if (! validateParameterFamily(xml, processor, legacyWithoutModulationEffects, "modulationEffectsSchemaVersion",
+                                  fire::modulation_fx::isParameterID, fire::modulation_fx::schemaVersion))
+        return false;
     bool legacyWithoutModuleOrder = false;
     if (! validateParameterFamily(xml, processor, legacyWithoutModuleOrder, "moduleOrderSchemaVersion", fire::module_order::isParameterID))
         return false;
@@ -359,6 +369,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         if (legacyWithoutOtt && ParameterIDAndName::isOttParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutInserts && fire::effects::isParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutModulationEffects && fire::modulation_fx::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutModuleOrder && fire::module_order::isParameterID(parameterWithID->paramID))
             continue;
@@ -415,6 +427,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("presetFormatVersion", 2);
     xml.setAttribute("ottSchemaVersion", 1);
     xml.setAttribute("insertEffectsSchemaVersion", 1);
+    xml.setAttribute("modulationEffectsSchemaVersion", fire::modulation_fx::schemaVersion);
     xml.setAttribute("moduleOrderSchemaVersion", 1);
     xml.setAttribute("eqSchemaVersion", 1);
     xml.setAttribute("lfoBankSchemaVersion", fire::lfo_bank::schemaVersion);

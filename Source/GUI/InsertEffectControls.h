@@ -61,6 +61,7 @@ public:
         scope = targetScope; slot = targetSlot; type = targetType;
         const auto colour = fire::ui::effectColour(type);
         const auto& definitions = fire::effects::controls(type);
+        const bool modulationEffect = type == fire::effects::Type::flanger || type == fire::effects::Type::phaser;
         const auto isCurrent = [&] { return safe != nullptr && request == safe->bindingGeneration; };
         for (size_t i = 0; i < sliders.size(); ++i)
         {
@@ -73,8 +74,23 @@ public:
             attachments[i] = std::move(attachment);
             configureSlider(*slider, definitions[i], colour,
                             type == fire::effects::Type::delay && i == 4,
-                            usesExpandedLayout() && i == 1);
+                            usesExpandedLayout() && i == 1, modulationEffect && i == 0);
             if (! isCurrent()) return;
+            if (modulationEffect)
+            {
+                const std::array<const char*, 6> help {
+                    "Speed of the sweep in cycles per second.",
+                    type == fire::effects::Type::flanger ? "Amount of delay-time movement."
+                                                        : "Range of the filter sweep.",
+                    type == fire::effects::Type::flanger ? "Base delay time around which the sweep moves."
+                                                        : "Centre frequency around which the phaser notches sweep.",
+                    "Recirculates the effected signal for stronger resonances. Negative values reverse the feedback polarity.",
+                    "Spread of the movement between the left and right channels.",
+                    "Blend of the original signal and the effect."
+                };
+                slider->setTooltip(juce::String(fire::effects::name(type)) + " " + definitions[i].name
+                                   + ": " + help[i]);
+            }
             if (usesExpandedLayout() && i == 3)
                 slider->setTooltip("Position in the recorded buffer: turn clockwise to select older audio.");
             if (usesExpandedLayout() && i == 4)
@@ -202,7 +218,7 @@ private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
     void configureSlider(ModulatableSlider& slider, fire::effects::Control definition,
-                         juce::Colour colour, bool delaySync, bool cloudsDensity)
+                         juce::Colour colour, bool delaySync, bool cloudsDensity, bool preciseRate = false)
     {
         const juce::Component::SafePointer<ModulatableSlider> safeSlider(&slider);
         slider.setLabel(definition.name, colour);
@@ -213,7 +229,7 @@ private:
         slider.setTooltip(cloudsDensity
             ? "Density: left is Regular and right is Random. The centre (-6% to +6%) is Off: no new grains."
             : slider.getTitle() + " - insert slot " + juce::String(slot + 1));
-        slider.textFromValueFunction = [definition, delaySync, cloudsDensity](double value)
+        slider.textFromValueFunction = [definition, delaySync, cloudsDensity, preciseRate](double value)
         {
             const auto physical = definition.fromNormalised(static_cast<float>(value));
             if (delaySync)
@@ -222,7 +238,8 @@ private:
                 return divisions[juce::jlimit(0, 7, juce::roundToInt(physical))];
             }
             if (cloudsDensity && std::abs(physical) <= 6.0f) return juce::String("Off");
-            return juce::String(physical, physical >= 100.0f ? 0 : 1) + definition.unit;
+            const int decimals = preciseRate && physical < 1.0f ? 2 : physical >= 100.0f ? 0 : 1;
+            return juce::String(physical, decimals) + definition.unit;
         };
         slider.valueFromTextFunction = [definition, delaySync, cloudsDensity](const juce::String& text)
         {

@@ -9,7 +9,8 @@
 
 namespace fire::effects
 {
-enum class Type { none, chorus, delay, reverb, granular, lofi, count };
+enum class Type { none = 0, chorus = 1, delay = 2, reverb = 3, granular = 4, lofi = 5,
+                  flanger = 6, phaser = 7, count = 8 };
 inline constexpr size_t controlCount = 6;
 
 struct Control
@@ -39,6 +40,8 @@ inline const char* name(Type type) noexcept
         case Type::reverb: return "Reverb";
         case Type::granular: return "Granular";
         case Type::lofi: return "Lo-Fi";
+        case Type::flanger: return "Flanger";
+        case Type::phaser: return "Phaser";
         case Type::none: case Type::count: return "Empty";
     }
     return "Empty";
@@ -71,12 +74,24 @@ inline const std::array<Control, controlCount>& controls(Type type)
         {"Tape", " %", 0, 100, 30}, {"Wow", " %", 0, 100, 10},
         {"Flutter", " %", 0, 100, 10}, {"Mix", " %", 0, 100, 50}
     }};
+    static const std::array<Control, controlCount> flanger {{
+        {"Rate", " Hz", 0.05f, 8, 0.25f, 0.4f}, {"Depth", " %", 0, 100, 65},
+        {"Delay", " ms", 0.1f, 10, 2}, {"Feedback", " %", -90, 90, 40},
+        {"Width", " %", 0, 100, 75}, {"Mix", " %", 0, 100, 50}
+    }};
+    static const std::array<Control, controlCount> phaser {{
+        {"Rate", " Hz", 0.05f, 8, 0.35f, 0.4f}, {"Depth", " %", 0, 100, 70},
+        {"Center", " Hz", 40, 6000, 900, 0.36f}, {"Feedback", " %", -85, 85, 30},
+        {"Width", " %", 0, 100, 75}, {"Mix", " %", 0, 100, 50}
+    }};
     switch (type)
     {
         case Type::delay: return delay;
         case Type::reverb: return reverb;
         case Type::granular: return granular;
         case Type::lofi: return lofi;
+        case Type::flanger: return flanger;
+        case Type::phaser: return phaser;
         case Type::chorus: case Type::none: case Type::count: return chorus;
     }
     return chorus;
@@ -221,6 +236,10 @@ public:
         for (auto& route : routes) route.blend.reset(sampleRate, 0.01);
         for (auto& smoother : cloudsBases) smoother.reset(sampleRate, 0.02);
         for (auto& route : cloudsRoutes) route.blend.reset(sampleRate, 0.01);
+        flangerWet.reset(sampleRate, 0.02);
+        flangerRecordGain.reset(sampleRate, 0.005);
+        flangerWarmupLength = static_cast<int>(std::ceil(sampleRate * 0.02));
+        phaserCoefficientPeriod = juce::jmax(1, juce::roundToInt(sampleRate / 6000.0));
         reset();
     }
     void reset() noexcept
@@ -322,8 +341,16 @@ public:
                 if (! right) wetL = 0.5f * (wetL + wetR);
             }
             else
-                processSample(wetL, wetR, value, parameters.bpm);
-            const auto mix = enabled * value[5] * 0.01f;
+                processSample(wetL, wetR, value, parameters.bpm, right != nullptr);
+            auto mix = enabled * value[5] * 0.01f;
+            if (currentType == Type::flanger)
+            {
+                // Cold delay history is not an audible signal. Record under
+                // dry audio for the maximum sweep length, then fade in wet.
+                if (flangerWarmupRemaining > 0) --flangerWarmupRemaining;
+                else flangerWet.setTargetValue(1.0f);
+                mix *= flangerWet.getNextValue();
+            }
             left[sample] = juce::jmap(mix, dryL, std::isfinite(wetL) ? wetL : 0.0f);
             if (right) right[sample] = juce::jmap(mix, dryR, std::isfinite(wetR) ? wetR : 0.0f);
         }
@@ -395,9 +422,18 @@ private:
         feedback.fill(0); highPassInput.fill(0); highPassOutput.fill(0);
         held.fill(0); holdRemaining = 0; holdResidual = 0;
         phase = 0;
+        flangerWarmupRemaining = flangerWarmupLength;
+        flangerWet.setCurrentAndTargetValue(0.0f);
+        flangerRecordGain.setCurrentAndTargetValue(0.0f);
+        flangerRecordGain.setTargetValue(1.0f);
         lastNormalisedValues.fill(std::numeric_limits<float>::quiet_NaN());
         lastDelayTone = lastReverbLowCut = lastBits = -1.0f;
         reverbSettingsValid = false;
+        for (auto& channel : phaserMemory) channel.fill(0.0);
+        phaserFeedback.fill(0.0);
+        phaserLastFrequency.fill(-1.0);
+        phaserCoefficientCounter = phaserCoefficientRamp = 0;
+        phaserCoefficientsReady = false;
         for (auto& route : routes)
         {
             route.initialised = false;
@@ -437,7 +473,89 @@ private:
     { return controls(currentType); }
     static float safeCloudsBase(const ModulatedValueProvider& provider) noexcept
     { return juce::jlimit(0.0f, 1.0f, std::isfinite(provider.baseValue) ? provider.baseValue : 0.0f); }
-    void processSample(float& left, float& right, const std::array<float, controlCount>& p, float bpm) noexcept
+    void updatePhaserCoefficients(const std::array<float, controlCount>& p, bool stereo) noexcept
+    {
+        const auto maxFrequency = sampleRate * 0.45;
+        const auto minFrequency = juce::jmin(20.0, maxFrequency);
+        const auto angle = phase * juce::MathConstants<double>::twoPi;
+        std::array<double, 2> frequency;
+        for (size_t channel = 0; channel < frequency.size(); ++channel)
+        {
+            if (channel == 1 && (! stereo || p[4] == 0.0f)) { frequency[1] = frequency[0]; continue; }
+            const auto shift = channel == 1 ? static_cast<double>(p[4]) * 0.01 * juce::MathConstants<double>::pi : 0.0;
+            const auto sweep = p[1] > 0.0f
+                ? std::exp2(static_cast<double>(p[1]) * 0.025 * std::sin(angle + shift)) : 1.0;
+            frequency[channel] = juce::jlimit(minFrequency, maxFrequency, static_cast<double>(p[2]) * sweep);
+        }
+        if (phaserCoefficientsReady && frequency == phaserLastFrequency) return;
+        phaserLastFrequency = frequency;
+        for (size_t channel = 0; channel < frequency.size(); ++channel)
+        {
+            if (channel == 1 && juce::exactlyEqual(frequency[1], frequency[0]))
+            {
+                phaserTargetA[1] = phaserTargetA[0];
+                phaserTargetB[1] = phaserTargetB[0];
+            }
+            else
+            {
+                const auto tangent = std::tan(juce::MathConstants<double>::pi * frequency[channel] / sampleRate);
+                phaserTargetA[channel] = (tangent - 1.0) / (tangent + 1.0);
+                phaserTargetB[channel] = 2.0 * std::sqrt(tangent) / (tangent + 1.0);
+            }
+            if (! phaserCoefficientsReady)
+            {
+                phaserA[channel] = phaserTargetA[channel];
+                phaserB[channel] = phaserTargetB[channel];
+            }
+            phaserStepA[channel] = (phaserTargetA[channel] - phaserA[channel]) / phaserCoefficientPeriod;
+            phaserStepB[channel] = (phaserTargetB[channel] - phaserB[channel]) / phaserCoefficientPeriod;
+        }
+        phaserCoefficientRamp = phaserCoefficientsReady ? phaserCoefficientPeriod : 0;
+        phaserCoefficientsReady = true;
+    }
+    void processPhaser(float& left, float& right, const std::array<float, controlCount>& p, bool stereo) noexcept
+    {
+        if (phaserCoefficientCounter == 0)
+        {
+            updatePhaserCoefficients(p, stereo);
+            phaserCoefficientCounter = phaserCoefficientPeriod;
+        }
+        --phaserCoefficientCounter;
+        if (phaserCoefficientRamp > 0)
+        {
+            if (--phaserCoefficientRamp == 0) { phaserA = phaserTargetA; phaserB = phaserTargetB; }
+            else
+                for (size_t channel = 0; channel < phaserA.size(); ++channel)
+                { phaserA[channel] += phaserStepA[channel]; phaserB[channel] += phaserStepB[channel]; }
+        }
+        const auto amount = static_cast<double>(p[3]) * 0.01;
+        const auto inputGain = 1.0 - std::abs(amount);
+        float* channels[] {&left, &right};
+        for (size_t channel = 0; channel < (stereo ? size_t {2} : size_t {1}); ++channel)
+        {
+            auto sample = static_cast<double>(*channels[channel]) * inputGain + amount * phaserFeedback[channel];
+            const auto a = phaserA[channel], b = phaserB[channel];
+            for (auto& memory : phaserMemory[channel])
+            {
+                // Normalised first-order lattice: H(z)=(a+z^-1)/(1+a*z^-1).
+                // [a b; b -a] is orthogonal when a*a+b*b=1. Interpolating a/b
+                // together follows the unit-circle chord (norm <= 1), so even
+                // rapidly varying coefficients cannot inject state energy.
+                const auto output = a * sample + b * memory;
+                memory = b * sample - a * memory;
+                sample = output;
+            }
+            if (! std::isfinite(sample))
+            {
+                phaserMemory[channel].fill(0.0);
+                sample = 0.0;
+            }
+            phaserFeedback[channel] = sample;
+            const auto output = static_cast<float>(sample);
+            *channels[channel] = std::isfinite(output) ? output : 0.0f;
+        }
+    }
+    void processSample(float& left, float& right, const std::array<float, controlCount>& p, float bpm, bool stereo) noexcept
     {
         const auto sr = static_cast<float>(sampleRate);
         if (currentType == Type::chorus)
@@ -451,6 +569,36 @@ private:
             const auto r = history.read(1, center + depth * std::sin(angle + p[4] * 0.01f * juce::MathConstants<float>::pi));
             history.write(left + l * p[3] * 0.01f, right + r * p[3] * 0.01f);
             left = l; right = r;
+        }
+        else if (currentType == Type::flanger)
+        {
+            phase += p[0] / sampleRate;
+            if (phase >= 1.0) phase -= std::floor(phase);
+            const auto center = juce::jmax(1.0f, p[2] * 0.001f * sr);
+            // The read always precedes this sample's write. Keeping the sweep
+            // above one sample avoids an algebraic feedback loop at low rates.
+            const auto excursion = (center - 1.0f) * 0.95f * p[1] * 0.01f;
+            const auto angle = static_cast<float>(phase) * juce::MathConstants<float>::twoPi;
+            const auto delayL = excursion > 0.0f ? center + excursion * std::sin(angle) : center;
+            const auto delayR = stereo && excursion > 0.0f && p[4] > 0.0f
+                ? center + excursion * std::sin(angle + p[4] * 0.01f * juce::MathConstants<float>::pi) : delayL;
+            const auto l = history.read(0, delayL);
+            const auto r = stereo ? history.read(1, delayR) : l;
+            const auto amount = p[3] * 0.01f;
+            // Fade only the start of a new recording. Otherwise feedback can
+            // repeat its initial zero-to-signal edge after the wet fade starts.
+            const auto inputGain = (1.0f - std::abs(amount)) * flangerRecordGain.getNextValue();
+            // Convex fractional reads and |feedback| <= .9 bound the loop;
+            // normalising its input also prevents extreme resonance gain.
+            history.write(left * inputGain + l * amount,
+                          (stereo ? right : left) * inputGain + r * amount);
+            left = l; right = r;
+        }
+        else if (currentType == Type::phaser)
+        {
+            phase += p[0] / sampleRate;
+            if (phase >= 1.0) phase -= std::floor(phase);
+            processPhaser(left, right, p, stereo);
         }
         else if (currentType == Type::delay)
         {
@@ -547,8 +695,15 @@ private:
     float lastBits = -1.0f, quantisationSteps = 1.0f;
     bool reverbSettingsValid = false;
     juce::SmoothedValue<float> gate;
+    juce::SmoothedValue<float> flangerWet, flangerRecordGain;
+    int flangerWarmupLength = 960, flangerWarmupRemaining = 960;
     std::array<float, 2> feedback {}, highPassInput {}, highPassOutput {}, held {};
     int holdRemaining = 0;
     float holdResidual = 0;
+    std::array<std::array<double, 6>, 2> phaserMemory {};
+    std::array<double, 2> phaserFeedback {}, phaserA {}, phaserB {}, phaserTargetA {}, phaserTargetB {},
+        phaserStepA {}, phaserStepB {}, phaserLastFrequency {};
+    int phaserCoefficientPeriod = 8, phaserCoefficientCounter = 0, phaserCoefficientRamp = 0;
+    bool phaserCoefficientsReady = false;
 };
 }

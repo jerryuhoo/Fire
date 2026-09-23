@@ -11,6 +11,8 @@ inline juce::Colour effectColour(effects::Type type)
     switch (type)
     {
         case effects::Type::chorus: return colours::chorus;
+        case effects::Type::flanger: return colours::flanger;
+        case effects::Type::phaser: return colours::phaser;
         case effects::Type::delay: return colours::delay;
         case effects::Type::reverb: return colours::reverb;
         case effects::Type::granular: return colours::granular;

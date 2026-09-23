@@ -130,8 +130,8 @@ TEST_CASE("Chain menus expose existing builtins and a single canonical Master Lo
     for (const auto& item : items(band.navigation->createAddMenu())) bandNames.add(item.text);
     for (const auto& item : items(master.navigation->createAddMenu())) masterNames.add(item.text);
     CHECK(bandNames == juce::StringArray { "Drive", "Shape", "Compressor", "OTT", "Stereo",
-                                         "Chorus", "Delay", "Reverb", "Granular", "Lo-Fi" });
-    CHECK(masterNames == juce::StringArray { "EQ", "Lo-Fi", "Chorus", "Delay", "Reverb", "Granular" });
+                                         "Chorus", "Delay", "Reverb", "Granular", "Lo-Fi", "Flanger", "Phaser" });
+    CHECK(masterNames == juce::StringArray { "EQ", "Lo-Fi", "Chorus", "Delay", "Reverb", "Granular", "Flanger", "Phaser" });
     for (const auto& item : items(master.navigation->createAddMenu()))
         if (item.text == "Lo-Fi") CHECK(item.itemID == Rack::builtinMenuItemID(1));
     CHECK_FALSE(master.navigation->activateBuiltin(2)); // Analysis remains a view-only row.

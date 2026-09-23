@@ -631,3 +631,32 @@ readouts. Traces settle below the display floor, and bypass clears held peaks as
 well as live data. Graph cards use a soft hover edge and an expand/restore icon.
 All motion follows signal data or interaction; static geometry is cached and
 hidden displays stop their animation timers.
+
+### Flanger and Phaser
+
+Both **Band Lab** and **Master Lab** offer **Flanger** and **Phaser** in the
+CHAIN **+** menu. Each uses a normal insert slot, so multiple instances can be
+combined, reordered, bypassed and removed independently. Their six controls
+support host automation and LFO assignment; presets, A/B and band copies retain
+the complete setup.
+
+- **Flanger** mixes a swept short delay with the dry signal for a comb-like,
+  metallic sweep. Controls: **Rate**, **Depth**, **Delay**, **Feedback**,
+  **Width**, **Mix**.
+- **Phaser** mixes a six-stage all-pass chain with the dry signal for moving
+  notches and a rounded, swirling sweep. Controls: **Rate**, **Depth**,
+  **Center**, **Feedback**, **Width**, **Mix**.
+
+Start with Mix at 50% to hear the cancellations clearly. Width offsets the
+internal sweep between left and right; set it to zero for a centred sweep.
+Negative feedback gives an alternative resonance character. Mix at zero and
+bypass retain the dry signal; bypass and ordinary parameter changes fade
+smoothly. These effects add no reported processing latency.
+When Flanger starts or resumes from a fully cleared bypass, it first fills its
+short delay under dry audio, then fades the wet signal in. This avoids exposing
+the edge of an empty delay buffer while inserting an effect on sustained audio.
+
+Existing effect Type automation retains its six original choices and values.
+The new algorithms use an appended **Modulation Type** host selector
+(Standard / Flanger / Phaser); the plugin's CHAIN menu handles it automatically.
+Old presets and projects load with Standard selected.

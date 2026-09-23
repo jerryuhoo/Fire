@@ -12,6 +12,7 @@
 #include "../GUI/InterfaceDefines.h"
 #include "InsertParameters.h"
 #include "CloudsParameters.h"
+#include "ModulationEffectParameters.h"
 #include "EqParameters.h"
 #include "ModuleOrder.h"
 #include "juce_audio_processors/juce_audio_processors.h"
@@ -405,6 +406,9 @@ namespace ParameterIDAndName
                     result.push_back({"FX " + juce::String(slot + 1) + " Clouds "
                                           + fire::clouds_params::fieldNames[static_cast<size_t>(field)],
                                       fire::clouds_params::parameterBase(slot, field, false)});
+            for (int slot = 0; slot < fire::modulation_fx::slotCount; ++slot)
+                result.push_back({"FX " + juce::String(slot + 1) + " Modulation Type",
+                                  fire::modulation_fx::parameterBase(slot, false)});
             return result;
         }();
         return params;

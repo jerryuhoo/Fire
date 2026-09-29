@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>Fire Wings</title>
+  <defs>
+    <linearGradient id="wings-gold" x1="30" y1="8" x2="92" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFDF32"/>
+      <stop offset="1" stop-color="#FFB91E"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#wings-gold)" fill-rule="evenodd" d="M6 8L70 39L55 116L44 93L47 76L37 76L30 63L43 64L40 57L27 55L20 39L35 43L33 37L16 32Z M57 14L70 19L71 34L59 30Z M122 14L100 90L91 84L100 76L88 42Z M108 35L98 42L103 54Z M80 51L91 74L73 82Z"/>
+</svg>

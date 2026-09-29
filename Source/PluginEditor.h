@@ -12,6 +12,7 @@
 
 #include "GUI/InterfaceDefines.h"
 #include "GUI/FireTooltipWindow.h"
+#include "GUI/FireLogoMotion.h"
 #include "GUI/LookAndFeel.h"
 #include "GUI/PrimaryButton.h"
 #include "GUI/ValueEntryPopup.h"
@@ -136,6 +137,7 @@ private:
     friend struct EditorHiddenSessionTestAccess;
     friend struct EditorBackgroundCacheTestAccess;
     friend struct SpectrumHostBypassPresentationTestAccess;
+    friend struct FireBrandingIntegrationTestAccess;
 #endif
 
     class UpdateCheckThread final : public juce::Thread
@@ -186,6 +188,11 @@ private:
     double lastAnimationTimeSeconds = 0.0;
     float animationSeconds = 0.0f;
     float headerEnergy = 0.0f;
+    fire::ui::FireLogoMotion fireLogoMotion;
+    bool headerMeterFramePending = false;
+    bool headerRepaintPending = false;
+    bool headerSessionSuspended = true;
+    std::uint32_t headerPeerID = 0;
     int animationFrame = 0;
     bool lastBypassedState = false;
     std::uint64_t lastHostBypassPresentationEpoch = 0;
@@ -235,6 +242,7 @@ private:
     void rebuildPendingBackgroundCache(std::uint32_t nowMs);
     void rebuildBackgroundCache();
     void initialiseHeaderEmbers();
+    void resetHeaderPresentation() noexcept;
     void advanceAnimations(float deltaSeconds);
     void synchroniseSpectrumHostBypassState(bool animateTransition);
     void suspendSpectrumPresentation();

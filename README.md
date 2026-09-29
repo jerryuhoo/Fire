@@ -728,3 +728,18 @@ manual Output value and changes the compensation's position, so the sound can
 change. Merely opening the editor never upgrades an old project. Both modes
 are saved independently per band and on both A/B sides; existing parameter IDs
 and automation positions remain unchanged.
+
+### Vector branding and audio-driven fire
+
+The header and Settings page use a vector **火** mark based on the original
+Fire logo. The header's Wings signature uses the original angular wing motif.
+Editable transparent SVG versions live in `assets/images/firelogo.svg` and
+`assets/images/firewingslogo.svg`; the UI draws cached paths at the current scale.
+
+The Fire mark's warm edge, small flame tongues and sparks follow the global
+output RMS and peaks. Loud sounds and attacks produce stronger motion, while
+quiet sounds stay restrained. It works with live input even when the transport
+is stopped and is independent of the selected band. Silence or stopped audio
+callbacks settle to a still gold mark. Hidden editors discard old fire energy
+and require fresh audio after reattachment. This shares the existing UI clock,
+stops header animation repaints once settled, and adds no audio-thread work.

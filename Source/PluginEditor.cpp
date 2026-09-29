@@ -882,6 +882,7 @@ void FireAudioProcessorEditor::visibilityChanged()
     }
     else
     {
+        resetHeaderPresentation();
         bool isProvisionalVisibleState = false;
         {
             const juce::ScopedLock lock(updateResultLock);
@@ -1164,22 +1165,37 @@ void FireAudioProcessorEditor::initialiseHeaderEmbers()
     }
 }
 
+void FireAudioProcessorEditor::resetHeaderPresentation() noexcept
+{
+    fireLogoMotion.reset();
+    headerEnergy = 0.0f;
+    headerMeterFramePending = false;
+    headerRepaintPending = false;
+    headerSessionSuspended = true;
+}
+
 void FireAudioProcessorEditor::advanceAnimations(float deltaSeconds)
 {
+    // A real meter packet drives the whole-plugin mark, independently of the
+    // transport or whichever band happens to be selected. The watchdog uses
+    // the actual elapsed time even after a stalled UI clock.
+    const auto saneLevel = [](float value) { return std::isfinite(value) ? juce::jmax(0.0f, value) : 0.0f; };
+    headerRepaintPending = fireLogoMotion.advance(deltaSeconds, headerMeterFramePending,
+        juce::jmax(saneLevel(cachedMeterValues.outputRMS_L), saneLevel(cachedMeterValues.outputRMS_R)),
+        juce::jmax(saneLevel(cachedMeterValues.outputPeak_L), saneLevel(cachedMeterValues.outputPeak_R)))
+        || headerRepaintPending;
+    headerMeterFramePending = false;
+    headerEnergy = fireLogoMotion.energy();
+
     deltaSeconds = juce::jlimit(0.0f, 0.05f, deltaSeconds);
     animationSeconds += deltaSeconds;
 
-    const auto focusedBand = juce::jlimit(0, 3, bandPanel.getFocusBandNum());
-    const auto signalEnergy = juce::jlimit(0.0f, 1.0f,
-                                           processor.getSampleMaxValue(focusedBand) * 1.8f);
-    const auto targetEnergy = processor.isDawPlaying() ? 0.28f + signalEnergy * 0.72f : 0.14f;
-    headerEnergy += (targetEnergy - headerEnergy) * juce::jmin(1.0f, deltaSeconds * 7.0f);
-
     for (auto& ember : headerEmbers)
     {
-        ember.y -= ember.velocity * deltaSeconds * (0.55f + headerEnergy);
-        ember.x += (ember.drift + std::sin(animationSeconds * 0.8f + ember.phase) * 0.012f)
-                   * deltaSeconds;
+        if (headerEnergy == 0.0f) break;
+        ember.y -= ember.velocity * deltaSeconds * headerEnergy;
+        ember.x += (ember.drift + std::sin(fireLogoMotion.phase() + ember.phase) * 0.012f)
+                   * deltaSeconds * headerEnergy;
         if (ember.y < -0.08f)
         {
             ember.y = 1.08f;
@@ -1289,9 +1305,9 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
     const auto particleArea = headerArea.toFloat();
     for (const auto& ember : headerEmbers)
     {
-        const auto alpha = (0.012f + 0.055f * headerEnergy)
-                           * (0.45f + 0.55f * std::sin(ember.phase + animationSeconds * 1.3f)
-                                             * std::sin(ember.phase + animationSeconds * 1.3f));
+        if (headerEnergy == 0.0f) break;
+        const auto pulse = std::sin(ember.phase + fireLogoMotion.phase());
+        const auto alpha = 0.055f * headerEnergy * (0.45f + 0.55f * pulse * pulse);
         const juce::Point<float> point {
             particleArea.getX() + ember.x * particleArea.getWidth(),
             particleArea.getY() + ember.y * particleArea.getHeight()
@@ -1302,7 +1318,7 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
 
     const auto seamY = static_cast<float>(headerArea.getBottom()) - 1.0f;
     const auto hotSpot = static_cast<float>(headerArea.getWidth())
-                         * (0.18f + 0.64f * (0.5f + 0.5f * std::sin(animationSeconds * 0.42f)));
+                         * (0.18f + 0.64f * (0.5f + 0.5f * std::sin(fireLogoMotion.phase())));
     juce::ColourGradient seam(fire::ui::colours::ember.withAlpha(0.0f), 0.0f, seamY,
                               fire::ui::colours::whiteHot.withAlpha(0.18f * headerEnergy), hotSpot, seamY, false);
     seam.addColour(0.55, fire::ui::colours::flame.withAlpha(0.14f * headerEnergy));
@@ -1311,8 +1327,8 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
     g.fillRect(0.0f, seamY, static_cast<float>(headerArea.getWidth()), 1.0f);
 
     auto brand = logoArea.toFloat().reduced(2.0f, 3.0f);
-    auto glyph = brand.removeFromLeft(brand.getHeight()).reduced(8.0f * fireLookAndFeel.scale);
-    fire::ui::drawFireGlyph(g, glyph, headerEnergy);
+    auto glyph = brand.removeFromLeft(brand.getHeight()).reduced(3.0f * fireLookAndFeel.scale);
+    fire::ui::drawFireGlyph(g, glyph, headerEnergy, fireLogoMotion.phase(), fireLogoMotion.attack());
     brand.removeFromLeft(5.0f * fireLookAndFeel.scale);
     auto title = brand.removeFromTop(brand.getHeight() * 0.62f);
     g.setFont(fire::ui::displayFont(18.0f * fireLookAndFeel.scale));
@@ -1323,17 +1339,10 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
     g.drawText("MULTIBAND REACTOR", brand, juce::Justification::centredLeft);
 
     auto signature = wingsArea.toFloat().reduced(4.0f, 5.0f);
-    auto bars = signature.removeFromLeft(24.0f * fireLookAndFeel.scale);
-    for (int i = 0; i < 3; ++i)
-    {
-        const auto height = bars.getHeight() * (0.28f + 0.18f * static_cast<float>(i)
-                                                + 0.08f * headerEnergy);
-        const auto barWidth = juce::jmax(1.0f, 2.0f * fireLookAndFeel.scale);
-        g.setColour(fire::ui::colours::flame.withAlpha(0.45f + 0.16f * static_cast<float>(i)));
-        g.fillRoundedRectangle(bars.getX() + static_cast<float>(i) * 6.0f * fireLookAndFeel.scale,
-                               bars.getCentreY() - height * 0.5f,
-                               barWidth, height, barWidth * 0.5f);
-    }
+    auto wings = signature.removeFromLeft(30.0f * fireLookAndFeel.scale);
+    fire::ui::brand::drawWingsMark(g, wings.withSizeKeepingCentre(28.0f * fireLookAndFeel.scale,
+                                                               28.0f * fireLookAndFeel.scale));
+    signature.removeFromLeft(4.0f * fireLookAndFeel.scale);
     g.setFont(fire::ui::labelFont(8.0f * fireLookAndFeel.scale));
     g.setColour(fire::ui::colours::textSecondary);
     g.drawText("BLUE WINGS", signature.removeFromTop(signature.getHeight() * 0.55f),
@@ -1384,11 +1393,18 @@ void FireAudioProcessorEditor::timerCallback()
     // component's own visible flag. Observe that boundary here too.
     updateUpdateCheckVisibilitySession();
 
+    const auto peerID = getPeer() != nullptr ? getPeer()->getUniqueID() : 0;
+    if (peerID != headerPeerID)
+    {
+        resetHeaderPresentation();
+        headerPeerID = peerID;
+    }
     MeterValues latestMeterValues;
     if (processor.getLatestMeterValues(latestMeterValues))
     {
         cachedMeterValues = latestMeterValues;
         hasCachedMeterValues = true;
+        headerMeterFramePending = true;
         ++meterPacketGeneration;
         if (meterPacketGeneration == 0)
             ++meterPacketGeneration;
@@ -1426,6 +1442,7 @@ void FireAudioProcessorEditor::timerCallback()
     // when the peer becomes visible again.
     if (! isShowing())
     {
+        resetHeaderPresentation();
         bool visibleEditorSessionEnded = false;
         bool isProvisionalVisibleState = false;
         {
@@ -1556,6 +1573,15 @@ void FireAudioProcessorEditor::timerCallback()
         return;
     }
 
+    // The first tick in a new peer/visibility session may consume a packet
+    // queued while hidden. Other meters may retain it, but the fire waits for
+    // a subsequent audio publication instead of replaying that old energy.
+    if (headerSessionSuspended)
+    {
+        headerMeterFramePending = false;
+        headerSessionSuspended = false;
+    }
+
     // A reattached peer begins a new visible session. The next hide/detach
     // must therefore be allowed to run one cleanup pass again.
     hiddenUiCleanupComplete = false;
@@ -1580,8 +1606,11 @@ void FireAudioProcessorEditor::timerCallback()
     advanceAnimations(deltaSeconds);
 
     ++animationFrame;
-    if ((animationFrame & 1) == 0)
+    if ((animationFrame & 1) == 0 && headerRepaintPending)
+    {
         repaint(headerArea);
+        headerRepaintPending = false;
+    }
 
     for (auto* slider : allModulatableSliders)
         if (slider != nullptr && slider->isShowing() && slider->advanceAnimation(deltaSeconds))

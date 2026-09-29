@@ -94,7 +94,7 @@ public:
         fire::ui::drawPanel(g, getLocalBounds().toFloat().reduced(12.0f),
                             fire::ui::colours::ember, true,
                             fire::ui::Metrics::radiusLarge);
-        fire::ui::drawFireGlyph(g, fireGlyphArea.toFloat(), 0.72f);
+        fire::ui::drawFireGlyph(g, fireGlyphArea.toFloat());
     }
 
     void resized() override

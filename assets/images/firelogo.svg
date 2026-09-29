@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>Fire — 火</title>
+  <defs>
+    <linearGradient id="fire-gold" x1="64" y1="8" x2="64" y2="123" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFDC42"/>
+      <stop offset="1" stop-color="#FFBD25"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#fire-gold)" d="M52 8H78V48C80 64 97 87 123 100L111 123C91 114 77 99 69 85C61 101 44 115 23 123L8 102C32 91 45 78 50 61C55 43 54 25 52 8Z M8 33L29 22L49 58L25 71Z M97 22L122 30L107 69L84 57Z"/>
+</svg>

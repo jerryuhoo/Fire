@@ -15,6 +15,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "BrandMarks.h"
 #include "../Utility/LfoBankParameters.h"
 #include <array>
 #include <cmath>
@@ -485,32 +486,10 @@ inline void drawSectionTitle(juce::Graphics& g,
 
 inline void drawFireGlyph(juce::Graphics& g,
                           juce::Rectangle<float> bounds,
-                          float energy = 0.5f)
+                          float energy = 0.0f,
+                          float phase = 0.0f,
+                          float attack = 0.0f)
 {
-    if (bounds.isEmpty())
-        return;
-
-    energy = juce::jlimit(0.0f, 1.0f, energy);
-    juce::Path flame;
-    flame.startNewSubPath(bounds.getCentreX(), bounds.getY());
-    flame.cubicTo(bounds.getRight() - bounds.getWidth() * 0.05f,
-                  bounds.getY() + bounds.getHeight() * 0.34f,
-                  bounds.getRight(),
-                  bounds.getBottom() - bounds.getHeight() * 0.20f,
-                  bounds.getCentreX(),
-                  bounds.getBottom());
-    flame.cubicTo(bounds.getX(),
-                  bounds.getBottom() - bounds.getHeight() * 0.22f,
-                  bounds.getX() + bounds.getWidth() * 0.16f,
-                  bounds.getY() + bounds.getHeight() * 0.48f,
-                  bounds.getCentreX(),
-                  bounds.getY());
-    flame.closeSubPath();
-
-    juce::ColourGradient heat(colours::whiteHot.withAlpha(0.92f), bounds.getCentreX(), bounds.getBottom(),
-                              colours::ember.withAlpha(0.68f + energy * 0.25f), bounds.getCentreX(), bounds.getY(), false);
-    heat.addColour(0.55, colours::flame.withAlpha(0.90f));
-    g.setGradientFill(heat);
-    g.fillPath(flame);
+    brand::drawFireMark(g, bounds, energy, phase, attack);
 }
 } // namespace fire::ui

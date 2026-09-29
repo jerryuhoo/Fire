@@ -87,6 +87,7 @@ public:
 private:
     friend struct BandPanelGraphTestAccess;
     friend struct BandPanelModeTestAccess;
+    friend struct DriveCompensationUiTestAccess;
     friend struct DistortionGraphSourceEpochTestAccess;
 
     void updateAttachments();
@@ -129,6 +130,8 @@ private:
     void createComboBoxes(); // New function
     void setupComponentGroups();
     void updateIconButtonSemantics();
+    bool usesModernDriveCompensation() const noexcept;
+    void updateDriveCompensationPresentation(bool updateLayout = true);
 
     void setVisibility(juce::Array<juce::Component*>& components, bool isVisible);
     void updateDistortionGraphFromParameters();
@@ -152,6 +155,23 @@ private:
     juce::Label dcFilterLabel;
 
     PrimaryTextButton linkedButton, safeButton, extremeButton;
+    PrimaryTextButton upgradeDriveCompButton;
+    juce::Label driveCompReadout;
+    struct DriveCompPresentationParameters
+    {
+        std::atomic<float>* modern = nullptr;
+        std::atomic<float>* linked = nullptr;
+        std::atomic<float>* drive = nullptr;
+        std::atomic<float>* extreme = nullptr;
+        std::atomic<float>* driveEnabled = nullptr;
+        std::atomic<float>* bandEnabled = nullptr;
+    };
+    std::array<DriveCompPresentationParameters, 4> driveCompParameters {};
+    int displayedDriveCompMode = -1;
+    int displayedDriveCompBand = -1;
+    std::array<std::uint64_t, 4> driveCompSequences {};
+    std::array<double, 4> driveCompReceivedAtMs { -1.0, -1.0, -1.0, -1.0 };
+    static constexpr double driveCompTelemetryTimeoutMs = 250.0;
 
     std::unique_ptr<ButtonAttachment> linkedAttachment, safeAttachment, extremeAttachment,
         shapeBypassAttachment, compressorBypassAttachment, widthBypassAttachment, dcFilterAttachment, driveBypassAttachment;

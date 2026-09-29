@@ -12,6 +12,7 @@
 #include "../../PluginProcessor.h"
 #include "../../Utility/StrictNumberParser.h"
 #include "../../Utility/LfoBankParameters.h"
+#include "../../Utility/DriveCompensationParameters.h"
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -230,6 +231,18 @@ bool validateParameterFamily(const juce::XmlElement& xml,
     return present == expected;
 }
 
+void materialiseLegacyDriveCompensation(juce::XmlElement& xml)
+{
+    if (xml.hasAttribute("driveCompSchemaVersion")) return;
+    for (const auto& id : fire::drive_comp::parameterIDs())
+        if (xml.hasAttribute(id)) return;
+
+    // Called only for validated/internal snapshots. The new parameter default
+    // is true, but historical Link must remain legacy on both A/B sides.
+    for (const auto& id : fire::drive_comp::parameterIDs()) xml.setAttribute(id, 0.0f);
+    xml.setAttribute("driveCompSchemaVersion", fire::drive_comp::schemaVersion);
+}
+
 bool isValidABSnapshot(const juce::XmlElement& snapshot,
                        const juce::AudioProcessor& processor) noexcept
 {
@@ -251,6 +264,10 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
     bool legacyWithoutResonator = false;
     if (! validateParameterFamily(snapshot, processor, legacyWithoutResonator, "resonatorSchemaVersion",
                                   fire::resonator_params::isParameterID, fire::resonator_params::schemaVersion))
+        return false;
+    bool legacyWithoutDriveCompensation = false;
+    if (! validateParameterFamily(snapshot, processor, legacyWithoutDriveCompensation, "driveCompSchemaVersion",
+                                  fire::drive_comp::isParameterID, fire::drive_comp::schemaVersion))
         return false;
     bool legacyWithoutModuleOrder = false;
     if (! validateParameterFamily(snapshot, processor, legacyWithoutModuleOrder, "moduleOrderSchemaVersion", fire::module_order::isParameterID))
@@ -282,6 +299,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (legacyWithoutModulationEffects && fire::modulation_fx::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutResonator && fire::resonator_params::isParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutDriveCompensation && fire::drive_comp::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutModuleOrder && fire::module_order::isParameterID(parameterWithID->paramID))
             continue;
@@ -344,6 +363,10 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     if (! validateParameterFamily(xml, processor, legacyWithoutResonator, "resonatorSchemaVersion",
                                   fire::resonator_params::isParameterID, fire::resonator_params::schemaVersion))
         return false;
+    bool legacyWithoutDriveCompensation = false;
+    if (! validateParameterFamily(xml, processor, legacyWithoutDriveCompensation, "driveCompSchemaVersion",
+                                  fire::drive_comp::isParameterID, fire::drive_comp::schemaVersion))
+        return false;
     bool legacyWithoutModuleOrder = false;
     if (! validateParameterFamily(xml, processor, legacyWithoutModuleOrder, "moduleOrderSchemaVersion", fire::module_order::isParameterID))
         return false;
@@ -383,6 +406,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         if (legacyWithoutModulationEffects && fire::modulation_fx::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutResonator && fire::resonator_params::isParameterID(parameterWithID->paramID))
+            continue;
+        if (legacyWithoutDriveCompensation && fire::drive_comp::isParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutModuleOrder && fire::module_order::isParameterID(parameterWithID->paramID))
             continue;
@@ -441,6 +466,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("insertEffectsSchemaVersion", 1);
     xml.setAttribute("modulationEffectsSchemaVersion", fire::modulation_fx::schemaVersion);
     xml.setAttribute("resonatorSchemaVersion", fire::resonator_params::schemaVersion);
+    xml.setAttribute("driveCompSchemaVersion", fire::drive_comp::schemaVersion);
     xml.setAttribute("moduleOrderSchemaVersion", 1);
     xml.setAttribute("eqSchemaVersion", 1);
     xml.setAttribute("lfoBankSchemaVersion", fire::lfo_bank::schemaVersion);
@@ -572,6 +598,7 @@ namespace state
 
         juce::XmlElement xml(incomingXml);
         canonicaliseCloudsPresetState(xml);
+        materialiseLegacyDriveCompensation(xml);
 
         auto& fireProc = static_cast<FireAudioProcessor&>(proc);
         {
@@ -589,6 +616,7 @@ namespace state
                 if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
                 {
                     float valueToLoad = p->getDefaultValue();
+                    if (fire::drive_comp::isParameterID(p->paramID)) valueToLoad = 0.0f;
                     if (xml.hasAttribute(p->paramID))
                     {
                         // XmlElement's numeric helpers accept a valid numeric prefix
@@ -608,6 +636,7 @@ namespace state
                     // saved snapshot and preset-equivalence checks agree.
                     if (fire::clouds_params::isParameterID(p->paramID)
                         || fire::resonator_params::isParameterID(p->paramID)
+                        || fire::drive_comp::isParameterID(p->paramID)
                         || fire::lfo_bank::isPresentParameterID(p->paramID))
                         if (auto* ranged = fireProc.treeState.getParameter(p->paramID))
                             valueToLoad = ranged->convertTo0to1(
@@ -799,6 +828,7 @@ namespace state
         const juce::ScopedLock lock(stateLock);
         juce::XmlElement snapshot { ab };
         canonicaliseCloudsPresetState(snapshot);
+        materialiseLegacyDriveCompensation(snapshot);
         snapshot.setTagName("AB_STATE");
         snapshot.setAttribute("currentSideIsA",
                               currentSideIsA.load(std::memory_order_relaxed));
@@ -833,6 +863,7 @@ namespace state
 
         juce::XmlElement replacement { *state };
         const bool migrated = canonicaliseCloudsPresetState(replacement);
+        materialiseLegacyDriveCompensation(replacement);
         if (migratedGranular != nullptr)
             *migratedGranular = migrated;
         replacement.setTagName("AB");

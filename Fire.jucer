@@ -185,11 +185,13 @@
         <FILE id="ottCore1" name="OttProcessor.h" compile="0" resource="0" file="Source/DSP/OttProcessor.h"/>
         <FILE id="insertFx1" name="InsertEffect.h" compile="0" resource="0" file="Source/DSP/InsertEffect.h"/>
         <FILE id="chordResDsp" name="ChordResonator.h" compile="0" resource="0" file="Source/DSP/ChordResonator.h"/>
+        <FILE id="driveCompDsp" name="DriveCompensation.h" compile="0" resource="0" file="Source/DSP/DriveCompensation.h"/>
         <FILE id="insertFx2" name="InsertRack.h" compile="0" resource="0" file="Source/DSP/InsertRack.h"/>
         <FILE id="insertFx3" name="InsertParameters.h" compile="0" resource="0" file="Source/Utility/InsertParameters.h"/>
         <FILE id="cloudsParams" name="CloudsParameters.h" compile="0" resource="0" file="Source/Utility/CloudsParameters.h"/>
         <FILE id="modFxParams" name="ModulationEffectParameters.h" compile="0" resource="0" file="Source/Utility/ModulationEffectParameters.h"/>
         <FILE id="resParams" name="ResonatorParameters.h" compile="0" resource="0" file="Source/Utility/ResonatorParameters.h"/>
+        <FILE id="driveCompParams" name="DriveCompensationParameters.h" compile="0" resource="0" file="Source/Utility/DriveCompensationParameters.h"/>
         <FILE id="clapTail" name="ClapTail.h" compile="0" resource="0" file="Source/Utility/ClapTail.h"/>
         <FILE id="moduleOrder1" name="ModuleOrder.h" compile="0" resource="0" file="Source/Utility/ModuleOrder.h"/>
         <FILE id="y9Kac2" name="SampleAccurateCompressor.h" compile="0" resource="0"

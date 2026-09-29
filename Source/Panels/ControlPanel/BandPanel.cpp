@@ -11,6 +11,7 @@
 #include "BandPanel.h"
 #include "../../GUI/FireTheme.h"
 #include "../../Utility/AudioHelpers.h"
+#include "../../Utility/DriveCompensationParameters.h"
 #include <algorithm>
 #include <cmath>
 
@@ -142,6 +143,14 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     {
         driveParameterIds[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(DRIVE_ID, i);
         processor.treeState.addParameterListener(driveParameterIds[static_cast<size_t>(i)], this);
+        driveCompParameters[static_cast<size_t>(i)] = {
+            processor.treeState.getRawParameterValue(fire::drive_comp::parameterID(i)),
+            processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(LINKED_ID, i)),
+            processor.treeState.getRawParameterValue(driveParameterIds[static_cast<size_t>(i)]),
+            processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(EXTREME_ID, i)),
+            processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(DRIVE_BYPASS_ID, i)),
+            processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, i))
+        };
 
         for (size_t parameterIndex = 0; parameterIndex < graphParameterBases.size(); ++parameterIndex)
         {
@@ -164,6 +173,7 @@ BandPanel::~BandPanel()
 {
     effectNavigation.onSelectEffect = nullptr;
     insertControls.onLayoutChanged = nullptr;
+    upgradeDriveCompButton.onClick = nullptr;
     graphViewMenu.configurePopupSession({}, {}, ContextAwareComboBox::SelectionCallback {});
     for (auto& sliderPair : modulatableSliderComponents)
     {
@@ -268,7 +278,29 @@ void BandPanel::createLabels()
 
 void BandPanel::createButtons()
 {
-    initFlatButton(linkedButton, "Link");
+    initFlatButton(linkedButton, "Gain Comp");
+    addAndMakeVisible(driveCompReadout);
+    driveCompReadout.setComponentID("driveCompensationReadout");
+    driveCompReadout.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    driveCompReadout.setJustificationType(juce::Justification::centred);
+    driveCompReadout.setInterceptsMouseClicks(false, false);
+    initFlatButton(upgradeDriveCompButton, "Use Drive Comp");
+    upgradeDriveCompButton.setClickingTogglesState(false);
+    upgradeDriveCompButton.setComponentID("driveCompUpgrade");
+    upgradeDriveCompButton.setTitle("Use Drive Comp");
+    upgradeDriveCompButton.setTooltip("Move compensation into the Drive stage and enable Comp for this band. "
+                                      "This can change the sound: the stored manual Output setting becomes active again.");
+    upgradeDriveCompButton.setHelpText(upgradeDriveCompButton.getTooltip());
+    const juce::Component::SafePointer<BandPanel> safe(this);
+    upgradeDriveCompButton.onClick = [safe]
+    {
+        if (! safe || ! safe->upgradeDriveCompButton.isShowing() || ! safe->upgradeDriveCompButton.isEnabled()
+            || safe->selectedInsert >= 0 || ! safe->oscSwitch.getToggleState() || safe->usesModernDriveCompensation()) return;
+        const auto band = safe->focusBandNum;
+        auto& processor = safe->processor;
+        processor.upgradeBandDriveCompensation(band);
+        if (safe) safe->updateDriveCompensationPresentation();
+    };
     initFlatButton(safeButton, "Safe");
     initFlatButton(extremeButton, "Extreme");
 
@@ -381,7 +413,8 @@ void BandPanel::createComboBoxes()
 void BandPanel::setupComponentGroups()
 {
     driveComponents = {
-        modulatableSliderComponents.at(DRIVE_NAME).get()
+        modulatableSliderComponents.at(DRIVE_NAME).get(),
+        &linkedButton, &driveCompReadout, &upgradeDriveCompButton
     };
 
     // Groups for managing VISIBILITY when switching panels
@@ -420,7 +453,7 @@ void BandPanel::setupComponentGroups()
     allControls.addArray(driveComponents);
     allControls.add(modulatableSliderComponents.at(OUTPUT_NAME).get());
     allControls.add(modulatableSliderComponents.at(MIX_NAME).get());
-    allControls.add(&linkedButton, &safeButton, &extremeButton);
+    allControls.add(&safeButton, &extremeButton);
     allControls.addArray(shapeComponents);
     allControls.addArray(compressorComponents);
     allControls.addArray(widthComponents);
@@ -520,11 +553,28 @@ void BandPanel::resized()
     // --- Active module controls ---
     if (oscSwitch.getToggleState())
     {
+        const bool modern = usesModernDriveCompensation();
+        // Reuse the card's title strip rather than shrinking the hero dial.
+        // Its original dimensions are retained; only its vertical position
+        // changes to make room for the paired gain control below it.
         const int driveSize = juce::jmax(1, std::min({ scaledKnobSize * 2,
-                                                      knobsColumnArea.getWidth(),
-                                                      knobsColumnArea.getHeight() }));
+                                                      knobsColumnArea.getWidth(), knobsColumnArea.getHeight() }));
+        auto driveArea = knobsAreaRect.reduced(cardPadding);
+        const auto compRowHeight = juce::jmin(titleHeight, driveArea.getHeight());
+        const auto compGap = juce::jmax(2, juce::roundToInt(4.0f * uiScale));
+        auto compArea = driveArea.removeFromBottom(compRowHeight);
         modulatableSliderComponents.at(DRIVE_NAME)->setBounds(
-            knobsColumnArea.withSizeKeepingCentre(driveSize, driveSize));
+            driveArea.withSizeKeepingCentre(driveSize, driveSize));
+        const auto rowWidth = juce::jmin(compArea.getWidth(), juce::roundToInt((modern ? 206.0f : 224.0f) * uiScale));
+        auto compRow = compArea.withSizeKeepingCentre(rowWidth, compRowHeight);
+        linkedButton.setBounds(compRow.removeFromLeft(juce::jmin(compRow.getWidth(), juce::roundToInt((modern ? 96.0f : 98.0f) * uiScale))));
+        compRow.removeFromLeft(juce::jmin(compGap, compRow.getWidth()));
+        driveCompReadout.setBounds(compRow);
+        driveCompReadout.setFont(fire::ui::valueFont((modern ? 12.0f : 10.5f) * uiScale));
+        auto upgradeArea = knobsAreaRect.reduced(cardPadding, 0).removeFromTop(titleHeight);
+        upgradeDriveCompButton.setBounds(upgradeArea.removeFromRight(
+            juce::jmin(upgradeArea.getWidth(), juce::roundToInt(132.0f * uiScale))));
+        upgradeDriveCompButton.toFront(false);
     }
     else if (shapeSwitch.getToggleState())
     {
@@ -639,15 +689,16 @@ void BandPanel::resized()
 
     const int compactButtonGap = juce::jmax(3, juce::roundToInt(5.0f * uiScale));
     const int compactGroupWidth = juce::jmin(buttonArea.getWidth(), juce::roundToInt(184.0f * uiScale));
-    auto compactButtonRow = buttonArea.withSizeKeepingCentre(compactGroupWidth, buttonAreaHeight);
-    const int compactButtonWidth = juce::jmax(1, (compactButtonRow.getWidth() - compactButtonGap * 2) / 3);
-    linkedButton.setBounds(compactButtonRow.removeFromLeft(compactButtonWidth));
-    compactButtonRow.removeFromLeft(juce::jmin(compactButtonGap, compactButtonRow.getWidth()));
+    const int compactButtonWidth = juce::jmax(1, (compactGroupWidth - compactButtonGap * 2) / 3);
+    // Keep the original button dimensions while centring the remaining pair.
+    auto compactButtonRow = buttonArea.withSizeKeepingCentre(compactButtonWidth * 2 + compactButtonGap, buttonAreaHeight);
     safeButton.setBounds(compactButtonRow.removeFromLeft(compactButtonWidth));
     compactButtonRow.removeFromLeft(juce::jmin(compactButtonGap, compactButtonRow.getWidth()));
     extremeButton.setBounds(compactButtonRow);
 
-    invalidateChromeCache();
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    updateDriveCompensationPresentation(false);
+    if (safeThis) invalidateChromeCache();
 }
 
 void BandPanel::rebuildChromeCache(float displayScale)
@@ -1107,6 +1158,8 @@ void BandPanel::animationTick(float deltaSeconds)
     if (! safeOwner) return;
     insertControls.refresh();
     if (! safeOwner) return;
+    updateDriveCompensationPresentation();
+    if (! safeOwner) return;
     if (ottSwitch.getToggleState())
     {
         auto* rawUp = processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(OTT_UPWARD_ID, focusBandNum));
@@ -1174,6 +1227,8 @@ void BandPanel::dismissButtonInteractions() noexcept
     };
 
     if (! dismiss(linkedButton))
+        return;
+    if (! dismiss(upgradeDriveCompButton))
         return;
     if (! dismiss(safeButton))
         return;
@@ -1340,6 +1395,7 @@ void BandPanel::updateAttachments()
     dcFilterAttachment.reset();
     ottAttachment.reset();
 
+    linkedButton.setComponentID(ParameterIDAndName::getIDString(LINKED_ID, focusBandNum));
     linkedAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(LINKED_ID, focusBandNum), linkedButton);
     safeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(SAFE_ID, focusBandNum), safeButton);
     extremeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(EXTREME_ID, focusBandNum), extremeButton);
@@ -1356,7 +1412,9 @@ void BandPanel::updateAttachments()
     const auto* bandEnabledParameter = processor.treeState.getRawParameterValue(
         ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
     const bool bandEnabled = bandEnabledParameter != nullptr && bandEnabledParameter->load() > 0.5f;
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
     setBandKnobsStates(bandEnabled, false);
+    if (safeThis) updateDriveCompensationPresentation();
 }
 
 void BandPanel::initFlatButton(juce::TextButton& button, juce::String buttonName)
@@ -1715,6 +1773,107 @@ void BandPanel::updateDistortionGraphFromParameters()
                              values.rateDivide);
 }
 
+bool BandPanel::usesModernDriveCompensation() const noexcept
+{
+    if (! juce::isPositiveAndBelow(focusBandNum, 4)) return false;
+    const auto* parameter = driveCompParameters[static_cast<size_t>(focusBandNum)].modern;
+    return parameter != nullptr && parameter->load(std::memory_order_relaxed) > 0.5f;
+}
+
+void BandPanel::updateDriveCompensationPresentation(bool updateLayout)
+{
+    if (! juce::isPositiveAndBelow(focusBandNum, 4)) return;
+    const juce::Component::SafePointer<BandPanel> safe(this);
+    const auto band = focusBandNum;
+    const auto& parameters = driveCompParameters[static_cast<size_t>(band)];
+    const auto read = [](const std::atomic<float>* parameter, float fallback)
+    { return parameter != nullptr ? parameter->load(std::memory_order_relaxed) : fallback; };
+    const bool modern = usesModernDriveCompensation();
+    const bool layoutChanged = displayedDriveCompMode != static_cast<int>(modern) || displayedDriveCompBand != band;
+    if (layoutChanged)
+    {
+        displayedDriveCompMode = static_cast<int>(modern);
+        displayedDriveCompBand = band;
+        linkedButton.dismissPointerGesture();
+        if (! safe || focusBandNum != band) return;
+        upgradeDriveCompButton.dismissPointerGesture();
+        if (! safe || focusBandNum != band) return;
+        linkedButton.setButtonText(modern ? "Gain Comp" : "Legacy Link");
+        linkedButton.setTitle((modern ? "Drive volume compensation for Band " : "Legacy Drive to Output link for Band ") + juce::String(band + 1));
+        linkedButton.setTooltip(modern
+            ? "Drive volume compensation: a coarse gain adjustment that follows Drive modulation, Safe, Extreme and bypass. Output stays independently adjustable."
+            : "Legacy Link overrides the manual Output setting with gain linked to Drive. Use Drive Comp moves compensation into Drive and restores manual Output.");
+        linkedButton.setHelpText(linkedButton.getTooltip());
+        driveCompReadout.setTitle("Drive volume compensation for Band " + juce::String(band + 1));
+    }
+    const bool drivePage = selectedInsert < 0 && oscSwitch.getToggleState() && zoomedGraph == nullptr;
+    for (auto* component : std::array<juce::Component*, 3> {&linkedButton, &driveCompReadout, &upgradeDriveCompButton})
+    {
+        const bool visible = drivePage && (component != &upgradeDriveCompButton || ! modern);
+        if (! dismissInteractionBeforeComponentStateChange(component, component->isVisible() != visible, safe)) return;
+        component->setVisible(visible);
+        if (! safe || focusBandNum != band) return;
+    }
+    const bool enabled = read(parameters.linked, 1.0f) > 0.5f;
+    juce::String text, help;
+    if (! modern)
+    {
+        text = enabled ? "Output linked" : "Manual Output";
+        help = enabled ? "Legacy Link is active: the stored manual Output setting is overridden."
+                       : "Legacy Link is off: the stored manual Output setting is active.";
+    }
+    else if (! enabled)
+    {
+        text = "Off";
+        help = "Drive compensation is off. Output remains manually adjustable.";
+    }
+    else if (read(parameters.bandEnabled, 1.0f) <= 0.5f || read(parameters.driveEnabled, 1.0f) <= 0.5f)
+    {
+        text = "Bypassed";
+        help = "Drive compensation is bypassed with this band or the Drive stage.";
+    }
+    else
+    {
+        const auto index = static_cast<size_t>(band);
+        const auto sequence = processor.getBandDriveCompensationSequence(band);
+        const auto now = juce::Time::getMillisecondCounterHiRes();
+        if (sequence == 0)
+        {
+            driveCompSequences[index] = 0;
+            driveCompReceivedAtMs[index] = -1.0;
+        }
+        else if (driveCompSequences[index] != sequence)
+        {
+            driveCompSequences[index] = sequence;
+            driveCompReceivedAtMs[index] = now;
+        }
+        auto compensation = processor.getBandDriveCompensationDb(band);
+        const bool estimated = sequence == 0 || ! std::isfinite(compensation)
+                            || now - driveCompReceivedAtMs[index] >= driveCompTelemetryTimeoutMs;
+        if (estimated)
+        {
+            const auto drive = read(parameters.drive, 0.0f);
+            compensation = -0.1f * (std::isfinite(drive) ? drive : 0.0f);
+            if (read(parameters.extreme, 0.0f) > 0.5f) compensation *= std::log2(10.0f);
+        }
+        if (std::abs(compensation) < 0.05f) compensation = 0.0f;
+        text = (estimated ? juce::String::charToString(0x2248) + " " : juce::String())
+             + (compensation < 0.0f ? juce::String::charToString(0x2212) : juce::String())
+             + juce::String(std::abs(compensation), 1) + " dB";
+        help = estimated
+            ? "Estimated from base Drive and Extreme while audio updates are unavailable. Drive modulation and Safe limiting are reflected when processing resumes. Output remains manual."
+            : "Applied Drive compensation from the latest processed audio, including Drive modulation, Safe and Extreme. This is a gain estimate, not a loudness measurement. Output remains manual.";
+    }
+    if (driveCompReadout.getText() != text) driveCompReadout.setText(text, juce::dontSendNotification);
+    if (! safe || focusBandNum != band) return;
+    if (driveCompReadout.getTooltip() != help)
+    {
+        driveCompReadout.setTooltip(help);
+        driveCompReadout.setHelpText(help);
+    }
+    if (updateLayout && layoutChanged) resized();
+}
+
 void BandPanel::updateDriveMeter()
 {
     if (! isShowing())
@@ -1810,7 +1969,9 @@ void BandPanel::setBandKnobsStates(bool isBandEnabled, bool /*callFromSubBypass*
         bool driveIsEnabled = driveBypassButton.getToggleState();
         for (auto* component : driveComponents)
         {
-            if (! setComponentEnabled(component, driveIsEnabled))
+            const bool compensationControl = component == &linkedButton || component == &driveCompReadout
+                                             || component == &upgradeDriveCompButton;
+            if (! setComponentEnabled(component, compensationControl || driveIsEnabled))
                 return;
         }
 

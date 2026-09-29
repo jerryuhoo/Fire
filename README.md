@@ -220,8 +220,8 @@ Match off. Closing the editor retains the comparison state in the processor.
 ### 3.3. Band Effect
 
 - You can click four switches on the right side of graphs.
-- **Drive**:『Fire』 has several distortion functions. There are three buttons "L", "S", "E", related to drive knob, and each means "Link", "Safe", and "Extreme".
-  - **Link**: When your turn up drive knob, the output knob value will automatically reduce.
+- **Drive**:『Fire』 has several distortion functions, with **Gain Comp**, **Safe** and **Extreme** controls.
+  - **Gain Comp**: Estimates a level reduction from the audible Drive gain while keeping Output independent. The amount appears beside the Drive control. Older projects retain **Legacy Link** until explicitly upgraded.
   - **Safe**: If your drive knob pushes your volume too loud, it will automatically reduce your drive value. It also shows reduced value on drive knob.
   - **Extreme**: It expands the range of the the drive knob (from around +40db to around +60db) when it is enabled to give more distortion.
 - **Retification and bias**: Change your distortion shape.
@@ -695,3 +695,36 @@ The previous Type and Modulation Type host selectors retain their ranges and
 automation positions. A new per-slot **Chord Resonator** flag selects this
 algorithm; the CHAIN menu manages it automatically. Older presets and projects
 load with these flags off.
+
+### Drive level compensation
+
+**Gain Comp** lives on the Drive page and estimates a level reduction from the
+Drive gain actually being applied, including its LFO modulation, Safe limiting,
+Extreme mode and bypass transition. At ordinary, unrestricted settings it
+retains the approximate **Drive 60 → −6 dB** relationship. This is an estimate
+for convenient sound design, rather than a loudness measurement.
+
+The reduction is applied at the end of the Drive stage (or the adjacent joined
+Drive/Shape stage). Output stays independently adjustable, and later effects
+receive the compensated signal. Changing Gain Comp no longer directly turns
+down an already-recorded tail in a downstream delay or reverb. Bypassing Drive
+returns its compensation smoothly to unity; a joined Shape Mix at zero also
+removes compensation for the inaudible Drive contribution. Reordering Drive
+moves its compensation with it. Compressor remains a separate, reorderable
+effect.
+
+The readout shows the applied gain while audio is running. **≈** marks a base
+Drive/Extreme estimate when current audio telemetry is unavailable; it does not
+pretend to track an unheard LFO or Safe limiting. **Off** and **Bypassed** make
+inactive states explicit. Use **Match / Learn** afterwards for an actual
+whole-chain listening-level comparison; its learned adjustment remains fixed
+until learned again.
+
+New instances and newly created bands use Gain Comp. Existing presets and
+projects retain **Legacy Link**, including its old override of the stored
+Output setting. Their Drive page offers **Use Drive Comp** to explicitly switch
+that band to the new behavior and enable compensation. This restores the stored
+manual Output value and changes the compensation's position, so the sound can
+change. Merely opening the editor never upgrades an old project. Both modes
+are saved independently per band and on both A/B sides; existing parameter IDs
+and automation positions remain unchanged.

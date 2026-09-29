@@ -11,9 +11,11 @@
 #pragma once
 #include "DSP/InsertRack.h"
 #include "DSP/LoudnessMatchState.h"
+#include "DSP/DriveCompensation.h"
 #include "Utility/CloudsParameters.h"
 #include "Utility/ModulationEffectParameters.h"
 #include "Utility/ResonatorParameters.h"
+#include "Utility/DriveCompensationParameters.h"
 #include "Utility/EqParameters.h"
 #include "Utility/LfoBankParameters.h"
 #include "DSP/EqCoefficients.h"
@@ -53,6 +55,7 @@ struct BandProcessingParameters
 
     ModulatedValueProvider outputVal;
     bool isOutputLinked { false };
+    bool useModernDriveComp { false };
     float mixVal { 1.0f };
     ModulatedValueProvider mixValProvider;
     float compThreshold { 0.0f };
@@ -132,6 +135,11 @@ struct OutputGainTransitionState
     float anchorLinearGain = 1.0f;
     float lastAppliedLinearGain = 1.0f;
     float routedBaseTargetDb = 0.0f;
+    int routeRampSamples = 480;
+    int driveCompHandoffSamples = 2400;
+    int driveCompHandoffRemaining = 0;
+    bool lastModernDriveComp = false;
+    bool scalarDriveCompHandoff = false;
     bool routedBaseGainPrimed = false;
     bool initialised = false;
 
@@ -245,6 +253,7 @@ struct BandProcessor
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
     OutputGainTransitionState outputGainTransition;
     DriveControlTransitionState driveControlTransition;
+    fire::dsp::DriveCompensation driveCompensation;
     ShapeControlRecipeTransitionState biasRecipeTransition;
     ShapeControlRecipeTransitionState recRecipeTransition;
     CompressorRecipeTransitionState compressorThresholdRecipeTransition;
@@ -298,6 +307,8 @@ struct BandProcessor
 
     // Per-band state for Safe Mode
     std::atomic<float> mReductionPercent { 1.0f };
+    std::atomic<float> mDriveCompensationDb { 0.0f };
+    std::atomic<std::uint64_t> mDriveCompensationSequence { 0 };
     std::atomic<float> mSampleMaxValue { 0.0f };
     std::atomic<float> mOttInputLevelDb { -120.0f };
     std::atomic<float> mOttGainChangeDb { 0.0f };
@@ -418,6 +429,9 @@ public:
     void clearCurrentLoudnessMatch() noexcept;
     void cancelLoudnessMatchMeasurement() noexcept;
     void copyLoudnessMatchToOtherSide() noexcept;
+    float getBandDriveCompensationDb(int bandIndex) const noexcept;
+    std::uint64_t getBandDriveCompensationSequence(int bandIndex) const noexcept;
+    void upgradeBandDriveCompensation(int bandIndex);
 
     bool hasUpdateCheckBeenPerformed = false;
     bool isSlient(const juce::AudioBuffer<float>& buffer);
@@ -688,6 +702,7 @@ private:
         CachedParameter solo;
         CachedParameter mode;
         CachedParameter linked;
+        CachedParameter modernDriveComp;
         CachedParameter safe;
         CachedParameter extreme;
         CachedParameter driveEnabled;

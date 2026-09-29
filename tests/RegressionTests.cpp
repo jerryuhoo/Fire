@@ -210,6 +210,21 @@ namespace TestHelpers
                     parameter->setValueNotifyingHost(attributeValue.getFloatValue());
             }
 
+            // These historical audio fixtures deliberately load parameters
+            // without the full preset/LFO loader. Mirror its missing-family
+            // migration: the old reference recordings used Legacy Link, not
+            // the modern compensation default for newly created instances.
+            bool hasDriveCompState = xml->hasAttribute("driveCompSchemaVersion");
+            for (const auto& id : fire::drive_comp::parameterIDs())
+                hasDriveCompState = hasDriveCompState || xml->hasAttribute(id);
+            if (! hasDriveCompState)
+                for (const auto& id : fire::drive_comp::parameterIDs())
+                {
+                    auto* parameter = processor.treeState.getParameter(id);
+                    REQUIRE(parameter != nullptr);
+                    parameter->setValueNotifyingHost(0.0f);
+                }
+
             // After loading the preset, manually enable the Shape module for all bands.
             // This is necessary because older presets won't have this new parameter,
             // and it defaults to 'off' (bypassed), causing a mismatch with the golden masters.

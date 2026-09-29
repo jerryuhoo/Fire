@@ -14,6 +14,7 @@
 #include "CloudsParameters.h"
 #include "ModulationEffectParameters.h"
 #include "ResonatorParameters.h"
+#include "DriveCompensationParameters.h"
 #include "EqParameters.h"
 #include "ModuleOrder.h"
 #include "juce_audio_processors/juce_audio_processors.h"
@@ -413,6 +414,7 @@ namespace ParameterIDAndName
             for (int slot = 0; slot < fire::resonator_params::slotCount; ++slot)
                 result.push_back({"FX " + juce::String(slot + 1) + " Chord Resonator",
                                   fire::resonator_params::parameterBase(slot, false)});
+            result.push_back({"Modern Drive Compensation", fire::drive_comp::parameterBase});
             return result;
         }();
         return params;

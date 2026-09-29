@@ -148,6 +148,9 @@ TEST_CASE("Clouds appends a separate parameter family without changing original 
             checkParameter((scope == 0 ? juce::String("masterFx") : "bandFx") + juce::String(slot)
                                + "Resonator" + (scope == 0 ? juce::String() : juce::String(scope)), 9);
     CHECK(index == 1036);
+    for (int band = 1; band <= 4; ++band)
+        checkParameter("driveCompModern" + juce::String(band), 10);
+    CHECK(index == 1040);
     CHECK(index == parameters.size());
     CHECK_FALSE(clouds::isParameterID("masterFx1CloudsBogus"));
     CHECK_FALSE(clouds::isParameterID("bandFx9CloudsEngine1"));

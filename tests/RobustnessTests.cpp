@@ -1330,7 +1330,7 @@ TEST_CASE("Stopped LFO smoothness survives host and preset state round-trips", "
     CHECK(presetRestoredData[2].smoothness == Catch::Approx(0.73f));
 }
 
-TEST_CASE("Linked output compensation works without an editor", "[processor][link][headless]")
+TEST_CASE("Legacy Linked output compensation works without an editor", "[processor][link][headless]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor linkedProcessor;
@@ -1341,7 +1341,10 @@ TEST_CASE("Linked output compensation works without an editor", "[processor][lin
     const auto linkedID = ParameterIDAndName::getIDString(LINKED_ID, 0);
 
     for (auto* processor : { &linkedProcessor, &explicitProcessor })
+    {
+        setParameterValue(*processor, fire::drive_comp::parameterID(0), 0.0f);
         setParameterValue(*processor, driveID, 30.0f);
+    }
 
     setParameterValue(linkedProcessor, linkedID, 1.0f);
     setParameterValue(linkedProcessor, outputID, 6.0f); // Must be ignored while linked.
@@ -1385,6 +1388,8 @@ TEST_CASE("Opening an editor does not overwrite stored output while Linked is ac
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
     processor.hasUpdateCheckBeenPerformed = true;
+
+    setParameterValue(processor, fire::drive_comp::parameterID(0), 0.0f);
 
     const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
     const auto outputID = ParameterIDAndName::getIDString(OUTPUT_ID, 0);

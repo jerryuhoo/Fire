@@ -397,7 +397,7 @@ TEST_CASE("Control-panel buttons reject popup and auxiliary pointer gestures",
     {
         BandPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
-        checkPanelButtons(panel, 16);
+        checkPanelButtons(panel, 17);
     }
 
     SECTION("global controls")

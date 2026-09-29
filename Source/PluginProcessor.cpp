@@ -587,6 +587,8 @@ void OutputGainTransitionState::prepare(double sampleRate) noexcept
     const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
                                       ? sampleRate
                                       : 48000.0;
+    routeRampSamples = static_cast<int>(std::floor(safeSampleRate * 0.01));
+    driveCompHandoffSamples = static_cast<int>(std::floor(safeSampleRate * 0.05));
     routeTransitionMix.reset(safeSampleRate, 0.01);
     routedBaseGainSmoother.reset(safeSampleRate, 0.05);
     legacyGainTracker.reset(safeSampleRate, 0.05);
@@ -602,6 +604,9 @@ void OutputGainTransitionState::reset() noexcept
     anchorLinearGain = 1.0f;
     lastAppliedLinearGain = 1.0f;
     routedBaseTargetDb = 0.0f;
+    driveCompHandoffRemaining = 0;
+    lastModernDriveComp = false;
+    scalarDriveCompHandoff = false;
     routedBaseGainPrimed = false;
     initialised = false;
 }
@@ -1083,15 +1088,39 @@ static void applyGain(juce::AudioBuffer<float>& buffer,
                       juce::dsp::Gain<float>& gain,
                       OutputGainTransitionState& transition,
                       int sourceIndex,
-                      bool isLinked)
+                      bool isLinked,
+                      bool modernDriveComp = false)
 {
     if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
         return;
 
+    // Moving compensation between Drive and Output uses the same 50 ms
+    // handoff at both locations. A routed Output normally bridges recipe
+    // changes in 10 ms, which would otherwise finish far ahead of Drive.
+    // Retargets retain the handoff's deadline; only a mode reversal starts a
+    // new 50 ms window. Count base-rate samples on every path, including the
+    // scalar and steady routed early returns below.
+    const bool driveCompModeChanged = transition.initialised
+                                     && modernDriveComp != transition.lastModernDriveComp;
+    if (driveCompModeChanged)
+        transition.driveCompHandoffRemaining = transition.driveCompHandoffSamples;
+    transition.lastModernDriveComp = modernDriveComp;
+    const int recipeRampSamples = juce::jmax(transition.routeRampSamples,
+                                            transition.driveCompHandoffRemaining);
+    if (gainProvider.lfoSignal != nullptr)
+        transition.scalarDriveCompHandoff = false;
+    else if (transition.driveCompHandoffRemaining > 0 && transition.lastRecipe.routed)
+        transition.scalarDriveCompHandoff = true;
+    transition.driveCompHandoffRemaining = juce::jmax(
+        0, transition.driveCompHandoffRemaining - buffer.getNumSamples());
+
     const auto recipe = makeOutputGainRecipe(gainProvider,
                                              sourceIndex,
                                              isLinked);
-    if (gainProvider.lfoSignal == nullptr)
+    // A route removed during the handoff must also retain its deadline.
+    // Temporarily let the recipe bridge below target a scalar value; handing
+    // it straight back to Gain here would restart a full 50 ms Output ramp.
+    if (gainProvider.lfoSignal == nullptr && ! transition.scalarDriveCompHandoff)
     {
         transition.routedBaseGainPrimed = false;
         if (! transition.initialised)
@@ -1146,11 +1175,13 @@ static void applyGain(juce::AudioBuffer<float>& buffer,
                                        recipe,
                                        transition.lastRecipe)
                                    || (linkedModeChanged
+                                       && routedBaseTargetChanged)
+                                   || (driveCompModeChanged
                                        && routedBaseTargetChanged));
 
     // A newly attached route starts from its complete current recipe. A true
     // discrete recipe edit also snaps a simultaneously changed base so the
-    // existing 10 ms held-anchor bridge remains its only transition. When just
+    // held-anchor bridge remains its only transition. When just
     // source/depth/polarity changes during an in-flight base ramp, retain that
     // independent 50 ms trajectory instead of fast-forwarding it.
     if (! transition.routedBaseGainPrimed
@@ -1178,6 +1209,7 @@ static void applyGain(juce::AudioBuffer<float>& buffer,
         // Keep the target LFO fully sample-accurate. Only the discrete recipe
         // boundary is bridged from the gain that was actually audible.
         transition.anchorLinearGain = transition.lastAppliedLinearGain;
+        transition.routeTransitionMix.reset(recipeRampSamples);
         transition.routeTransitionMix.setCurrentAndTargetValue(0.0f);
         transition.routeTransitionMix.setTargetValue(1.0f);
         transition.lastRecipe = recipe;
@@ -1212,6 +1244,7 @@ static void applyGain(juce::AudioBuffer<float>& buffer,
         synchroniseLegacyGain(gain,
                               transition,
                               lastLinearGain);
+        transition.scalarDriveCompHandoff = false;
         return;
     }
 
@@ -1334,6 +1367,9 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     // Reset all smoothed values with the current sample rate and a ramp time.
     driveSmoother.reset(spec.sampleRate, 0.05);
     driveControlTransition.prepare(spec.sampleRate);
+    driveCompensation.prepare(spec.sampleRate);
+    mDriveCompensationDb.store(0.0f, std::memory_order_relaxed);
+    mDriveCompensationSequence.store(0, std::memory_order_release);
     biasSmoother.reset(spec.sampleRate, 0.05);
     recSmoother.reset(spec.sampleRate, 0.05);
     biasRecipeTransition.prepare(spec.sampleRate);
@@ -1407,6 +1443,9 @@ void BandProcessor::reset()
     compressorAttackRecipeTransition.reset(10.0f);
     compressorReleaseRecipeTransition.reset(100.0f);
     driveControlTransition.reset();
+    driveCompensation.reset();
+    mDriveCompensationDb.store(0.0f, std::memory_order_relaxed);
+    mDriveCompensationSequence.store(0, std::memory_order_release);
     biasRecipeTransition.reset();
     recRecipeTransition.reset();
     shapeMixSmoother.setCurrentAndTargetValue(1.0f);
@@ -1690,7 +1729,8 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
               gain,
               outputGainTransition,
               params.outputLfoSourceIndex,
-              params.isOutputLinked);
+              params.isOutputLinked && ! params.useModernDriveComp,
+              params.useModernDriveComp);
 
     // 5. Final Dry/Wet Mix. The dry samples supplied above already contain
     // JUCE's original HQ Thiran latency compensation. Keep the coefficient
@@ -2335,6 +2375,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
             getDriveRouteTargetGain(driveProvider, 0, driveSmoother.getCurrentValue(),
                                     params.isExtremeModeOn));
         serviceDriveEnableTransition(driveControlTransition, params.isDriveEnabled);
+        driveCompensation.setMode(params.useModernDriveComp, params.isOutputLinked);
     }
 
     if (processShape)
@@ -2354,6 +2395,9 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
     float currentDriveForCalc = legacyDriveForCalc;
     float finalReductionDriveForCalc = 0.0f;
     float finalReductionDriveGain = 1.0f;
+    float currentCompensationGain = 1.0f;
+    const bool applyDriveCompensation = processDrive
+        && (params.useModernDriveComp || driveCompensation.isActive());
     bool hasReductionForRange = false;
     for (int sample = 0; sample < numSamples; ++sample)
     {
@@ -2413,6 +2457,9 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
                         }
                     }
                 }
+                if (applyDriveCompensation)
+                    currentCompensationGain = driveCompensation.next(currentState.drive,
+                        processShape ? currentShapeMix : 1.0f);
             }
             if (processShape)
             {
@@ -2481,6 +2528,8 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
                 currentSample *= currentShapeMix;
                 currentSample += drySample * (1.0f - currentShapeMix);
             }
+            if (processDrive && ! juce::exactlyEqual(currentCompensationGain, 1.0f))
+                currentSample *= currentCompensationGain;
             blockToProcess.setSample(channel, sample, currentSample);
         }
 
@@ -2516,6 +2565,16 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
                 mode1Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[1]);
             }
         }
+    }
+
+    if (processDrive)
+    {
+        mDriveCompensationDb.store(params.useModernDriveComp ? driveCompensation.getLastGainDb() : 0.0f,
+                                  std::memory_order_relaxed);
+        if (params.useModernDriveComp)
+            mDriveCompensationSequence.fetch_add(1, std::memory_order_release);
+        else
+            mDriveCompensationSequence.store(0, std::memory_order_release);
     }
 
     if (hasReductionForRange)
@@ -2838,6 +2897,7 @@ void FireAudioProcessor::initialiseParameterCache()
         parameters.solo = indexed(BAND_SOLO_ID, i);
         parameters.mode = indexed(MODE_ID, i);
         parameters.linked = indexed(LINKED_ID, i);
+        parameters.modernDriveComp = cacheParameter(fire::drive_comp::parameterID(i));
         parameters.safe = indexed(SAFE_ID, i);
         parameters.extreme = indexed(EXTREME_ID, i);
         parameters.driveEnabled = indexed(DRIVE_BYPASS_ID, i);
@@ -3359,6 +3419,38 @@ fire::dsp::LoudnessMatchState::View FireAudioProcessor::getLoudnessMatchState() 
     return loudnessMatch.view(stateAB.isCurrentA() ? 0 : 1, isBypassed.load(std::memory_order_acquire));
 }
 
+float FireAudioProcessor::getBandDriveCompensationDb(int bandIndex) const noexcept
+{
+    if (! juce::isPositiveAndBelow(bandIndex, static_cast<int>(bands.size())))
+        return std::numeric_limits<float>::quiet_NaN();
+    const auto* band = bands[static_cast<size_t>(bandIndex)].get();
+    if (band == nullptr || band->mDriveCompensationSequence.load(std::memory_order_acquire) == 0)
+        return std::numeric_limits<float>::quiet_NaN();
+    return band->mDriveCompensationDb.load(std::memory_order_relaxed);
+}
+
+std::uint64_t FireAudioProcessor::getBandDriveCompensationSequence(int bandIndex) const noexcept
+{
+    if (! juce::isPositiveAndBelow(bandIndex, static_cast<int>(bands.size()))) return 0;
+    const auto* band = bands[static_cast<size_t>(bandIndex)].get();
+    return band != nullptr ? band->mDriveCompensationSequence.load(std::memory_order_acquire) : 0;
+}
+
+void FireAudioProcessor::upgradeBandDriveCompensation(int bandIndex)
+{
+    if (! juce::isPositiveAndBelow(bandIndex, 4)) return;
+    beginMultibandTopologyEdit();
+    const juce::ScopeGuard publish { [this] { finishMainStateEdit(false); } };
+    for (const auto& id : {fire::drive_comp::parameterID(bandIndex),
+                          ParameterIDAndName::getIDString(LINKED_ID, bandIndex)})
+        if (auto* parameter = treeState.getParameter(id))
+        {
+            parameter->beginChangeGesture();
+            parameter->setValueNotifyingHost(1.0f);
+            parameter->endChangeGesture();
+        }
+}
+
 void FireAudioProcessor::setLoudnessMatchEnabled(bool enabled)
 {
     loudnessMatch.setEnabled(enabled, stateAB.isCurrentA() ? 0 : 1);
@@ -3473,6 +3565,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
             band->biasSmoother.setCurrentAndTargetValue(loadCachedParameter(parameters.bias));
 
             const float initialOutput = loadCachedParameter(parameters.linked) > 0.5f
+                                            && loadCachedParameter(parameters.modernDriveComp) < 0.5f
                                             ? -0.1f * loadCachedParameter(parameters.drive)
                                             : loadCachedParameter(parameters.output);
             band->gain.setRampDurationSeconds(0.0);
@@ -5379,6 +5472,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("insertEffectsSchemaVersion", 1);
     xmlState.setAttribute("modulationEffectsSchemaVersion", fire::modulation_fx::schemaVersion);
     xmlState.setAttribute("resonatorSchemaVersion", fire::resonator_params::schemaVersion);
+    xmlState.setAttribute("driveCompSchemaVersion", fire::drive_comp::schemaVersion);
     xmlState.setAttribute("moduleOrderSchemaVersion", 1);
     xmlState.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xmlState.setAttribute("eqSchemaVersion", 1);
@@ -5558,6 +5652,23 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                     || (value != 0.0 && value != 1.0)) return;
             }
     }
+    int driveCompCount = 0;
+    for (const auto& id : incomingParameterIDs) if (fire::drive_comp::isParameterID(id)) ++driveCompCount;
+    if (xmlState->hasAttribute("driveCompSchemaVersion") || driveCompCount > 0)
+    {
+        int version = fire::drive_comp::schemaVersion;
+        if ((xmlState->hasAttribute("driveCompSchemaVersion")
+             && (! parseStrictNonNegativeIntegerAttribute(*xmlState, "driveCompSchemaVersion", version)
+                 || version != fire::drive_comp::schemaVersion))
+            || driveCompCount != fire::drive_comp::parameterCount) return;
+        for (const auto& child : incomingParameterState)
+            if (fire::drive_comp::isParameterID(child.getProperty("id").toString()))
+            {
+                double value = 0;
+                if (! parseStrictFiniteDouble(child.getProperty("value").toString(), value)
+                    || (value != 0.0 && value != 1.0)) return;
+            }
+    }
     int moduleOrderCount = 0;
     for (const auto& id : incomingParameterIDs) if (fire::module_order::isParameterID(id)) ++moduleOrderCount;
     if (xmlState->hasAttribute("moduleOrderSchemaVersion") || moduleOrderCount > 0)
@@ -5693,7 +5804,8 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 
         auto child = templateChild.createCopy();
         child.setProperty("value",
-                          parameter->convertFrom0to1(parameter->getDefaultValue()),
+                          fire::drive_comp::isParameterID(parameterID) ? 0.0f
+                              : parameter->convertFrom0to1(parameter->getDefaultValue()),
                           nullptr);
         treeToLoad.addChild(child, -1, nullptr);
     }
@@ -6998,6 +7110,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
                 (scope == 0 ? juce::String("Master") : "Band " + juce::String(scope))
                     + " FX " + juce::String(slot + 1) + " Chord Resonator", false));
 
+    for (int band = 0; band < fire::drive_comp::parameterCount; ++band)
+        parameters.push_back(std::make_unique<PBool>(
+            juce::ParameterID {fire::drive_comp::parameterID(band), 10},
+            "Drive Comp Modern " + juce::String(band + 1), true));
+
     return { parameters.begin(), parameters.end() };
 }
 
@@ -7172,6 +7289,7 @@ void FireAudioProcessor::prepareHqCallbackContext(
         params.isBandEnabled = loadCachedParameter(parameters.enabled) > 0.5f;
         params.mode = juce::roundToInt(loadCachedParameter(parameters.mode));
         params.isOutputLinked = loadCachedParameter(parameters.linked) > 0.5f;
+        params.useModernDriveComp = loadCachedParameter(parameters.modernDriveComp) > 0.5f;
         params.isDriveEnabled = loadCachedParameter(parameters.driveEnabled) > 0.5f;
         params.isShapeEnabled = loadCachedParameter(parameters.shapeEnabled) > 0.5f;
         params.isCompEnabled = loadCachedParameter(parameters.compressorEnabled) > 0.5f;
@@ -7242,7 +7360,7 @@ void FireAudioProcessor::prepareHqCallbackContext(
                       params.compMixLfoSourceIndex,
                       parameters.compressorMix);
 
-        if (params.isOutputLinked)
+        if (params.isOutputLinked && ! params.useModernDriveComp)
             params.outputVal.baseValue = -0.1f
                                        * loadCachedParameter(parameters.drive);
 
@@ -9576,6 +9694,10 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
         else if (parameterWithID->paramID.startsWith(SHAPE_BYPASS_ID))
         {
             presetValue = 1.0f;
+        }
+        else if (fire::drive_comp::isParameterID(parameterWithID->paramID))
+        {
+            presetValue = 0.0f; // Missing in an older preset means Legacy Link.
         }
         else
         {

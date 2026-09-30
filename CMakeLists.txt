@@ -114,25 +114,21 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         PROPERTY JUCE_COPY_PLUGIN_AFTER_BUILD
         "${FIRE_COPY_PLUGIN_AFTER_BUILD}")
 
-    # The AU bundle needs a resource signature even when automatic install is
-    # disabled; the linker's binary-only ad-hoc signature is not sufficient.
-    if (TARGET "${PROJECT_NAME}_AU")
-        add_custom_command(TARGET "${PROJECT_NAME}_AU" POST_BUILD
-            COMMAND /usr/bin/codesign --force --deep --sign -
-                "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_AU>"
-            COMMAND /usr/bin/codesign --verify --deep --strict
-                "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_AU>"
-            COMMENT "Signing ${PRODUCT_NAME}.component"
-            VERBATIM)
-    endif ()
-
-    add_custom_command(TARGET "${PROJECT_NAME}_CLAP" POST_BUILD
-        COMMAND /usr/bin/codesign --force --deep --sign -
-            "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_CLAP>"
-        COMMAND /usr/bin/codesign --verify --deep --strict
-            "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_CLAP>"
-        COMMENT "Signing ${PRODUCT_NAME}.clap"
-        VERBATIM)
+    # Sign complete bundles even when automatic install is disabled. The
+    # linker's binary-only signature does not seal AU/CLAP resources, and JUCE
+    # generates VST3 moduleinfo.json after its initial signing step. Seal the
+    # final manifest here so a version change cannot invalidate the VST3 bundle.
+    foreach (FireMacFormat IN ITEMS AU VST3 CLAP)
+        if (TARGET "${PROJECT_NAME}_${FireMacFormat}")
+            add_custom_command(TARGET "${PROJECT_NAME}_${FireMacFormat}" POST_BUILD
+                COMMAND /usr/bin/codesign --force --deep --sign -
+                    "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_${FireMacFormat}>"
+                COMMAND /usr/bin/codesign --verify --deep --strict
+                    "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_${FireMacFormat}>"
+                COMMENT "Signing ${PROJECT_NAME}_${FireMacFormat}"
+                VERBATIM)
+        endif ()
+    endforeach ()
 endif ()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND FIRE_INSTALL_PLUGINS)

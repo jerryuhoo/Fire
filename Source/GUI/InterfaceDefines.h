@@ -14,7 +14,11 @@
 
 #include "FireTheme.h"
 
-#define VERSION                 "1.6.0"
+// CMake supplies VERSION from the root VERSION file; Projucer supplies the
+// generated plug-in version. Keep the UI and updater on the same build value.
+#ifndef VERSION
+ #define VERSION                 JucePlugin_VersionString
+#endif
 #define GITHUB_LINK             "https://github.com/jerryuhoo/Fire"
 #define GITHUB_TAG_LINK         "https://github.com/jerryuhoo/Fire/releases/tag/"
 #define PRESET_EXETENSION       ".fire"

@@ -1,4 +1,4 @@
-# Fire (Version 1.6.0) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://app.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
+# Fire (Version 2.0.0) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://app.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
 
 ![Alt text](Fire1.png?raw=true "Title")
 
@@ -315,6 +315,20 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 5.4. [SimpleEQ](https://github.com/matkatmusic/SimpleEQ) by matkatmusic
 
 ## 6. Update Notes
+
+### 2.0.0 (unreleased)
+
+- Add reorderable band and master effect chains with Chorus, Delay, Reverb,
+  Clouds Granular, Lo-Fi, Flanger, Phaser and Chord Resonator, plus band OTT.
+- Add an interactive EQ with up to 12 nodes and a scrollable bank of up to
+  16 LFOs, with updated modulation controls and signal-driven visuals.
+- Separate Drive compensation from Output in new states while preserving
+  legacy Link behaviour when loading older presets and host projects.
+- Harden state restoration, automation transitions, host bypass, oversized
+  audio callbacks and non-finite input handling; update to pinned JUCE 9.0.2.
+- Keep UI, updater and plug-in metadata on the build's version, and validate
+  release tags and macOS bundle signatures before packaging. Stable tags create
+  normal GitHub releases; tags containing a prerelease suffix remain prereleases.
 
 ### 2025-10-18 (version 1.5.0)
 

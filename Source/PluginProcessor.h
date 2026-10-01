@@ -42,6 +42,8 @@
 #include <functional>
 #endif
 
+namespace fire::state { class EditHistory; }
+
 
 //==============================================================================
 // A struct to encapsulate all DSP modules for a single band.
@@ -410,6 +412,12 @@ public:
     //==============================================================================
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
+
+    bool canUndoEdit() const noexcept;
+    bool canRedoEdit() const noexcept;
+    bool undoEdit();
+    bool redoEdit();
+    void checkpointEditHistory() noexcept;
 
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
@@ -834,6 +842,7 @@ private:
     bool hasActiveFilterModulation() const noexcept;
     bool isLegacyEqNodeActive(int slot) const noexcept;
     void finishMainStateEdit(bool resetDsp) noexcept;
+    std::unique_ptr<fire::state::EditHistory> editHistory;
     void prepareAudioCallbackParameterSnapshot(
         std::uint32_t publicationSequence,
         AudioCallbackParameterSnapshot& snapshot) const;

@@ -1091,6 +1091,7 @@ std::uint64_t LfoManager::advanceModulationRoutingRevisionLocked() noexcept
 {
     ++modulationRoutingRevision;
     updatePublishedRoutingState();
+    if (onStateEdited) onStateEdited();
     return modulationRoutingRevision;
 }
 
@@ -1361,6 +1362,7 @@ std::uint64_t LfoManager::setLfoData(int index, const LfoData& newData)
     }
 
     lfoData[lfoIndex] = std::move(safeData);
+    if (shapeChanged && onStateEdited) onStateEdited();
     return lfoDataRevisions[lfoIndex];
 }
 
@@ -1401,6 +1403,7 @@ bool LfoManager::setLfoDataIfRevisionMatches(
 
     lfoData[lfoIndex] = std::move(safeData);
     resultingRevision = lfoDataRevisions[lfoIndex];
+    if (shapeChanged && onStateEdited) onStateEdited();
     return true;
 }
 

@@ -23,6 +23,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <functional>
 
 class LfoManager
 {
@@ -38,6 +39,7 @@ public:
     };
 
     LfoManager(juce::AudioProcessorValueTreeState& apvts);
+    std::function<void()> onStateEdited;
 
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();

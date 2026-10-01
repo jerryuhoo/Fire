@@ -11,6 +11,7 @@
 #include "DSP/DistortionLogic.h"
 #include "PluginEditor.h"
 #include "Utility/StrictNumberParser.h"
+#include "Utility/EditHistory.h"
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -3061,13 +3062,61 @@ FireAudioProcessor::FireAudioProcessor()
     highcutFreqSmoother.setCurrentAndTargetValue(chainSettings.highCutFreq);
     highcutGainSmoother.setCurrentAndTargetValue(chainSettings.highCutGainInDecibels);
     highcutQualitySmoother.setCurrentAndTargetValue(chainSettings.highCutQuality);
+    editHistory = std::make_unique<fire::state::EditHistory>(*this,
+        [this]
+        {
+            juce::MemoryBlock snapshot;
+            getStateInformation(snapshot);
+            return snapshot;
+        },
+        [this](const juce::MemoryBlock& snapshot)
+        {
+            auto xml = getXmlFromBinary(snapshot.getData(), static_cast<int>(snapshot.getSize()));
+            if (xml == nullptr) return;
+            if (auto* other = xml->getChildByName("otherState"))
+            {
+                const auto size = getSavedEditorSize();
+                other->setAttribute("editorWidth", size.width);
+                other->setAttribute("editorHeight", size.height);
+            }
+            juce::MemoryBlock restored;
+            copyXmlToBinary(*xml, restored);
+            setStateInformation(restored.getData(), static_cast<int>(restored.getSize()));
+        });
+    lfoManager->onStateEdited = [this] { if (editHistory) editHistory->changed(); };
     startTimerHz(30);
 }
 
 FireAudioProcessor::~FireAudioProcessor()
 {
     stopTimer();
+    lfoManager->onStateEdited = {};
+    editHistory.reset();
 }
+
+bool FireAudioProcessor::canUndoEdit() const noexcept { return editHistory && editHistory->canUndo(); }
+bool FireAudioProcessor::canRedoEdit() const noexcept { return editHistory && editHistory->canRedo(); }
+bool FireAudioProcessor::undoEdit()
+{
+    const bool changed = editHistory && editHistory->undo();
+    if (changed)
+    {
+        editHistory->ignoreNextHostDisplayChange();
+        updateHostDisplay(juce::AudioProcessorListener::ChangeDetails{}.withNonParameterStateChanged(true));
+    }
+    return changed; // The host notification may destroy the processor.
+}
+bool FireAudioProcessor::redoEdit()
+{
+    const bool changed = editHistory && editHistory->redo();
+    if (changed)
+    {
+        editHistory->ignoreNextHostDisplayChange();
+        updateHostDisplay(juce::AudioProcessorListener::ChangeDetails{}.withNonParameterStateChanged(true));
+    }
+    return changed;
+}
+void FireAudioProcessor::checkpointEditHistory() noexcept { if (editHistory) editHistory->checkpoint(); }
 
 //==============================================================================
 const juce::String FireAudioProcessor::getName() const
@@ -4377,6 +4426,7 @@ bool FireAudioProcessor::deleteMultibandBandLocked(int deletedBandIndex,
 
 void FireAudioProcessor::beginMultibandTopologyEdit()
 {
+    if (editHistory) editHistory->beginGroup();
     // Keep one recursive writer-lock level alive until the matching publish.
     // This serialises editor, preset and host-state writers without ever
     // involving the audio thread. Nested edits on the same thread coalesce
@@ -4501,6 +4551,7 @@ void FireAudioProcessor::finishMainStateEdit(bool resetDsp) noexcept
 
         multibandTopologyWriterLock.exit();
         multibandTopologyWriterLock.exit();
+        if (editHistory) editHistory->endGroup();
         return;
     }
 
@@ -4939,6 +4990,7 @@ void FireAudioProcessor::publishLatencyToHost()
 
 void FireAudioProcessor::timerCallback()
 {
+    if (editHistory) editHistory->poll();
     // setLatencySamples synchronously notifies the host, so keep it on the
     // message thread. The prepared maximum is invariant across HQ automation.
     if (getLatencySamples() != juce::roundToInt(totalLatency.load(std::memory_order_acquire)))
@@ -6051,6 +6103,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         // throws, so no failed restore can strand the generation odd or retain
         // the recursive writer lock indefinitely.
     }
+    if (editHistory) editHistory->requestReset();
     sendChangeMessage();
 }
 

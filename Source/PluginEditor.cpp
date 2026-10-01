@@ -74,6 +74,16 @@ void FireAudioProcessorEditor::UpdateCheckThread::stop()
 }
 
 //==============================================================================
+bool FireAudioProcessorEditor::keyPressed(const juce::KeyPress& key)
+{
+    if (! key.getModifiers().isCommandDown() && ! key.getModifiers().isCtrlDown()) return false;
+    const auto character = juce::CharacterFunctions::toLowerCase(key.getTextCharacter());
+    if (character == 'z')
+        return key.getModifiers().isShiftDown() ? processor.redoEdit() : processor.undoEdit();
+    if (character == 'y') return processor.redoEdit();
+    return false;
+}
+
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     : AudioProcessorEditor(&p),
       processor(p),

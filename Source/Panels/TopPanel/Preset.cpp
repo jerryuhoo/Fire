@@ -3405,6 +3405,10 @@ namespace state
 
         auto resultHandler = createPresetMenuResultHandler();
         presetMenu.clear();
+        auto& processor = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());
+        presetMenu.addItem(7, "Undo", processor.canUndoEdit());
+        presetMenu.addItem(8, "Redo", processor.canRedoEdit());
+        presetMenu.addSeparator();
         presetMenu.addItem(1, "Init", true);
         presetMenu.addItem(2, "Open Preset Folder", true);
         presetMenu.addItem(3, "Rescan Preset Folder", true);
@@ -3465,6 +3469,12 @@ namespace state
 
     void StateComponent::handlePresetMenuResult(int result)
     {
+        if (result == 7 || result == 8)
+        {
+            auto& processor = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());
+            if (result == 7) processor.undoEdit(); else processor.redoEdit();
+            return;
+        }
         if (result == 1)
         {
             const juce::Component::SafePointer<StateComponent> safeThis(this);

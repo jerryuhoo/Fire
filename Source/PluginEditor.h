@@ -122,6 +122,7 @@ public:
     void timerCallback() override;
     void handleAsyncUpdate() override;
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+    bool keyPressed(const juce::KeyPress& key) override;
 
     void showValuePopupForSlider(ModulatableSlider* slider);
     void updateValuePopupForSlider(ModulatableSlider* slider);

@@ -109,6 +109,7 @@
               file="Source/Utility/StrictNumberParser.h"/>
         <FILE id="iNAOxz" name="VersionInfo.cpp" compile="1" resource="0" file="Source/Utility/VersionInfo.cpp"/>
         <FILE id="hyj9JI" name="VersionInfo.h" compile="0" resource="0" file="Source/Utility/VersionInfo.h"/>
+        <FILE id="editHist01" name="EditHistory.h" compile="0" resource="0" file="Source/Utility/EditHistory.h"/>
       </GROUP>
       <GROUP id="{A397A229-19FD-F110-6940-6CC5C037D4D0}" name="GUI">
         <FILE id="fireIcon1" name="FireIcons.h" compile="0" resource="0" file="Source/GUI/FireIcons.h"/>

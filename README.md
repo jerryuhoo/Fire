@@ -180,6 +180,12 @@ Builds/Fire_artefacts/Release/
 
 ### 3.1. Top panel
 
+- **Undo / Redo**: The header menu and Cmd/Ctrl-Z, Cmd/Ctrl-Shift-Z or Ctrl-Y
+  restore sound edits, including complete knob gestures, LFO curves/routings,
+  EQ nodes and effect-chain changes. History stays in the processor when the
+  editor is closed. Loading a DAW project starts a fresh history; audio-thread
+  automation does not create history entries. Up to 100 edits are retained,
+  within a 64 MiB snapshot budget. Undo keeps the current editor size.
 - **HQ**: 4x oversampling for high quality audio.
 - **A/B**: Switch between A/B to compare.
 - **Copy**: Copy current preset parameters to another (A/B) panel.

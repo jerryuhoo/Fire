@@ -280,6 +280,20 @@ The main LFO display allows you to create complex modulation shapes. It has two 
 
 #### Modulation Matrix
 
+- **Envelope / Macros**: Open these controls from the matrix header. Envelope
+  follows the raw plug-in input's linked stereo energy, with Attack, Release and
+  Sensitivity controls and a live level display. Opposite-polarity stereo input
+  does not cancel the detector. Choose **Envelope** as a routing source to make
+  Drive, filters, effects or Mix react to the incoming performance.
+- **Macro 1–4**: Four automatable 0–100% controls can each drive several
+  destinations. Choose a macro in each matrix row, then set its depth and
+  polarity. Their values ramp over 20 ms. Factory scenes preassign them to
+  intensity, width, tone/space and dry blend; descriptions explain the scene.
+  Source badges show **ENV** or **M1–M4**. These controls remain available with
+  an empty LFO bank and are saved in sound presets, A/B and DAW projects.
+  The seven added parameters use AU version hint 11, after every historical
+  parameter; older states load neutral macros. Source configuration controls
+  cannot be modulation destinations, preventing recursive source routes.
 - **Matrix Button**: Opens the Modulation Matrix window, where you can assign LFOs to control plugin parameters.
 - **Assign Button**: Engages "Assign Mode." While active, the next parameter you click in the plugin will be automatically assigned to the currently selected LFO.
 

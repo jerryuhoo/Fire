@@ -175,7 +175,7 @@ TEST_CASE("New LFO bank presets reject missing slots family data and out of rang
         auto* routings = corrupt.getChildByName("MODULATION_STATE");
         REQUIRE(routings != nullptr);
         REQUIRE(routings->getChildElement(0) != nullptr);
-        routings->getChildElement(0)->setAttribute("source", fire::lfo_bank::capacity);
+        routings->getChildElement(0)->setAttribute("source", fire::mod_sources::sourceCount);
     }
     SECTION("future bank schema")
     {
@@ -220,7 +220,7 @@ TEST_CASE("Matrix sources expose present slots and reject removed recreated menu
     show(panel);
     auto* combo = findWithID<ModulationMatrixRoutingComboBox>(panel, "matrix_source");
     REQUIRE(combo != nullptr);
-    CHECK(combo->getNumItems() == 15);
+    CHECK(combo->getNumItems() == 20);
     CHECK(combo->indexOfItemId(2) == -1);
     CHECK(combo->indexOfItemId(16) >= 0);
     auto stale = LfoBankUiTestAccess::sourceHandler(*combo);
@@ -244,7 +244,7 @@ TEST_CASE("Matrix sources expose present slots and reject removed recreated menu
         REQUIRE(processor.removeLfo(slot));
     auto* add = findWithID<juce::Button>(panel, "matrix_add_route");
     REQUIRE(add != nullptr);
-    waitFor([&] { return ! add->isEnabled(); });
+    waitFor([&] { return !panel.isUiRebuildPending() && add->isEnabled(); });
     CHECK(findWithID<ModulationMatrixRoutingComboBox>(panel, "matrix_source") == nullptr);
 }
 

@@ -1602,7 +1602,7 @@ TEST_CASE("Modulation overlays follow the assigned LFO bank palette",
 
     slider.lfoSource = 0;
     const auto unassignedFingerprint = renderFingerprint(slider);
-    slider.lfoSource = fire::ui::lfoBankCount + 1;
+    slider.lfoSource = fire::mod_sources::sourceCount + 1;
     CHECK(renderFingerprint(slider) == unassignedFingerprint);
     slider.setLookAndFeel(nullptr);
 }

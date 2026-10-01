@@ -44,6 +44,8 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
         "1/64", "1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/8", "1/4T", "1/4", "1/2T", "1/2", "1 Bar", "2 Bars", "4 Bars"
     };
 
+    for (size_t index = 0; index < auxiliaryParameters.size(); ++index)
+        auxiliaryParameters[index] = treeState.getRawParameterValue(fire::mod_sources::ids[index]);
     for (int i = 0; i < fire::lfo_bank::defaultCount; ++i)
         modulationRoutings.add({});
 
@@ -88,12 +90,15 @@ void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
     // Keep the prepared capacity. Smaller blocks no longer resize this buffer on the audio thread.
     const auto safeMaximumBlockSize = static_cast<int>(juce::jmin<uint64_t>(
         spec.maximumBlockSize, static_cast<uint64_t>(std::numeric_limits<int>::max())));
-    lfoOutputBuffer.setSize(fire::lfo_bank::capacity, juce::jmax(1, safeMaximumBlockSize), false, true, false);
+    lfoOutputBuffer.setSize(fire::mod_sources::sourceCount, juce::jmax(1, safeMaximumBlockSize), false, true, false);
+    auxiliary.prepare(preparedSampleRate);
     publishVisualState(nullptr);
 }
 
 void LfoManager::reset()
 {
+    auxiliary.reset();
+    for (auto& level : auxiliaryLevels) level.store(0, std::memory_order_relaxed);
     for (auto& engine : lfoEngines)
     {
         engine.reset();
@@ -154,7 +159,7 @@ bool LfoManager::isModulationActive() const
     if (lock.isLocked())
     {
         for (const auto& routing : modulationRoutings)
-            if (routing.targetParameterID.isNotEmpty() && isLfoPresent(routing.sourceLfoIndex))
+            if (routing.targetParameterID.isNotEmpty() && isModulationSourcePresent(routing.sourceLfoIndex))
                 return true;
 
         return false;
@@ -226,6 +231,8 @@ LfoManager::captureAudioThreadParameterSnapshot() const noexcept
         destination.generation = slotGenerations[index].load(std::memory_order_relaxed);
     }
 
+    for (size_t index = 0; index < auxiliaryParameters.size(); ++index)
+        snapshot.auxiliary[index] = loadParameter(auxiliaryParameters[index], fire::mod_sources::defaults[index]);
     return snapshot;
 }
 
@@ -294,7 +301,8 @@ void LfoManager::renderBlock(
         return;
     }
 
-    std::array<float, fire::lfo_bank::capacity> firstLfoValues {};
+    auxiliary.setParameters(parameterSnapshot.auxiliary);
+    std::array<float, fire::mod_sources::sourceCount> firstLfoValues {};
     const int channelsToCopy = juce::jmin(outputBuffer.getNumChannels(),
                                           lfoOutputBuffer.getNumChannels());
     int sampleOffset = 0;
@@ -311,6 +319,20 @@ void LfoManager::renderBlock(
                           samplesInRange,
                           parameterSnapshot,
                           playheadSampleOffset + sampleOffset);
+
+        for (int sample = 0; sample < samplesInRange; ++sample)
+        {
+            const auto inputSample = sampleOffset + sample;
+            const bool available = audioInput && audioInput->getNumChannels() > 0 && inputSample < audioInput->getNumSamples();
+            const bool stereo = available && audioInput->getNumChannels() > 1;
+            const auto values = auxiliary.next(available ? audioInput->getSample(0, inputSample) : 0,
+                stereo ? audioInput->getSample(1, inputSample) : 0, stereo);
+            for (size_t index = 0; index < values.size(); ++index)
+            {
+                lfoOutputBuffer.setSample(fire::mod_sources::envelope + static_cast<int>(index), sample, values[index]);
+                if (sample + 1 == samplesInRange) auxiliaryLevels[index].store(values[index], std::memory_order_relaxed);
+            }
+        }
 
         if (sampleOffset == 0)
             for (size_t channel = 0; channel < firstLfoValues.size(); ++channel)
@@ -334,8 +356,9 @@ void LfoManager::renderBlock(
     for (size_t routingIndex = 0; routingIndex < runtimeRoutingCount; ++routingIndex)
     {
         const auto& routing = runtimeRoutings[routingIndex];
-        if (routing.parameter == nullptr || ! fire::lfo_bank::validIndex(routing.sourceLfoIndex)
-            || ! parameterSnapshot.lfos[static_cast<size_t>(routing.sourceLfoIndex)].present)
+        if (routing.parameter == nullptr || ! fire::mod_sources::validSource(routing.sourceLfoIndex)
+            || (fire::lfo_bank::validIndex(routing.sourceLfoIndex)
+                && ! parameterSnapshot.lfos[static_cast<size_t>(routing.sourceLfoIndex)].present))
             continue;
 
         // Use the first sample of the LFO output as the representative value for the whole block.
@@ -533,12 +556,12 @@ bool LfoManager::captureRuntimeRoutings(
 
     for (const auto& routing : modulationRoutings)
     {
-        if (routing.targetParameterID.isEmpty() || ! isLfoPresent(routing.sourceLfoIndex))
+        if (routing.targetParameterID.isEmpty() || ! isModulationSourcePresent(routing.sourceLfoIndex))
             continue;
 
         hasAnyRouting = true;
         if (routing.isBypassed
-            || ! fire::lfo_bank::validIndex(routing.sourceLfoIndex)
+            || ! fire::mod_sources::validSource(routing.sourceLfoIndex)
             || destinationCount >= destination.size())
         {
             continue;
@@ -591,7 +614,7 @@ void LfoManager::updatePublishedRoutingState() noexcept
     bool hasAnyRouting = false;
     for (const auto& routing : modulationRoutings)
     {
-        if (routing.targetParameterID.isNotEmpty() && isLfoPresent(routing.sourceLfoIndex))
+        if (routing.targetParameterID.isNotEmpty() && isModulationSourcePresent(routing.sourceLfoIndex))
         {
             hasAnyRouting = true;
             break;
@@ -990,13 +1013,14 @@ LfoManager::assignModulationRoutingIfRevisionMatches(
     const juce::String& targetParameterID)
 {
     if (targetParameterID.isNotEmpty()
-        && (! fire::lfo_bank::validIndex(sourceLfoIndex)
+        && (! fire::mod_sources::validSource(sourceLfoIndex)
             || treeState.getParameter(targetParameterID) == nullptr))
         return {};
 
-    const int safeSourceIndex = juce::jlimit(0, fire::lfo_bank::capacity - 1, sourceLfoIndex);
+    const int safeSourceIndex = juce::jlimit(0, fire::mod_sources::sourceCount - 1, sourceLfoIndex);
+    if (fire::mod_sources::isParameterID(targetParameterID)) return {};
     const juce::ScopedLock lock(dataAccessLock);
-    if (targetParameterID.isNotEmpty() && ! isLfoPresent(safeSourceIndex)) return {};
+    if (targetParameterID.isNotEmpty() && ! isModulationSourcePresent(safeSourceIndex)) return {};
     ModulationRoutingEditResult result;
     result.revision = modulationRoutingRevision;
     if (modulationRoutingRevision != expectedRevision
@@ -1026,6 +1050,7 @@ LfoManager::assignModulationRoutingIfRevisionMatches(
     if (currentRouting.sourceLfoIndex != safeSourceIndex)
     {
         currentRouting.sourceLfoIndex = safeSourceIndex;
+        if (fire::mod_sources::isAuxiliary(safeSourceIndex)) currentRouting.isBipolar = false;
         result.changed = true;
     }
     if (currentRouting.targetParameterID != targetParameterID)
@@ -1189,6 +1214,8 @@ bool LfoManager::isLfoDataRevisionCurrent(
 
 float LfoManager::getLfoOutput(int lfoIndex) const
 {
+    if (fire::mod_sources::isAuxiliary(lfoIndex))
+        return auxiliaryLevels[static_cast<size_t>(lfoIndex - fire::mod_sources::envelope)].load(std::memory_order_relaxed);
     if (juce::isPositiveAndBelow(lfoIndex, (int) lfoEngines.size()))
     {
         return lfoEngines[static_cast<size_t>(lfoIndex)].getLastOutput();
@@ -1202,14 +1229,15 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
     int sourceLfoIndex,
     const juce::String& targetParameterID)
 {
-    if (! fire::lfo_bank::validIndex(sourceLfoIndex) || targetParameterID.isEmpty())
+    if (! fire::mod_sources::validSource(sourceLfoIndex) || targetParameterID.isEmpty()
+        || fire::mod_sources::isParameterID(targetParameterID))
     {
         jassertfalse;
         return AssignmentResult::invalidRequest;
     }
 
     const juce::ScopedLock sl(dataAccessLock);
-    if (! isLfoPresent(sourceLfoIndex)) return AssignmentResult::invalidRequest;
+    if (! isModulationSourcePresent(sourceLfoIndex)) return AssignmentResult::invalidRequest;
     // 1. First, check if the target parameter is already being modulated.
     //    If so, just update its LFO source.
     for (auto& routing : modulationRoutings)
@@ -1219,6 +1247,7 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
             if (routing.sourceLfoIndex != sourceLfoIndex)
             {
                 routing.sourceLfoIndex = sourceLfoIndex;
+                if (fire::mod_sources::isAuxiliary(sourceLfoIndex)) routing.isBipolar = false;
                 advanceModulationRoutingRevisionLocked();
                 return AssignmentResult::changed;
             }
@@ -1232,6 +1261,7 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
         if (routing.targetParameterID.isEmpty())
         {
             routing.sourceLfoIndex = sourceLfoIndex;
+            if (fire::mod_sources::isAuxiliary(sourceLfoIndex)) routing.isBipolar = false;
             routing.targetParameterID = targetParameterID;
             if (juce::approximatelyEqual(routing.depth, 0.0f))
                 routing.depth = 0.5f; // Set a sensible default depth.
@@ -1253,6 +1283,7 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
 
     // Step 3: Configure the new routing slot.
     newRouting.sourceLfoIndex = sourceLfoIndex;
+    if (fire::mod_sources::isAuxiliary(sourceLfoIndex)) newRouting.isBipolar = false;
     newRouting.targetParameterID = targetParameterID;
     newRouting.depth = 0.5f; // Set a sensible default depth.
     advanceModulationRoutingRevisionLocked();

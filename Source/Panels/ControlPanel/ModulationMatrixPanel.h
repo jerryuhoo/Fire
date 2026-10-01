@@ -308,6 +308,8 @@ private:
     ModulationMatrixHeader header;
     std::vector<std::unique_ptr<ModulationMatrixRow>> rows;
     ModulationMatrixPrimaryButton addButton { "Add routing" };
+    ModulationMatrixPrimaryButton sourceControlsButton { "Envelope / Macros" };
+    juce::Component::SafePointer<juce::DialogWindow> sourceControlsDialog;
 
     juce::Viewport viewport;
     juce::Component contentComponent;

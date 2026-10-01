@@ -1148,8 +1148,8 @@ private:
         bounds = bounds.reduced(margin);
         const auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
         const auto centre = bounds.getCentre();
-        const auto hasValidSource = isValidLfoSourceNumber(slider.lfoSource);
-        const auto bankAccent = lfoBankColourForSource(slider.lfoSource);
+        const auto hasValidSource = isValidModulationSourceNumber(slider.lfoSource);
+        const auto bankAccent = modulationSourceColourForSource(slider.lfoSource);
         const auto modulationAccent = slider.isBypassed
                                           ? bankAccent.interpolatedWith(
                                                 colours::disabled, 0.68f)
@@ -1278,7 +1278,7 @@ private:
                                                             ? 0.96f
                                                             : 0.72f));
             g.setFont(fire::ui::labelFont(juce::jmax(7.0f, handle.getHeight() * 0.48f)));
-            g.drawText(hasValidSource ? juce::String(slider.lfoSource) : "?",
+            g.drawText(hasValidSource ? fire::mod_sources::badge(slider.lfoSource - 1) : "?",
                        handle,
                        juce::Justification::centred);
         }

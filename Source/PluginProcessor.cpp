@@ -308,6 +308,7 @@ bool isValidVersionedHostRoutingState(
         // semantic routing and may repeat, but all populated targets must be
         // known and unique.
         const auto target = routing->getStringAttribute("target");
+        if (fire::mod_sources::isParameterID(target)) return false;
         if (target.isEmpty())
             continue;
         if (parameterState.getParameter(target) == nullptr
@@ -3691,7 +3692,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     mWetBuffer.clear();
     hostBypassWetBuffer.setSize(outputChannels, maximumBlockSize);
     hostBypassWetBuffer.clear();
-    lfoOutputBuffer.setSize(fire::lfo_bank::capacity, maximumBlockSize);
+    lfoOutputBuffer.setSize(fire::mod_sources::sourceCount, maximumBlockSize);
     lfoOutputBuffer.clear();
     lofiDryBuffer.setSize(outputChannels, maximumBlockSize);
     lofiDryBuffer.clear();
@@ -5300,7 +5301,7 @@ void FireAudioProcessor::processWetBlock(
         multibandTopologyResetGeneration.load(std::memory_order_acquire);
     lastAudioCallbackGenerationAtStart = topologySequenceAtCallbackStart;
 
-    lfoOutputBuffer.setSize(fire::lfo_bank::capacity, numSamples, false, false, true);
+    lfoOutputBuffer.setSize(fire::mod_sources::sourceCount, numSamples, false, false, true);
     lfoOutputBuffer.clear();
 
     // Routes, staged shapes and every scalar DSP recipe are selected under
@@ -5327,6 +5328,8 @@ void FireAudioProcessor::processWetBlock(
     lfoManager->finishAudioThreadStateCapture(capturedStableCallbackState);
     lfoCaptureNeedsAbort = false;
 
+    lfoManager->setAudioInput(&buffer);
+    const juce::ScopeGuard clearModulationInput{[this] { lfoManager->setAudioInput(nullptr); }};
     lfoManager->processBlock(
         lfoOutputBuffer,
         static_cast<float>(sampleRate),
@@ -5584,6 +5587,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("modulationEffectsSchemaVersion", fire::modulation_fx::schemaVersion);
     xmlState.setAttribute("resonatorSchemaVersion", fire::resonator_params::schemaVersion);
     xmlState.setAttribute("driveCompSchemaVersion", fire::drive_comp::schemaVersion);
+    xmlState.setAttribute("modulationSourcesSchemaVersion", fire::mod_sources::schemaVersion);
     xmlState.setAttribute("moduleOrderSchemaVersion", 1);
     xmlState.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xmlState.setAttribute("eqSchemaVersion", 1);
@@ -5784,6 +5788,17 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             }
     }
     int moduleOrderCount = 0;
+    int auxiliaryCount = 0;
+    for (const auto& id : incomingParameterIDs) if (fire::mod_sources::isParameterID(id)) ++auxiliaryCount;
+    const bool hasAuxiliaryState = xmlState->hasAttribute("modulationSourcesSchemaVersion") || auxiliaryCount > 0;
+    if (hasAuxiliaryState)
+    {
+        int version = 0;
+        if (auxiliaryCount != fire::mod_sources::parameterCount
+            || (xmlState->hasAttribute("modulationSourcesSchemaVersion")
+                && (!parseStrictNonNegativeIntegerAttribute(*xmlState, "modulationSourcesSchemaVersion", version)
+                    || version != fire::mod_sources::schemaVersion))) return;
+    }
     for (const auto& id : incomingParameterIDs) if (fire::module_order::isParameterID(id)) ++moduleOrderCount;
     if (xmlState->hasAttribute("moduleOrderSchemaVersion") || moduleOrderCount > 0)
     {
@@ -5855,7 +5870,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                                               "MODULATION_STATE") != 1
             || ! isValidVersionedHostLfoState(*versionedLfoState, lfoCountInState)
             || ! isValidVersionedHostRoutingState(*versionedRoutingState,
-                                                  treeState, lfoCountInState)
+                                                  treeState, hasAuxiliaryState ? fire::mod_sources::sourceCount : lfoCountInState)
             || xmlState->getChildByName("AB_STATE") == nullptr)
         {
             return;
@@ -6097,8 +6112,10 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 continue;
 
             auto routing = ModulationRouting::readFromXml(*routingXml);
+            if (!hasAuxiliaryState) routing.sourceLfoIndex = juce::jmin(routing.sourceLfoIndex, fire::lfo_bank::capacity - 1);
             if (routing.targetParameterID.isEmpty()
                 || treeState.getParameter(routing.targetParameterID) == nullptr
+                || fire::mod_sources::isParameterID(routing.targetParameterID)
                 || migratedCloudsRoutingTargets.contains(routing.targetParameterID)
                 || loadedRoutingTargets.contains(routing.targetParameterID))
                 continue;
@@ -7231,6 +7248,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
             juce::ParameterID {fire::drive_comp::parameterID(band), 10},
             "Drive Comp Modern " + juce::String(band + 1), true));
 
+    for (int index = 0; index < fire::mod_sources::parameterCount; ++index)
+    {
+        const auto i = static_cast<size_t>(index);
+        const auto name = index == 0 ? juce::String("Envelope Attack") : index == 1 ? juce::String("Envelope Release")
+            : index == 2 ? juce::String("Envelope Sensitivity") : "Macro " + juce::String(index - 2);
+        parameters.push_back(std::make_unique<PFloat>(juce::ParameterID{fire::mod_sources::ids[i], 11}, name,
+            juce::NormalisableRange<float>(fire::mod_sources::minimums[i], fire::mod_sources::maximums[i],
+                index < 2 ? 0.1f : index == 2 ? 0.1f : 0.001f, index < 2 ? 0.35f : 1.0f), fire::mod_sources::defaults[i]));
+    }
     return { parameters.begin(), parameters.end() };
 }
 
@@ -9243,7 +9269,7 @@ FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParam
     {
         if (routing.targetParameterID == parameterID)
         {
-            if (isLfoPresent(routing.sourceLfoIndex))
+            if (isModulationSourcePresent(routing.sourceLfoIndex))
             {
                 const float unipolarLfoValue = lfoManager->getLfoOutput(routing.sourceLfoIndex);
                 float finalLfoValue = routing.isBipolar ? (unipolarLfoValue * 2.0f - 1.0f) : unipolarLfoValue;

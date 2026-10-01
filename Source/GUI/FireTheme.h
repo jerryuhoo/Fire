@@ -17,6 +17,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "BrandMarks.h"
 #include "../Utility/LfoBankParameters.h"
+#include "../Utility/ModulationSources.h"
 #include <array>
 #include <cmath>
 #include <initializer_list>
@@ -116,6 +117,18 @@ inline juce::Colour lfoBankColourForSource(int oneBasedSource) noexcept
 
     return lfoBankColour(oneBasedSource - 1);
 }
+
+inline bool isValidModulationSourceNumber(int source) noexcept
+{ return source > 0 && source <= fire::mod_sources::sourceCount; }
+inline juce::Colour modulationSourceColour(int index) noexcept
+{
+    if (index == fire::mod_sources::envelope) return colours::flame;
+    if (index >= fire::mod_sources::firstMacro && index < fire::mod_sources::sourceCount)
+        return lfoBankColours[static_cast<size_t>(index - fire::mod_sources::firstMacro + 4)];
+    return lfoBankColour(index);
+}
+inline juce::Colour modulationSourceColourForSource(int source) noexcept
+{ return isValidModulationSourceNumber(source) ? modulationSourceColour(source - 1) : colours::disabled; }
 
 struct Metrics
 {

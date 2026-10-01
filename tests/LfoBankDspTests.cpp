@@ -341,7 +341,7 @@ TEST_CASE("Incomplete LFO bank host extensions and out of range sources are reje
         }
         if (variant == 2)
             for (auto* routing : invalid.getChildByName("MODULATION_STATE")->getChildIterator())
-                if (routing->getStringAttribute("target") == "drive1") routing->setAttribute("source", 16);
+                if (routing->getStringAttribute("target") == "drive1") routing->setAttribute("source", fire::mod_sources::sourceCount);
         restore(restored, invalid);
         CAPTURE(variant);
         CHECK(restored.treeState.getRawParameterValue("drive1")->load() == Catch::Approx(77));

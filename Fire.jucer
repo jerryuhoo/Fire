@@ -112,11 +112,13 @@
         <FILE id="editHist01" name="EditHistory.h" compile="0" resource="0" file="Source/Utility/EditHistory.h"/>
         <FILE id="frozenState01" name="FrozenAudioState.h" compile="0" resource="0" file="Source/Utility/FrozenAudioState.h"/>
         <FILE id="factoryPreset01" name="FactoryPresets.h" compile="0" resource="0" file="Source/Utility/FactoryPresets.h"/>
+        <FILE id="modSourceParams01" name="ModulationSources.h" compile="0" resource="0" file="Source/Utility/ModulationSources.h"/>
       </GROUP>
       <GROUP id="{A397A229-19FD-F110-6940-6CC5C037D4D0}" name="GUI">
         <FILE id="fireIcon1" name="FireIcons.h" compile="0" resource="0" file="Source/GUI/FireIcons.h"/>
         <FILE id="brandMarks" name="BrandMarks.h" compile="0" resource="0" file="Source/GUI/BrandMarks.h"/>
         <FILE id="logoMotion" name="FireLogoMotion.h" compile="0" resource="0" file="Source/GUI/FireLogoMotion.h"/>
+        <FILE id="modSourceUi01" name="ModulationSourceControls.h" compile="0" resource="0" file="Source/GUI/ModulationSourceControls.h"/>
         <FILE id="eqUI1" name="EqControlsPanel.h" compile="0" resource="0" file="Source/GUI/EqControlsPanel.h"/>
         <FILE id="ottVis1" name="OttVisuals.h" compile="0" resource="0" file="Source/GUI/OttVisuals.h"/>
         <FILE id="moduleDrag" name="ModuleDragButton.h" compile="0" resource="0" file="Source/GUI/ModuleDragButton.h"/>
@@ -169,6 +171,7 @@
         </GROUP>
         <FILE id="lmDsp1" name="LoudnessMatcher.h" compile="0" resource="0"
               file="Source/DSP/LoudnessMatcher.h"/>
+        <FILE id="auxModDsp01" name="AuxiliaryModulation.h" compile="0" resource="0" file="Source/DSP/AuxiliaryModulation.h"/>
         <FILE id="lmDsp2" name="LoudnessMatchState.h" compile="0" resource="0"
               file="Source/DSP/LoudnessMatchState.h"/>
         <FILE id="kfZ8qg" name="ClippingFunctions.h" compile="0" resource="0"

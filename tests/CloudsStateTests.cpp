@@ -151,6 +151,8 @@ TEST_CASE("Clouds appends a separate parameter family without changing original 
     for (int band = 1; band <= 4; ++band)
         checkParameter("driveCompModern" + juce::String(band), 10);
     CHECK(index == 1040);
+    for (auto* id : fire::mod_sources::ids) checkParameter(id, 11);
+    CHECK(index == 1047);
     CHECK(index == parameters.size());
     CHECK_FALSE(clouds::isParameterID("masterFx1CloudsBogus"));
     CHECK_FALSE(clouds::isParameterID("bandFx9CloudsEngine1"));

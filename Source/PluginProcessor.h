@@ -581,6 +581,7 @@ public:
 
     void lfoDataHasChanged();
     bool isLfoPresent(int index) const noexcept;
+    bool isModulationSourcePresent(int index) const noexcept { return lfoManager->isModulationSourcePresent(index); }
     int addLfo();
     bool removeLfo(int index);
     std::uint64_t getModulationUiRevision() const noexcept;

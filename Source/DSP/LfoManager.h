@@ -17,6 +17,7 @@
 #include "LfoData.h"
 #include "LfoEngine.h"
 #include "ModulationRouting.h"
+#include "AuxiliaryModulation.h"
 #include "../Utility/LfoBankParameters.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include <array>
@@ -71,6 +72,7 @@ public:
         };
 
         std::array<Parameters, fire::lfo_bank::capacity> lfos {};
+        fire::dsp::AuxiliaryModulation::Parameters auxiliary = fire::mod_sources::defaults;
         AudioThreadParameterSnapshot()
         {
             for (int index = 0; index < fire::lfo_bank::defaultCount; ++index)
@@ -240,6 +242,9 @@ public:
         const std::array<LfoData, fire::lfo_bank::defaultCount>& newLfoData,
         juce::Array<ModulationRouting> newRoutings);
     bool isLfoPresent(int index) const noexcept;
+    bool isModulationSourcePresent(int index) const noexcept
+    { return fire::mod_sources::isAuxiliary(index) || isLfoPresent(index); }
+    void setAudioInput(const juce::AudioBuffer<float>* input) noexcept { audioInput = input; }
     struct VisualState
     {
         float phase = -1.0f;
@@ -330,6 +335,10 @@ private:
     std::unique_ptr<EngineBank> engineStorage = std::make_unique<EngineBank>();
     EngineBank& lfoEngines = *engineStorage;
     std::array<LfoParameterPointers, fire::lfo_bank::capacity> lfoParameters;
+    std::array<std::atomic<float>*, fire::mod_sources::parameterCount> auxiliaryParameters{};
+    fire::dsp::AuxiliaryModulation auxiliary;
+    const juce::AudioBuffer<float>* audioInput = nullptr;
+    std::array<std::atomic<float>, 5> auxiliaryLevels{};
     std::array<juce::String, fire::lfo_bank::capacity> smoothnessParameterIDs;
     std::vector<LfoData> lfoData;
     std::array<std::uint64_t, fire::lfo_bank::capacity> lfoDataRevisions {};

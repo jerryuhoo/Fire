@@ -131,6 +131,31 @@ inline std::vector<std::unique_ptr<juce::XmlElement>> create(FireAudioProcessor&
                 set("lofiTape", 0.4f); set("lofiWow", 0.15f); set("lofiFlutter", 0.06f);
                 set(FILTER_BYPASS_ID, 1); set(LOWCUT_FREQ_ID, 400); set(HIGHCUT_FREQ_ID, 5000); set(MIX_ID, 0.7f); break;
         }
+        if (processor.treeState.getParameter("macro1") != nullptr)
+        {
+            const bool splitBand = index == 0 || index == 3 || index == 4 || index == 10;
+            const int targetBand = splitBand ? 1 : 0;
+            const auto routeMacro = [&](int macro, const juce::String& target, float depth)
+            {
+                auto* routes = preset->getChildByName("MODULATION_STATE");
+                for (auto* child : routes->getChildIterator()) if (child->getStringAttribute("target") == target) return;
+                ModulationRouting route; route.sourceLfoIndex = fire::mod_sources::firstMacro + macro;
+                route.targetParameterID = target; route.depth = depth; route.isBipolar = false;
+                route.writeToXml(*routes->createNewChildElement("ROUTING"));
+            };
+            const auto intensity = index == 7 ? fire::effects::parameterID(0, 0, 5)
+                : index == 10 ? juce::String("mix2") : ParameterIDAndName::getIDString(DRIVE_ID, targetBand);
+            routeMacro(0, intensity, index == 10 ? -0.3f : 0.2f);
+            band(WIDTH_BYPASS_ID, targetBand, 1);
+            routeMacro(1, ParameterIDAndName::getIDString(WIDTH_ID, targetBand), 0.25f);
+            if (index == 6) routeMacro(2, fire::effects::parameterID(0, 1, 5), 0.25f);
+            else if (index == 7) routeMacro(2, fire::clouds_params::parameterID(0, 0, fire::clouds_params::feedbackField), 0.3f);
+            else if (index == 8) routeMacro(2, fire::effects::parameterID(0, 1, 5), 0.3f);
+            else { set(FILTER_BYPASS_ID, 1); routeMacro(2, PEAK_GAIN_ID, 0.12f); }
+            routeMacro(3, MIX_ID, -0.35f);
+            preset->setAttribute("presetDescription", preset->getStringAttribute("presetDescription")
+                + " Macros: 1 intensity, 2 width, 3 tone/space, 4 dry blend.");
+        }
         results.push_back(std::move(preset));
     }
     return results;

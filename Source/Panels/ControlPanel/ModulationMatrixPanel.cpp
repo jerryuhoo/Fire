@@ -10,6 +10,7 @@
 
 #include "ModulationMatrixPanel.h"
 #include "../../Utility/AudioHelpers.h"
+#include "../../GUI/ModulationSourceControls.h"
 
 #include <utility>
 
@@ -24,7 +25,7 @@ MatrixColumns matrixColumns(juce::Rectangle<int> bounds)
 {
     auto area = bounds.reduced(10, 0);
     const auto extra = juce::jmax(0, area.getWidth() - 548);
-    const auto sourceWidth = 72 + juce::jmin(24, extra / 6);
+    const auto sourceWidth = 88 + juce::jmin(24, extra / 6);
     const auto amountWidth = 120 + juce::jmin(56, extra / 3);
     const auto destinationWidth = juce::jmax(0, area.getWidth()
         - sourceWidth - amountWidth - 44 - 30 - 28 - 18 - 32);
@@ -1059,22 +1060,22 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     const auto routingNumber = juce::String(index + 1);
     const auto routingName = "Modulation routing " + routingNumber;
     const auto sourceColour =
-        fire::ui::lfoBankColour(routing.sourceLfoIndex);
+        fire::ui::modulationSourceColour(routing.sourceLfoIndex);
 
     // SOURCE MENU
     addAndMakeVisible(sourceMenu);
     sourceMenu.setTitle(routingName + " source");
     sourceMenu.setComponentID("matrix_source");
-    sourceMenu.setTooltip("Select the LFO source for modulation routing "
+    sourceMenu.setTooltip("Select the modulation source for routing "
                           + routingNumber);
-    for (int sourceIndex = 0; sourceIndex < fire::lfo_bank::capacity; ++sourceIndex)
-        if (processor.isLfoPresent(sourceIndex))
+    for (int sourceIndex = 0; sourceIndex < fire::mod_sources::sourceCount; ++sourceIndex)
+        if (processor.isModulationSourcePresent(sourceIndex))
             sourceMenu.getRootMenu()->addColouredItem(
                 sourceIndex + 1,
-                "LFO " + juce::String(sourceIndex + 1),
-                fire::ui::lfoBankColour(sourceIndex));
+                fire::mod_sources::name(sourceIndex),
+                fire::ui::modulationSourceColour(sourceIndex));
     sourceMenu.setTextWhenNothingSelected("Choose source");
-    sourceMenu.setSelectedId(processor.isLfoPresent(routing.sourceLfoIndex)
+    sourceMenu.setSelectedId(processor.isModulationSourcePresent(routing.sourceLfoIndex)
                                  ? routing.sourceLfoIndex + 1 : 0,
                              juce::dontSendNotification);
     sourceMenu.addListener(this);
@@ -1237,7 +1238,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
 void ModulationMatrixRow::paint(juce::Graphics& g)
 {
     const bool bypassed = ! bypassButton.getToggleState();
-    const auto accent = fire::ui::lfoBankColour(expectedRouting.sourceLfoIndex);
+    const auto accent = fire::ui::modulationSourceColour(expectedRouting.sourceLfoIndex);
     const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
     g.setColour(bypassed ? fire::ui::colours::surface0 : fire::ui::colours::surface1);
     g.fillRoundedRectangle(bounds, 8.0f);
@@ -1506,7 +1507,7 @@ void ModulationMatrixRow::commitComboBoxSelection(
 
     if (&comboBox == &sourceMenu)
     {
-        if (! processor.isLfoPresent(selectedId - 1))
+        if (! processor.isModulationSourcePresent(selectedId - 1))
         {
             requestParentRebuild();
             return;
@@ -1623,16 +1624,20 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
     addButton.setButtonText("Add routing");
     addButton.setComponentID("matrix_add_route");
     addButton.setTitle("Add modulation routing");
-    addButton.setTooltip("Connect an LFO to another control.");
+    addButton.setTooltip("Connect an LFO, the input envelope or a macro to a control.");
     addButton.setAppearance(ModulationMatrixPrimaryButton::Appearance::add);
     addButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface1);
     addButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::modulation);
     addButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::modulation);
     addButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    addAndMakeVisible(sourceControlsButton);
+    sourceControlsButton.setComponentID("modulation_source_controls");
+    sourceControlsButton.setTooltip("Open input envelope settings and four automatable macros.");
+    sourceControlsButton.addListener(this);
     addAndMakeVisible(emptyTitle);
     addAndMakeVisible(emptyDescription);
     emptyTitle.setText("No modulation routings yet", juce::dontSendNotification);
-    emptyDescription.setText("Add a routing to connect an LFO to a control.", juce::dontSendNotification);
+    emptyDescription.setText("Connect an LFO, envelope or macro to a control.", juce::dontSendNotification);
     emptyTitle.setFont(fire::ui::displayFont(16.0f));
     emptyDescription.setFont(fire::ui::bodyFont(11.5f));
     emptyTitle.setColour(juce::Label::textColourId, fire::ui::colours::textPrimary);
@@ -1652,19 +1657,20 @@ ModulationMatrixPanel::~ModulationMatrixPanel()
     processor.removeModulationUiChangeListener(this);
     cancelPendingUpdate();
     addButton.removeListener(this);
+    sourceControlsButton.removeListener(this);
     setLookAndFeel(nullptr);
 }
 
 void ModulationMatrixPanel::paint(juce::Graphics& g)
 {
     g.fillAll(fire::ui::colours::canvas);
-    auto heading = titleArea.withTrimmedRight(148);
+    auto heading = titleArea.withTrimmedRight(300);
     g.setFont(fire::ui::displayFont(20.0f));
     g.setColour(fire::ui::colours::textPrimary);
     g.drawText("Modulation", heading.removeFromTop(28), juce::Justification::centredLeft);
     g.setFont(fire::ui::bodyFont(11.5f));
     g.setColour(fire::ui::colours::textMuted);
-    g.drawText("Choose a source and destination, then set the depth.", heading.removeFromTop(20), juce::Justification::centredLeft);
+    g.drawText("Choose source, destination and depth.", heading.removeFromTop(20), juce::Justification::centredLeft);
     g.setFont(fire::ui::labelFont(9.5f));
     g.drawText(juce::String(static_cast<int>(rows.size())) + (rows.size() == 1 ? " routing" : " routings")
                + "  /  " + juce::String(activeRouteCount) + " active",
@@ -1704,6 +1710,7 @@ void ModulationMatrixPanel::resized()
     titleArea = bounds.removeFromTop(62);
     addButton.setBounds(titleArea.withWidth(136).withRightX(titleArea.getRight())
                            .withSizeKeepingCentre(136, 34));
+    sourceControlsButton.setBounds(addButton.getX() - 156, addButton.getY(), 146, 34);
     summaryArea = bounds.removeFromBottom(22);
 
     // Position the header at the top.
@@ -1746,6 +1753,11 @@ void ModulationMatrixPanel::enablementChanged()
 
 void ModulationMatrixPanel::dismissTransientInteractions() noexcept
 {
+    const juce::Component::SafePointer<ModulationMatrixPanel> sourcePanelAlive(this);
+    auto dialog = sourceControlsDialog;
+    sourceControlsDialog = nullptr;
+    if (dialog != nullptr) dialog->closeButtonPressed();
+    if (sourcePanelAlive == nullptr) return;
     const juce::Component::SafePointer<ModulationMatrixPanel> safeThis(this);
     for (auto& row : rows)
     {
@@ -1760,6 +1772,18 @@ void ModulationMatrixPanel::dismissTransientInteractions() noexcept
 
 void ModulationMatrixPanel::buttonClicked(juce::Button* button)
 {
+    if (button == &sourceControlsButton)
+    {
+        if (sourceControlsDialog != nullptr) { sourceControlsDialog->toFront(true); return; }
+        juce::DialogWindow::LaunchOptions options;
+        options.content.setOwned(new fire::ui::ModulationSourceControls(processor));
+        options.dialogTitle = "Envelope and Macros";
+        options.dialogBackgroundColour = fire::ui::colours::canvas;
+        options.escapeKeyTriggersCloseButton = true;
+        options.useNativeTitleBar = true; options.resizable = false;
+        sourceControlsDialog = options.launchAsync();
+        return;
+    }
     if (button == &addButton)
     {
         if (isUiRebuildPending())
@@ -1810,14 +1834,14 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
     activeRouteCount = static_cast<int>(std::count_if(routingState.routings.begin(), routingState.routings.end(),
                                     [](const auto& routing) { return ! routing.isBypassed; }));
     bool hasSource = false;
-    for (int sourceIndex = 0; sourceIndex < fire::lfo_bank::capacity; ++sourceIndex)
-        hasSource = hasSource || processor.isLfoPresent(sourceIndex);
+    for (int sourceIndex = 0; sourceIndex < fire::mod_sources::sourceCount; ++sourceIndex)
+        hasSource = hasSource || processor.isModulationSourcePresent(sourceIndex);
     addButton.setEnabled(hasSource && routingState.routings.size()
                                       < LfoManager::maximumModulationRoutings);
     if (safePanel == nullptr)
         return;
     emptyDescription.setText(hasSource
-                                 ? "Add a routing to connect an LFO to a control."
+                                 ? "Connect an LFO, envelope or macro to a control."
                                  : "Add an LFO in Mod Forge to create a routing.",
                              juce::dontSendNotification);
     if (safePanel == nullptr)

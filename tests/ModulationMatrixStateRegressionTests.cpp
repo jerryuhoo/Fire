@@ -1051,7 +1051,7 @@ TEST_CASE("Modulation matrix host notifications may synchronously delete the pan
         const auto sourceMenu = std::find_if(
             comboBoxes.begin(), comboBoxes.end(), [](const auto* comboBox)
             {
-                return comboBox->getNumItems() == 4;
+                return comboBox->getComponentID() == "matrix_source";
             });
         REQUIRE(sourceMenu != comboBoxes.end());
         DeleteMatrixPanelOnHostNotification host(processor, panel);
@@ -2628,7 +2628,7 @@ TEST_CASE("Modulation matrix rejects stale rows after same-target state recall",
         const auto sourceMenu = std::find_if(
             comboBoxes.begin(), comboBoxes.end(), [](const auto* comboBox)
             {
-                return comboBox->getNumItems() == 4;
+                return comboBox->getComponentID() == "matrix_source";
             });
         REQUIRE(sourceMenu != comboBoxes.end());
         (*sourceMenu)->setSelectedId(2, juce::sendNotificationSync);
@@ -2867,21 +2867,21 @@ TEST_CASE("Modulation matrix source affordances follow the LFO bank palette",
 
         const auto* sourceItems = sourceMenu.getRootMenu();
         REQUIRE(sourceItems != nullptr);
-        CHECK(sourceItems->getNumItems() == fire::ui::lfoBankCount);
+        CHECK(sourceItems->getNumItems() == fire::mod_sources::sourceCount);
         int sourceItemIndex = 0;
         for (juce::PopupMenu::MenuItemIterator iterator(*sourceItems);
              iterator.next();)
         {
             const auto& item = iterator.getItem();
             CAPTURE(sourceItemIndex);
-            REQUIRE(sourceItemIndex < fire::ui::lfoBankCount);
+            REQUIRE(sourceItemIndex < fire::mod_sources::sourceCount);
             CHECK(item.itemID == sourceItemIndex + 1);
-            CHECK(item.text == "LFO " + juce::String(sourceItemIndex + 1));
+            CHECK(item.text == fire::mod_sources::name(sourceItemIndex));
             CHECK(item.colour
-                  == fire::ui::lfoBankColour(sourceItemIndex));
+                  == fire::ui::modulationSourceColour(sourceItemIndex));
             ++sourceItemIndex;
         }
-        CHECK(sourceItemIndex == fire::ui::lfoBankCount);
+        CHECK(sourceItemIndex == fire::mod_sources::sourceCount);
 
         auto& amountSlider =
             ModulationMatrixRowTestAccess::getAmountSlider(row);
@@ -3035,7 +3035,7 @@ TEST_CASE("Modulation matrix row controls expose distinct accessibility semantic
         "Remove modulation routing 1"
     };
     const std::array<juce::String, 6> expectedHelp {
-        "Select the LFO source for modulation routing 1",
+        "Select the modulation source for routing 1",
         "Select the destination for modulation routing 1",
         "Set the modulation depth for modulation routing 1",
         "Switch modulation routing 1 between bipolar and unipolar",

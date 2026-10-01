@@ -153,7 +153,7 @@ bool isValidLfoState(const juce::XmlElement& lfoState, bool legacyBank) noexcept
 
 bool isValidRoutingState(const juce::XmlElement& routingState,
                          const juce::AudioProcessor& processor,
-                         bool legacyBank) noexcept
+                         bool legacyBank, bool auxiliarySources = false) noexcept
 {
     if (! routingState.hasTagName("MODULATION_STATE")
         || routingState.getNumChildElements()
@@ -166,13 +166,14 @@ bool isValidRoutingState(const juce::XmlElement& routingState,
         int source = -1;
         if (! routing->hasTagName("ROUTING")
             || ! readStrictIntegerAttribute(*routing, "source", source)
-            || ! juce::isPositiveAndBelow(source, legacyBank ? fire::lfo_bank::defaultCount
+            || ! juce::isPositiveAndBelow(source, auxiliarySources ? fire::mod_sources::sourceCount : legacyBank ? fire::lfo_bank::defaultCount
                                                              : fire::lfo_bank::capacity)
             || ! isStrictNumberInRange(*routing, "depth", -1.0, 1.0)
             || routing->getNumChildElements() != 0)
             return false;
 
         const auto target = routing->getStringAttribute("target");
+        if (fire::mod_sources::isParameterID(target)) return false;
         if (target.isEmpty())
             continue; // Empty preallocated routing slots are part of Init.
 
@@ -288,6 +289,9 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
     if (! validateParameterFamily(snapshot, processor, legacyWithoutLfoBank, "lfoBankSchemaVersion",
                                   fire::lfo_bank::isAppendedParameterID, fire::lfo_bank::schemaVersion))
         return false;
+    bool legacyWithoutAuxiliary = false;
+    if (!validateParameterFamily(snapshot, processor, legacyWithoutAuxiliary, "modulationSourcesSchemaVersion",
+                                  fire::mod_sources::isParameterID)) return false;
 
     int expectedParameterCount = 0;
     for (const auto* parameter : processor.getParameters())
@@ -314,6 +318,7 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
             continue;
         if (legacyWithoutLfoBank && fire::lfo_bank::isAppendedParameterID(parameterWithID->paramID))
             continue;
+        if (legacyWithoutAuxiliary && fire::mod_sources::isParameterID(parameterWithID->paramID)) continue;
         ++expectedParameterCount;
         if (! snapshot.hasAttribute(parameterWithID->paramID))
             return false;
@@ -342,7 +347,7 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         else if (child->hasTagName("MODULATION_STATE") && ! hasRoutingState)
         {
             hasRoutingState = true;
-            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank))
+            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank, !legacyWithoutAuxiliary))
                 return false;
         }
         else
@@ -391,6 +396,9 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     if (! validateParameterFamily(xml, processor, legacyWithoutLfoBank, "lfoBankSchemaVersion",
                                   fire::lfo_bank::isAppendedParameterID, fire::lfo_bank::schemaVersion))
         return false;
+    bool legacyWithoutAuxiliary = false;
+    if (!validateParameterFamily(xml, processor, legacyWithoutAuxiliary, "modulationSourcesSchemaVersion",
+                                  fire::mod_sources::isParameterID)) return false;
     // Unversioned and v1 files predate complete model snapshots. Preserve
     // their historical default/migration behaviour. A v2 document is an
     // explicit complete snapshot, so accepting a sparse or truncated one
@@ -427,6 +435,7 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
             continue;
         if (legacyWithoutLfoBank && fire::lfo_bank::isAppendedParameterID(parameterWithID->paramID))
             continue;
+        if (legacyWithoutAuxiliary && fire::mod_sources::isParameterID(parameterWithID->paramID)) continue;
         ++parameterCount;
         if (! isStrictNumberInRange(xml, parameterWithID->paramID, 0.0, 1.0))
             return false;
@@ -452,7 +461,7 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         else if (child->hasTagName("MODULATION_STATE") && ! hasRoutingState)
         {
             hasRoutingState = true;
-            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank))
+            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank, !legacyWithoutAuxiliary))
                 return false;
         }
         else
@@ -481,6 +490,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("modulationEffectsSchemaVersion", fire::modulation_fx::schemaVersion);
     xml.setAttribute("resonatorSchemaVersion", fire::resonator_params::schemaVersion);
     xml.setAttribute("driveCompSchemaVersion", fire::drive_comp::schemaVersion);
+    xml.setAttribute("modulationSourcesSchemaVersion", fire::mod_sources::schemaVersion);
     xml.setAttribute("moduleOrderSchemaVersion", 1);
     xml.setAttribute("eqSchemaVersion", 1);
     xml.setAttribute("lfoBankSchemaVersion", fire::lfo_bank::schemaVersion);
@@ -737,7 +747,8 @@ namespace state
                 // snapshots keep all fixed slots and never retarget a missing source.
                 const bool extendedBank = xml.hasAttribute("lfoBankSchemaVersion")
                     || xml.hasAttribute(fire::lfo_bank::presentParameterID(0));
-                const int sourceLimit = extendedBank ? fire::lfo_bank::capacity
+                const bool auxiliarySources = xml.hasAttribute("modulationSourcesSchemaVersion") || xml.hasAttribute("macro1");
+                const int sourceLimit = auxiliarySources ? fire::mod_sources::sourceCount : extendedBank ? fire::lfo_bank::capacity
                                                       : fire::lfo_bank::defaultCount;
                 routing.sourceLfoIndex = juce::jlimit(0, sourceLimit - 1, routing.sourceLfoIndex);
                 routing.depth = std::isfinite(routing.depth) ? juce::jlimit(-1.0f, 1.0f, routing.depth) : 0.5f;
@@ -752,6 +763,7 @@ namespace state
 
                 if (! targetAlreadyUsed
                     && routing.targetParameterID.isNotEmpty()
+                    && !fire::mod_sources::isParameterID(routing.targetParameterID)
                     && fireProc.treeState.getParameter(routing.targetParameterID) != nullptr)
                     routingsToLoad.add(std::move(routing));
             }

@@ -63,20 +63,20 @@ public:
             {
                 // Refresh runtime media without turning audio recording or
                 // window resizing into a separate undo operation.
-                bytes -= entries[cursor].data.getSize();
+                bytes -= entryBytes(entries[cursor]);
                 entries[cursor].data = std::move(next);
                 entries[cursor].key = std::move(key);
-                bytes += entries[cursor].data.getSize();
+                bytes += entryBytes(entries[cursor]);
                 dirty = false;
                 return;
             }
             while (entries.size() > cursor + 1)
-            { bytes -= entries.back().data.getSize(); entries.pop_back(); }
-            bytes += next.getSize();
+            { bytes -= entryBytes(entries.back()); entries.pop_back(); }
+            bytes += next.getSize() + key.getSize();
             entries.push_back({std::move(next), std::move(key)});
             cursor = entries.size() - 1;
             while (entries.size() > 1 && (entries.size() > 101 || bytes > maximumBytes))
-            { bytes -= entries.front().data.getSize(); entries.erase(entries.begin()); --cursor; }
+            { bytes -= entryBytes(entries.front()); entries.erase(entries.begin()); --cursor; }
             dirty = false;
         }
         catch (...) { dirty = false; resetPending.store(true); }
@@ -94,6 +94,7 @@ public:
 
 private:
     struct Entry { juce::MemoryBlock data, key; };
+    static size_t entryBytes(const Entry& entry) noexcept { return entry.data.getSize() + entry.key.getSize(); }
     static constexpr size_t maximumBytes = 64u * 1024u * 1024u;
     static bool onMessageThread() noexcept
     {
@@ -116,7 +117,7 @@ private:
         {
             auto data = captureState();
             auto key = comparisonKey(data);
-            entries.clear(); bytes = data.getSize(); cursor = 0; depth = 0; dirty = false;
+            entries.clear(); bytes = data.getSize() + key.getSize(); cursor = 0; depth = 0; dirty = false;
             std::fill(gestures.begin(), gestures.end(), false);
             entries.push_back({std::move(data), std::move(key)});
         }
@@ -137,8 +138,8 @@ private:
         // masquerade as a new edit and erase the remaining redo branch.
         auto restored = captureState();
         auto key = comparisonKey(restored);
-        bytes -= entries[cursor].data.getSize();
-        bytes += restored.getSize();
+        bytes -= entryBytes(entries[cursor]);
+        bytes += restored.getSize() + key.getSize();
         entries[cursor] = {std::move(restored), std::move(key)};
         return true;
     }

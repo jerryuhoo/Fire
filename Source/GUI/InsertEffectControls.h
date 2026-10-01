@@ -19,8 +19,8 @@ public:
         freezeButton.setClickingTogglesState(true);
         freezeButton.setTitle("Freeze granular recording");
         freezeButton.setTooltip("Hold the recorded audio while grains keep playing. Turn off to record new audio. "
-                                "The recording is not saved with the project; after reopening or resetting, "
-                                "Freeze first captures about one second of new audio.");
+                                "Frozen recordings are saved in presets, projects and A/B states. "
+                                "With an empty recording, Freeze first captures about one second of new audio.");
         freezeButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface1);
         freezeButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::granular.withAlpha(0.25f));
         freezeButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);

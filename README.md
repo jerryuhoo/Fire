@@ -547,9 +547,17 @@ new grains in the centre. Texture moves from sharp to smooth grain envelopes,
 then adds diffusion. Position selects progressively older audio. The expanded
 Clouds control page uses the space normally occupied by the waveform display.
 
-Freeze holds the recording while grains continue to play. Its switch is saved,
-but recorded audio is not stored in presets, A/B snapshots or host projects.
-After an empty reset, Freeze captures a fresh buffer of audio before holding it.
+Freeze holds the recording while grains continue to play. Completed frozen
+recordings are now saved in presets, A/B snapshots and host projects, including
+their stereo PCM and ring position. The original 32 kHz / 16-bit material survives
+host sample-rate changes, effect deletion followed by Undo, and band reordering
+when a frequency band is removed or added. Newly inserted/reused slots start
+empty. Scheduled grains, feedback and reverb tails restart on restoration;
+the saved recording remains the same. Saved files use a bounded, versioned,
+compressed payload with length and integrity checks. Presets may be up to 12 MiB
+to accommodate multiple frozen slots. Older files without recorded audio retain
+their previous empty-buffer capture behaviour. With an empty recording, Freeze
+captures fresh audio before holding it.
 Spread, Feedback and Reverb support host automation and LFO modulation.
 
 The Clouds core runs at the original 32 kHz, stereo/16-bit quality, with

@@ -117,6 +117,14 @@ class AudioBuffer {
   int32_t size() const { return size_; }
   int32_t head() const { return write_head_; }
   int32_t valid_samples() const { return valid_samples_; }
+  // Fire project/preset state owns the samples. Restore the logical ring;
+  // scheduled grains and feedback state restart independently of the material.
+  void RestoreRecordingState(int32_t head, int32_t valid) {
+    write_head_ = std::max(0, std::min(size_ - 1, head));
+    valid_samples_ = std::max(0, std::min(size_, valid));
+    tail_size_ = fade_position_ = 0;
+    frozen_ = true;
+  }
  private:
   static int16_t Quantize(float value) {
     if (!std::isfinite(value)) value = 0.0f;

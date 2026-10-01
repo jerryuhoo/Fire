@@ -9,6 +9,7 @@
  */
 
 #include "Preset.h"
+#include "../../Utility/FrozenAudioState.h"
 #include "../../PluginProcessor.h"
 #include "../../Utility/StrictNumberParser.h"
 #include "../../Utility/LfoBankParameters.h"
@@ -19,7 +20,7 @@
 
 namespace
 {
-constexpr juce::int64 maximumPresetFileBytes = 4 * 1024 * 1024;
+constexpr juce::int64 maximumPresetFileBytes = 12 * 1024 * 1024;
 constexpr int maximumPresetFolderDepth = 16;
 constexpr int maximumPresetCount = 4096;
 constexpr int maximumPresetCandidateCount = maximumPresetCount * 2;
@@ -247,7 +248,9 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
                        const juce::AudioProcessor& processor) noexcept
 {
     int formatVersion = 0;
-    if (! snapshot.hasTagName("AB_STATE") || snapshot.getNumChildElements() > 2
+    fire::effects::FrozenRecordings frozenAudio;
+    if (!fire::effects::readFrozenAudioState(snapshot, frozenAudio)) return false;
+    if (! snapshot.hasTagName("AB_STATE") || snapshot.getNumChildElements() > 3
         || ! readSupportedPresetFormatVersion(snapshot, formatVersion))
         return false;
 
@@ -318,7 +321,7 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
             return false;
     }
 
-    if (expectedParameterCount == 0 || snapshot.getNumChildElements() != 2)
+    if (expectedParameterCount == 0 || snapshot.getNumChildElements() != (snapshot.getChildByName("FROZEN_AUDIO") ? 3 : 2))
         return false;
 
     bool hasLfoState = false;
@@ -330,6 +333,10 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
             hasLfoState = true;
             if (! isValidLfoState(*child, legacyWithoutLfoBank))
                 return false;
+        }
+        else if (child->hasTagName("FROZEN_AUDIO"))
+        {
+            // The recording payload was already decoded and bounded above.
         }
         else if (child->hasTagName("MODULATION_STATE") && ! hasRoutingState)
         {
@@ -349,6 +356,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
 bool isLoadablePresetState(const juce::XmlElement& xml,
                            const juce::AudioProcessor& processor) noexcept
 {
+    fire::effects::FrozenRecordings frozenAudio;
+    if (!fire::effects::readFrozenAudioState(xml, frozenAudio)) return false;
     bool legacyWithoutOtt = false;
     if (! validateParameterFamily(xml, processor, legacyWithoutOtt))
         return false;
@@ -422,7 +431,7 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
             return false;
     }
 
-    if (parameterCount == 0 || xml.getNumChildElements() != 2)
+    if (parameterCount == 0 || xml.getNumChildElements() != (xml.getChildByName("FROZEN_AUDIO") ? 3 : 2))
         return false;
 
     bool hasLfoState = false;
@@ -434,6 +443,10 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
             hasLfoState = true;
             if (! isValidLfoState(*child, legacyWithoutLfoBank))
                 return false;
+        }
+        else if (child->hasTagName("FROZEN_AUDIO"))
+        {
+            // The recording payload was already decoded and bounded above.
         }
         else if (child->hasTagName("MODULATION_STATE") && ! hasRoutingState)
         {
@@ -472,6 +485,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("lfoBankSchemaVersion", fire::lfo_bank::schemaVersion);
     xml.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xml.setAttribute("pluginVersion", VERSION);
+    fire::effects::writeFrozenAudioState(xml, snapshot.frozenAudio);
 
     for (const auto& param : processor.getParameters())
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
@@ -597,6 +611,8 @@ namespace state
             return false;
 
         juce::XmlElement xml(incomingXml);
+        fire::effects::FrozenRecordings frozenAudio;
+        if (!fire::effects::readFrozenAudioState(xml, frozenAudio)) return false;
         canonicaliseCloudsPresetState(xml);
         materialiseLegacyDriveCompensation(xml);
 
@@ -607,6 +623,8 @@ namespace state
             {
                 fireProc.requestMultibandTopologyReset();
             } };
+
+            fireProc.restoreFrozenAudio(frozenAudio);
 
             if (! preserveLoudnessComparison)
                 fireProc.clearCurrentLoudnessMatch();

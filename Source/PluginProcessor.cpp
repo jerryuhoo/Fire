@@ -12,6 +12,7 @@
 #include "PluginEditor.h"
 #include "Utility/StrictNumberParser.h"
 #include "Utility/EditHistory.h"
+#include "Utility/FrozenAudioState.h"
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -3382,6 +3383,8 @@ int FireAudioProcessor::addInsertEffect(int scope, fire::effects::Type type)
         if (getInsertEffectType(scope, slot) == Type::none) { if (freeSlot < 0) freeSlot = slot; }
         else active.push_back(slot);
     if (freeSlot < 0) return -1;
+    auto& rack = scope == 0 ? masterInserts : bands[static_cast<size_t>(scope - 1)]->inserts;
+    rack.stageFrozenRecording(freeSlot, {}, multibandTopologyResetGeneration.load(std::memory_order_seq_cst) + 1u);
     std::stable_sort(active.begin(), active.end(), [&](int a, int b) {return getInsertEffectOrder(scope, a) < getInsertEffectOrder(scope, b);});
     const auto write = [&](int slot, int field, float value) {
         auto* parameter = treeState.getParameter(parameterID(scope, slot, field));
@@ -3439,6 +3442,8 @@ void FireAudioProcessor::removeInsertEffect(int scope, int slot)
     if (getInsertEffectType(scope, slot) == Type::none) return;
     beginMultibandTopologyEdit();
     const juce::ScopeGuard publish { [this] { requestMultibandTopologyReset(); } };
+    auto& rack = scope == 0 ? masterInserts : bands[static_cast<size_t>(scope - 1)]->inserts;
+    rack.stageFrozenRecording(slot, {}, multibandTopologyResetGeneration.load(std::memory_order_seq_cst) + 1u);
     for (int control = 0; control < static_cast<int>(controlCount); ++control)
         clearModulationForParameter(parameterID(scope, slot, control));
     for (int field = 0; field < fire::clouds_params::fieldCount; ++field)
@@ -3890,6 +3895,7 @@ FireAudioProcessor::SerializableMainStateSnapshot
 FireAudioProcessor::captureSerializableMainStateSnapshot() const
 {
     auto lfoSnapshot = lfoManager->captureSerializableStateSnapshot();
+    auto frozenAudio = captureFrozenAudio(lfoSnapshot.parameterState);
     auto presetIdentity = statePresets.getCurrentPresetIdentity();
     const auto currentEditorSize = getSavedEditorSize();
     const auto savedEditorSize = normaliseEditorSize(currentEditorSize.width,
@@ -3906,8 +3912,47 @@ FireAudioProcessor::captureSerializableMainStateSnapshot() const
         savedEditorSize.width,
         savedEditorSize.height,
         stateAB.captureSerializableStateSnapshot(),
-        loudnessMatch.settings()
+        loudnessMatch.settings(),
+        std::move(frozenAudio)
     };
+}
+
+fire::effects::FrozenRecordings FireAudioProcessor::captureFrozenAudio(const juce::ValueTree& parameters) const
+{
+    using namespace fire::effects;
+    FrozenRecordings recordings{};
+    const auto read = [&](const juce::String& id, float fallback = 0.0f)
+    {
+        const auto child = parameters.getChildWithProperty("id", id);
+        return child.isValid() ? static_cast<float>(child.getProperty("value", fallback)) : fallback;
+    };
+    for (int scope = 0; scope < scopeCount; ++scope)
+        for (int slot = 0; slot < slotCount; ++slot)
+        {
+            if (read(parameterID(scope, slot, typeField)) != 4.0f
+                || read(fire::modulation_fx::parameterID(scope, slot)) != 0.0f
+                || read(fire::resonator_params::parameterID(scope, slot)) > 0.5f
+                || read(fire::clouds_params::parameterID(scope, slot, fire::clouds_params::freezeField)) <= 0.5f)
+                continue;
+            const auto* rack = scope == 0 ? &masterInserts
+                : static_cast<size_t>(scope) <= bands.size() ? &bands[static_cast<size_t>(scope - 1)]->inserts : nullptr;
+            if (rack) recordings[static_cast<size_t>(scope)][static_cast<size_t>(slot)] = rack->copyFrozenRecording(slot);
+        }
+    return recordings;
+}
+
+void FireAudioProcessor::restoreFrozenAudio(const fire::effects::FrozenRecordings& recordings)
+{
+    const auto sequence = multibandTopologyResetGeneration.load(std::memory_order_seq_cst);
+    const auto publication = (sequence & 1u) != 0u ? sequence + 1u : sequence;
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+        {
+            auto* rack = scope == 0 ? &masterInserts
+                : static_cast<size_t>(scope) <= bands.size() ? &bands[static_cast<size_t>(scope - 1)]->inserts : nullptr;
+            if (rack) rack->stageFrozenRecording(slot, recordings[static_cast<size_t>(scope)][static_cast<size_t>(slot)], publication);
+        }
+    if (editHistory) editHistory->changed();
 }
 
 FireAudioProcessor::SerializableMainStateSnapshot
@@ -4009,7 +4054,8 @@ FireAudioProcessor::captureSerializablePresetStateSnapshot() const
     return {
         std::move(snapshot.parameterState),
         std::move(snapshot.lfoData),
-        std::move(snapshot.routings)
+        std::move(snapshot.routings),
+        std::move(snapshot.frozenAudio)
     };
 }
 
@@ -4023,10 +4069,12 @@ FireAudioProcessor::captureCurrentSerializablePresetStateSnapshotForABFallback()
     // new live state rather than the immutable pre-edit snapshot returned to
     // external serializers during the same transaction.
     auto snapshot = lfoManager->captureSerializableStateSnapshot();
+    auto frozenAudio = captureFrozenAudio(snapshot.parameterState);
     return {
         std::move(snapshot.parameterState),
         std::move(snapshot.lfoData),
-        std::move(snapshot.routings)
+        std::move(snapshot.routings),
+        std::move(frozenAudio)
     };
 }
 
@@ -4069,6 +4117,7 @@ bool FireAudioProcessor::addMultibandBandLocked(int splitBandIndex,
                                                 bool newBandIsOnLeft,
                                                 float crossoverFrequency)
 {
+    auto frozenAudio = captureSerializablePresetStateSnapshot().frozenAudio;
     struct ParameterWrite
     {
         juce::RangedAudioParameter* parameter = nullptr;
@@ -4228,6 +4277,10 @@ bool FireAudioProcessor::addMultibandBandLocked(int splitBandIndex,
             write.parameter->setValueNotifyingHost(write.normalisedValue);
 
         clearLfoModulationForBand(newBandIndex, false);
+        for (int source = oldLastBandIndex; source >= firstBandToShift; --source)
+            frozenAudio[static_cast<size_t>(source + 2)] = frozenAudio[static_cast<size_t>(source + 1)];
+        frozenAudio[static_cast<size_t>(newBandIndex + 1)] = {};
+        restoreFrozenAudio(frozenAudio);
         bandCountParameter->setValueNotifyingHost(
             bandCountParameter->getNormalisableRange().convertTo0to1(
                 static_cast<float>(newBandCount)));
@@ -4281,6 +4334,7 @@ bool FireAudioProcessor::deleteMultibandBandLocked(int deletedBandIndex,
         snapshotHook();
 #endif
 
+    auto frozenAudio = captureSerializablePresetStateSnapshot().frozenAudio;
     struct ParameterWrite
     {
         juce::RangedAudioParameter* parameter = nullptr;
@@ -4416,6 +4470,10 @@ bool FireAudioProcessor::deleteMultibandBandLocked(int deletedBandIndex,
             write.parameter->setValueNotifyingHost(write.normalisedValue);
 
         clearLfoModulationForBand(oldLastBandIndex, false);
+        for (int source = deletedBandIndex + 1; source <= oldLastBandIndex; ++source)
+            frozenAudio[static_cast<size_t>(source)] = frozenAudio[static_cast<size_t>(source + 1)];
+        frozenAudio[static_cast<size_t>(oldLastBandIndex + 1)] = {};
+        restoreFrozenAudio(frozenAudio);
         bandCountParameter->setValueNotifyingHost(
             bandCountParameter->getNormalisableRange().convertTo0to1(
                 static_cast<float>(newBandCount)));
@@ -5589,6 +5647,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 
     // Persist the inactive A/B snapshot alongside the matching active state.
     xmlState.addChildElement(new juce::XmlElement(mainState.abState));
+    fire::effects::writeFrozenAudioState(xmlState, mainState.frozenAudio);
 
     copyXmlToBinary(xmlState, destData);
 }
@@ -5601,6 +5660,8 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
     if (xmlState == nullptr || ! xmlState->hasTagName("state"))
         return;
+    fire::effects::FrozenRecordings frozenAudio;
+    if (!fire::effects::readFrozenAudioState(*xmlState, frozenAudio)) return;
 
     // Parse and validate every section before mutating live state. Hosts may
     // retain a damaged or truncated chunk for years; applying only its UI/LFO
@@ -6078,6 +6139,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             requestMultibandTopologyReset();
         } };
         treeState.replaceState(treeToLoad);
+        restoreFrozenAudio(frozenAudio);
         if (xmlCurrentState != nullptr)
         {
             if (presetKey.isNotEmpty())
@@ -7181,6 +7243,7 @@ void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackP
     {
         const auto& cache = insertParameters[static_cast<size_t>(scope)][slot];
         auto& target = destination[slot];
+        target.effect.publicationSequence = multibandTopologyResetGeneration.load(std::memory_order_seq_cst) & ~std::uint32_t{1};
         target.effect.type = getInsertEffectType(scope, static_cast<int>(slot));
         target.effect.enabled = loadCachedParameter(cache[fire::effects::enabledField]) > 0.5f;
         target.effect.normalised = true;
@@ -9692,6 +9755,18 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
     constexpr float comparisonTolerance = 1.0e-6f;
     if (! state::canLoadStateFromXml(incomingPresetXml, *this))
         return false;
+    fire::effects::FrozenRecordings expectedAudio;
+    if (!fire::effects::readFrozenAudioState(incomingPresetXml, expectedAudio)) return false;
+    const auto currentAudio = captureSerializablePresetStateSnapshot().frozenAudio;
+    for (size_t scope = 0; scope < expectedAudio.size(); ++scope)
+        for (size_t slot = 0; slot < expectedAudio[scope].size(); ++slot)
+        {
+            const auto& expected = expectedAudio[scope][slot];
+            const auto& current = currentAudio[scope][slot];
+            if (static_cast<bool>(expected) != static_cast<bool>(current)) return false;
+            if (expected && (expected->head != current->head || expected->validFrames != current->validFrames
+                             || expected->samples != current->samples)) return false;
+        }
     juce::XmlElement presetXml(incomingPresetXml);
     state::canonicaliseCloudsPresetState(presetXml);
 

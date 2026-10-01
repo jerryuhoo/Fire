@@ -218,6 +218,7 @@ public:
             }
         } clouds;
         Type type = Type::none;
+        std::uint32_t publicationSequence = 0;
         bool enabled = true;
         bool normalised = false;
         float bpm = 120;
@@ -258,6 +259,9 @@ public:
         gate.setCurrentAndTargetValue(0);
         dormant = true;
     }
+    FrozenRecordingPtr copyFrozenRecording() const { return cloudsEngine.copyFrozenRecording(); }
+    void stageFrozenRecording(const FrozenRecordingPtr& recording, std::uint32_t publication)
+    { cloudsEngine.stageFrozenRecording(recording, publication); }
     void process(juce::dsp::AudioBlock<float> block, const Parameters& parameters, int offset = 0,
                  const std::array<int, controlCount>* sourceIndices = nullptr,
                  const std::array<int, 3>* cloudsSourceIndices = nullptr) noexcept
@@ -351,6 +355,7 @@ public:
                 cloudsState.spread = lastCloudsValues[0];
                 cloudsState.feedback = lastCloudsValues[1];
                 cloudsState.reverb = lastCloudsValues[2];
+                cloudsState.publicationSequence = parameters.publicationSequence;
                 cloudsEngine.process(wetL, wetR, cloudsState);
                 // A stereo granular field folds down symmetrically in a
                 // mono host; listening only to its left grains loses energy.
@@ -431,10 +436,10 @@ private:
                 route.depth = depth; route.bipolar = provider.isBipolar;
             }
     }
-    void resetMemory() noexcept
+    void resetMemory(bool preserveFrozen = true) noexcept
     {
         history.reset(); tape.reset(); reverb.reset();
-        cloudsEngine.reset();
+        cloudsEngine.reset(preserveFrozen);
         chordEngine.reset();
         feedback.fill(0); highPassInput.fill(0); highPassOutput.fill(0);
         held.fill(0); holdRemaining = 0; holdResidual = 0;
@@ -464,7 +469,7 @@ private:
     }
     void activate(Type type, const Parameters& parameters) noexcept
     {
-        resetMemory(); currentType = type; currentNormalised = parameters.normalised;
+        resetMemory(false); currentType = type; currentNormalised = parameters.normalised;
         cloudsState.freeze = parameters.clouds.freeze;
         for (size_t i = 0; i < controlCount; ++i)
         {

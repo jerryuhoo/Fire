@@ -1146,7 +1146,7 @@ TEST_CASE("Preset scan counts every fire candidate before validation",
         temporaryDirectory.directory.getChildFile("Empty.fire"), 0));
     REQUIRE(createSparseFileWithSize(
         temporaryDirectory.directory.getChildFile("Oversized.fire"),
-        4 * 1024 * 1024 + 1));
+        12 * 1024 * 1024 + 1));
     REQUIRE(temporaryDirectory.directory.getChildFile("Malformed.fire")
                 .replaceWithText("<WINGSFIRE><broken></WINGSFIRE>"));
     juce::XmlElement foreignXml { "SETTINGS" };

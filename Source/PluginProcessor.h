@@ -451,8 +451,11 @@ public:
         juce::ValueTree parameterState;
         std::vector<LfoData> lfoData;
         juce::Array<ModulationRouting> routings;
+        fire::effects::FrozenRecordings frozenAudio;
     };
     SerializablePresetStateSnapshot captureSerializablePresetStateSnapshot() const;
+    void restoreFrozenAudio(const fire::effects::FrozenRecordings&);
+    fire::effects::FrozenRecordings captureFrozenAudio(const juce::ValueTree& parameterState) const;
     bool isDawPlaying() const;
     float getLfoPhase(int lfoIndex) const;
     LfoManager::VisualState getLfoVisualState(int lfoIndex) const noexcept;
@@ -815,6 +818,7 @@ private:
         int editorHeight = static_cast<int>(INIT_HEIGHT);
         juce::XmlElement abState { "AB_STATE" };
         fire::dsp::LoudnessMatchState::Settings loudnessMatch;
+        fire::effects::FrozenRecordings frozenAudio;
     };
 
     void initialiseParameterCache();

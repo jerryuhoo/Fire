@@ -16,6 +16,10 @@ using RackParameters = std::array<SlotParameters, slotCount>;
 class InsertRack
 {
 public:
+    FrozenRecordingPtr copyFrozenRecording(int slot) const
+    { return juce::isPositiveAndBelow(slot, slotCount) ? effects[static_cast<size_t>(slot)].copyFrozenRecording() : FrozenRecordingPtr{}; }
+    void stageFrozenRecording(int slot, const FrozenRecordingPtr& recording, std::uint32_t publication)
+    { if (juce::isPositiveAndBelow(slot, slotCount)) effects[static_cast<size_t>(slot)].stageFrozenRecording(recording, publication); }
     void prepare(const juce::dsp::ProcessSpec& spec)
     {
         for (auto& effect : effects) effect.prepare(spec);

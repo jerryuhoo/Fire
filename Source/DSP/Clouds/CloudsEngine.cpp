@@ -58,7 +58,7 @@ CloudsParameters sanitise(const CloudsParameters& p) noexcept
     return {safeControl(p.position, 0.1f), safeControl(p.size, 0.5f),
             safeControl(p.pitch, 0.0f, -24.0f, 24.0f), safeControl(p.density, 0.25f),
             safeControl(p.texture, 0.5f), safeControl(p.spread, 0.5f),
-            safeControl(p.feedback, 0.0f), safeControl(p.reverb, 0.0f), p.freeze};
+            safeControl(p.feedback, 0.0f), safeControl(p.reverb, 0.0f), p.freeze, p.publicationSequence};
 }
 size_t powerOfTwo(size_t value)
 {
@@ -182,8 +182,10 @@ public:
         }
         reset();
     }
-    void reset() noexcept
+    void reset(bool preserveFrozen = false) noexcept
     {
+        const bool keep = preserveFrozen && actuallyFrozen && buffers[0].valid_samples() > 0;
+        const int head = buffers[0].head(), valid = buffers[0].valid_samples();
         for (auto& buffer : buffers) buffer.Reset();
         player.Init(2, 32);
         diffuser.Init(diffusionMemory.data());
@@ -194,6 +196,33 @@ public:
         samplesSinceSignal = 0;
         heardSignal = false;
         previousFreezeRequest = pendingCapture = false;
+        actuallyFrozen = false;
+        if (keep)
+        {
+            for (auto& buffer : buffers) buffer.RestoreRecordingState(head, valid);
+            freezeLowpass = 1.0f; samplesSinceSignal = recordingSamples;
+            heardSignal = previousFreezeRequest = actuallyFrozen = true;
+        }
+    }
+    bool isFrozen() const noexcept { return actuallyFrozen && buffers[0].valid_samples() > 0; }
+    void publishRecording(AtomicFrozenRecording& destination, std::uint32_t publication) const noexcept
+    {
+        const int valid = buffers[0].valid_samples();
+        destination.publish(isFrozen() ? valid : 0, buffers[0].head(), publication,
+            [this, valid](size_t channel, int frame) -> std::int16_t
+            { return frame < valid ? recording[channel][static_cast<size_t>(frame)] : 0; });
+    }
+    void restoreRecording(const FrozenRecording& saved) noexcept
+    {
+        reset();
+        if (!saved.isValid()) return;
+        for (size_t channel = 0; channel < recording.size(); ++channel)
+        {
+            std::copy(saved.samples[channel].begin(), saved.samples[channel].end(), recording[channel].begin());
+            buffers[channel].RestoreRecordingState(saved.head, saved.validFrames);
+        }
+        freezeLowpass = 1.0f; samplesSinceSignal = recordingSamples;
+        heardSignal = previousFreezeRequest = actuallyFrozen = true;
     }
     void process(const std::array<Frame, coreBlock>& input,
                  std::array<Frame, coreBlock>& output,
@@ -207,6 +236,7 @@ public:
             pendingCapture = false;
         previousFreezeRequest = controls.freeze;
         const bool freeze = controls.freeze && !pendingCapture;
+        actuallyFrozen = freeze;
         ONE_POLE(freezeLowpass, freeze ? 1.0f : 0.0f, 0.0005f)
         const auto amount = controls.feedback;
         feedbackFilter[0].set_f_q<FREQUENCY_FAST>((20.0f + 100.0f * amount * amount) / 32000.0f, 1.0f);
@@ -286,11 +316,21 @@ private:
     int samplesSinceSignal = 0;
     bool heardSignal = false;
     bool previousFreezeRequest = false, pendingCapture = false;
+    bool actuallyFrozen = false;
 };
 }
 
+struct CloudsEngine::RecordingExchange
+{
+    AtomicFrozenRecording captured, restored;
+    FrozenRecording audioScratch;
+    std::atomic<std::uint64_t> applied{0};
+    std::mutex writerLock; // Restoring writers only; audio never enters it.
+};
+
 struct CloudsEngine::Impl
 {
+    explicit Impl(RecordingExchange& exchangeToUse) : exchange(exchangeToUse) {}
     void prepare(double rate)
     {
         sampleRate = std::isfinite(rate) && rate >= 8000.0 && rate <= 384000.0 ? rate : 48000.0;
@@ -301,11 +341,14 @@ struct CloudsEngine::Impl
         outputQueue.resize(powerOfTwo(4 * minimumOutput + 128));
         reset();
     }
-    void reset() noexcept
+    void reset(bool preserveFrozen = false) noexcept
     {
         inputConverter.reset();
         outputConverter.reset();
-        core.reset();
+        core.reset(preserveFrozen);
+        appliedRestore = 0;
+        exchange.applied.store(0, std::memory_order_release);
+        if (!preserveFrozen) exchange.captured.publish(nullptr, 0);
         fill = 0;
         outputRead = outputWrite = outputCount = 0;
         outputPrimed = parametersPrimed = false;
@@ -329,9 +372,21 @@ struct CloudsEngine::Impl
         approach(smoothed.texture, target.texture); approach(smoothed.spread, target.spread);
         approach(smoothed.feedback, target.feedback); approach(smoothed.reverb, target.reverb);
         smoothed.freeze = target.freeze;
+        smoothed.publicationSequence = target.publicationSequence;
     }
     void process(float& left, float& right, const CloudsParameters& parameters) noexcept
     {
+        if (exchange.restored.generation() != appliedRestore)
+        {
+            std::uint64_t version = 0;
+            if (exchange.restored.copy(exchange.audioScratch, version, parameters.publicationSequence, true))
+            {
+                core.restoreRecording(exchange.audioScratch);
+                core.publishRecording(exchange.captured, parameters.publicationSequence);
+                appliedRestore = version;
+                exchange.applied.store(version, std::memory_order_release);
+            }
+        }
         inputConverter.push({safeSample(left), safeSample(right)});
         Frame frame;
         while (inputConverter.pop(frame))
@@ -339,7 +394,9 @@ struct CloudsEngine::Impl
             smooth(parameters);
             input[static_cast<size_t>(fill++)] = frame;
             if (fill != coreBlock) continue;
+            const bool wasFrozen = core.isFrozen();
             core.process(input, output, smoothed);
+            if (wasFrozen != core.isFrozen()) core.publishRecording(exchange.captured, smoothed.publicationSequence);
             fill = 0;
             for (const auto& sample : output)
             {
@@ -377,22 +434,52 @@ struct CloudsEngine::Impl
     int fill = 0;
     bool outputPrimed = false, parametersPrimed = false;
     CloudsParameters smoothed;
+    RecordingExchange& exchange;
+    std::uint64_t appliedRestore = 0;
 };
 
 CloudsEngine::CloudsEngine() noexcept = default;
 CloudsEngine::~CloudsEngine() = default;
 void CloudsEngine::prepare(double sampleRate)
 {
-    if (!implementation) implementation = std::make_unique<Impl>();
+    ensureRecordingExchange();
+    // The fixed-rate material remains usable after a host rate change.
+    if (auto saved = copyFrozenRecording()) stageFrozenRecording(saved);
+    if (!implementation) implementation = std::make_unique<Impl>(*recordings);
     implementation->prepare(sampleRate);
 }
-void CloudsEngine::reset() noexcept
+void CloudsEngine::reset(bool preserveFrozen) noexcept
 {
-    if (implementation) implementation->reset();
+    if (implementation) implementation->reset(preserveFrozen);
 }
 void CloudsEngine::process(float& left, float& right, const CloudsParameters& parameters) noexcept
 {
     if (implementation) implementation->process(left, right, parameters);
     else left = right = 0.0f;
+}
+void CloudsEngine::ensureRecordingExchange()
+{
+    if (!recordings) recordings = std::make_unique<RecordingExchange>();
+}
+void CloudsEngine::stageFrozenRecording(const FrozenRecordingPtr& saved, std::uint32_t publication)
+{
+    if (!recordings && !saved) return;
+    ensureRecordingExchange();
+    const std::lock_guard<std::mutex> lock(recordings->writerLock);
+    recordings->restored.publish(saved.get(), publication);
+}
+FrozenRecordingPtr CloudsEngine::copyFrozenRecording() const
+{
+    if (!recordings) return {};
+    const auto* source = recordings->restored.generation() != recordings->applied.load(std::memory_order_acquire)
+        ? &recordings->restored : &recordings->captured;
+    if (source->generation() == 0) return {};
+    auto saved = std::make_shared<FrozenRecording>();
+    for (int attempt = 0; attempt < 16; ++attempt)
+    {
+        std::uint64_t version = 0;
+        if (source->copy(*saved, version)) return saved->isValid() ? saved : FrozenRecordingPtr{};
+    }
+    return {};
 }
 }

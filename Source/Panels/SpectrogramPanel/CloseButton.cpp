@@ -95,19 +95,17 @@ void CloseButton::paintButton(juce::Graphics& g, bool, bool)
                                1.0f / physicalScale);
     }
 
-    const auto halfCross = surface.getWidth() * (0.185f + 0.045f * hover);
+    const auto halfWidth = surface.getWidth() * (0.24f + 0.045f * hover);
     const auto centre = surface.getCentre();
-    juce::Path cross;
-    cross.startNewSubPath(centre.x - halfCross, centre.y - halfCross);
-    cross.lineTo(centre.x + halfCross, centre.y + halfCross);
-    cross.startNewSubPath(centre.x + halfCross, centre.y - halfCross);
-    cross.lineTo(centre.x - halfCross, centre.y + halfCross);
+    juce::Path minus;
+    minus.startNewSubPath(centre.x - halfWidth, centre.y);
+    minus.lineTo(centre.x + halfWidth, centre.y);
 
     const auto iconColour = fire::ui::colours::textSecondary.interpolatedWith(
         fire::ui::colours::danger, 0.34f + 0.58f * hover);
     g.setColour(iconColour.withAlpha(
         visibility * (0.74f + 0.24f * hover)));
-    g.strokePath(cross,
+    g.strokePath(minus,
                  juce::PathStrokeType(juce::jlimit(1.1f,
                                                    1.8f,
                                                    surface.getWidth() * 0.085f),

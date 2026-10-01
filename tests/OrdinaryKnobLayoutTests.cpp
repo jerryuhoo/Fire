@@ -126,6 +126,18 @@ TEST_CASE("Ordinary rotary controls have identical boxes and dial areas across w
                 row->triggerClick();
                 juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
                 checkPage();
+                if (effects[slot] == fire::effects::Type::reverb)
+                {
+                    auto* model = findKnobLayoutControl<juce::ComboBox>(panel,
+                        [](auto& menu) {return menu.getTitle() == "Reverb algorithm";});
+                    REQUIRE(model != nullptr); REQUIRE(model->isVisible());
+                    auto* parent = model->getParentComponent(); REQUIRE(parent != nullptr);
+                    CHECK(parent->getLocalBounds().contains(model->getBounds()));
+                    for (auto* child : parent->getChildren())
+                        if (auto* slider = dynamic_cast<juce::Slider*>(child); slider && slider->isVisible())
+                            CHECK_FALSE(model->getBounds().intersects(slider->getBounds()));
+                    saveKnobLayout(editor, (scope == 0 ? "master-reverb-model-" : "band-reverb-model-") + juce::String(width));
+                }
                 if (effects[slot] == fire::effects::Type::granular)
                     saveKnobLayout(editor, (scope == 0 ? "master-clouds-" : "band-clouds-") + juce::String(width));
             }

@@ -63,6 +63,9 @@ public:
         addChildComponent(reverbModelMenu);
         reverbModelMenu.setTitle("Reverb algorithm"); reverbModelMenu.setTooltip("Choose Classic, Room, Hall, Plate, Spring or Chamber.");
         for (int model = 0; model < fire::space::count; ++model) reverbModelMenu.addItem(fire::space::names[static_cast<size_t>(model)], model + 1);
+        addChildComponent(reverbModelLabel); reverbModelLabel.setText("Algorithm", juce::dontSendNotification);
+        reverbModelLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+        reverbModelLabel.setJustificationType(juce::Justification::centred); reverbModelLabel.setInterceptsMouseClicks(false, false);
         addChildComponent(hardwareColour);
         coreMode.setTitle("Shape mode");
         coreMode.setTooltip("Choose the waveshaping algorithm.");
@@ -413,12 +416,6 @@ public:
         const auto gap = juce::roundToInt(8.0f * scale);
         const auto footer = juce::roundToInt(fire::ui::Metrics::knobValueHeight * scale);
         auto bounds = getLocalBounds();
-        if (type == fire::effects::Type::reverb)
-        {
-            auto header = bounds.removeFromTop(juce::roundToInt(28 * scale));
-            reverbModelMenu.setBounds(header.withSizeKeepingCentre(juce::jmin(header.getWidth(), juce::roundToInt(174 * scale)), header.getHeight()));
-            bounds.removeFromTop(juce::roundToInt(5 * scale));
-        }
         const int columns = usesExpandedLayout() ? 6 : type == fire::effects::Type::lofi ? 4 : 3;
         const auto size = fire::ui::ordinaryKnobWidth(scale, {
             knobWidth > 0 ? knobWidth : fire::ui::ordinaryKnobWidth(scale),
@@ -426,6 +423,19 @@ public:
             (bounds.getHeight() - gap) / 2 - footer});
         const auto height = fire::ui::ordinaryKnobHeight(size, scale);
         auto area = bounds.withSizeKeepingCentre(size * columns + gap * (columns - 1), height * 2 + gap);
+        if (type == fire::effects::Type::reverb)
+        {
+            // Use the spare horizontal space for the model selector. An
+            // extra header row would shrink all six otherwise standard dials.
+            const auto selectorWidth = juce::jmax(1, juce::jmin(juce::roundToInt(174 * scale),
+                bounds.getWidth() - area.getWidth() - gap));
+            area = bounds.withSizeKeepingCentre(selectorWidth + gap + area.getWidth(), height * 2 + gap);
+            auto choices = area.removeFromLeft(selectorWidth); area.removeFromLeft(gap);
+            choices = choices.withSizeKeepingCentre(selectorWidth, juce::roundToInt(48 * scale));
+            reverbModelLabel.setBounds(choices.removeFromTop(juce::roundToInt(20 * scale)));
+            reverbModelLabel.setFont(fire::ui::labelFont(10 * scale));
+            reverbModelMenu.setBounds(choices);
+        }
         if (usesChordSelectors())
         {
             const auto selectorWidth = juce::jmax(1, juce::jmin(juce::roundToInt(112.0f * scale),
@@ -676,6 +686,7 @@ private:
         coreMode.setVisible(active && type == fire::effects::Type::shape);
         if (!current()) return;
         reverbModelMenu.setVisible(active && type == fire::effects::Type::reverb);
+        reverbModelLabel.setVisible(active && type == fire::effects::Type::reverb);
         if (!current()) return;
         hardwareColour.setVisible(active && usesAnalogLayout());
         if (!current()) return;
@@ -692,6 +703,7 @@ private:
     std::array<std::array<std::unique_ptr<SliderAttachment>, 3>, fire::eq::maxNodes> eqAttachments;
     ContextAwareComboBox coreMode;
     ContextAwareComboBox reverbModelMenu;
+    juce::Label reverbModelLabel;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> reverbModelAttachment;
     fire::ui::HardwareColourPanel hardwareColour;
     ModulatableSlider* analogDriveKnob = nullptr;

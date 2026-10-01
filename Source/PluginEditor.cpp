@@ -76,6 +76,8 @@ void FireAudioProcessorEditor::UpdateCheckThread::stop()
 //==============================================================================
 bool FireAudioProcessorEditor::keyPressed(const juce::KeyPress& key)
 {
+    if (presetBrowser && presetBrowser->isVisible()) return presetBrowser->keyPressed(key);
+
     if (! key.getModifiers().isCommandDown() && ! key.getModifiers().isCtrlDown()) return false;
     const auto character = juce::CharacterFunctions::toLowerCase(key.getTextCharacter());
     if (character == 'z')
@@ -472,6 +474,20 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     stateComponent.getNextButton()->addListener(this);
 
     setLookAndFeel(&fireLookAndFeel);
+    presetBrowser = std::make_unique<fire::ui::PresetBrowserPanel>(processor.statePresets);
+    addChildComponent(*presetBrowser); presetBrowser->setAlwaysOnTop(true);
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safeBrowserOwner(this);
+    stateComponent.configureFullPageBrowser([safeBrowserOwner] {if (safeBrowserOwner) safeBrowserOwner->showPresetBrowser();});
+    presetBrowser->onClose = [safeBrowserOwner] {if (safeBrowserOwner) safeBrowserOwner->hidePresetBrowser();};
+    presetBrowser->onPresetSelected = [safeBrowserOwner](const juce::String& tag)
+    {
+        if (!safeBrowserOwner || !safeBrowserOwner->presetBrowser->isShowing()) return;
+        const bool loaded = safeBrowserOwner->stateComponent.loadBrowserPreset(tag);
+        if (!safeBrowserOwner) return;
+        safeBrowserOwner->presetBrowser->refreshSelection();
+        if (loaded) safeBrowserOwner->multiband.resortAndRedrawLines();
+    };
+
 
     // HQ(oversampling) Button
     addAndMakeVisible(hqButton);
@@ -602,6 +618,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
 {
+    stateComponent.onBrowserRequested = nullptr;
+    if (presetBrowser) {presetBrowser->onClose = nullptr; presetBrowser->onPresetSelected = nullptr;}
     // Stop the high-frequency modulation channel before any child control is
     // torn down. A worker may still publish a revision, but it can no longer
     // queue an editor callback against partially destroyed GUI state.
@@ -678,6 +696,8 @@ void FireAudioProcessorEditor::initEditor()
 //==============================================================================
 void FireAudioProcessorEditor::paint(juce::Graphics& g)
 {
+    if (presetBrowser && presetBrowser->isVisible()) return;
+
     const float newDisplayScale = g.getInternalContext().getPhysicalPixelScaleFactor();
 
     if (std::abs(newDisplayScale - currentDisplayScale) > 0.01f)
@@ -705,6 +725,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
 
 void FireAudioProcessorEditor::paintOverChildren(juce::Graphics& g)
 {
+    if (presetBrowser && presetBrowser->isVisible()) return;
+
     if (workspaceReveal < 0.999f && ! contentArea.isEmpty())
     {
         g.setColour(fire::ui::colours::surface0.withAlpha(1.0f - workspaceReveal));
@@ -771,6 +793,13 @@ void FireAudioProcessorEditor::resized()
 
     const float scale = juce::jmin(getHeight() / (float) INIT_HEIGHT, getWidth() / (float) INIT_WIDTH);
     fireLookAndFeel.scale = scale;
+    if (presetBrowser)
+    {
+        presetBrowser->setBounds(getLocalBounds());
+        // Background layout would make spectrum controls visible again.
+        // Rebuild it when leaving the browser, at the final editor size.
+        if (presetBrowser->isVisible()) return;
+    }
     bandPanel.setScale(scale);
     lfoPanel.setScale(scale);
     globalPanel.setScale(scale);
@@ -1186,6 +1215,8 @@ void FireAudioProcessorEditor::resetHeaderPresentation() noexcept
 
 void FireAudioProcessorEditor::advanceAnimations(float deltaSeconds)
 {
+    if (presetBrowser && presetBrowser->isVisible()) {presetBrowser->refreshSelection(); return;}
+
     // A real meter packet drives the whole-plugin mark, independently of the
     // transport or whichever band happens to be selected. The watchdog uses
     // the actual elapsed time even after a stalled UI clock.
@@ -1703,6 +1734,8 @@ void FireAudioProcessorEditor::sliderValueChanged(juce::Slider*)
 
 void FireAudioProcessorEditor::updateMainPanelVisibility()
 {
+    if (presetBrowser && presetBrowser->isVisible()) {bandPanel.setVisible(false); globalPanel.setVisible(false); lfoPanel.setVisible(false); return;}
+
     const auto selectedWorkspace = windowRightButton.getToggleState()
                                        ? 2
                                        : (windowLfoButton.getToggleState() ? 1 : 0);
@@ -1899,6 +1932,38 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
             }
         }
     }
+}
+
+void FireAudioProcessorEditor::showPresetBrowser()
+{
+    if (!presetBrowser || presetBrowser->isVisible()) return;
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safe(this);
+    exitAssignMode(false); if (!safe) return;
+    bandPanel.dismissTransientInteraction(); if (!safe) return;
+    globalPanel.dismissTransientInteraction(); if (!safe) return;
+    stateComponent.dismissPointerGestures(); if (!safe) return;
+    componentsHiddenForPresets.clear();
+    for (auto* component : getChildren())
+        if (component != presetBrowser.get() && component->isVisible()
+            && dynamic_cast<juce::ResizableCornerComponent*>(component) == nullptr) componentsHiddenForPresets.emplace_back(component);
+    for (auto component : componentsHiddenForPresets) {if (component) component->setVisible(false); if (!safe) return;}
+    presetBrowser->setVisible(true); presetBrowser->setBounds(getLocalBounds()); presetBrowser->open();
+    if (safe)
+    {
+        presetBrowser->toFront(true); repaint();
+        // Keep the native resize handle usable on the full-page browser.
+        for (auto* component : getChildren())
+            if (dynamic_cast<juce::ResizableCornerComponent*>(component)) {component->toFront(false); break;}
+    }
+}
+void FireAudioProcessorEditor::hidePresetBrowser()
+{
+    if (!presetBrowser || !presetBrowser->isVisible()) return;
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safe(this);
+    presetBrowser->setVisible(false); if (!safe) return;
+    auto hidden = std::move(componentsHiddenForPresets); componentsHiddenForPresets.clear();
+    for (auto component : hidden) {if (component && component->getParentComponent() == this) component->setVisible(true); if (!safe) return;}
+    updateMainPanelVisibility(); if (safe) resized();
 }
 
 void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox* combobox)

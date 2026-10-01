@@ -1457,6 +1457,11 @@ namespace state
                 if (newName != currentState->getStringAttribute("presetName"))
                     currentState->setAttribute("presetName", newName);
                 currentState->setAttribute("presetKey", presetKey);
+                // Factory catalogue markers belong to our embedded library.
+                // An exported scene is an editable user preset on disk.
+                currentState->removeAttribute("factoryPreset");
+                currentState->removeAttribute("factoryVirtual");
+                currentState->removeAttribute("factoryRecipeIndex");
 
                 parentXML.addChildElement(currentState.release());
 
@@ -1514,10 +1519,19 @@ namespace state
 
     int StatePresets::appendFactoryPresets()
     {
-        auto presets = fire::factory::create(static_cast<FireAudioProcessor&>(pluginProcessor));
+        std::vector<std::unique_ptr<juce::XmlElement>> presets;
+        for (size_t index = 0; index < fire::factory::definitions.size(); ++index)
+        {
+            const auto& definition = fire::factory::definitions[index];
+            auto preset = std::make_unique<juce::XmlElement>("factory-" + definition.key);
+            preset->setAttribute("presetName", definition.name); preset->setAttribute("presetCategory", definition.category);
+            preset->setAttribute("presetDescription", definition.description); preset->setAttribute("presetKey", "@factory/" + definition.key);
+            preset->setAttribute("factoryPreset", true); preset->setAttribute("factoryVirtual", true);
+            preset->setAttribute("factoryRecipeIndex", static_cast<int>(index)); presets.push_back(std::move(preset));
+        }
         const auto count = static_cast<int>(presets.size());
-        auto* root = mPresetXml.createNewChildElement("FOLDER");
-        root->setAttribute("folderName", "Factory");
+        const juce::ScopedLock lock(identityLock);
+        auto* root = mPresetXml.createNewChildElement("FOLDER"); root->setAttribute("folderName", "Factory");
         juce::String category;
         juce::XmlElement* folder = nullptr;
         for (auto& preset : presets)
@@ -1532,6 +1546,42 @@ namespace state
             folder->addChildElement(preset.release());
         }
         return count;
+    }
+
+    const juce::XmlElement* StatePresets::getPresetForComparison(const juce::XmlElement& preset) const
+    {
+        if (!preset.getBoolAttribute("factoryVirtual") || !preset.getBoolAttribute("factoryPreset")) return &preset;
+        const int index = preset.getIntAttribute("factoryRecipeIndex", -1);
+        if (!juce::isPositiveAndBelow(index, static_cast<int>(fire::factory::definitions.size()))) return nullptr;
+        const auto& definition = fire::factory::definitions[static_cast<size_t>(index)];
+        if (preset.getTagName() != "factory-" + definition.key || preset.getStringAttribute("presetKey") != "@factory/" + definition.key) return nullptr;
+        if (expandedFactoryIndex != index || !expandedFactoryPreset)
+        {
+            auto expanded = fire::factory::create(static_cast<FireAudioProcessor&>(pluginProcessor), index);
+            if (expanded.empty()) return nullptr;
+            expandedFactoryPreset = std::move(expanded.front()); expandedFactoryIndex = index;
+        }
+        return expandedFactoryPreset.get();
+    }
+
+    std::vector<StatePresets::BrowserEntry> StatePresets::getBrowserEntries() const
+    {
+        const juce::ScopedLock lock(identityLock);
+        std::vector<BrowserEntry> result;
+        std::function<void(const juce::XmlElement&, juce::String)> gather = [&](const auto& root, juce::String folder)
+        {
+            for (auto* child : root.getChildIterator())
+            {
+                if (child->hasTagName("FOLDER")) gather(*child, child->getStringAttribute("folderName"));
+                else if (child->hasAttribute("presetName"))
+                {
+                    const bool factory = child->getBoolAttribute("factoryPreset");
+                    result.push_back({child->getTagName(), child->getStringAttribute("presetKey"), child->getStringAttribute("presetName"),
+                        child->getStringAttribute("presetCategory", factory ? folder : "User"), child->getStringAttribute("presetDescription"), factory});
+                }
+            }
+        };
+        gather(mPresetXml, {}); return result;
     }
 
     void StatePresets::enableFactoryPresets()
@@ -1627,8 +1677,8 @@ namespace state
         {
             if (child->hasAttribute("presetName") && child->getTagName() == presetId)
             {
-                if (! isLoadablePresetState(*child, pluginProcessor))
-                    return false;
+                const auto* expanded = getPresetForComparison(*child);
+                if (!expanded || !isLoadablePresetState(*expanded, pluginProcessor)) return false;
 
                 {
                     auto& fireProc = static_cast<FireAudioProcessor&>(
@@ -1639,7 +1689,7 @@ namespace state
                         fireProc.requestMultibandTopologyReset();
                     } };
 
-                    if (! loadStateFromXml(*child, pluginProcessor))
+                    if (! loadStateFromXml(*expanded, pluginProcessor))
                         return false;
                     {
                         const juce::ScopedLock lock(identityLock);
@@ -2404,6 +2454,13 @@ namespace state
         nextButton.addListener(this);
 
         addAndMakeVisible(presetBox);
+        addChildComponent(browserButton);
+        browserButton.setComponentID("header_preset_browser"); browserButton.setTitle("Browse presets");
+        browserButton.setTooltip("Open the full-page sound library"); browserButton.setButtonText("- Init -");
+        browserButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
+        browserButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textPrimary);
+        browserButton.onClick = [safe = juce::Component::SafePointer<StateComponent>(this)]
+        {if (safe && safe->onBrowserRequested) safe->onBrowserRequested();};
 
         presetBox.setComponentID("header_preset");
         presetBox.setTitle("Preset browser");
@@ -2473,6 +2530,7 @@ namespace state
 
     StateComponent::~StateComponent()
     {
+        onBrowserRequested = nullptr; browserButton.onClick = nullptr;
         loudnessMatchControls.onEnabledChanged = nullptr;
         loudnessMatchControls.onLearn = nullptr;
         loudnessMatchControls.dismiss();
@@ -2521,6 +2579,8 @@ namespace state
 
     void StateComponent::timerCallback()
     {
+        const auto shownName = presetBox.getText().isEmpty() ? juce::String("- Init -") : presetBox.getText();
+        if (browserButton.getButtonText() != shownName) browserButton.setButtonText(shownName);
         if (dirtyUpdatePending.exchange(false, std::memory_order_acq_rel))
             markAsDirty();
     }
@@ -2816,6 +2876,7 @@ namespace state
         placeRight(nextButton, compactWidth);
         placeRight(previousButton, compactWidth);
         presetBox.setBounds(r);
+        browserButton.setBounds(r);
     }
 
     void StateComponent::visibilityChanged()
@@ -2933,6 +2994,22 @@ namespace state
     void StateComponent::comboBoxChanged(juce::ComboBox* changedComboBox)
     {
         juce::ignoreUnused(changedComboBox);
+    }
+
+    bool StateComponent::loadBrowserPreset(const juce::String& tag)
+    {
+        for (int index = 0; index < presetBox.getNumItems(); ++index)
+        {
+            const int id = presetBox.getItemId(index);
+            if (procStatePresets.comboBoxIdToTagNameMap[id] != tag) continue;
+            const juce::Component::SafePointer<StateComponent> safe(this);
+            updatePresetBox(id);
+            if (!safe) return false;
+            const auto key = procStatePresets.getCurrentPresetKey();
+            browserButton.setButtonText(procStatePresets.getPresetName());
+            return procStatePresets.getCurrentPresetId() == id && key.isNotEmpty();
+        }
+        return false;
     }
 
     void StateComponent::updatePresetBox(int selectedId) // when preset is changed
@@ -3079,7 +3156,8 @@ namespace state
         presetBox.setText(presetName, juce::dontSendNotification);
 
         auto& fireProc = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());
-        if (! fireProc.isCurrentStateEquivalentToPreset(*presetXml))
+        const auto* expanded = procStatePresets.getPresetForComparison(*presetXml);
+        if (!expanded || ! fireProc.isCurrentStateEquivalentToPreset(*expanded))
         {
             markAsDirty();
         }
@@ -3812,6 +3890,8 @@ namespace state
         if (safeThis == nullptr)
             return;
 
+        safeThis->browserButton.dismissPointerGesture();
+        if (!safeThis) return;
         safeThis->presetBox.dismissTransientInteraction();
         if (safeThis == nullptr)
             return;

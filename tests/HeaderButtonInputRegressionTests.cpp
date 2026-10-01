@@ -1033,7 +1033,7 @@ TEST_CASE("Editor header and preset actions use primary-only buttons",
 
     std::vector<PrimaryTextButton*> buttons;
     collectHeaderButtons(*editor, buttons);
-    REQUIRE(buttons.size() == 11);
+    REQUIRE(buttons.size() == 12);
 
     std::map<juce::String, int> componentIdCounts;
     for (const auto* button : buttons)
@@ -1047,6 +1047,7 @@ TEST_CASE("Editor header and preset actions use primary-only buttons",
     CHECK(componentIdCounts["header_previous"] == 1);
     CHECK(componentIdCounts["header_next"] == 1);
     CHECK(componentIdCounts["header_menu"] == 1);
+    CHECK(componentIdCounts["header_preset_browser"] == 1);
 
     auto* zoom = dynamic_cast<PrimaryTextButton*>(editor->findChildWithID("zoom"));
     REQUIRE(zoom != nullptr);
@@ -1107,6 +1108,10 @@ TEST_CASE("Editor header and preset actions use primary-only buttons",
                            "Save",
                            "Save preset",
                            "Save preset");
+    checkButtonDescription("header_preset_browser",
+                           "- Init -",
+                           "Browse presets",
+                           "Open the full-page sound library");
 
     const auto leftButton = juce::ModifierKeys {
         juce::ModifierKeys::leftButtonModifier
@@ -1175,7 +1180,7 @@ TEST_CASE("Editor peer detachment discards every header pointer gesture",
 
     std::vector<PrimaryTextButton*> buttons;
     collectHeaderButtons(*editor, buttons);
-    REQUIRE(buttons.size() == 11);
+    REQUIRE(buttons.size() == 12);
     const auto leftButton = juce::ModifierKeys {
         juce::ModifierKeys::leftButtonModifier
     };

@@ -122,6 +122,9 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         void enableFactoryPresets();
         int getNumFactoryPresets() const noexcept;
         juce::String getCurrentPresetDescription() const;
+        struct BrowserEntry {juce::String tag, key, name, category, description; bool factory = false;};
+        std::vector<BrowserEntry> getBrowserEntries() const;
+        const juce::XmlElement* getPresetForComparison(const juce::XmlElement& preset) const;
         juce::String getNextAvailablePresetId();
         struct PresetIdentitySnapshot
         {
@@ -188,6 +191,8 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         juce::AudioProcessor& pluginProcessor;
         juce::XmlElement mPresetXml { "WINGSFIRE" }; // in-plugin representation mutiple presets in one xml
         juce::XmlElement presetXmlSingle { "WINGSFIRE" }; // single preset for save file
+        mutable std::unique_ptr<juce::XmlElement> expandedFactoryPreset;
+        mutable int expandedFactoryIndex = -1;
         juce::File presetFile; // on-disk representation
         juce::String statePresetName { "" };
         juce::String currentPresetKey;
@@ -249,6 +254,11 @@ PluginProcessor).
         void requestFocusResetAfterStateLoad() noexcept;
         bool consumeFocusResetAfterStateLoad() noexcept;
         juce::ComboBox* getPresetBox();
+        std::function<void()> onBrowserRequested;
+        void configureFullPageBrowser(std::function<void()> callback)
+        {onBrowserRequested = std::move(callback); presetBox.setVisible(!onBrowserRequested); browserButton.setVisible(static_cast<bool>(onBrowserRequested));}
+        bool loadBrowserPreset(const juce::String& tag);
+        juce::Button& getBrowserButton() {return browserButton;}
         juce::Button* getToggleABButton();
         void updatePresetBox(int selectedId);
         void synchronisePresetSelectionFromManager();
@@ -395,6 +405,7 @@ PluginProcessor).
         PrimaryTextButton copyABButton;
         fire::ui::LoudnessMatchControls loudnessMatchControls;
         PresetComboBox presetBox;
+        PrimaryTextButton browserButton;
         PrimaryTextButton previousButton;
         PrimaryTextButton nextButton;
         PrimaryTextButton savePresetButton;

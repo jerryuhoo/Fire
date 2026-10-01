@@ -189,7 +189,7 @@ TEST_CASE("Production ComboBoxes repaint on hover motion for smooth feedback",
         }
     }
 
-    SECTION("preset menu")
+    SECTION("full-page preset entry")
     {
         FireAudioProcessor processor;
         processor.hasUpdateCheckBeenPerformed = true;
@@ -203,7 +203,15 @@ TEST_CASE("Production ComboBoxes repaint on hover motion for smooth feedback",
         auto* presetBox = stateComponent->getPresetBox();
         REQUIRE(presetBox != nullptr);
         CHECK(dynamic_cast<FocusAwareComboBox*>(presetBox) != nullptr);
-        checkPointerMotionRequestsAnimationFrames(*presetBox);
+        CHECK_FALSE(presetBox->isShowing());
+        CHECK(stateComponent->getBrowserButton().isShowing());
+        CHECK(dynamic_cast<PrimaryTextButton*>(&stateComponent->getBrowserButton()) != nullptr);
+        auto* probe = new RepaintProbe();
+        presetBox->setCachedComponentImage(probe); probe->takeInvalidations();
+        const auto event = makeMouseEvent(*presetBox);
+        presetBox->mouseEnter(event); presetBox->mouseMove(event); presetBox->mouseExit(event);
+        CHECK(probe->takeInvalidations() == 0);
+        presetBox->setCachedComponentImage(nullptr);
     }
 }
 

@@ -100,7 +100,7 @@ TEST_CASE("Editor loudness matching fits beside A B Copy and the preset browser"
     auto& learn = buttonWithId(editor, "loudnessMatchLearn");
     auto* ab = states.getToggleABButton();
     auto* copy = states.getCopyABButton();
-    auto* preset = states.getPresetBox();
+    auto* preset = &states.getBrowserButton();
     REQUIRE(ab != nullptr);
     REQUIRE(copy != nullptr);
     REQUIRE(preset != nullptr);

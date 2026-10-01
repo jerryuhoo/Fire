@@ -198,6 +198,7 @@
               file="Source/DSP/SampleAccurateCompressor.cpp"/>
         <FILE id="ottCore1" name="OttProcessor.h" compile="0" resource="0" file="Source/DSP/OttProcessor.h"/>
         <FILE id="insertFx1" name="InsertEffect.h" compile="0" resource="0" file="Source/DSP/InsertEffect.h"/>
+        <FILE id="presetUi1" name="PresetBrowserPanel.h" compile="0" resource="0" file="Source/GUI/PresetBrowserPanel.h"/>
         <FILE id="analogUi1" name="HardwareColourPanel.h" compile="0" resource="0" file="Source/GUI/HardwareColourPanel.h"/>
         <FILE id="spaceFx1" name="SpatialReverb.h" compile="0" resource="0" file="Source/DSP/SpatialReverb.h"/>
         <FILE id="spaceFx2" name="ReverbModelParameters.h" compile="0" resource="0" file="Source/Utility/ReverbModelParameters.h"/>

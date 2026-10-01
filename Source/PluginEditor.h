@@ -17,6 +17,7 @@
 #include "GUI/PrimaryButton.h"
 #include "GUI/ValueEntryPopup.h"
 #include "GUI/ValuePopup.h"
+#include "GUI/PresetBrowserPanel.h"
 #include "Panels/ControlPanel/BandPanel.h"
 #include "Panels/ControlPanel/GlobalPanel.h"
 #include "Panels/ControlPanel/LfoPanel.h"
@@ -158,6 +159,11 @@ private:
     // access the processor object that created it.
     FireAudioProcessor& processor;
     state::StateComponent stateComponent;
+    std::unique_ptr<fire::ui::PresetBrowserPanel> presetBrowser;
+    std::vector<juce::Component::SafePointer<juce::Component>> componentsHiddenForPresets;
+    void showPresetBrowser();
+    void hidePresetBrowser();
+
 
     ValuePopup valuePopup;
     juce::Component::SafePointer<ModulatableSlider> valuePopupOwner;

@@ -190,14 +190,20 @@ Builds/Fire_artefacts/Release/
 - **A/B**: Switch between A/B to compare.
 - **Copy**: Copy current preset parameters to another (A/B) panel.
 - **Match**: Learn and hold separate loudness compensation for A and B.
-- **Preset bar**: Choose your current preset.
-- **Factory scenes**: The menu includes 12 read-only starting points under
-  Factory / Drums, Bass, Vocals, Atmosphere, Rhythm and Creative. Hover the
-  preset bar after loading one to read its suggested source and controls.
-  Factory scenes are embedded in the plug-in, use stable identities across
-  rescans and project restoration, and never overwrite user presets. Save an
-  edited scene as a user preset. Existing user-preset menu positions are kept
-  ahead of the factory section.
+- **Preset bar**: Click the current sound name to open the full-page sound
+  library. Choose a collection on the left, or search by name, colour and
+  space. A single click loads a preset while keeping the browser open for
+  auditioning; double-click, Escape or **Back to Reactor** returns to the
+  processing page. Up/down arrows audition neighbouring sounds when the
+  search field is not focused. The current sound stays highlighted.
+- **Factory scenes**: 200 read-only starting points, with 20 scenes in each
+  of Vocals, Synths, Drums, Bass, Guitar, Keys, Spaces, Lo-Fi, Rhythm and
+  Effects. Scenes combine the analog circuits, spatial reverb models,
+  compression, modulation and other effects, with four assigned macros.
+  The catalogue expands each scene's complete state only when selected.
+  Existing factory identities survive rescans and project restoration;
+  user presets appear in their own collection. Save an edited factory
+  scene as a user preset.
 - **Save**: Save your preset to user folder.
 - **Menu**: Other settings including init, open preset folder, rescan preset folder, open GitHub page, check for new version.
 

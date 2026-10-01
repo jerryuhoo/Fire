@@ -119,6 +119,9 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
 
         void setPresetAndFolderNames(juce::ComboBox& menu);
         int getNumPresets() const;
+        void enableFactoryPresets();
+        int getNumFactoryPresets() const noexcept;
+        juce::String getCurrentPresetDescription() const;
         juce::String getNextAvailablePresetId();
         struct PresetIdentitySnapshot
         {
@@ -190,6 +193,9 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         juce::String currentPresetKey;
         juce::HashMap<int, juce::String> comboBoxIdToPresetKeyMap;
         mutable juce::CriticalSection identityLock;
+        std::atomic<bool> factoryPresetsEnabled{false};
+        std::atomic<int> userPresetCount{0};
+        int appendFactoryPresets();
         void recursiveFileSearchImpl(juce::XmlElement& parentXML,
                                      const juce::File& dir,
                                      int depth,

@@ -3063,6 +3063,7 @@ FireAudioProcessor::FireAudioProcessor()
     highcutFreqSmoother.setCurrentAndTargetValue(chainSettings.highCutFreq);
     highcutGainSmoother.setCurrentAndTargetValue(chainSettings.highCutGainInDecibels);
     highcutQualitySmoother.setCurrentAndTargetValue(chainSettings.highCutQuality);
+    statePresets.enableFactoryPresets();
     editHistory = std::make_unique<fire::state::EditHistory>(*this,
         [this]
         {

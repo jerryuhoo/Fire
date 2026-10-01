@@ -11,6 +11,7 @@
 #include "Preset.h"
 #include "../../Utility/FrozenAudioState.h"
 #include "../../PluginProcessor.h"
+#include "../../Utility/FactoryPresets.h"
 #include "../../Utility/StrictNumberParser.h"
 #include "../../Utility/LfoBankParameters.h"
 #include "../../Utility/DriveCompensationParameters.h"
@@ -1462,6 +1463,8 @@ namespace state
                                 scanState);
 
         recursiveSort(&mPresetXml);
+        userPresetCount.store(scanState.statistics.acceptedPresetCount, std::memory_order_release);
+        const auto factoryCount = factoryPresetsEnabled.load() ? appendFactoryPresets() : 0;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         lastPresetScanStatistics = scanState.statistics;
 #endif
@@ -1469,10 +1472,58 @@ namespace state
         // Host state restoration may query the count from a non-message
         // thread. Publish only the complete scan so it never clamps a legacy
         // preset ID against a transient zero or partial result.
-        numPresets.store(scanState.statistics.acceptedPresetCount,
+        numPresets.store(scanState.statistics.acceptedPresetCount + factoryCount,
                          std::memory_order_release);
 
         //mPresetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
+    }
+
+    int StatePresets::appendFactoryPresets()
+    {
+        auto presets = fire::factory::create(static_cast<FireAudioProcessor&>(pluginProcessor));
+        const auto count = static_cast<int>(presets.size());
+        auto* root = mPresetXml.createNewChildElement("FOLDER");
+        root->setAttribute("folderName", "Factory");
+        juce::String category;
+        juce::XmlElement* folder = nullptr;
+        for (auto& preset : presets)
+        {
+            const auto nextCategory = preset->getStringAttribute("presetCategory");
+            if (folder == nullptr || nextCategory != category)
+            {
+                category = nextCategory;
+                folder = root->createNewChildElement("FOLDER");
+                folder->setAttribute("folderName", "Factory / " + category);
+            }
+            folder->addChildElement(preset.release());
+        }
+        return count;
+    }
+
+    void StatePresets::enableFactoryPresets()
+    {
+        if (factoryPresetsEnabled.exchange(true)) return;
+        const auto count = appendFactoryPresets();
+        numPresets.fetch_add(count, std::memory_order_release);
+    }
+
+    int StatePresets::getNumFactoryPresets() const noexcept
+    { return factoryPresetsEnabled.load() ? static_cast<int>(fire::factory::definitions.size()) : 0; }
+
+    juce::String StatePresets::getCurrentPresetDescription() const
+    {
+        const juce::ScopedLock lock(identityLock);
+        std::function<juce::String(const juce::XmlElement&)> find = [&](const juce::XmlElement& root) -> juce::String
+        {
+            for (auto* child : root.getChildIterator())
+            {
+                if (child->getStringAttribute("presetKey") == currentPresetKey && currentPresetKey.isNotEmpty())
+                    return child->getStringAttribute("presetDescription");
+                if (child->hasTagName("FOLDER")) if (auto description = find(*child); description.isNotEmpty()) return description;
+            }
+            return {};
+        };
+        return find(mPresetXml);
     }
 
     juce::String StatePresets::savePreset(juce::File savePath, bool overwriteAlreadyConfirmed)
@@ -1602,6 +1653,7 @@ namespace state
             {
                 if (child->getTagName() == presetTag && child->hasAttribute("presetName"))
                 {
+                    if (child->getBoolAttribute("factoryPreset")) return false;
                     parent.removeChildElement(child, true);
                     return true;
                 }
@@ -1702,7 +1754,8 @@ namespace state
         // bind it to the discovered stable key for future saves.
         if (! hasStableIdentity)
         {
-            const int safeLegacyId = juce::isPositiveAndBelow(pendingLegacyId, index + 1)
+            const auto legacyCount = factoryPresetsEnabled.load() ? userPresetCount.load() : index;
+            const int safeLegacyId = juce::isPositiveAndBelow(pendingLegacyId, legacyCount + 1)
                                          ? pendingLegacyId
                                          : 0;
             mCurrentPresetId.store(safeLegacyId, std::memory_order_relaxed);
@@ -1768,6 +1821,7 @@ namespace state
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     void StatePresets::setPresetDirectoryForTesting(juce::File directory)
     {
+        factoryPresetsEnabled.store(false);
         presetFile = std::move(directory);
         scanAllPresets();
     }
@@ -2940,6 +2994,8 @@ namespace state
 
     void StateComponent::synchronisePresetSelectionFromManager()
     {
+        const auto description = procStatePresets.getCurrentPresetDescription();
+        presetBox.setTooltip(description.isNotEmpty() ? description : "Select a preset");
         // A processor state restore changes the live state first and then
         // publishes its stable preset key. Rebuild the menu mapping and only
         // reflect that state in the ComboBox; this path must never load a file.

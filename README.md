@@ -551,6 +551,8 @@ OTT settings participate in presets, A/B comparisons and band copying. Older pro
 
 ### Master and Band insert effects
 
+Reverb now has **Classic, Room, Hall, Plate, Spring and Chamber** models. Classic retains the original processing and automation mapping. The new models use tuned diffusion and feedback-delay structures; Spring adds frequency-dependent allpass dispersion. Choose the model above the reverb controls. Size, Damping, Pre-delay, Width, Low Cut and Mix remain available on their existing host IDs. Model changes fade through the dry signal and clear old delay history without reallocating in the audio callback.
+
 Shape also offers twelve **Analog Hardware** colours: Warm Triode, Bright Pentode, Class A Console, Tweed Breakup, British Crunch, Modern High Gain, Diode Overdrive, Germanium Fuzz, Silicon Fuzz, MOSFET Drive, Transformer and Tape Saturation. These circuit-inspired colours combine nonlinear stages with input/tone filtering, power-supply sag and magnetic memory. The original twelve digital modes and their host automation ranges remain unchanged. New model selections use independent appended parameters and smooth mode transitions.
 
 Analog pages use a hardware faceplate. Tube filaments brighten with Drive and input energy; the tape transport turns while audio arrives and winds down when callbacks stop. The artwork is cached and animation runs only while its panel is visible. Both Band Shape and independently added Master/Band Shape instances offer these colours; each added analog Shape has its own Drive control.

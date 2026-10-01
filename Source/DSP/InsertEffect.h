@@ -4,6 +4,7 @@
 #include "Clouds/CloudsEngine.h"
 #include "ChordResonator.h"
 #include "CoreEffect.h"
+#include "SpatialReverb.h"
 #include <juce_dsp/juce_dsp.h>
 #include <array>
 #include <limits>
@@ -267,6 +268,7 @@ public:
         std::array<CoreEffect::EqNode, eq::maxNodes> eq;
         ModulatedValueProvider jitter;
         int shapeModel = 0;
+        int reverbModel = 0;
         ModulatedValueProvider analogDrive;
         int analogDriveSource = -1;
         explicit Parameters(Type kind = Type::none) : type(kind)
@@ -285,6 +287,7 @@ public:
         history.prepare(sampleRate, 2.3);
         tape.prepare(sampleRate);
         reverb.setSampleRate(sampleRate);
+        spatialReverb.prepare(sampleRate);
         cloudsEngine.prepare(sampleRate);
         chordEngine.prepare(sampleRate);
         if (! core) core = std::make_unique<CoreEffect>();
@@ -318,7 +321,8 @@ public:
         if (block.getNumChannels() == 0 || block.getNumSamples() == 0) return;
         auto requested = parameters.type;
         if (requested < Type::none || requested >= Type::count) requested = Type::none;
-        const auto matches = [&] { return requested == currentType; };
+        const auto matches = [&] { return requested == currentType && (currentType != Type::reverb
+            || currentReverbModel == juce::jlimit(0, fire::space::count - 1, parameters.reverbModel)); };
         if (requested == Type::none && currentType == Type::none) return;
         if (currentType == Type::none && requested != Type::none) activate(requested, parameters);
         if (! matches() && juce::exactlyEqual(gate.getCurrentValue(), 0.0f)) activate(requested, parameters);
@@ -542,7 +546,7 @@ private:
     }
     void resetMemory(bool preserveFrozen = true) noexcept
     {
-        history.reset(); tape.reset(); reverb.reset();
+        history.reset(); tape.reset(); reverb.reset(); spatialReverb.reset();
         cloudsEngine.reset(preserveFrozen);
         chordEngine.reset();
         if (core) core->reset();
@@ -575,6 +579,7 @@ private:
     void activate(Type type, const Parameters& parameters) noexcept
     {
         resetMemory(false); currentType = type; currentNormalised = parameters.normalised;
+        currentReverbModel = juce::jlimit(0, fire::space::count - 1, parameters.reverbModel);
         cloudsState.freeze = parameters.clouds.freeze;
         for (size_t i = 0; i < controlCount; ++i)
         {
@@ -774,6 +779,11 @@ private:
                 const auto value = reverbLowCutCoefficient * (highPassOutput[c] + *channels[c] - highPassInput[c]);
                 highPassInput[c] = *channels[c]; highPassOutput[c] = value; *channels[c] = value;
             }
+            if (currentReverbModel > 0)
+            {
+                spatialReverb.process(left, right, currentReverbModel, p[0], p[1], p[3]);
+                return;
+            }
             juce::Reverb::Parameters settings;
             settings.roomSize = p[0] * 0.01f; settings.damping = p[1] * 0.01f;
             settings.wetLevel = 1; settings.dryLevel = 0; settings.width = p[3] * 0.01f; settings.freezeMode = 0;
@@ -827,6 +837,8 @@ private:
     StereoHistory history;
     TapeFlutter tape;
     juce::Reverb reverb;
+    fire::space::Reverb spatialReverb;
+    int currentReverbModel = 0;
     std::array<juce::SmoothedValue<float>, controlCount> bases;
     std::array<Route, controlCount> routes;
     std::array<float, controlCount> lastValues {};

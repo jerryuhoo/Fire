@@ -19,6 +19,7 @@
 #include "Utility/EqParameters.h"
 #include "Utility/CoreModuleParameters.h"
 #include "Utility/AnalogShapeParameters.h"
+#include "Utility/ReverbModelParameters.h"
 #include "Utility/LfoBankParameters.h"
 #include "DSP/EqCoefficients.h"
 #include "DSP/EqProcessor.h"
@@ -891,6 +892,7 @@ private:
     std::array<std::array<CachedParameter, 5>, fire::effects::scopeCount> modulePresenceParameters;
     std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> shapeModelParameters;
     std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> analogDriveParameters;
+    std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> reverbModelParameters;
     std::array<std::array<std::array<CachedParameter, fire::core_modules::slotFieldCount>, fire::effects::slotCount>, fire::effects::scopeCount> coreModuleParameters;
     fire::module_order::Transition masterOrderTransition;
     juce::AudioBuffer<float> masterOrderDry;

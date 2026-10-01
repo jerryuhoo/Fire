@@ -205,7 +205,7 @@ TEST_CASE("Chord Resonator appends an independent boolean family and preserves p
     const juce::StringArray modulationNames {"Standard", "Flanger", "Phaser"};
     constexpr std::array oldTypes {fx::Type::none, fx::Type::chorus, fx::Type::delay,
                                   fx::Type::reverb, fx::Type::granular, fx::Type::lofi};
-    REQUIRE(processor.getParameters().size() == 1047 + fire::core_modules::parameterCount + fire::analog_params::parameterCount);
+    REQUIRE(processor.getParameters().size() == 1047 + fire::core_modules::parameterCount + fire::analog_params::parameterCount + fire::reverb_params::parameterCount);
     for (int scope = 0; scope < 5; ++scope)
         for (int slot = 0; slot < 8; ++slot)
         {

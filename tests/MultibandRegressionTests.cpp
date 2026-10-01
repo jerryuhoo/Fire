@@ -2676,6 +2676,7 @@ TEST_CASE("Band move/reset parameter contract covers every per-band processor pa
             expectedBaseIDs.insert("bandFx" + juce::String(slot) + "EqField" + juce::String(field));
     }
 
+    for (int slot = 1; slot <= 8; ++slot) expectedBaseIDs.insert("bandFx" + juce::String(slot) + "ReverbModel");
     expectedBaseIDs.insert("shapeModel");
     for (int slot = 1; slot <= 8; ++slot)
     {expectedBaseIDs.insert("bandFx" + juce::String(slot) + "ShapeModel"); expectedBaseIDs.insert("bandFx" + juce::String(slot) + "ShapeDrive");}

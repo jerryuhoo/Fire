@@ -199,6 +199,8 @@
         <FILE id="ottCore1" name="OttProcessor.h" compile="0" resource="0" file="Source/DSP/OttProcessor.h"/>
         <FILE id="insertFx1" name="InsertEffect.h" compile="0" resource="0" file="Source/DSP/InsertEffect.h"/>
         <FILE id="analogUi1" name="HardwareColourPanel.h" compile="0" resource="0" file="Source/GUI/HardwareColourPanel.h"/>
+        <FILE id="spaceFx1" name="SpatialReverb.h" compile="0" resource="0" file="Source/DSP/SpatialReverb.h"/>
+        <FILE id="spaceFx2" name="ReverbModelParameters.h" compile="0" resource="0" file="Source/Utility/ReverbModelParameters.h"/>
         <FILE id="analogFx1" name="AnalogDistortion.h" compile="0" resource="0" file="Source/DSP/AnalogDistortion.h"/>
         <FILE id="analogFx2" name="AnalogShapeParameters.h" compile="0" resource="0" file="Source/Utility/AnalogShapeParameters.h"/>
         <FILE id="coreFx1" name="CoreEffect.h" compile="0" resource="0" file="Source/DSP/CoreEffect.h"/>

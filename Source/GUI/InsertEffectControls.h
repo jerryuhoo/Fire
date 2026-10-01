@@ -60,6 +60,9 @@ public:
             label->setJustificationType(juce::Justification::centredLeft);
         }
         addChildComponent(coreMode);
+        addChildComponent(reverbModelMenu);
+        reverbModelMenu.setTitle("Reverb algorithm"); reverbModelMenu.setTooltip("Choose Classic, Room, Hall, Plate, Spring or Chamber.");
+        for (int model = 0; model < fire::space::count; ++model) reverbModelMenu.addItem(fire::space::names[static_cast<size_t>(model)], model + 1);
         addChildComponent(hardwareColour);
         coreMode.setTitle("Shape mode");
         coreMode.setTooltip("Choose the waveshaping algorithm.");
@@ -130,6 +133,7 @@ public:
         coreModeAttachment.reset();
         shapeModelAttachment.reset();
         analogDriveAttachment.reset();
+        reverbModelAttachment.reset();
         for (auto& attachment : coreSwitchAttachments) attachment.reset();
         freezeAttachment.reset();
         scope = targetScope; slot = targetSlot; type = targetType;
@@ -300,6 +304,17 @@ public:
             coreModeAttachment->sendInitialUpdate();
             if (!isCurrent()) return;
         }
+        if (type == fire::effects::Type::reverb)
+        {
+            const auto id = fire::reverb_params::parameterID(scope, slot);
+            reverbModelMenu.setComponentID(id);
+            reverbModelMenu.configurePopupSession([safe] {return safe ? safe->choiceGeneration.load(std::memory_order_acquire) : 0;},
+                [safe, request] {return safe && safe->bindingGeneration == request && safe->isShowing() && safe->isEnabled()
+                    && safe->processor.getInsertEffectType(safe->scope, safe->slot) == fire::effects::Type::reverb;},
+                processor.treeState.getParameter(id));
+            reverbModelAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, id, reverbModelMenu);
+            if (!isCurrent()) return;
+        }
         updateVisibility();
         if (! isCurrent()) return;
         resized();
@@ -334,6 +349,7 @@ public:
         if (! safe) return;
         coreMode.dismissTransientInteraction();
         if (!safe) return;
+        reverbModelMenu.dismissTransientInteraction(); if (!safe) return;
         for (auto& button : coreSwitches) {button.dismissPointerGesture(); if (!safe) return;}
         if (analogDriveKnob) analogDriveKnob->dismissTransientInteraction();
         if (!safe) return;
@@ -397,6 +413,12 @@ public:
         const auto gap = juce::roundToInt(8.0f * scale);
         const auto footer = juce::roundToInt(fire::ui::Metrics::knobValueHeight * scale);
         auto bounds = getLocalBounds();
+        if (type == fire::effects::Type::reverb)
+        {
+            auto header = bounds.removeFromTop(juce::roundToInt(28 * scale));
+            reverbModelMenu.setBounds(header.withSizeKeepingCentre(juce::jmin(header.getWidth(), juce::roundToInt(174 * scale)), header.getHeight()));
+            bounds.removeFromTop(juce::roundToInt(5 * scale));
+        }
         const int columns = usesExpandedLayout() ? 6 : type == fire::effects::Type::lofi ? 4 : 3;
         const auto size = fire::ui::ordinaryKnobWidth(scale, {
             knobWidth > 0 ? knobWidth : fire::ui::ordinaryKnobWidth(scale),
@@ -653,6 +675,8 @@ private:
         if (!current()) return;
         coreMode.setVisible(active && type == fire::effects::Type::shape);
         if (!current()) return;
+        reverbModelMenu.setVisible(active && type == fire::effects::Type::reverb);
+        if (!current()) return;
         hardwareColour.setVisible(active && usesAnalogLayout());
         if (!current()) return;
         if (analogDriveKnob) analogDriveKnob->setVisible(active && usesAnalogLayout());
@@ -667,6 +691,8 @@ private:
     EqControlsPanel::Knobs eqKnobs {};
     std::array<std::array<std::unique_ptr<SliderAttachment>, 3>, fire::eq::maxNodes> eqAttachments;
     ContextAwareComboBox coreMode;
+    ContextAwareComboBox reverbModelMenu;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> reverbModelAttachment;
     fire::ui::HardwareColourPanel hardwareColour;
     ModulatableSlider* analogDriveKnob = nullptr;
     std::unique_ptr<SliderAttachment> analogDriveAttachment;

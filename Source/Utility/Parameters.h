@@ -19,6 +19,7 @@
 #include "ModuleOrder.h"
 #include "CoreModuleParameters.h"
 #include "AnalogShapeParameters.h"
+#include "ReverbModelParameters.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_core/juce_core.h"
 #include <array>
@@ -435,6 +436,8 @@ namespace ParameterIDAndName
                     result.push_back({"FX " + juce::String(slot + 1) + " Core Field " + juce::String(field), fire::core_modules::parameterID(1, slot, field).dropLastCharacters(1)});
             for (int slot = 0; slot < fire::effects::slotCount; ++slot)
                 result.push_back({"FX " + juce::String(slot + 1) + " Analog Drive", fire::analog_params::driveID(1, slot).dropLastCharacters(1)});
+            for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+                result.push_back({"FX " + juce::String(slot + 1) + " Reverb Model", fire::reverb_params::parameterID(1, slot).dropLastCharacters(1)});
             result.push_back({"Shape Model", "shapeModel"});
             for (int slot = 0; slot < fire::effects::slotCount; ++slot)
                 result.push_back({"FX " + juce::String(slot + 1) + " Shape Model", fire::analog_params::parameterID(1, slot).dropLastCharacters(1)});

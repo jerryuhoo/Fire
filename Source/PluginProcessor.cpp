@@ -2991,6 +2991,7 @@ void FireAudioProcessor::initialiseParameterCache()
         {
             shapeModelParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)] = cacheParameter(fire::analog_params::parameterID(scope, slot));
             analogDriveParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)] = cacheParameter(fire::analog_params::driveID(scope, slot));
+            reverbModelParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)] = cacheParameter(fire::reverb_params::parameterID(scope, slot));
         }
     for (int scope = 0; scope < fire::resonator_params::scopeCount; ++scope)
         for (int slot = 0; slot < fire::resonator_params::slotCount; ++slot)
@@ -3612,6 +3613,8 @@ int FireAudioProcessor::addInsertEffect(int scope, fire::effects::Type type)
     clearModulationForParameter(driveID);
     auto* analogDrive = treeState.getParameter(driveID);
     analogDrive->beginChangeGesture(); analogDrive->setValueNotifyingHost(0); analogDrive->endChangeGesture();
+    auto* reverbModel = treeState.getParameter(fire::reverb_params::parameterID(scope, freeSlot));
+    reverbModel->beginChangeGesture(); reverbModel->setValueNotifyingHost(0); reverbModel->endChangeGesture();
     auto* shapeModel = treeState.getParameter(fire::analog_params::parameterID(scope, freeSlot));
     shapeModel->beginChangeGesture(); shapeModel->setValueNotifyingHost(0); shapeModel->endChangeGesture();
     // Reused storage slots still append to the visible chain, irrespective of
@@ -3658,6 +3661,8 @@ void FireAudioProcessor::removeInsertEffect(int scope, int slot)
     clearModulationForParameter(driveID);
     auto* analogDrive = treeState.getParameter(driveID);
     analogDrive->beginChangeGesture(); analogDrive->setValueNotifyingHost(0); analogDrive->endChangeGesture();
+    auto* reverbModel = treeState.getParameter(fire::reverb_params::parameterID(scope, slot));
+    reverbModel->beginChangeGesture(); reverbModel->setValueNotifyingHost(0); reverbModel->endChangeGesture();
     auto* shapeModel = treeState.getParameter(fire::analog_params::parameterID(scope, slot));
     shapeModel->beginChangeGesture(); shapeModel->setValueNotifyingHost(0); shapeModel->endChangeGesture();
     auto* parameter = treeState.getParameter(parameterID(scope, slot, typeField));
@@ -5798,6 +5803,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("eqSchemaVersion", 1);
     xmlState.setAttribute("coreModulesSchemaVersion", fire::core_modules::schemaVersion);
     xmlState.setAttribute("analogShapesSchemaVersion", fire::analog_params::schemaVersion);
+    xmlState.setAttribute("reverbModelsSchemaVersion", fire::reverb_params::schemaVersion);
     xmlState.setAttribute("lfoBankSchemaVersion", fire::lfo_bank::schemaVersion);
     xmlState.setAttribute("savedParameterCount",
                           mainState.parameterState.getNumChildren());
@@ -5995,6 +6001,14 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 if (! parseStrictFiniteDouble(child.getProperty("value").toString(), value)
                     || (value != 0.0 && value != 1.0)) return;
             }
+    }
+    int reverbCount = 0;
+    for (const auto& id : incomingParameterIDs) if (fire::reverb_params::isParameterID(id)) ++reverbCount;
+    if (xmlState->hasAttribute("reverbModelsSchemaVersion") || reverbCount > 0)
+    {
+        int version = 1;
+        if ((xmlState->hasAttribute("reverbModelsSchemaVersion") && (!parseStrictNonNegativeIntegerAttribute(*xmlState, "reverbModelsSchemaVersion", version)
+                || version != fire::reverb_params::schemaVersion)) || reverbCount != fire::reverb_params::parameterCount) return;
     }
     int analogCount = 0;
     for (const auto& id : incomingParameterIDs) if (fire::analog_params::isParameterID(id)) ++analogCount;
@@ -7524,6 +7538,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
             parameters.push_back(std::make_unique<PFloat>(juce::ParameterID{fire::analog_params::driveID(scope, slot), 13},
                 (scope == 0 ? juce::String("Master") : "Band " + juce::String(scope)) + " FX " + juce::String(slot + 1) + " Analog Drive",
                 juce::NormalisableRange<float>{0, 100}, 0));
+    juce::StringArray reverbs;
+    for (auto name : fire::space::names) reverbs.add(name);
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+            parameters.push_back(std::make_unique<PChoice>(juce::ParameterID{fire::reverb_params::parameterID(scope, slot), 14},
+                (scope == 0 ? juce::String("Master") : "Band " + juce::String(scope)) + " FX " + juce::String(slot + 1) + " Reverb Model", reverbs, 0));
     return { parameters.begin(), parameters.end() };
 }
 
@@ -7539,6 +7559,7 @@ void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackP
         auto& target = destination[slot];
         target.effect.publicationSequence = multibandTopologyResetGeneration.load(std::memory_order_seq_cst) & ~std::uint32_t{1};
         target.effect.type = getInsertEffectType(scope, static_cast<int>(slot));
+        target.effect.reverbModel = juce::roundToInt(loadCachedParameter(reverbModelParameters[static_cast<size_t>(scope)][slot]));
         target.effect.shapeModel = juce::roundToInt(loadCachedParameter(shapeModelParameters[static_cast<size_t>(scope)][slot]));
         const auto& analogDrive = analogDriveParameters[static_cast<size_t>(scope)][slot];
         target.effect.analogDrive.baseValue = loadCachedParameter(analogDrive);

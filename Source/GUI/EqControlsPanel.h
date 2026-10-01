@@ -15,7 +15,7 @@ public:
     static constexpr int capacity = 12;
     using Knobs = std::array<std::array<ModulatableSlider*, 3>, capacity>;
 
-    explicit EqControlsPanel(FireAudioProcessor& p) : processor(p)
+    explicit EqControlsPanel(FireAudioProcessor& p, bool bindLegacy = true) : processor(p)
     {
         setTitle("EQ point controls");
         addAndMakeVisible(addButton);
@@ -51,20 +51,20 @@ public:
         addButton.onClick = [safe]
         {
             if (! safe) return;
-            const auto slot = safe->processor.addEqNode(1000.0f, 0.0f);
+            const auto slot = safe->processor.addEqNode(1000.0f, 0.0f, fire::eq::Type::bell, safe->fxScope, safe->fxSlot);
             if (safe && slot >= 0) safe->selectNode(slot);
         };
         removeButton.onClick = [safe]
         {
             if (! safe || safe->selected < 0) return;
-            safe->processor.removeEqNode(safe->selected);
+            safe->processor.removeEqNode(safe->selected, safe->fxScope, safe->fxSlot);
             if (safe) safe->refresh();
         };
         powerButton.onClick = [safe]
         {
             if (! safe || safe->selected < 0) return;
             auto* parameter = safe->processor.treeState.getParameter(
-                fire::eq::parameterID(safe->selected, fire::eq::Field::bypassed));
+                safe->nodeParameterID(safe->selected, fire::eq::Field::bypassed));
             const auto value = safe->powerButton.getToggleState() ? 0.0f : 1.0f;
             if (parameter != nullptr)
             {
@@ -77,19 +77,14 @@ public:
         };
         for (int slot = 0; slot < capacity; ++slot)
         {
-            const auto index = static_cast<size_t>(slot);
-            presentParameters[index] = processor.treeState.getRawParameterValue(fire::eq::parameterID(slot, fire::eq::Field::present));
-            presentParameterObjects[index] = processor.treeState.getParameter(fire::eq::parameterID(slot, fire::eq::Field::present));
-            if (presentParameterObjects[index]) presentParameterObjects[index]->addListener(this);
-            typeParameters[index] = processor.treeState.getRawParameterValue(fire::eq::parameterID(slot, fire::eq::Field::type));
-            bypassParameters[index] = processor.treeState.getRawParameterValue(fire::eq::parameterID(slot, fire::eq::Field::bypassed));
             auto& point = navigation[static_cast<size_t>(slot)];
             addChildComponent(point);
-            point.setComponentID("eqPointNavigation" + juce::String(slot + 1));
+            point.setComponentID((bindLegacy ? "eqPointNavigation" : "insertEqPointNavigation") + juce::String(slot + 1));
             point.setTitle("EQ point " + juce::String(slot + 1));
             point.setTooltip("Select EQ point " + juce::String(slot + 1));
             point.onClick = [safe, slot] { if (safe) safe->selectNode(slot); };
         }
+        if (bindLegacy) bind(-1, -1);
     }
 
     ~EqControlsPanel() override
@@ -99,9 +94,33 @@ public:
     }
     std::function<void(int)> onSelectionChanged;
 
+    void bind(int scope, int slot)
+    {
+        if (bound && fxScope == scope && fxSlot == slot) return;
+        const juce::Component::SafePointer<EqControlsPanel> safe(this);
+        const auto request = ++bindingGeneration;
+        dismiss();
+        if (!safe || request != bindingGeneration) return;
+        for (auto* parameter : presentParameterObjects) if (parameter) parameter->removeListener(this);
+        fxScope = scope; fxSlot = slot; bound = true;
+        selected = -1; presentedSelection = -2; paintSignature = -1; present.fill(false);
+        for (int node = 0; node < capacity; ++node)
+        {
+            const auto i = static_cast<size_t>(node);
+            navigation[i].setComponentID(slot < 0 ? "eqPointNavigation" + juce::String(node + 1)
+                : fire::effects::parameterID(scope, slot, fire::effects::typeField) + "EqPoint" + juce::String(node + 1));
+            presentParameters[i] = processor.treeState.getRawParameterValue(nodeParameterID(node, fire::eq::Field::present));
+            presentParameterObjects[i] = processor.treeState.getParameter(nodeParameterID(node, fire::eq::Field::present));
+            typeParameters[i] = processor.treeState.getRawParameterValue(nodeParameterID(node, fire::eq::Field::type));
+            bypassParameters[i] = processor.treeState.getRawParameterValue(nodeParameterID(node, fire::eq::Field::bypassed));
+            if (presentParameterObjects[i]) presentParameterObjects[i]->addListener(this);
+        }
+        refresh();
+    }
     void setKnobs(Knobs next)
     {
         knobs = next;
+        presentedSelection = -2;
         for (auto& node : knobs)
             for (auto* knob : node)
                 if (knob != nullptr) addChildComponent(knob);
@@ -121,7 +140,7 @@ public:
     }
     void selectNode(int slot)
     {
-        if (slot < 0 || slot >= capacity || ! processor.getEqNodeState(slot).present) return;
+        if (slot < 0 || slot >= capacity || ! processor.getEqNodeState(slot, fxScope, fxSlot).present) return;
         if (selected == slot) { refresh(); return; }
         const juce::Component::SafePointer<EqControlsPanel> safe(this);
         const auto expectedGeneration = interactionGeneration() + 1;
@@ -403,10 +422,11 @@ private:
         const juce::Component::SafePointer<EqControlsPanel> safe(this);
         for (auto pair : {std::pair{&typeMenu, fire::eq::Field::type}, std::pair{&slopeMenu, fire::eq::Field::slope}})
         {
-            auto id = fire::eq::parameterID(selected, pair.second);
+            auto id = nodeParameterID(selected, pair.second);
             pair.first->setComponentID(id);
             pair.first->configurePopupSession([safe] { return safe ? safe->interactionGeneration() : 0; },
                 [safe] { return safe && safe->isShowing() && safe->isEnabled() && safe->selected >= 0
+                    && (safe->fxSlot < 0 || safe->processor.getInsertEffectType(safe->fxScope, safe->fxSlot) == fire::effects::Type::eq)
                     && safe->presentParameters[static_cast<size_t>(safe->selected)]->load(std::memory_order_relaxed) > 0.5f; },
                 processor.treeState.getParameter(id));
             if (! safe) return;
@@ -427,6 +447,11 @@ private:
     void parameterValueChanged(int, float) override
     { presenceEpoch.fetch_add(1, std::memory_order_release); }
     void parameterGestureChanged(int, bool) override {}
+    juce::String nodeParameterID(int node, fire::eq::Field field) const
+    {return fxSlot < 0 ? fire::eq::parameterID(node, field) : fire::core_modules::eqParameterID(fxScope, fxSlot, node, field);}
+    int fxScope = -1, fxSlot = -1;
+    bool bound = false;
+    std::uint64_t bindingGeneration = 0;
     FireAudioProcessor& processor;
     Knobs knobs {};
     std::array<PointButton, capacity> navigation;

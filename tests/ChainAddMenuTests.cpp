@@ -121,7 +121,7 @@ juce::TextButton* findButton(juce::Component& root, const juce::String& id)
 }
 }
 
-TEST_CASE("Chain menus expose existing builtins and a single canonical Master Lo-Fi",
+TEST_CASE("Band and Master share one complete module catalog and allow repeated DSP instances",
           "[chain][insertfx][ui][menu][builtins]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
@@ -129,12 +129,13 @@ TEST_CASE("Chain menus expose existing builtins and a single canonical Master Lo
     juce::StringArray bandNames, masterNames;
     for (const auto& item : items(band.navigation->createAddMenu())) bandNames.add(item.text);
     for (const auto& item : items(master.navigation->createAddMenu())) masterNames.add(item.text);
-    CHECK(bandNames == juce::StringArray { "Drive", "Shape", "Compressor", "OTT", "Stereo",
-                                         "Chorus", "Delay", "Reverb", "Granular", "Lo-Fi", "Flanger", "Phaser", "Chord Resonator" });
-    CHECK(masterNames == juce::StringArray { "EQ", "Lo-Fi", "Chorus", "Delay", "Reverb", "Granular", "Flanger", "Phaser", "Chord Resonator" });
-    for (const auto& item : items(master.navigation->createAddMenu()))
-        if (item.text == "Lo-Fi") CHECK(item.itemID == Rack::builtinMenuItemID(1));
-    CHECK_FALSE(master.navigation->activateBuiltin(2)); // Analysis remains a view-only row.
+    CHECK(bandNames == masterNames);
+    CHECK(bandNames == juce::StringArray{"Drive", "Shape", "Compressor", "OTT", "Stereo", "EQ", "Lo-Fi",
+        "Chorus", "Flanger", "Phaser", "Delay", "Reverb", "Granular", "Chord Resonator"});
+    master.navigation->createAddMenuResultHandler()(static_cast<int>(fx::Type::lofi));
+    CHECK(master.processor.getInsertEffectType(0, 0) == fx::Type::lofi);
+    band.navigation->createAddMenuResultHandler()(static_cast<int>(fx::Type::drive));
+    CHECK(band.processor.getInsertEffectType(1, 0) == fx::Type::drive);
 }
 
 TEST_CASE("Builtin menu selections enable once select the existing row and preserve the chain",
@@ -163,11 +164,13 @@ TEST_CASE("Builtin menu selections enable once select the existing row and prese
     }
 }
 
-TEST_CASE("Full insert racks still allow their builtins and Master Lo-Fi consumes no slot",
+TEST_CASE("Full chains can restore deleted modules and reject additional instances",
           "[chain][insertfx][ui][menu][capacity][lofi]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
     Fixture fixture(0);
+    fixture.processor.removeModule(0, 1);
+    fixture.navigation->refresh();
     for (int slot = 0; slot < fx::slotCount; ++slot)
         REQUIRE(fixture.processor.addInsertEffect(0, fx::Type::delay) == slot);
     fixture.navigation->refresh();
@@ -185,7 +188,7 @@ TEST_CASE("Full insert racks still allow their builtins and Master Lo-Fi consume
     CHECK(fixture.buttons[1].getY() >= viewTop);
     CHECK(fixture.buttons[1].getBottom() <= viewTop + fixture.navigation->getViewport().getHeight());
     CHECK(fixture.insertCount(0) == fx::slotCount);
-    CHECK(fixture.processor.getModuleOrder(0) == order);
+    CHECK(fixture.processor.isModulePresent(0, 1));
 }
 
 TEST_CASE("Chain menu results cannot replay across sessions scope visibility or enablement",

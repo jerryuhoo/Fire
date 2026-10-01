@@ -2666,6 +2666,15 @@ TEST_CASE("Band move/reset parameter contract covers every per-band processor pa
     for (int slot = 1; slot <= 8; ++slot)
         expectedBaseIDs.insert("bandFx" + juce::String(slot) + "Resonator");
     expectedBaseIDs.insert("driveCompModern");
+    for (int node = 0; node < 5; ++node)
+        expectedBaseIDs.insert("bandModule" + juce::String(node) + "Present");
+    for (int slot = 1; slot <= 8; ++slot)
+    {
+        expectedBaseIDs.insert("bandFx" + juce::String(slot) + "CoreType");
+        expectedBaseIDs.insert("bandFx" + juce::String(slot) + "Jitter");
+        for (int field = 0; field < 12 * 7; ++field)
+            expectedBaseIDs.insert("bandFx" + juce::String(slot) + "EqField" + juce::String(field));
+    }
 
     std::set<juce::String> actualBaseIDs;
     for (const auto& parameter : ParameterIDAndName::getBandParameterInfo())

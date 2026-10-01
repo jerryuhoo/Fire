@@ -17,6 +17,7 @@
 #include "Utility/ResonatorParameters.h"
 #include "Utility/DriveCompensationParameters.h"
 #include "Utility/EqParameters.h"
+#include "Utility/CoreModuleParameters.h"
 #include "Utility/LfoBankParameters.h"
 #include "DSP/EqCoefficients.h"
 #include "DSP/EqProcessor.h"
@@ -316,7 +317,7 @@ struct BandProcessor
     std::atomic<float> mOttGainChangeDb { 0.0f };
     std::atomic<float> mOttDynamicsActivityDb { 0.0f };
 
-    void prepare(const juce::dsp::ProcessSpec& spec);
+    void prepare(const juce::dsp::ProcessSpec& spec, bool withInserts = true);
     void reset();
     void resetQualityTransitionState() noexcept;
     void process(juce::AudioBuffer<float>& buffer,
@@ -331,6 +332,7 @@ struct BandProcessor
     const int oversampleFactor = 2;
 
 private:
+    friend class fire::effects::CoreEffect;
     void processChunk(juce::AudioBuffer<float>& buffer,
                       const BandProcessingParameters& params,
                       const juce::AudioBuffer<float>& lfoOutputs,
@@ -425,6 +427,9 @@ public:
     int getInsertEffectOrder(int scope, int slot) const;
     int addInsertEffect(int scope, fire::effects::Type type);
     void removeInsertEffect(int scope, int slot);
+    bool isModulePresent(int scope, int node) const;
+    void removeModule(int scope, int node);
+    bool restoreLegacyModule(int scope, int node);
     void moveInsertEffect(int scope, int slot, int direction);
     void moveInsertEffectToPosition(int scope, int slot, int position);
     fire::module_order::Order getModuleOrder(int scope) const;
@@ -561,10 +566,10 @@ public:
         ModulatedFilterValues& values,
         std::uint64_t requiredCaptureEpoch = 0);
     std::uint64_t requestFreshModulatedFilterValuesEpoch() noexcept;
-    fire::eq::NodeState getEqNodeState(int slot) const;
+    fire::eq::NodeState getEqNodeState(int slot, int fxScope = -1, int fxSlot = -1) const;
     int addEqNode(float frequency, float gainDb,
-                  fire::eq::Type type = fire::eq::Type::bell);
-    bool removeEqNode(int slot);
+                  fire::eq::Type type = fire::eq::Type::bell, int fxScope = -1, int fxSlot = -1);
+    bool removeEqNode(int slot, int fxScope = -1, int fxSlot = -1);
     bool getLatestMeterValues(MeterValues& values);
 
     // Getters for meter levels
@@ -876,6 +881,8 @@ private:
     std::array<std::array<std::array<CachedParameter, fire::clouds_params::fieldCount>, fire::clouds_params::slotCount>, fire::clouds_params::scopeCount> cloudsParameters;
     fire::effects::InsertRack masterInserts;
     std::array<std::array<CachedParameter, fire::module_order::capacity>, fire::effects::scopeCount> moduleOrderParameters;
+    std::array<std::array<CachedParameter, 5>, fire::effects::scopeCount> modulePresenceParameters;
+    std::array<std::array<std::array<CachedParameter, fire::core_modules::slotFieldCount>, fire::effects::slotCount>, fire::effects::scopeCount> coreModuleParameters;
     fire::module_order::Transition masterOrderTransition;
     juce::AudioBuffer<float> masterOrderDry;
     fire::dsp::LoudnessMatchState loudnessMatch;

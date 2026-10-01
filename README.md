@@ -551,7 +551,7 @@ OTT settings participate in presets, A/B comparisons and band copying. Older pro
 
 ### Master and Band insert effects
 
-Use **CHAIN → +** in either **Master Lab** or **Band Lab** to select an effect. Built-in Drive, Shape, Compressor, OTT, Stereo, Master EQ and Master Lo-Fi entries enable and select their existing module. Additional effects use eight independent insert slots per chain and can have multiple instances. The module rail keeps five fixed-height rows visible and scrolls as more effects are added. The selected module scrolls into view automatically.
+Use **CHAIN → +** in either **Master Lab** or **Band Lab** to select a DSP module. Both workspaces share Drive, Shape, Compressor, OTT, Stereo, EQ, Lo-Fi, Chorus, Flanger, Phaser, Delay, Reverb, Granular and Chord Resonator. Every row, including the initial modules, can be bypassed, moved or removed with its **−** button. Removed modules can be added again, and each chain supports up to eight additional independent instances. Master Analysis is a removable display page. The module rail keeps five fixed-height rows visible and scrolls as more effects are added. The selected module scrolls into view automatically.
 
 | Effect | Controls |
 | --- | --- |
@@ -559,7 +559,9 @@ Use **CHAIN → +** in either **Master Lab** or **Band Lab** to select an effect
 | Delay | Time (10–2000 ms), Feedback, Tone, Ping-Pong, tempo Sync, Mix. Sync offers 1/16 through one bar, including dotted eighth/quarter notes, within the two-second delay capacity. |
 | Reverb | Size, Damping, Pre-delay, Width, Low Cut, Mix. |
 | Granular | Clouds: Position, Size, Pitch (±24 semitones), Density, Texture, Mix, Spread, Feedback, Reverb and Freeze. Clouds is the sole granular engine. |
-| Lo-Fi insert | Rate, Bits, Tape, Wow, Flutter, Mix. |
+| Lo-Fi | Rate, Bits, Jitter, Tape, Wow, Flutter, Mix. |
+| Drive / Shape / Compressor / OTT / Stereo | The corresponding core DSP controls, independently available in both workspaces. |
+| EQ | Up to 12 independent points per instance, with Frequency, Gain, Q, filter type, slope and point power. |
 
 All Granular inserts use a port of Mutable Instruments' **Clouds normal granular
 mode**, with its grain scheduler, window shapes, diffusion, feedback and reverb.
@@ -600,9 +602,9 @@ the sound of old granular presets. Existing Clouds presets keep their values.
 The old engine parameter IDs remain inert reserved slots so later automation
 indices do not move; they cannot select another engine.
 
-The **Master Lo-Fi** menu entry opens the same built-in page, with Rate, Bits, Jitter, Mix, Tape, Wow and Flutter; it does not create a second Master Lo-Fi variant. Historical Lo-Fi inserts remain editable with their original parameter ranges and use the same two-row control grouping. Tape adds saturation and a softer high-frequency response; Wow introduces slow pitch drift and Flutter adds faster pitch variation. Zero Tape/Wow/Flutter preserves the previous Lo-Fi processing.
+**Lo-Fi** is available in both workspaces, including multiple instances. Rate, Bits, Jitter and Mix sit above Tape, Wow and Flutter. Tape adds saturation and a softer high-frequency response; Wow introduces slow pitch drift and Flutter adds faster pitch variation. Zero Jitter/Tape/Wow/Flutter preserves the previous insert processing.
 
-Built-in modules and insert effects run in the same freely reorderable list, before the chain's Output/Mix controls. Drag any module, including Drive, Shape, Compressor, Stereo, OTT, Master EQ and Lo-Fi, to change its processing position. Analysis is a movable display page and does not process audio. Older presets retain their original audio order (OTT before Stereo, and Master Lo-Fi before EQ); the list now displays that order. Drive and Shape retain their legacy combined processing when adjacent in that order, and run as separate stages when moved apart. Hover an inserted effect to reveal its remove button, or drag its name/body to reorder it. A floating preview and insertion line indicate the destination; holding near the list edges scrolls to offscreen effects. The new order is committed once on release. Escape, dropping outside the list or changing workspace/band cancels the drag. Removing the selected effect selects its nearest remaining neighbour. The power button bypasses each effect, and the context menu also provides move/remove actions. Reordering retains that slot's parameters and LFO assignments. New effect values fade in while editing; the waveform shows the selected band's output or the master output.
+Built-in modules and insert effects run in the same freely reorderable list, before the chain's Output/Mix controls. Drag any module, including Drive, Shape, Compressor, Stereo, OTT, Master EQ and Lo-Fi, to change its processing position. Analysis is a movable display page and does not process audio. Older presets retain their original audio order (OTT before Stereo, and Master Lo-Fi before EQ); the list now displays that order. Drive and Shape retain their legacy combined processing when adjacent in that order, and run as separate stages when moved apart. Hover any module to reveal its **−** remove button, or drag its name/body to reorder it. A floating preview and insertion line indicate the destination; holding near the list edges scrolls to offscreen effects. The new order is committed once on release. Escape, dropping outside the list or changing workspace/band cancels the drag. Removing the selected effect selects its nearest remaining neighbour. The power button bypasses each effect, and the context menu also provides move/remove actions. Reordering retains that slot's parameters and LFO assignments. New effect values fade in while editing; the waveform shows the selected band's output or the master output.
 
 Every insert retains its six normalized host controls with effect-specific labels and units in Fire's UI; Clouds adds a separately versioned set of controls. LFO modulation, presets, host state, A/B comparisons and band copying include the new controls. New host parameters are appended with a newer AU version hint, and older projects load empty insert racks with Tape/Wow/Flutter at zero. The insert stages add no reported processing latency; delay, pitch modulation, granular playback and reverb create their intended time offsets and tails in the wet signal. Tail reporting reserves conservative bounds so hosts do not cut long echoes prematurely; a frozen Clouds buffer or maximum feedback reports an infinite tail.
 
@@ -614,7 +616,7 @@ Stereo. **Auto** follows the selected module. A manual choice remains selected
 when changing modules or bands; dragging Drive temporarily previews Transfer
 and restores the previous view afterward. Hidden graphs stop their display timers.
 
-Master **EQ** supports up to 12 points. Double-click an empty area of the spectrum
+**EQ** is available in Master and Band chains and supports up to 12 points per instance. The original Master EQ also supports spectrum editing. Double-click an empty area of the spectrum
 to add a bell at that frequency and gain, or use the **+** in the EQ panel. Drag a
 point to change frequency/gain; scroll over it for Q. Select a point to show its
 Frequency, Gain, Q, Filter Type and Slope controls. The numbered selected dot in

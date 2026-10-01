@@ -8,6 +8,8 @@
   ==============================================================================
 */
 #include "PluginProcessor.h"
+#include <map>
+#include <set>
 #include "DSP/DistortionLogic.h"
 #include "PluginEditor.h"
 #include "Utility/StrictNumberParser.h"
@@ -1312,12 +1314,12 @@ static bool pushToFifo(juce::AbstractFifo& fifo,
 //==============================================================================
 
 // This is where we tell JUCE what to do when prepareToPlay is called for a single band.
-void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
+void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec, bool withInserts)
 {
     // Prepare all the DSP modules with the sample rate and block size.
     compressor.prepare(spec);
     ott.prepare(spec);
-    inserts.prepare(spec);
+    if (withInserts) inserts.prepare(spec);
     orderTransition.prepare(spec.sampleRate);
     mOttInputLevelDb.store(-120.0f, std::memory_order_relaxed);
     mOttGainChangeDb.store(0.0f, std::memory_order_relaxed);
@@ -2947,6 +2949,15 @@ void FireAudioProcessor::initialiseParameterCache()
         for (int node = 0; node < fire::module_order::capacity; ++node)
             if (fire::module_order::valid(scope, node))
                 moduleOrderParameters[static_cast<size_t>(scope)][static_cast<size_t>(node)] = cacheParameter(fire::module_order::parameterID(scope, node));
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+    {
+        for (int node = 0; node < (scope == 0 ? 3 : 5); ++node)
+            modulePresenceParameters[static_cast<size_t>(scope)][static_cast<size_t>(node)] = cacheParameter(fire::core_modules::presenceID(scope, node));
+        for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+            for (int field = 0; field < fire::core_modules::slotFieldCount; ++field)
+                coreModuleParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][static_cast<size_t>(field)]
+                    = cacheParameter(fire::core_modules::parameterID(scope, slot, field));
+    }
     for (size_t i = 0; i < tapeParameters.size(); ++i) tapeParameters[i] = cacheParameter(fire::effects::tapeIDs[i]);
     for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
         for (int slot = 0; slot < fire::effects::slotCount; ++slot)
@@ -3200,6 +3211,9 @@ fire::effects::Type FireAudioProcessor::getInsertEffectType(int scope, int slot)
 {
     if (! juce::isPositiveAndBelow(scope, fire::effects::scopeCount) || ! juce::isPositiveAndBelow(slot, fire::effects::slotCount))
         return fire::effects::Type::none;
+    const auto core = fire::core_modules::decodeType(juce::roundToInt(loadCachedParameter(
+        coreModuleParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][fire::core_modules::typeField])));
+    if (core != fire::effects::Type::none) return core;
     if (loadCachedParameter(resonatorParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)]) > 0.5f)
         return fire::effects::Type::chordResonator;
     const auto extension = juce::roundToInt(loadCachedParameter(
@@ -3210,25 +3224,41 @@ fire::effects::Type FireAudioProcessor::getInsertEffectType(int scope, int slot)
         insertParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][fire::effects::typeField]))));
 }
 
-fire::eq::NodeState FireAudioProcessor::getEqNodeState(int slot) const
+fire::eq::NodeState FireAudioProcessor::getEqNodeState(int slot, int fxScope, int fxSlot) const
 {
-    return fire::eq::readNode(treeState, slot);
+    if (fxSlot < 0) return fire::eq::readNode(treeState, slot);
+    auto node = fire::eq::defaultNode(slot);
+    if (!fire::eq::validSlot(slot) || getInsertEffectType(fxScope, fxSlot) != fire::effects::Type::eq)
+    {node.present = false; return node;}
+    const auto read = [&](fire::eq::Field field)
+    {
+        auto* value = treeState.getRawParameterValue(fire::core_modules::eqParameterID(fxScope, fxSlot, slot, field));
+        return value ? value->load(std::memory_order_relaxed) : 0.0f;
+    };
+    node.present = read(fire::eq::Field::present) > 0.5f;
+    node.bypassed = read(fire::eq::Field::bypassed) > 0.5f;
+    node.type = static_cast<fire::eq::Type>(juce::jlimit(0, 6, juce::roundToInt(read(fire::eq::Field::type))));
+    node.slope = juce::jlimit(0, 3, juce::roundToInt(read(fire::eq::Field::slope)));
+    node.frequency = read(fire::eq::Field::frequency); node.gainDb = read(fire::eq::Field::gain); node.q = read(fire::eq::Field::q);
+    return node;
 }
 
-int FireAudioProcessor::addEqNode(float frequency, float gainDb, fire::eq::Type type)
+int FireAudioProcessor::addEqNode(float frequency, float gainDb, fire::eq::Type type, int fxScope, int fxSlot)
 {
     using namespace fire::eq;
+    if (fxSlot >= 0 && getInsertEffectType(fxScope, fxSlot) != fire::effects::Type::eq) return -1;
+    const auto id = [&](int node, Field field) {return fxSlot < 0 ? parameterID(node, field) : fire::core_modules::eqParameterID(fxScope, fxSlot, node, field);};
     if (! std::isfinite(frequency) || ! std::isfinite(gainDb)
         || static_cast<int>(type) < 0 || static_cast<int>(type) >= static_cast<int>(typeNames.size())) return -1;
     beginMultibandTopologyEdit();
     const juce::ScopeGuard publish { [this] { finishMainStateEdit(false); } };
     int slot = -1;
     for (int index = 0; index < maxNodes; ++index)
-        if (! getEqNodeState(index).present) { slot = index; break; }
+        if (! getEqNodeState(index, fxScope, fxSlot).present) { slot = index; break; }
     if (slot < 0) return -1;
     const auto write = [&](Field field, float value)
     {
-        auto* parameter = treeState.getParameter(parameterID(slot, field));
+        auto* parameter = treeState.getParameter(id(slot, field));
         if (parameter == nullptr) return;
         const auto& range = parameter->getNormalisableRange();
         const auto safeValue = range.snapToLegalValue(juce::jlimit(range.start, range.end, value));
@@ -3239,16 +3269,16 @@ int FireAudioProcessor::addEqNode(float frequency, float gainDb, fire::eq::Type 
     // A deleted stable slot can carry historical automation values. Clear only
     // its old LFO assignments before publishing its new active identity.
     for (auto field : {Field::frequency, Field::gain, Field::q})
-        clearModulationForParameter(parameterID(slot, field));
+        clearModulationForParameter(id(slot, field));
     write(Field::frequency, frequency);
     write(Field::gain, gainDb);
     write(Field::q, slot < 3 ? 1.0f : 0.70710678f);
     write(Field::slope, 0.0f);
     write(Field::type, static_cast<float>(type));
     write(Field::bypassed, 0.0f);
-    eqNodeGenerations[static_cast<size_t>(slot)].fetch_add(1u, std::memory_order_relaxed);
+    if (fxSlot < 0) eqNodeGenerations[static_cast<size_t>(slot)].fetch_add(1u, std::memory_order_relaxed);
     write(Field::present, 1.0f);
-    if (auto* enabled = treeState.getParameter(FILTER_BYPASS_ID))
+    if (auto* enabled = treeState.getParameter(fxSlot < 0 ? juce::String(FILTER_BYPASS_ID) : fire::effects::parameterID(fxScope, fxSlot, fire::effects::enabledField)))
     {
         enabled->beginChangeGesture();
         enabled->setValueNotifyingHost(1.0f);
@@ -3257,20 +3287,22 @@ int FireAudioProcessor::addEqNode(float frequency, float gainDb, fire::eq::Type 
     return slot;
 }
 
-bool FireAudioProcessor::removeEqNode(int slot)
+bool FireAudioProcessor::removeEqNode(int slot, int fxScope, int fxSlot)
 {
     using namespace fire::eq;
+    if (fxSlot >= 0 && getInsertEffectType(fxScope, fxSlot) != fire::effects::Type::eq) return false;
+    const auto id = [&](int node, Field field) {return fxSlot < 0 ? parameterID(node, field) : fire::core_modules::eqParameterID(fxScope, fxSlot, node, field);};
     if (! validSlot(slot)) return false;
     beginMultibandTopologyEdit();
     const juce::ScopeGuard publish { [this] { finishMainStateEdit(false); } };
-    if (! getEqNodeState(slot).present) return false;
-    auto* present = treeState.getParameter(parameterID(slot, Field::present));
+    if (! getEqNodeState(slot, fxScope, fxSlot).present) return false;
+    auto* present = treeState.getParameter(id(slot, Field::present));
     if (present == nullptr) return false;
     present->beginChangeGesture();
     present->setValueNotifyingHost(0.0f);
     present->endChangeGesture();
     for (auto field : {Field::frequency, Field::gain, Field::q})
-        clearModulationForParameter(parameterID(slot, field));
+        clearModulationForParameter(id(slot, field));
     return true;
 }
 
@@ -3278,6 +3310,98 @@ int FireAudioProcessor::getInsertEffectOrder(int scope, int slot) const
 {
     if (! juce::isPositiveAndBelow(scope, fire::effects::scopeCount) || ! juce::isPositiveAndBelow(slot, fire::effects::slotCount)) return 0;
     return juce::roundToInt(loadCachedParameter(insertParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][fire::effects::orderField]));
+}
+
+namespace
+{
+juce::StringArray legacyModuleParameters(int scope, int node)
+{
+    juce::StringArray ids;
+    if (! fire::core_modules::validLegacy(scope, node)) return ids;
+    if (scope == 0)
+    {
+        if (node == 0)
+        {
+            ids.add(FILTER_BYPASS_ID);
+            for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
+                for (int field = 0; field < fire::eq::fieldCount; ++field)
+                    ids.add(fire::eq::parameterID(slot, static_cast<fire::eq::Field>(field)));
+        }
+        else if (node == 1)
+        {
+            for (const auto* id : {DOWNSAMPLE_BYPASS_ID, DOWNSAMPLE_ID, BIT_DEPTH_ID, JITTER_ID, DOWNSAMPLE_MIX_ID}) ids.add(id);
+            for (const auto* id : fire::effects::tapeIDs) ids.add(id);
+        }
+        return ids;
+    }
+    const auto add = [&](const char* id) {ids.add(ParameterIDAndName::getIDString(id, scope - 1));};
+    if (node == 0)
+    {
+        for (const auto* id : {DRIVE_BYPASS_ID, DRIVE_ID, SAFE_ID, EXTREME_ID, LINKED_ID}) add(id);
+        ids.add(fire::drive_comp::parameterID(scope - 1));
+    }
+    else if (node == 1)
+        for (const auto* id : {SHAPE_BYPASS_ID, MODE_ID, BIAS_ID, REC_ID, SHAPE_MIX_ID, DC_FILTER_ID}) add(id);
+    else if (node == 2)
+        for (const auto* id : {COMP_BYPASS_ID, COMP_THRESH_ID, COMP_RATIO_ID, COMP_ATTACK_ID, COMP_RELEASE_ID, COMP_MIX_ID}) add(id);
+    else if (node == 3)
+        for (const auto* id : {WIDTH_BYPASS_ID, WIDTH_ID, PAN_ID, WIDTH_MIX_ID}) add(id);
+    else
+    {
+        add(OTT_ENABLED_ID);
+        for (const auto* id : ParameterIDAndName::ottControlIDs) add(id);
+    }
+    return ids;
+}
+}
+
+bool FireAudioProcessor::isModulePresent(int scope, int node) const
+{
+    if (! fire::module_order::valid(scope, node)) return false;
+    if (node >= fire::module_order::firstInsert)
+        return getInsertEffectType(scope, node - fire::module_order::firstInsert) != fire::effects::Type::none;
+    return fire::core_modules::validLegacy(scope, node)
+        && loadCachedParameter(modulePresenceParameters[static_cast<size_t>(scope)][static_cast<size_t>(node)], 1) > 0.5f;
+}
+void FireAudioProcessor::removeModule(int scope, int node)
+{
+    if (! isModulePresent(scope, node)) return;
+    if (node >= fire::module_order::firstInsert) {removeInsertEffect(scope, node - fire::module_order::firstInsert); return;}
+    beginMultibandTopologyEdit();
+    const juce::ScopeGuard publish {[this] {requestMultibandTopologyReset();}};
+    const auto ids = legacyModuleParameters(scope, node);
+    for (const auto& id : ids) clearModulationForParameter(id);
+    if (!ids.isEmpty())
+        if (auto* enabled = treeState.getParameter(ids[0]))
+        {enabled->beginChangeGesture(); enabled->setValueNotifyingHost(0); enabled->endChangeGesture();}
+    if (scope > 0 && node == 0)
+        if (auto* linked = treeState.getParameter(ParameterIDAndName::getIDString(LINKED_ID, scope - 1)))
+        {linked->beginChangeGesture(); linked->setValueNotifyingHost(0); linked->endChangeGesture();}
+    auto* parameter = treeState.getParameter(fire::core_modules::presenceID(scope, node));
+    parameter->beginChangeGesture(); parameter->setValueNotifyingHost(0); parameter->endChangeGesture();
+}
+bool FireAudioProcessor::restoreLegacyModule(int scope, int node)
+{
+    if (! fire::core_modules::validLegacy(scope, node)) return false;
+    if (isModulePresent(scope, node)) return true;
+    beginMultibandTopologyEdit();
+    const juce::ScopeGuard publish {[this] {requestMultibandTopologyReset();}};
+    for (const auto& id : legacyModuleParameters(scope, node))
+    {
+        clearModulationForParameter(id);
+        if (auto* parameter = treeState.getParameter(id))
+        {
+            parameter->beginChangeGesture(); parameter->setValueNotifyingHost(parameter->getDefaultValue()); parameter->endChangeGesture();
+        }
+    }
+    auto* parameter = treeState.getParameter(fire::core_modules::presenceID(scope, node));
+    parameter->beginChangeGesture(); parameter->setValueNotifyingHost(1); parameter->endChangeGesture();
+    auto nodes = visibleModuleOrder(scope);
+    nodes.erase(std::remove(nodes.begin(), nodes.end(), node), nodes.end()); nodes.push_back(node);
+    for (int id : getModuleOrder(scope)) if (id >= 0 && std::find(nodes.begin(), nodes.end(), id) == nodes.end()) nodes.push_back(id);
+    fire::module_order::Order order; order.fill(-1);
+    std::copy(nodes.begin(), nodes.end(), order.begin()); writeModuleOrder(scope, order);
+    return true;
 }
 
 fire::module_order::Order FireAudioProcessor::getModuleOrder(int scope) const
@@ -3316,8 +3440,7 @@ std::vector<int> FireAudioProcessor::visibleModuleOrder(int scope) const
 {
     std::vector<int> result;
     for (int node : getModuleOrder(scope))
-        if (node >= 0 && (node < fire::module_order::firstInsert
-            || getInsertEffectType(scope, node - fire::module_order::firstInsert) != fire::effects::Type::none)) result.push_back(node);
+        if (isModulePresent(scope, node)) result.push_back(node);
     return result;
 }
 
@@ -3415,7 +3538,7 @@ int FireAudioProcessor::addInsertEffect(int scope, fire::effects::Type type)
     write(freeSlot, enabledField, 1);
     const int extension = type == Type::flanger ? 1 : type == Type::phaser ? 2 : 0;
     const bool isResonator = type == Type::chordResonator;
-    write(freeSlot, typeField, extension == 0 && ! isResonator ? static_cast<float>(type) : 0.0f);
+    write(freeSlot, typeField, extension == 0 && ! isResonator && ! isCore(type) ? static_cast<float>(type) : 0.0f);
     auto* extendedType = treeState.getParameter(fire::modulation_fx::parameterID(scope, freeSlot));
     extendedType->beginChangeGesture();
     extendedType->setValueNotifyingHost(extendedType->convertTo0to1(static_cast<float>(extension)));
@@ -3424,6 +3547,16 @@ int FireAudioProcessor::addInsertEffect(int scope, fire::effects::Type type)
     resonator->beginChangeGesture();
     resonator->setValueNotifyingHost(isResonator ? 1.0f : 0.0f);
     resonator->endChangeGesture();
+    for (int field = 0; field < fire::core_modules::slotFieldCount; ++field)
+    {
+        const auto id = fire::core_modules::parameterID(scope, freeSlot, field);
+        clearModulationForParameter(id);
+        auto* parameter = treeState.getParameter(id);
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost(field == fire::core_modules::typeField
+            ? parameter->convertTo0to1(static_cast<float>(fire::core_modules::encodeType(type))) : parameter->getDefaultValue());
+        parameter->endChangeGesture();
+    }
     // Reused storage slots still append to the visible chain, irrespective of
     // where their previous instance was located.
     auto nodes = visibleModuleOrder(scope);
@@ -3456,6 +3589,13 @@ void FireAudioProcessor::removeInsertEffect(int scope, int slot)
         extension->beginChangeGesture();
         extension->setValueNotifyingHost(extension->getDefaultValue());
         extension->endChangeGesture();
+    }
+    for (int field = 0; field < fire::core_modules::slotFieldCount; ++field)
+    {
+        const auto id = fire::core_modules::parameterID(scope, slot, field);
+        clearModulationForParameter(id);
+        auto* extra = treeState.getParameter(id);
+        extra->beginChangeGesture(); extra->setValueNotifyingHost(extra->getDefaultValue()); extra->endChangeGesture();
     }
     auto* parameter = treeState.getParameter(parameterID(scope, slot, typeField));
     parameter->beginChangeGesture(); parameter->setValueNotifyingHost(0); parameter->endChangeGesture();
@@ -3863,7 +4003,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     globalMixMixer.prepare(spec);
 
     globalFilterMixer.setMixingRule(juce::dsp::DryWetMixingRule::linear);
-    globalFilterMixer.setWetMixProportion(loadCachedParameter(filterEnabledParameter) > 0.5f
+    globalFilterMixer.setWetMixProportion(isModulePresent(0, 0) && loadCachedParameter(filterEnabledParameter) > 0.5f
                                               ? 1.0f
                                               : 0.0f);
     globalFilterMixer.prepare(globalMixerSpec);
@@ -3934,6 +4074,7 @@ fire::effects::FrozenRecordings FireAudioProcessor::captureFrozenAudio(const juc
             if (read(parameterID(scope, slot, typeField)) != 4.0f
                 || read(fire::modulation_fx::parameterID(scope, slot)) != 0.0f
                 || read(fire::resonator_params::parameterID(scope, slot)) > 0.5f
+                || read(fire::core_modules::parameterID(scope, slot, fire::core_modules::typeField)) != 0.0f
                 || read(fire::clouds_params::parameterID(scope, slot, fire::clouds_params::freezeField)) <= 0.5f)
                 continue;
             const auto* rack = scope == 0 ? &masterInserts
@@ -5591,6 +5732,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("moduleOrderSchemaVersion", 1);
     xmlState.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xmlState.setAttribute("eqSchemaVersion", 1);
+    xmlState.setAttribute("coreModulesSchemaVersion", fire::core_modules::schemaVersion);
     xmlState.setAttribute("lfoBankSchemaVersion", fire::lfo_bank::schemaVersion);
     xmlState.setAttribute("savedParameterCount",
                           mainState.parameterState.getNumChildren());
@@ -5689,10 +5831,11 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     // make a sparse, damaged tree look complete. Unknown but well-formed IDs
     // remain available for backward compatibility and are ignored below.
     juce::StringArray incomingParameterIDs;
+    std::set<juce::String> incomingParameterIDSet;
     for (const auto& incomingChild : incomingParameterState)
     {
         const auto parameterID = incomingChild.getProperty("id").toString();
-        if (parameterID.isEmpty() || incomingParameterIDs.contains(parameterID)
+        if (parameterID.isEmpty() || incomingParameterIDSet.contains(parameterID)
             || ! incomingChild.hasProperty("value"))
         {
             return;
@@ -5706,6 +5849,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         }
 
         incomingParameterIDs.add(parameterID);
+        incomingParameterIDSet.insert(parameterID);
     }
 
     const bool hasStateFormatVersion =
@@ -5786,6 +5930,16 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 if (! parseStrictFiniteDouble(child.getProperty("value").toString(), value)
                     || (value != 0.0 && value != 1.0)) return;
             }
+    }
+    int coreModuleCount = 0;
+    for (const auto& id : incomingParameterIDs) if (fire::core_modules::isParameterID(id)) ++coreModuleCount;
+    if (xmlState->hasAttribute("coreModulesSchemaVersion") || coreModuleCount > 0)
+    {
+        int version = 1;
+        if ((xmlState->hasAttribute("coreModulesSchemaVersion")
+             && (!parseStrictNonNegativeIntegerAttribute(*xmlState, "coreModulesSchemaVersion", version)
+                 || version != fire::core_modules::schemaVersion))
+            || coreModuleCount != fire::core_modules::parameterCount) return;
     }
     int moduleOrderCount = 0;
     int auxiliaryCount = 0;
@@ -5909,16 +6063,14 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 
     const auto parameterStateTemplate = treeState.copyState();
     juce::ValueTree treeToLoad(parameterStateTemplate.getType());
-    juce::StringArray loadedParameterIDs;
+    std::set<juce::String> loadedParameterIDs;
     std::array<bool, fire::lfo_bank::capacity> smoothnessPresentInParameterState {};
 
-    const auto findParameterState = [](juce::ValueTree& state, const juce::String& parameterID)
+    std::map<juce::String, juce::ValueTree> stagedParameters;
+    const auto findParameterState = [&](const juce::String& parameterID)
     {
-        for (auto child : state)
-            if (child.getProperty("id").toString() == parameterID)
-                return child;
-
-        return juce::ValueTree {};
+        const auto found = stagedParameters.find(parameterID);
+        return found == stagedParameters.end() ? juce::ValueTree{} : found->second;
     };
 
     // Begin with one canonical child for every current parameter. Missing
@@ -5937,6 +6089,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                               : parameter->convertFrom0to1(parameter->getDefaultValue()),
                           nullptr);
         treeToLoad.addChild(child, -1, nullptr);
+        stagedParameters.emplace(parameterID, child);
     }
 
     int recognisedParameterCount = 0;
@@ -5963,12 +6116,12 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                                                 range.end,
                                                 static_cast<float>(parsedValue));
         const float safeValue = range.snapToLegalValue(boundedValue);
-        auto targetChild = findParameterState(treeToLoad, parameterID);
+        auto targetChild = findParameterState(parameterID);
         if (! targetChild.isValid())
             return;
 
         targetChild.setProperty("value", safeValue, nullptr);
-        loadedParameterIDs.add(parameterID);
+        loadedParameterIDs.insert(parameterID);
         ++recognisedParameterCount;
 
         for (int i = 0; i < static_cast<int>(smoothnessPresentInParameterState.size()); ++i)
@@ -5985,8 +6138,8 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         for (int slot = 0; slot < fire::clouds_params::slotCount; ++slot)
         {
             const auto engineID = fire::clouds_params::parameterID(scope, slot, fire::clouds_params::engineField);
-            auto engineState = findParameterState(treeToLoad, engineID);
-            const auto typeState = findParameterState(treeToLoad,
+            auto engineState = findParameterState(engineID);
+            const auto typeState = findParameterState(
                 fire::effects::parameterID(scope, slot, fire::effects::typeField));
             const bool wasLegacy = ! loadedParameterIDs.contains(engineID)
                                || static_cast<float>(engineState.getProperty("value", 0.0f)) < 0.5f;
@@ -5998,7 +6151,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 std::array<juce::ValueTree, 6> controls;
                 for (int control = 0; control < 6; ++control)
                 {
-                    controls[static_cast<size_t>(control)] = findParameterState(treeToLoad,
+                    controls[static_cast<size_t>(control)] = findParameterState(
                         fire::effects::parameterID(scope, slot, control));
                     values[static_cast<size_t>(control)] = static_cast<float>(
                         controls[static_cast<size_t>(control)].getProperty("value", 0.5f));
@@ -6009,7 +6162,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 // These controls were inaudible in Legacy. In particular,
                 // do not freeze an empty new engine using an obsolete flag.
                 for (int field = fire::clouds_params::freezeField; field < fire::clouds_params::fieldCount; ++field)
-                    findParameterState(treeToLoad, fire::clouds_params::parameterID(scope, slot, field))
+                    findParameterState(fire::clouds_params::parameterID(scope, slot, field))
                         .setProperty("value", fire::clouds_params::defaults[static_cast<size_t>(field)], nullptr);
                 for (int field = fire::clouds_params::spreadField; field < fire::clouds_params::fieldCount; ++field)
                     migratedCloudsRoutingTargets.add(fire::clouds_params::parameterID(scope, slot, field));
@@ -6040,7 +6193,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             legacyShapeValue = parsedValue > 0.5 ? 1.0f : 0.0f;
         }
 
-        if (auto shapeState = findParameterState(treeToLoad, shapeID); shapeState.isValid())
+        if (auto shapeState = findParameterState(shapeID); shapeState.isValid())
             shapeState.setProperty("value", legacyShapeValue, nullptr);
     }
 
@@ -6071,7 +6224,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     {
         const auto smoothnessID = ParameterIDAndName::getIDString(
             LFO_SMOOTH_ID, static_cast<int>(i));
-        auto smoothnessState = findParameterState(treeToLoad, smoothnessID);
+        auto smoothnessState = findParameterState(smoothnessID);
         if (! smoothnessState.isValid())
             continue;
 
@@ -7257,6 +7410,34 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
             juce::NormalisableRange<float>(fire::mod_sources::minimums[i], fire::mod_sources::maximums[i],
                 index < 2 ? 0.1f : index == 2 ? 0.1f : 0.001f, index < 2 ? 0.35f : 1.0f), fire::mod_sources::defaults[i]));
     }
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+    {
+        const auto prefix = scope == 0 ? juce::String("Master") : "Band " + juce::String(scope);
+        for (int node = 0; node < (scope == 0 ? 3 : 5); ++node)
+            parameters.push_back(std::make_unique<PBool>(juce::ParameterID{fire::core_modules::presenceID(scope, node), 12},
+                prefix + " " + (scope == 0 && node == 2 ? "Analysis" : fire::effects::name(fire::core_modules::legacyType(scope, node))) + " Present", true));
+        for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+        {
+            const auto fx = prefix + " FX " + juce::String(slot + 1);
+            parameters.push_back(std::make_unique<PChoice>(juce::ParameterID{fire::core_modules::parameterID(scope, slot, 0), 12},
+                fx + " Core Type", juce::StringArray{"Standard", "Drive", "Shape", "Compressor", "OTT", "Stereo", "EQ"}, 0));
+            parameters.push_back(std::make_unique<PFloat>(juce::ParameterID{fire::core_modules::parameterID(scope, slot, 1), 12},
+                fx + " Jitter", juce::NormalisableRange<float>{0, 1}, 0));
+            for (int node = 0; node < fire::eq::maxNodes; ++node)
+            {
+                const auto state = fire::eq::defaultNode(node);
+                const auto point = fx + " EQ " + juce::String(node + 1);
+                const auto id = [&](fire::eq::Field field) {return juce::ParameterID{fire::core_modules::eqParameterID(scope, slot, node, field), 12};};
+                parameters.push_back(std::make_unique<PFloat>(id(fire::eq::Field::frequency), point + " Frequency", juce::NormalisableRange<float>{20, 20000, 0, 0.3f}, state.frequency));
+                parameters.push_back(std::make_unique<PFloat>(id(fire::eq::Field::gain), point + " Gain", juce::NormalisableRange<float>{-24, 24}, state.gainDb));
+                parameters.push_back(std::make_unique<PFloat>(id(fire::eq::Field::q), point + " Q", juce::NormalisableRange<float>{0.1f, 20, 0, 0.35f}, state.q));
+                parameters.push_back(std::make_unique<PChoice>(id(fire::eq::Field::slope), point + " Slope", juce::StringArray{"12", "24", "36", "48"}, 0));
+                parameters.push_back(std::make_unique<PChoice>(id(fire::eq::Field::type), point + " Type", juce::StringArray{"Bell", "Low cut", "High cut", "Low shelf", "High shelf", "Notch", "Band pass"}, static_cast<int>(state.type)));
+                parameters.push_back(std::make_unique<PBool>(id(fire::eq::Field::present), point + " Present", state.present));
+                parameters.push_back(std::make_unique<PBool>(id(fire::eq::Field::bypassed), point + " Bypassed", false));
+            }
+        }
+    }
     return { parameters.begin(), parameters.end() };
 }
 
@@ -7289,6 +7470,38 @@ void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackP
                 target.sources[control] = routing.sourceLfoIndex;
             }
         }
+        const auto& core = coreModuleParameters[static_cast<size_t>(scope)][slot];
+        auto& jitter = target.effect.jitter;
+        jitter.baseValue = loadCachedParameter(core[fire::core_modules::jitterField]);
+        jitter.range = {0, 1}; jitter.lfoSignal = nullptr; jitter.modulationDepth = 0;
+        target.jitterSource = -1;
+        LfoManager::AudioThreadRoutingInfo jitterRouting;
+        if (core[fire::core_modules::jitterField].ranged && lfoManager->getAudioThreadRoutingInfo(core[fire::core_modules::jitterField].ranged, jitterRouting))
+        {jitter.modulationDepth = jitterRouting.depth; jitter.isBipolar = jitterRouting.isBipolar; target.jitterSource = jitterRouting.sourceLfoIndex;}
+        if (target.effect.type == fire::effects::Type::eq)
+            for (int node = 0; node < fire::eq::maxNodes; ++node)
+            {
+                auto& destination = target.effect.eq[static_cast<size_t>(node)];
+                const auto field = [&](fire::eq::Field index) -> const CachedParameter&
+                { return core[static_cast<size_t>(2 + node * fire::eq::fieldCount + static_cast<int>(index))]; };
+                destination.state.present = loadCachedParameter(field(fire::eq::Field::present)) > 0.5f;
+                destination.state.bypassed = loadCachedParameter(field(fire::eq::Field::bypassed)) > 0.5f;
+                destination.state.type = static_cast<fire::eq::Type>(juce::jlimit(0, 6, juce::roundToInt(loadCachedParameter(field(fire::eq::Field::type)))));
+                destination.state.slope = juce::jlimit(0, 3, juce::roundToInt(loadCachedParameter(field(fire::eq::Field::slope))));
+                destination.generation = 0;
+                for (int control = 0; control < 3; ++control)
+                {
+                    const auto& cached = field(static_cast<fire::eq::Field>(control));
+                    auto& value = destination.controls[static_cast<size_t>(control)];
+                    value.value = loadCachedParameter(cached); value.depth = 0; value.source = -1; value.signal = nullptr;
+                    LfoManager::AudioThreadRoutingInfo routing;
+                    if (cached.ranged && lfoManager->getAudioThreadRoutingInfo(cached.ranged, routing))
+                    { value.depth = routing.depth; value.bipolar = routing.isBipolar; value.source = routing.sourceLfoIndex; }
+                }
+                destination.state.frequency = destination.controls[0].value;
+                destination.state.gainDb = destination.controls[1].value;
+                destination.state.q = destination.controls[2].value;
+            }
         const auto& clouds = cloudsParameters[static_cast<size_t>(scope)][slot];
         const bool isGranular = target.effect.type == fire::effects::Type::granular;
         target.effect.clouds.freeze = isGranular
@@ -7431,15 +7644,15 @@ void FireAudioProcessor::prepareHqCallbackContext(
         BandProcessingParameters params;
         params.isBandEnabled = loadCachedParameter(parameters.enabled) > 0.5f;
         params.mode = juce::roundToInt(loadCachedParameter(parameters.mode));
-        params.isOutputLinked = loadCachedParameter(parameters.linked) > 0.5f;
+        params.isOutputLinked = isModulePresent(i + 1, 0) && loadCachedParameter(parameters.linked) > 0.5f;
         params.useModernDriveComp = loadCachedParameter(parameters.modernDriveComp) > 0.5f;
-        params.isDriveEnabled = loadCachedParameter(parameters.driveEnabled) > 0.5f;
-        params.isShapeEnabled = loadCachedParameter(parameters.shapeEnabled) > 0.5f;
-        params.isCompEnabled = loadCachedParameter(parameters.compressorEnabled) > 0.5f;
-        params.ott.enabled = loadCachedParameter(parameters.ottEnabled) > 0.5f;
+        params.isDriveEnabled = isModulePresent(i + 1, 0) && loadCachedParameter(parameters.driveEnabled) > 0.5f;
+        params.isShapeEnabled = isModulePresent(i + 1, 1) && loadCachedParameter(parameters.shapeEnabled) > 0.5f;
+        params.isCompEnabled = isModulePresent(i + 1, 2) && loadCachedParameter(parameters.compressorEnabled) > 0.5f;
+        params.ott.enabled = isModulePresent(i + 1, 4) && loadCachedParameter(parameters.ottEnabled) > 0.5f;
         prepareInsertParameters(i + 1, params.inserts);
         params.moduleOrder = getModuleOrder(i + 1);
-        params.isWidthEnabled = loadCachedParameter(parameters.widthEnabled) > 0.5f;
+        params.isWidthEnabled = isModulePresent(i + 1, 3) && loadCachedParameter(parameters.widthEnabled) > 0.5f;
         params.isSafeModeOn = loadCachedParameter(parameters.safe) > 0.5f;
         params.isExtremeModeOn = loadCachedParameter(parameters.extreme) > 0.5f;
         params.isDcFilterEnabled = params.isShapeEnabled
@@ -7530,7 +7743,7 @@ void FireAudioProcessor::prepareAudioCallbackParameterSnapshot(
     snapshot.publicationSequence = publicationSequence;
     snapshot.requestedHq = loadCachedParameter(hqParameter) > 0.5f;
     snapshot.downsampleEnabled =
-        loadCachedParameter(downsampleEnabledParameter) > 0.5f;
+        isModulePresent(0, 1) && loadCachedParameter(downsampleEnabledParameter) > 0.5f;
     snapshot.loudnessMatch = loudnessMatch.capture(stateAB.isCurrentA() ? 0 : 1);
     snapshot.lfoParameters =
         lfoManager->captureAudioThreadParameterSnapshot();
@@ -7562,7 +7775,7 @@ void FireAudioProcessor::prepareAudioCallbackParameterSnapshot(
     };
 
     auto& filter = snapshot.globalFilter;
-    filter.enabled = loadCachedParameter(filterEnabledParameter) > 0.5f;
+    filter.enabled = isModulePresent(0, 0) && loadCachedParameter(filterEnabledParameter) > 0.5f;
     prepareModulatedParameter(filterParameterCache.lowCutFrequency,
                               filter.lowCutFrequency);
     prepareModulatedParameter(filterParameterCache.lowCutGain,

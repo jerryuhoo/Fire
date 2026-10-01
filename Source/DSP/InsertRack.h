@@ -9,6 +9,7 @@ struct SlotParameters
     std::array<int, controlCount> sources {-1, -1, -1, -1, -1, -1};
     std::array<int, 3> cloudsSources {-1, -1, -1};
     int order = 0;
+    int jitterSource = -1;
     SlotParameters() { effect.normalised = true; }
 };
 using RackParameters = std::array<SlotParameters, slotCount>;
@@ -17,19 +18,24 @@ class InsertRack
 {
 public:
     FrozenRecordingPtr copyFrozenRecording(int slot) const
-    { return juce::isPositiveAndBelow(slot, slotCount) ? effects[static_cast<size_t>(slot)].copyFrozenRecording() : FrozenRecordingPtr{}; }
+    { return effects && juce::isPositiveAndBelow(slot, slotCount) ? (*effects)[static_cast<size_t>(slot)].copyFrozenRecording() : FrozenRecordingPtr{}; }
     void stageFrozenRecording(int slot, const FrozenRecordingPtr& recording, std::uint32_t publication)
-    { if (juce::isPositiveAndBelow(slot, slotCount)) effects[static_cast<size_t>(slot)].stageFrozenRecording(recording, publication); }
+    {
+        if (! juce::isPositiveAndBelow(slot, slotCount)) return;
+        if (! effects) effects = std::make_unique<std::array<InsertEffect, slotCount>>();
+        (*effects)[static_cast<size_t>(slot)].stageFrozenRecording(recording, publication);
+    }
     void prepare(const juce::dsp::ProcessSpec& spec)
     {
-        for (auto& effect : effects) effect.prepare(spec);
+        if (! effects) effects = std::make_unique<std::array<InsertEffect, slotCount>>();
+        for (auto& effect : *effects) effect.prepare(spec);
         dry.setSize(2, juce::jmax(1, static_cast<int>(spec.maximumBlockSize)));
         transition.reset(spec.sampleRate, 0.015);
         reset();
     }
     void reset() noexcept
     {
-        for (auto& effect : effects) effect.reset();
+        if (effects) for (auto& effect : *effects) effect.reset();
         for (size_t i = 0; i < order.size(); ++i) order[i] = static_cast<int>(i);
         transition.setCurrentAndTargetValue(1.0f);
         initialised = false;
@@ -76,7 +82,7 @@ public:
     void processSlot(juce::dsp::AudioBlock<float> block, int slot, const RackParameters& parameters,
                      const juce::AudioBuffer<float>& lfo, int sampleOffset = 0) noexcept
     {
-        if (! juce::isPositiveAndBelow(slot, slotCount)) return;
+        if (! effects || ! juce::isPositiveAndBelow(slot, slotCount)) return;
         auto p = parameters[static_cast<size_t>(slot)].effect;
         for (size_t control = 0; control < controlCount; ++control)
         {
@@ -92,12 +98,20 @@ public:
                 && sampleOffset >= 0 && sampleOffset + static_cast<int>(block.getNumSamples()) <= lfo.getNumSamples()
                 ? lfo.getReadPointer(source) : nullptr;
         }
-        effects[static_cast<size_t>(slot)].process(block, p, sampleOffset,
+        for (auto& node : p.eq)
+            for (auto& control : node.controls)
+                control.signal = juce::isPositiveAndBelow(control.source, lfo.getNumChannels())
+                    && sampleOffset >= 0 && sampleOffset + static_cast<int>(block.getNumSamples()) <= lfo.getNumSamples()
+                    ? lfo.getReadPointer(control.source) : nullptr;
+        p.jitter.lfoSignal = juce::isPositiveAndBelow(parameters[static_cast<size_t>(slot)].jitterSource, lfo.getNumChannels())
+            && sampleOffset >= 0 && sampleOffset + static_cast<int>(block.getNumSamples()) <= lfo.getNumSamples()
+            ? lfo.getReadPointer(parameters[static_cast<size_t>(slot)].jitterSource) : nullptr;
+        (*effects)[static_cast<size_t>(slot)].process(block, p, sampleOffset,
                                                   &parameters[static_cast<size_t>(slot)].sources,
                                                   &parameters[static_cast<size_t>(slot)].cloudsSources);
     }
 private:
-    std::array<InsertEffect, slotCount> effects;
+    std::unique_ptr<std::array<InsertEffect, slotCount>> effects;
     std::array<int, slotCount> order;
     juce::AudioBuffer<float> dry;
     juce::SmoothedValue<float> transition;

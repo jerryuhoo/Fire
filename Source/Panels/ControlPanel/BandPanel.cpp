@@ -96,6 +96,17 @@ BandPanel::BandPanel(FireAudioProcessor& p,
         cloudsKnobs[i]->setInteractionOnlyReadout(true);
     }
     insertControls.setCloudsControls(cloudsKnobs);
+    EqControlsPanel::Knobs insertEqKnobs {};
+    for (int node = 0; node < fire::eq::maxNodes; ++node)
+        for (int control = 0; control < 3; ++control)
+        {
+            const auto name = "Insert EQ " + juce::String(node) + " Control " + juce::String(control);
+            createAndConfigureSlider(name, control == 0 ? "Frequency" : control == 1 ? "Gain" : "Q", fire::ui::colours::filter);
+            auto* knob = modulatableSliderComponents.at(name).get();
+            setupModulationCallbacks(*knob);
+            insertEqKnobs[static_cast<size_t>(node)][static_cast<size_t>(control)] = knob;
+        }
+    insertControls.setEqControls(insertEqKnobs);
     insertControls.bind(1, 0);
     insertControls.onLayoutChanged = [safe = juce::Component::SafePointer<BandPanel>(this)]
     {
@@ -162,10 +173,12 @@ BandPanel::BandPanel(FireAudioProcessor& p,
 
     // Set initial attachments for band 0 and update knob enabled states
     setFocusBandNum(0, true);
+    effectNavigation.refresh();
 
     // Set initial visibility
     moduleSelectionPosition.snapTo(0.0f);
     buttonClicked(&oscSwitch);
+    effectNavigation.refresh();
     startTimerHz(30);
 }
 
@@ -727,7 +740,7 @@ void BandPanel::rebuildChromeCache(float displayScale)
         return area.removeFromTop(juce::jmin(titleHeight, area.getHeight())).toFloat();
     };
 
-    juce::String moduleTitle { "DRIVE" };
+    juce::String moduleTitle {oscSwitch.getToggleState() ? "DRIVE" : "EMPTY CHAIN"};
     if (shapeSwitch.getToggleState())
     {
         moduleTitle = "SHAPE";
@@ -1023,7 +1036,7 @@ GraphTemplate* BandPanel::getAutomaticModuleGraph() noexcept
         return &vuPanel;
     if (widthSwitch.getToggleState())
         return &widthGraph;
-    return &oscilloscope;
+    return oscSwitch.getToggleState() ? &oscilloscope : nullptr;
 }
 
 void BandPanel::restoreDriveGraphPreviewNow() noexcept
@@ -1070,8 +1083,16 @@ void BandPanel::selectInsertEffect(int slot)
     const juce::Component::SafePointer<BandPanel> safeThis(this);
     if (slot < 0 || processor.getInsertEffectType(focusBandNum + 1, slot) == fire::effects::Type::none)
     {
+        clearGraphZoom();
+        if (!safeThis) return;
         selectedInsert = -1;
-        oscSwitch.setToggleState(true, juce::sendNotificationSync);
+        insertControls.setActive(false);
+        if (!safeThis) return;
+        for (auto* button : {&oscSwitch, &shapeSwitch, &compressorSwitch, &widthSwitch, &ottSwitch}) button->setToggleState(false, juce::dontSendNotification);
+        for (auto* group : {&driveComponents, &shapeComponents, &compressorComponents, &widthComponents, &ottComponents})
+        {setVisibility(*group, false); if (!safeThis) return;}
+        applySelectedGraphView();
+        if (safeThis) resized();
         return;
     }
     dismissTransientInteraction();
@@ -1701,6 +1722,7 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
         return;
 
     invalidateChromeCache();
+    effectNavigation.refresh();
 }
 
 bool BandPanel::hasActiveSliderInteraction() const noexcept

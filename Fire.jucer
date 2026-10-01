@@ -195,6 +195,9 @@
               file="Source/DSP/SampleAccurateCompressor.cpp"/>
         <FILE id="ottCore1" name="OttProcessor.h" compile="0" resource="0" file="Source/DSP/OttProcessor.h"/>
         <FILE id="insertFx1" name="InsertEffect.h" compile="0" resource="0" file="Source/DSP/InsertEffect.h"/>
+        <FILE id="coreFx1" name="CoreEffect.h" compile="0" resource="0" file="Source/DSP/CoreEffect.h"/>
+        <FILE id="coreFx2" name="CoreEffect.cpp" compile="1" resource="0" file="Source/DSP/CoreEffect.cpp"/>
+        <FILE id="coreFx3" name="CoreModuleParameters.h" compile="0" resource="0" file="Source/Utility/CoreModuleParameters.h"/>
         <FILE id="chordResDsp" name="ChordResonator.h" compile="0" resource="0" file="Source/DSP/ChordResonator.h"/>
         <FILE id="driveCompDsp" name="DriveCompensation.h" compile="0" resource="0" file="Source/DSP/DriveCompensation.h"/>
         <FILE id="insertFx2" name="InsertRack.h" compile="0" resource="0" file="Source/DSP/InsertRack.h"/>

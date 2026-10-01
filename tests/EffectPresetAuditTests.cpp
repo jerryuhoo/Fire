@@ -329,14 +329,15 @@ TEST_CASE("Preset and host restores reproduce the processed sound of reordered e
         return output;
     };
     for (bool hq : {false, true})
+      for (int firstType = 1; firstType < static_cast<int>(fx::Type::count); firstType += fx::slotCount)
     {
-        CAPTURE(hq);
+        CAPTURE(hq, firstType);
         FireAudioProcessor original, fromPreset, fromHost;
         plain(original, HQ_ID, hq ? 1.0f : 0.0f);
         plain(original, NUM_BANDS_ID, 2); plain(original, "lineState1", 1); plain(original, "freq1", 800);
         for (int scope = 0; scope <= 2; ++scope)
         {
-            for (int type = 1; type < static_cast<int>(fx::Type::count); ++type)
+            for (int type = firstType; type < juce::jmin(firstType + fx::slotCount, static_cast<int>(fx::Type::count)); ++type)
             {
                 const auto slot = original.addInsertEffect(scope, static_cast<fx::Type>(type)); REQUIRE(slot >= 0);
                 plain(original, fx::parameterID(scope, slot, 5), 0.4f);

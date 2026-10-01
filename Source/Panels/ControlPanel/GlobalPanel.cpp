@@ -101,6 +101,17 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
         cloudsKnobs[i]->setInteractionOnlyReadout(true);
     }
     insertControls.setCloudsControls(cloudsKnobs);
+    EqControlsPanel::Knobs insertEqKnobs {};
+    for (int node = 0; node < fire::eq::maxNodes; ++node)
+        for (int control = 0; control < 3; ++control)
+        {
+            const auto name = "Insert EQ " + juce::String(node) + " Control " + juce::String(control);
+            createAndConfigureSlider(name, control == 0 ? "Frequency" : control == 1 ? "Gain" : "Q", fire::ui::colours::filter);
+            auto* knob = modulatableSliderComponents.at(name).get();
+            setupModulationCallbacks(*knob);
+            insertEqKnobs[static_cast<size_t>(node)][static_cast<size_t>(control)] = knob;
+        }
+    insertControls.setEqControls(insertEqKnobs);
     insertControls.bind(0, 0);
     insertControls.onLayoutChanged = [safe = juce::Component::SafePointer<GlobalPanel>(this)]
     {
@@ -137,6 +148,7 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
     // Set initial switch state and trigger visibility update using buttonClicked
     filterSwitch.setToggleState(true, juce::dontSendNotification);
     buttonClicked(&filterSwitch);
+    effectNavigation.refresh();
 }
 
 GlobalPanel::~GlobalPanel()
@@ -1068,8 +1080,16 @@ void GlobalPanel::selectInsertEffect(int slot)
     const juce::Component::SafePointer<GlobalPanel> safeThis(this);
     if (slot < 0 || processor.getInsertEffectType(0, slot) == fire::effects::Type::none)
     {
+        clearGraphZoom();
+        if (!safeThis) return;
         selectedInsert = -1;
-        filterSwitch.setToggleState(true, juce::sendNotificationSync);
+        insertControls.setActive(false);
+        if (!safeThis) return;
+        for (auto* button : {&filterSwitch, &downsampleSwitch, &graphSwitch}) button->setToggleState(false, juce::dontSendNotification);
+        for (auto* group : {&filterComponents, &downsampleComponents, &graphComponents})
+        {setVisibility(*group, false); if (!safeThis) return;}
+        eqControls.setVisible(false);
+        if (safeThis) resized();
         return;
     }
     dismissTransientInteraction();

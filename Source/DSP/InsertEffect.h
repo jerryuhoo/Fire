@@ -3,6 +3,7 @@
 #include "ModulatedValueProvider.h"
 #include "Clouds/CloudsEngine.h"
 #include "ChordResonator.h"
+#include "CoreEffect.h"
 #include <juce_dsp/juce_dsp.h>
 #include <array>
 #include <limits>
@@ -11,7 +12,9 @@
 namespace fire::effects
 {
 enum class Type { none = 0, chorus = 1, delay = 2, reverb = 3, granular = 4, lofi = 5,
-                  flanger = 6, phaser = 7, chordResonator = 8, count = 9 };
+                  flanger = 6, phaser = 7, chordResonator = 8,
+                  drive = 9, shape = 10, compressor = 11, ott = 12, stereo = 13, eq = 14, count = 15 };
+inline bool isCore(Type type) noexcept { return type >= Type::drive && type <= Type::eq; }
 inline constexpr size_t controlCount = 6;
 
 struct Control
@@ -44,6 +47,12 @@ inline const char* name(Type type) noexcept
         case Type::flanger: return "Flanger";
         case Type::phaser: return "Phaser";
         case Type::chordResonator: return "Chord Resonator";
+        case Type::drive: return "Drive";
+        case Type::shape: return "Shape";
+        case Type::compressor: return "Compressor";
+        case Type::ott: return "OTT";
+        case Type::stereo: return "Stereo";
+        case Type::eq: return "EQ";
         case Type::none: case Type::count: return "Empty";
     }
     return "Empty";
@@ -91,6 +100,32 @@ inline const std::array<Control, controlCount>& controls(Type type)
         {"Color", " %", 0, 100, 55}, {"Decay", " s", 0.05f, 3, 0.6f, 0.42f},
         {"Width", " %", 0, 100, 70}, {"Mix", " %", 0, 100, 35}
     }};
+    static const std::array<Control, controlCount> drive {{
+        {"Drive", "", 0, 100, 0}, {"Safe", "", 0, 1, 1}, {"Extreme", "", 0, 1, 0},
+        {"Comp", "", 0, 1, 1}, {"", "", 0, 1, 0}, {"Mix", " %", 0, 100, 100}
+    }};
+    static const std::array<Control, controlCount> shape {{
+        {"Mode", "", 0, 11, 3}, {"Bias", "", -1, 1, 0}, {"Rectify", "", 0, 1, 0},
+        {"DC Filter", "", 0, 1, 0}, {"", "", 0, 1, 0}, {"Mix", " %", 0, 100, 100}
+    }};
+    static const std::array<Control, controlCount> compressor {{
+        {"Threshold", " dB", -60, 0, 0}, {"Ratio", " :1", 1, 20, 1},
+        {"Attack", " ms", 0.1f, 200, 10, 0.35f}, {"Release", " ms", 1, 1000, 100, 0.35f},
+        {"", "", 0, 1, 0}, {"Mix", " %", 0, 100, 100}
+    }};
+    static const std::array<Control, controlCount> ott {{
+        {"Depth", " %", 0, 100, 50}, {"Time", " %", 10, 400, 100},
+        {"Upward", " dB", -72, -6, -48}, {"Downward", " dB", -36, 0, -18},
+        {"Output", " dB", -24, 24, 0}, {"Mix", " %", 0, 100, 100}
+    }};
+    static const std::array<Control, controlCount> stereo {{
+        {"Width", " %", 0, 100, 50}, {"Pan", " %", -100, 100, 0}, {"", "", 0, 1, 0},
+        {"", "", 0, 1, 0}, {"", "", 0, 1, 0}, {"Mix", " %", 0, 100, 100}
+    }};
+    static const std::array<Control, controlCount> eq {{
+        {"", "", 0, 1, 0}, {"", "", 0, 1, 0}, {"", "", 0, 1, 0},
+        {"", "", 0, 1, 0}, {"", "", 0, 1, 0}, {"Mix", " %", 0, 100, 100}
+    }};
     switch (type)
     {
         case Type::delay: return delay;
@@ -100,6 +135,12 @@ inline const std::array<Control, controlCount>& controls(Type type)
         case Type::flanger: return flanger;
         case Type::phaser: return phaser;
         case Type::chordResonator: return chordResonator;
+        case Type::drive: return drive;
+        case Type::shape: return shape;
+        case Type::compressor: return compressor;
+        case Type::ott: return ott;
+        case Type::stereo: return stereo;
+        case Type::eq: return eq;
         case Type::chorus: case Type::none: case Type::count: return chorus;
     }
     return chorus;
@@ -223,6 +264,8 @@ public:
         bool normalised = false;
         float bpm = 120;
         std::array<ModulatedValueProvider, controlCount> values;
+        std::array<CoreEffect::EqNode, eq::maxNodes> eq;
+        ModulatedValueProvider jitter;
         explicit Parameters(Type kind = Type::none) : type(kind)
         {
             for (size_t i = 0; i < values.size(); ++i)
@@ -241,6 +284,9 @@ public:
         reverb.setSampleRate(sampleRate);
         cloudsEngine.prepare(sampleRate);
         chordEngine.prepare(sampleRate);
+        if (! core) core = std::make_unique<CoreEffect>();
+        core->prepare(spec);
+        coreWet.setSize(2, juce::jmax(1, static_cast<int>(spec.maximumBlockSize)));
         gate.reset(sampleRate, 0.02);
         for (auto& smoother : bases) smoother.reset(sampleRate, 0.02);
         for (auto& route : routes) route.blend.reset(sampleRate, 0.01);
@@ -272,13 +318,19 @@ public:
         const auto matches = [&] { return requested == currentType; };
         if (requested == Type::none && currentType == Type::none) return;
         if (currentType == Type::none && requested != Type::none) activate(requested, parameters);
+        if (! matches() && juce::exactlyEqual(gate.getCurrentValue(), 0.0f)) activate(requested, parameters);
         if (matches()) updateControlTargets(parameters, sourceIndices, cloudsSourceIndices);
         gate.setTargetValue(parameters.enabled && matches() && currentType != Type::none ? 1.0f : 0.0f);
+        if (isCore(currentType))
+        {
+            processCore(block, parameters, offset, sourceIndices, matches());
+            return;
+        }
         auto* left = block.getChannelPointer(0);
         auto* right = block.getNumChannels() > 1 ? block.getChannelPointer(1) : nullptr;
         for (size_t sample = 0; sample < block.getNumSamples(); ++sample)
         {
-            if (gate.getCurrentValue() == 0.0f && ! matches())
+            if (gate.getCurrentValue() == 0.0f && ! matches() && ! isCore(requested))
             {
                 activate(requested, parameters);
                 updateControlTargets(parameters, sourceIndices, cloudsSourceIndices);
@@ -362,7 +414,8 @@ public:
                 if (! right) wetL = 0.5f * (wetL + wetR);
             }
             else
-                processSample(wetL, wetR, value, parameters.bpm, right != nullptr);
+                processSample(wetL, wetR, value, parameters.bpm, right != nullptr,
+                    matches() ? parameters.jitter.get(offset + static_cast<int>(sample)) : 0.0f);
             auto mix = enabled * value[5] * 0.01f;
             if (currentType == Type::flanger)
             {
@@ -377,6 +430,53 @@ public:
         }
     }
 private:
+    void processCore(juce::dsp::AudioBlock<float> block, const Parameters& requested,
+                     int offset, const std::array<int, controlCount>* sources, bool matches) noexcept
+    {
+        if (! core || coreWet.getNumSamples() == 0) return;
+        if (block.getNumSamples() > static_cast<size_t>(coreWet.getNumSamples()))
+        {
+            const auto capacity = static_cast<size_t>(coreWet.getNumSamples());
+            for (size_t start = 0; start < block.getNumSamples(); start += capacity)
+                processCore(block.getSubBlock(start, juce::jmin(capacity, block.getNumSamples() - start)),
+                    requested, offset + static_cast<int>(start), sources, matches);
+            return;
+        }
+        if (matches)
+        {
+            coreLastParameters = requested;
+            for (auto& value : coreLastParameters.values) value.lfoSignal = nullptr;
+            for (auto& node : coreLastParameters.eq) for (auto& value : node.controls) value.signal = nullptr;
+        }
+        if (juce::exactlyEqual(gate.getCurrentValue(), 0.0f) && ! gate.isSmoothing())
+        {
+            if (! dormant) {core->reset(); dormant = true;}
+            return;
+        }
+        dormant = false;
+        auto wet = juce::dsp::AudioBlock<float>(coreWet).getSubsetChannelBlock(0, juce::jmin(size_t{2}, block.getNumChannels()))
+            .getSubBlock(0, block.getNumSamples());
+        wet.copyFrom(block);
+        const auto& p = matches ? requested : coreLastParameters;
+        core->process(wet, currentType, p.values, currentNormalised, matches ? offset : 0, sources, p.eq);
+        for (size_t sample = 0; sample < block.getNumSamples(); ++sample)
+        {
+            const auto base = bases[5].getNextValue();
+            auto mix = matches ? p.values[5].get(offset + static_cast<int>(sample), base) : lastValues[5];
+            if (matches && currentNormalised) mix = controls(currentType)[5].fromNormalised(mix);
+            mix = juce::jlimit(0.0f, 100.0f, std::isfinite(mix) ? mix : 0.0f);
+            const auto blend = routes[5].blend.getNextValue();
+            if (matches && blend < 1.0f) mix = juce::jmap(blend, routes[5].anchor, mix);
+            lastValues[5] = mix;
+            const auto amount = gate.getNextValue() * mix * 0.01f;
+            for (size_t channel = 0; channel < wet.getNumChannels(); ++channel)
+            {
+                auto& original = block.getChannelPointer(channel)[sample];
+                const auto result = wet.getChannelPointer(channel)[sample];
+                original = juce::jmap(amount, original, std::isfinite(result) ? result : 0.0f);
+            }
+        }
+    }
     struct Route
     {
         juce::SmoothedValue<float> blend;
@@ -441,8 +541,9 @@ private:
         history.reset(); tape.reset(); reverb.reset();
         cloudsEngine.reset(preserveFrozen);
         chordEngine.reset();
+        if (core) core->reset();
         feedback.fill(0); highPassInput.fill(0); highPassOutput.fill(0);
-        held.fill(0); holdRemaining = 0; holdResidual = 0;
+        held.fill(0); holdRemaining = 0; holdResidual = 0; jitterSeed = 0x61c88647u;
         phase = 0;
         flangerWarmupRemaining = flangerWarmupLength;
         flangerWet.setCurrentAndTargetValue(0.0f);
@@ -577,7 +678,7 @@ private:
             *channels[channel] = std::isfinite(output) ? output : 0.0f;
         }
     }
-    void processSample(float& left, float& right, const std::array<float, controlCount>& p, float bpm, bool stereo) noexcept
+    void processSample(float& left, float& right, const std::array<float, controlCount>& p, float bpm, bool stereo, float jitter = 0.0f) noexcept
     {
         const auto sr = static_cast<float>(sampleRate);
         if (currentType == Type::chorus)
@@ -687,7 +788,10 @@ private:
         {
             if (holdRemaining-- <= 0)
             {
-                const auto period = p[0] + holdResidual;
+                jitter = juce::jlimit(0.0f, 1.0f, std::isfinite(jitter) ? jitter : 0.0f);
+                jitterSeed ^= jitterSeed << 13; jitterSeed ^= jitterSeed >> 17; jitterSeed ^= jitterSeed << 5;
+                const auto random = static_cast<float>(jitterSeed & 0xffffu) / 65535.0f;
+                const auto period = juce::jmax(1.0f, p[0] * (1.0f + jitter * (random * 2.0f - 1.0f))) + holdResidual;
                 const auto whole = std::floor(period);
                 holdRemaining = juce::jmax(0, static_cast<int>(whole) - 1);
                 holdResidual = period - whole;
@@ -705,6 +809,10 @@ private:
     }
     double sampleRate = 48000, phase = 0;
     Type currentType = Type::none;
+    std::unique_ptr<CoreEffect> core;
+    juce::AudioBuffer<float> coreWet;
+    Parameters coreLastParameters;
+    std::uint32_t jitterSeed = 0x61c88647u;
     bool dormant = true, currentNormalised = false;
     CloudsEngine cloudsEngine;
     fire::chord_resonator::Engine chordEngine;

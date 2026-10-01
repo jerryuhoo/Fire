@@ -17,6 +17,7 @@
 #include "DriveCompensationParameters.h"
 #include "EqParameters.h"
 #include "ModuleOrder.h"
+#include "CoreModuleParameters.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_core/juce_core.h"
 #include <array>
@@ -354,6 +355,17 @@ namespace ParameterIDAndName
             // For global parameters, the name is the display text and the ID is the parameter ID
             targets.push_back({ paramInfo.name, getIDString(paramInfo.idBase) });
         }
+        for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+            for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+            {
+                const auto context = scope == 0 ? juce::String("Master") : "Band " + juce::String(scope);
+                const auto fx = context + " FX " + juce::String(slot + 1);
+                targets.push_back({fx + " Jitter", fire::core_modules::parameterID(scope, slot, fire::core_modules::jitterField)});
+                for (int node = 0; node < fire::eq::maxNodes; ++node)
+                    for (int control = 0; control < 3; ++control)
+                        targets.push_back({fx + " EQ " + juce::String(node + 1) + (control == 0 ? " Frequency" : control == 1 ? " Gain" : " Q"),
+                            fire::core_modules::eqParameterID(scope, slot, node, static_cast<fire::eq::Field>(control))});
+            }
         return targets;
     }
 
@@ -414,6 +426,11 @@ namespace ParameterIDAndName
             for (int slot = 0; slot < fire::resonator_params::slotCount; ++slot)
                 result.push_back({"FX " + juce::String(slot + 1) + " Chord Resonator",
                                   fire::resonator_params::parameterBase(slot, false)});
+            for (int node = 0; node < 5; ++node)
+                result.push_back({"Module " + juce::String(node) + " Present", fire::core_modules::presenceID(1, node).dropLastCharacters(1)});
+            for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+                for (int field = 0; field < fire::core_modules::slotFieldCount; ++field)
+                    result.push_back({"FX " + juce::String(slot + 1) + " Core Field " + juce::String(field), fire::core_modules::parameterID(1, slot, field).dropLastCharacters(1)});
             result.push_back({"Modern Drive Compensation", fire::drive_comp::parameterBase});
             return result;
         }();

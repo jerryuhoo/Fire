@@ -280,6 +280,7 @@ std::vector<juce::Button*> collectDirectButtons(juce::Component& panel)
     {
         if (auto* button = dynamic_cast<juce::Button*>(child))
         {
+            if (auto* remove = dynamic_cast<CloseButton*>(button); remove && !remove->isPresented()) continue;
             const auto id = button->getComponentID();
             // Empty insert slots are deliberately absent from the module rail.
             if ((id.startsWith("masterFx") || id.startsWith("bandFx")) && ! button->isVisible()) continue;
@@ -397,14 +398,14 @@ TEST_CASE("Control-panel buttons reject popup and auxiliary pointer gestures",
     {
         BandPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
-        checkPanelButtons(panel, 17);
+        checkPanelButtons(panel, 17 + EqControlsPanel::capacity + 6);
     }
 
     SECTION("global controls")
     {
         GlobalPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
-        checkPanelButtons(panel, 10 + 3 + EqControlsPanel::capacity);
+        checkPanelButtons(panel, 10 + 3 + EqControlsPanel::capacity * 2 + 6);
     }
 }
 
@@ -2218,7 +2219,7 @@ TEST_CASE("Control-panel icon buttons expose complete accessibility semantics",
             }
         }
 
-        checkEmptyTextButtons(panel, buttons.size());
+        checkEmptyTextButtons(panel, buttons.size() + EqControlsPanel::capacity + 1);
     }
 
     SECTION("Global power and selected EQ point controls")
@@ -2259,6 +2260,6 @@ TEST_CASE("Control-panel icon buttons expose complete accessibility semantics",
 
         // Retain the tree-wide metadata check, including all navigation
         // slots and the three hidden legacy selection listeners.
-        checkEmptyTextButtons(panel, 5 + EqControlsPanel::capacity + 1);
+        checkEmptyTextButtons(panel, 5 + EqControlsPanel::capacity * 2 + 2);
     }
 }

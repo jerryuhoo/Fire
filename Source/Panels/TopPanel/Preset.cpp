@@ -18,6 +18,8 @@
 #include <cmath>
 #include <limits>
 #include <utility>
+#include <map>
+#include <set>
 
 namespace
 {
@@ -208,20 +210,19 @@ bool validateParameterFamily(const juce::XmlElement& xml,
             if (belongs(attribute.name.toString())) { anyPresent = true; break; }
         if (! anyPresent) { legacyWithoutOtt = true; return true; }
     }
-    int present = 0;
-    int expected = 0;
+    std::set<juce::String> expectedIDs;
     for (const auto* parameter : processor.getParameters())
         if (const auto* identified = dynamic_cast<const juce::AudioProcessorParameterWithID*>(parameter);
-            identified != nullptr && belongs(identified->paramID))
-        {
-            ++expected;
-            if (xml.hasAttribute(identified->paramID))
-            {
-                if (! isStrictNumberInRange(xml, identified->paramID, 0.0, 1.0))
-                    return false;
-                ++present;
-            }
-        }
+            identified != nullptr && belongs(identified->paramID)) expectedIDs.insert(identified->paramID);
+    int present = 0;
+    const auto expected = static_cast<int>(expectedIDs.size());
+    for (const auto& attribute : xml.getAttributeIterator())
+    {
+        if (!expectedIDs.contains(attribute.name.toString())) continue;
+        double value = 0;
+        if (!parseStrictDouble(attribute.value, value) || value < 0 || value > 1) return false;
+        ++present;
+    }
     legacyWithoutOtt = ! xml.hasAttribute(marker) && present == 0;
     if (legacyWithoutOtt)
         return true;
@@ -289,11 +290,16 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
     if (! validateParameterFamily(snapshot, processor, legacyWithoutLfoBank, "lfoBankSchemaVersion",
                                   fire::lfo_bank::isAppendedParameterID, fire::lfo_bank::schemaVersion))
         return false;
+    bool legacyWithoutCoreModules = false;
+    if (!validateParameterFamily(snapshot, processor, legacyWithoutCoreModules, "coreModulesSchemaVersion",
+                                  fire::core_modules::isParameterID, fire::core_modules::schemaVersion)) return false;
     bool legacyWithoutAuxiliary = false;
     if (!validateParameterFamily(snapshot, processor, legacyWithoutAuxiliary, "modulationSourcesSchemaVersion",
                                   fire::mod_sources::isParameterID)) return false;
 
     int expectedParameterCount = 0;
+    std::map<juce::String, juce::String> attributes;
+    for (const auto& attribute : snapshot.getAttributeIterator()) attributes.emplace(attribute.name.toString(), attribute.value);
     for (const auto* parameter : processor.getParameters())
     {
         const auto* parameterWithID = dynamic_cast<const juce::AudioProcessorParameterWithID*>(parameter);
@@ -319,11 +325,11 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (legacyWithoutLfoBank && fire::lfo_bank::isAppendedParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutAuxiliary && fire::mod_sources::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutCoreModules && fire::core_modules::isParameterID(parameterWithID->paramID)) continue;
         ++expectedParameterCount;
-        if (! snapshot.hasAttribute(parameterWithID->paramID))
-            return false;
-
-        if (! isStrictNumberInRange(snapshot, parameterWithID->paramID, 0.0, 1.0))
+        const auto found = attributes.find(parameterWithID->paramID);
+        double value = 0;
+        if (found == attributes.end() || !parseStrictDouble(found->second, value) || value < 0 || value > 1)
             return false;
     }
 
@@ -396,6 +402,9 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     if (! validateParameterFamily(xml, processor, legacyWithoutLfoBank, "lfoBankSchemaVersion",
                                   fire::lfo_bank::isAppendedParameterID, fire::lfo_bank::schemaVersion))
         return false;
+    bool legacyWithoutCoreModules = false;
+    if (!validateParameterFamily(xml, processor, legacyWithoutCoreModules, "coreModulesSchemaVersion",
+                                  fire::core_modules::isParameterID, fire::core_modules::schemaVersion)) return false;
     bool legacyWithoutAuxiliary = false;
     if (!validateParameterFamily(xml, processor, legacyWithoutAuxiliary, "modulationSourcesSchemaVersion",
                                   fire::mod_sources::isParameterID)) return false;
@@ -411,6 +420,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         return true;
 
     int parameterCount = 0;
+    std::map<juce::String, juce::String> attributes;
+    for (const auto& attribute : xml.getAttributeIterator()) attributes.emplace(attribute.name.toString(), attribute.value);
     for (const auto* parameter : processor.getParameters())
     {
         const auto* parameterWithID = dynamic_cast<const juce::AudioProcessorParameterWithID*>(parameter);
@@ -436,8 +447,11 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         if (legacyWithoutLfoBank && fire::lfo_bank::isAppendedParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutAuxiliary && fire::mod_sources::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutCoreModules && fire::core_modules::isParameterID(parameterWithID->paramID)) continue;
         ++parameterCount;
-        if (! isStrictNumberInRange(xml, parameterWithID->paramID, 0.0, 1.0))
+        const auto found = attributes.find(parameterWithID->paramID);
+        double value = 0;
+        if (found == attributes.end() || !parseStrictDouble(found->second, value) || value < 0 || value > 1)
             return false;
     }
 
@@ -493,35 +507,26 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("modulationSourcesSchemaVersion", fire::mod_sources::schemaVersion);
     xml.setAttribute("moduleOrderSchemaVersion", 1);
     xml.setAttribute("eqSchemaVersion", 1);
+    xml.setAttribute("coreModulesSchemaVersion", fire::core_modules::schemaVersion);
     xml.setAttribute("lfoBankSchemaVersion", fire::lfo_bank::schemaVersion);
     xml.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xml.setAttribute("pluginVersion", VERSION);
     fire::effects::writeFrozenAudioState(xml, snapshot.frozenAudio);
 
+    std::map<juce::String, float> plainValues;
+    for (const auto& child : snapshot.parameterState)
+        if (child.hasProperty("id") && child.hasProperty("value"))
+            plainValues.emplace(child.getProperty("id").toString(), static_cast<float>(child.getProperty("value")));
     for (const auto& param : processor.getParameters())
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
         {
             float normalisedValue = p->getDefaultValue();
-            for (const auto& child : snapshot.parameterState)
-            {
-                if (child.getProperty("id").toString() != p->paramID
-                    || ! child.hasProperty("value"))
-                    continue;
-
+            if (const auto value = plainValues.find(p->paramID); value != plainValues.end() && std::isfinite(value->second))
                 if (auto* ranged = processor.treeState.getParameter(p->paramID))
                 {
-                    const float plainValue = static_cast<float>(
-                        child.getProperty("value"));
-                    if (std::isfinite(plainValue))
-                    {
-                        const auto& range = ranged->getNormalisableRange();
-                        normalisedValue = ranged->convertTo0to1(
-                            range.snapToLegalValue(juce::jlimit(
-                                range.start, range.end, plainValue)));
-                    }
+                    const auto& range = ranged->getNormalisableRange();
+                    normalisedValue = ranged->convertTo0to1(range.snapToLegalValue(juce::jlimit(range.start, range.end, value->second)));
                 }
-                break;
-            }
             xml.setAttribute(p->paramID, fire::clouds_params::isReservedEngineParameterID(p->paramID)
                                             ? 1.0f : normalisedValue);
         }
@@ -663,7 +668,8 @@ namespace state
                     // value even though its APVTS raw value snaps to 0/1.
                     // Canonicalise this new family so Freeze/Engine, the
                     // saved snapshot and preset-equivalence checks agree.
-                    if (fire::clouds_params::isParameterID(p->paramID)
+                    if (fire::core_modules::isParameterID(p->paramID)
+                        || fire::clouds_params::isParameterID(p->paramID)
                         || fire::resonator_params::isParameterID(p->paramID)
                         || fire::drive_comp::isParameterID(p->paramID)
                         || fire::lfo_bank::isPresentParameterID(p->paramID))

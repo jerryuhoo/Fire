@@ -18,6 +18,12 @@ inline juce::Colour effectColour(effects::Type type)
         case effects::Type::reverb: return colours::reverb;
         case effects::Type::granular: return colours::granular;
         case effects::Type::lofi: return colours::loFi;
+        case effects::Type::drive: return colours::drive;
+        case effects::Type::shape: return colours::shape;
+        case effects::Type::compressor: return colours::compressor;
+        case effects::Type::ott: return colours::ott;
+        case effects::Type::stereo: return colours::stereo;
+        case effects::Type::eq: return colours::filter;
         case effects::Type::none: case effects::Type::count: return colours::textMuted;
     }
     return colours::textMuted;
@@ -41,7 +47,7 @@ public:
         addAndMakeVisible(viewport);
         addAndMakeVisible(addButton);
         addButton.setButtonText("+"); addButton.setTitle("Add effect");
-        addButton.setTooltip("Enable a built-in module or add an effect to this chain (8 insert slots)");
+        addButton.setTooltip("Add a DSP module to this chain");
         addButton.setColour(juce::TextButton::buttonColourId, colours::raised);
         addButton.setColour(juce::TextButton::textColourOffId, colours::textSecondary);
         addButton.onClick = [this] { showAddMenu(); };
@@ -67,6 +73,18 @@ public:
                 if (safe) refresh();
             };
             power.getProperties().set("iconType", "power");
+        }
+        for (int node = 0; node < 5; ++node)
+        {
+            auto& remove = legacyRemoveButtons[static_cast<size_t>(node)];
+            content.addChildComponent(remove);
+            remove.onClick = [this, node]
+            {
+                if (dragNode >= 0 || ! isShowing() || ! isEnabled()) return;
+                const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+                processor.removeModule(scope, node);
+                if (safe) refresh();
+            };
         }
         setScope(initialScope);
     }
@@ -94,7 +112,7 @@ public:
         dismiss();
         if (! safe) return;
         scope = nextScope; selectedSlot = -1;
-        cachedTypes.fill(-1); cachedModuleOrder.fill(-2);
+        cachedTypes.fill(-1); cachedModuleOrder.fill(-2); cachedPresence.fill(-1);
         addButton.setComponentID(scope == 0 ? "addMasterEffect" : "addBandEffect");
         for (int slot = 0; slot < effects::slotCount; ++slot)
         {
@@ -107,6 +125,8 @@ public:
             insertButtons[i].setComponentID(effects::parameterID(scope, slot, effects::typeField));
             removeButtons[i].setComponentID(effects::parameterID(scope, slot, effects::typeField) + "Remove");
         }
+        for (int node = 0; node < 5; ++node)
+            legacyRemoveButtons[static_cast<size_t>(node)].setComponentID(core_modules::presenceID(scope, node) + "Remove");
         refresh();
     }
     void setSelectedSlot(int slot)
@@ -129,20 +149,26 @@ public:
     void refresh()
     {
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        int selectedNode = selectedSlot >= 0 ? module_order::firstInsert + selectedSlot : -1;
+        if (selectedNode < 0)
+            for (size_t node = 0; node < builtins.size(); ++node)
+                if (builtins[node].button->getToggleState()) {selectedNode = static_cast<int>(node); break;}
         int replacement = -1;
-        const bool selectionRemoved = selectedSlot >= 0 && processor.getInsertEffectType(scope, selectedSlot) == effects::Type::none;
+        const bool selectionRemoved = selectedNode >= 0 && ! processor.isModulePresent(scope, selectedNode);
         if (selectionRemoved)
         {
-            const auto previous = std::find_if(visibleRows.begin(), visibleRows.end(), [&](const auto& row) {
-                return row.button == &insertButtons[static_cast<size_t>(selectedSlot)];
-            });
+            const auto selected = rowForNode(selectedNode).button;
+            const auto previous = std::find_if(visibleRows.begin(), visibleRows.end(), [&](const auto& row) {return row.button == selected;});
             if (previous != visibleRows.end())
             {
                 for (auto row = previous + 1; row != visibleRows.end() && replacement < 0; ++row)
-                    replacement = nodeForButton(row->button);
+                {const int node = nodeForButton(row->button); if (processor.isModulePresent(scope, node)) replacement = node;}
                 for (auto row = previous; row != visibleRows.begin() && replacement < 0;)
-                    replacement = nodeForButton((--row)->button);
+                {const int node = nodeForButton((--row)->button); if (processor.isModulePresent(scope, node)) replacement = node;}
             }
+            if (replacement < 0)
+                for (const int node : processor.getModuleOrder(scope))
+                    if (processor.isModulePresent(scope, node)) {replacement = node; break;}
         }
         const auto order = processor.getModuleOrder(scope);
         bool changed = cachedModuleOrder != order;
@@ -156,7 +182,7 @@ public:
             {
                 insertButtons[i].setButtonText(type == effects::Type::chordResonator ? "Resonator" : effects::name(type));
                 insertButtons[i].setTitle(effects::name(type));
-                insertButtons[i].setTooltip(juce::String(effects::name(type)) + " · slot " + juce::String(slot + 1) + ". Drag to reorder. Hover to remove.");
+                insertButtons[i].setTooltip(juce::String(effects::name(type)) + ". Drag to reorder. Hover to remove.");
                 powerButtons[i].setColour(juce::ToggleButton::tickColourId, effectColour(type));
                 powerButtons[i].setColour(juce::ToggleButton::tickDisabledColourId, colours::disabled);
                 powerButtons[i].setTooltip("Enable or bypass " + juce::String(effects::name(type)) + " in this chain");
@@ -170,7 +196,18 @@ public:
             }
             cachedTypes[i] = static_cast<int>(type);
         }
-        if (! changed) return;
+        for (size_t node = 0; node < builtins.size(); ++node)
+        {
+            const int present = processor.isModulePresent(scope, static_cast<int>(node)) ? 1 : 0;
+            if (cachedPresence[node] != present) changed = true;
+            cachedPresence[node] = present;
+            auto& remove = legacyRemoveButtons[node];
+            const auto description = "Remove " + builtins[node].button->getButtonText()
+                + (scope == 0 ? " from Master" : " from Band " + juce::String(scope));
+            remove.setTitle(description); remove.setTooltip(description); remove.setDescription(description); remove.setHelpText(description);
+            builtins[node].button->setTooltip(builtins[node].button->getButtonText() + ". Drag to reorder. Hover to remove.");
+        }
+        if (! changed && ! selectionRemoved) return;
         cancelRowInteractions();
         if (! safe) return;
         ++generation;
@@ -219,16 +256,18 @@ public:
             updateDropTarget();
             content.repaint();
         }
-        for (size_t i = 0; i < removeButtons.size(); ++i)
+        for (const int node : processor.getModuleOrder(scope))
         {
-            auto& remove = removeButtons[i];
-            if (remove.advanceAnimation(dt)) remove.repaint();
-            if (! safe) return;
-            const bool reveal = dragNode < 0 && cachedTypes[i] > 0 && isShowing() && isEnabled()
-                && (hoveredSlot == static_cast<int>(i) || insertButtons[i].getFocusAnimation() > 0.01f
-                    || powerButtons[i].getFocusAnimation() > 0.01f || remove.getFocusAnimation() > 0.01f);
-            if (remove.isPresented() != reveal) remove.setPresented(reveal);
-            if (! safe) return;
+            auto* remove = removeForNode(node);
+            const auto row = rowForNode(node);
+            if (!remove || !row.button) continue;
+            if (remove->advanceAnimation(dt)) remove->repaint();
+            if (!safe) return;
+            const bool reveal = dragNode < 0 && processor.isModulePresent(scope, node) && isShowing() && isEnabled()
+                && (hoveredNode == node || row.button->hasKeyboardFocus(true)
+                    || (row.power && row.power->hasKeyboardFocus(true)) || remove->getFocusAnimation() > 0.01f);
+            if (remove->isPresented() != reveal) remove->setPresented(reveal);
+            if (!safe) return;
         }
     }
     void dismiss()
@@ -247,21 +286,24 @@ public:
     int getScope() const noexcept { return scope; }
     static constexpr int builtinMenuItemID(int node) noexcept { return 100 + node; }
 
-    // Built-ins own permanent host parameters and already have a rail row.
-    // Selecting one enables that row idempotently; it never consumes a slot.
+    // Reusing a removed historical row retains its permanent automation IDs.
     bool activateBuiltin(int node)
     {
         if (! isShowing() || ! isEnabled() || dragNode >= 0 || ! isAddableBuiltin(node)) return false;
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
-        const auto epoch = generation;
         const auto originalScope = scope;
+        if (! processor.restoreLegacyModule(scope, node)) return false;
+        if (! safe) return false;
+        refresh();
+        if (! safe) return false;
+        const auto currentEpoch = generation;
         const auto row = builtins[static_cast<size_t>(node)];
         const juce::Component::SafePointer<juce::TextButton> button(row.button);
         const juce::Component::SafePointer<juce::ToggleButton> power(row.power);
         if (! button || ! button->isEnabled() || (power && ! power->isEnabled())) return false;
         const auto stillCurrent = [&]
         {
-            return safe && button && safe->generation == epoch && safe->scope == originalScope
+            return safe && button && safe->generation == currentEpoch && safe->scope == originalScope
                 && safe->isShowing() && safe->isEnabled();
         };
         if (power && ! power->getToggleState())
@@ -279,35 +321,18 @@ public:
     juce::PopupMenu createAddMenu() const
     {
         juce::PopupMenu menu;
-        bool hasBuiltins = false;
-        const auto addBuiltin = [&](int node, const char* label)
-        {
-            if (! isAddableBuiltin(node)) return;
-            const auto row = builtins[static_cast<size_t>(node)];
-            menu.addItem(builtinMenuItemID(node), label,
-                row.button->isEnabled() && (! row.power || row.power->isEnabled()),
-                row.power && row.power->getToggleState());
-            hasBuiltins = true;
-        };
-        if (scope == 0)
-        {
-            addBuiltin(0, "EQ");
-            addBuiltin(1, "Lo-Fi");
-        }
-        else
-        {
-            addBuiltin(0, "Drive"); addBuiltin(1, "Shape");
-            addBuiltin(2, "Compressor"); addBuiltin(4, "OTT"); addBuiltin(3, "Stereo");
-        }
-        if (hasBuiltins) menu.addSeparator();
         const bool room = hasInsertRoom();
-        for (int type = 1; type < static_cast<int>(effects::Type::count); ++type)
+        constexpr effects::Type catalog[] {effects::Type::drive, effects::Type::shape, effects::Type::compressor,
+            effects::Type::ott, effects::Type::stereo, effects::Type::eq, effects::Type::lofi,
+            effects::Type::chorus, effects::Type::flanger, effects::Type::phaser, effects::Type::delay,
+            effects::Type::reverb, effects::Type::granular, effects::Type::chordResonator};
+        for (const auto type : catalog)
         {
-            // Master has one canonical Lo-Fi. Historical insert Lo-Fi rows
-            // remain accessible, but the menu cannot create a duplicate form.
-            if (scope == 0 && type == static_cast<int>(effects::Type::lofi)) continue;
-            menu.addItem(type, effects::name(static_cast<effects::Type>(type)), room);
+            const int legacy = core_modules::legacyNode(scope, type);
+            const bool restore = legacy >= 0 && !processor.isModulePresent(scope, legacy);
+            menu.addItem(restore ? builtinMenuItemID(legacy) : static_cast<int>(type), effects::name(type), restore || room);
         }
+        if (scope == 0 && !processor.isModulePresent(scope, 2)) menu.addItem(builtinMenuItemID(2), "Analysis");
         return menu;
     }
 
@@ -328,11 +353,6 @@ public:
                 return;
             }
             if (result <= 0 || result >= static_cast<int>(effects::Type::count)) return;
-            if (originalScope == 0 && result == static_cast<int>(effects::Type::lofi))
-            {
-                safe->activateBuiltin(1);
-                return;
-            }
             if (! safe->hasInsertRoom()) return;
             const auto slot = safe->processor.addInsertEffect(originalScope, static_cast<effects::Type>(result));
             if (! safe || safe->scope != originalScope || safe->generation != epoch
@@ -357,7 +377,7 @@ public:
 private:
     bool isAddableBuiltin(int node) const noexcept
     {
-        const int count = scope == 0 ? 2 : 5; // Master Analysis is a view, not an effect.
+        const int count = scope == 0 ? 3 : 5;
         return juce::isPositiveAndBelow(node, count)
             && juce::isPositiveAndBelow(node, static_cast<int>(builtins.size()))
             && builtins[static_cast<size_t>(node)].button != nullptr;
@@ -391,6 +411,12 @@ private:
         button.onRowDrag = [this, node](const juce::MouseEvent& e) { updateDrag(node, e); };
         button.onRowDrop = [this](const juce::MouseEvent& e) { finishDrag(e); };
         button.onRowCancel = [this] { cancelDrag(); };
+    }
+    CloseButton* removeForNode(int node)
+    {
+        if (core_modules::validLegacy(scope, node)) return &legacyRemoveButtons[static_cast<size_t>(node)];
+        if (node >= module_order::firstInsert && node < module_order::capacity) return &removeButtons[static_cast<size_t>(node - module_order::firstInsert)];
+        return nullptr;
     }
     Row rowForNode(int node)
     {
@@ -428,13 +454,13 @@ private:
     {
         if (dragNode >= 0) return;
         const auto point = event.getEventRelativeTo(&viewport).position;
-        hoveredSlot = -1;
+        hoveredNode = -1;
         if (viewport.getLocalBounds().toFloat().contains(point))
         {
             const auto inContent = point + viewport.getViewPosition().toFloat();
             for (auto row : visibleRows)
                 if (row.button->getBounds().toFloat().contains(inContent))
-                { hoveredSlot = liveSlotForButton(row.button); break; }
+                { hoveredNode = nodeForButton(row.button); break; }
         }
     }
     void mouseEnter(const juce::MouseEvent& event) override { noteHover(event); }
@@ -455,12 +481,13 @@ private:
     void cancelRowInteractions()
     {
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
-        cancelDrag(); hoveredSlot = -1;
+        cancelDrag(); hoveredNode = -1;
         for (auto row : builtins)
             if (auto* button = dynamic_cast<ModuleDragButton*>(row.button))
             {button->cancelRowPointer(false); if (! safe) return;}
         for (auto& button : insertButtons) {button.cancelRowPointer(false); if (! safe) return;}
         for (auto& button : removeButtons) {button.setPresented(false, false); if (! safe) return;}
+        for (auto& button : legacyRemoveButtons) {button.setPresented(false, false); if (! safe) return;}
     }
     void updateDrag(int node, const juce::MouseEvent& event)
     {
@@ -475,6 +502,7 @@ private:
             row.button->setAlpha(0.32f);
             if (row.power) row.power->setAlpha(0.32f);
             for (auto& button : removeButtons) {button.setPresented(false, false); if (! safe) return;}
+        for (auto& button : legacyRemoveButtons) {button.setPresented(false, false); if (! safe) return;}
         }
         if (dragNode != node || dragGeneration != generation) return;
         dragViewPoint = event.getEventRelativeTo(&viewport).position;
@@ -546,6 +574,12 @@ private:
     void rebuildRows()
     {
         visibleRows.clear();
+        for (size_t node = 0; node < builtins.size(); ++node)
+        {
+            const bool visible = processor.isModulePresent(scope, static_cast<int>(node));
+            builtins[node].button->setVisible(visible);
+            if (builtins[node].power) builtins[node].power->setVisible(visible);
+        }
         for (int slot = 0; slot < effects::slotCount; ++slot)
         {
             const bool visible = processor.getInsertEffectType(scope, slot) != effects::Type::none;
@@ -555,7 +589,7 @@ private:
         for (const auto node : processor.getModuleOrder(scope))
         {
             const auto row = rowForNode(node);
-            if (row.button && nodeForButton(row.button) == node) visibleRows.push_back(row);
+            if (row.button && processor.isModulePresent(scope, node)) visibleRows.push_back(row);
         }
         layoutRows();
     }
@@ -570,15 +604,12 @@ private:
             const auto row = juce::Rectangle<int>(0, static_cast<int>(i) * rowPitch, width, rowPitch).reduced(margin);
             visibleRows[i].button->setBounds(row);
             if (auto* button = dynamic_cast<ModuleDragButton*>(visibleRows[i].button)) button->dragThreshold = 6.0f * scale;
-            const auto slot = liveSlotForButton(visibleRows[i].button);
-            if (slot >= 0)
+            if (auto* remove = removeForNode(nodeForButton(visibleRows[i].button)))
             {
-                auto& button = insertButtons[static_cast<size_t>(slot)];
                 const auto side = juce::jmin(row.getHeight(), juce::roundToInt(24.0f * scale));
-                button.getProperties().set("fireModuleTrailingSpace", side + 5.0f * scale);
-                auto& remove = removeButtons[static_cast<size_t>(slot)];
-                remove.setBounds(row.getRight() - side - juce::roundToInt(3 * scale), row.getCentreY() - side / 2, side, side);
-                remove.toFront(false);
+                visibleRows[i].button->getProperties().set("fireModuleTrailingSpace", side + 5.0f * scale);
+                remove->setBounds(row.getRight() - side - juce::roundToInt(3 * scale), row.getCentreY() - side / 2, side, side);
+                remove->toFront(false);
             }
             if (auto* power = visibleRows[i].power)
             {
@@ -614,14 +645,14 @@ private:
         const bool canMoveUp = ! visibleRows.empty() && visibleRows.front().button != row.button;
         const bool canMoveDown = ! visibleRows.empty() && visibleRows.back().button != row.button;
         menu.addItem(1, "Move up", canMoveUp); menu.addItem(2, "Move down", canMoveDown);
-        if (node >= module_order::firstInsert) {menu.addSeparator(); menu.addItem(3, "Remove effect");}
+        menu.addSeparator(); menu.addItem(3, "Remove effect");
         const auto epoch = generation;
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
         menu.showMenuAsync(prepareContextMenu(menu, *row.button, juce::Desktop::getMousePosition())
                               .withMinimumWidth(juce::roundToInt(170.0f * scale))
                               .withStandardItemHeight(juce::roundToInt(29.0f * scale)), [safe, epoch, node](int result) {
             if (! safe || safe->generation != epoch || ! safe->isShowing() || ! safe->isEnabled()) return;
-            if (result == 3 && node >= module_order::firstInsert) safe->processor.removeInsertEffect(safe->scope, node - module_order::firstInsert);
+            if (result == 3) safe->processor.removeModule(safe->scope, node);
             else if (result == 1 || result == 2) safe->processor.moveModuleBy(safe->scope, node, result == 1 ? -1 : 1);
             if (safe) safe->refresh();
         });
@@ -635,6 +666,8 @@ private:
     std::array<ModuleDragButton, effects::slotCount> insertButtons;
     std::array<PrimaryToggleButton, effects::slotCount> powerButtons;
     std::array<CloseButton, effects::slotCount> removeButtons;
+    std::array<CloseButton, 5> legacyRemoveButtons;
+    std::array<int, 5> cachedPresence {-1, -1, -1, -1, -1};
     std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>, effects::slotCount> attachments;
     std::vector<Row> builtins, visibleRows;
     std::array<int, effects::slotCount> cachedTypes {};
@@ -644,7 +677,7 @@ private:
     bool selectionInitialised = false;
     float scale = 1;
     std::uint64_t generation = 0, addMenuGeneration = 0;
-    int hoveredSlot = -1, dragNode = -1, dragTarget = -1, dropBeforeNode = -1;
+    int hoveredNode = -1, dragNode = -1, dragTarget = -1, dropBeforeNode = -1;
     std::uint64_t dragGeneration = 0;
     juce::Point<float> dragViewPoint;
     float dragOffset = 0, dropLineY = 0, scrollRemainder = 0;

@@ -626,6 +626,72 @@ TEST_CASE("Production control panels wire graph zoom into their live layouts",
     }
 }
 
+TEST_CASE("Expanded insert waveforms hide overlapping control containers and restore their knobs",
+          "[graph][integration][insertfx][zoom]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    for (int scope : {0, 1})
+        for (auto type : {fire::effects::Type::chorus, fire::effects::Type::delay,
+                          fire::effects::Type::reverb, fire::effects::Type::flanger,
+                          fire::effects::Type::phaser, fire::effects::Type::chordResonator})
+            for (float scale : {1.0f, 2.0f})
+            {
+                CAPTURE(scope, static_cast<int>(type), scale);
+                FireAudioProcessor processor;
+                const int slot = processor.addInsertEffect(scope, type);
+                REQUIRE(slot >= 0);
+                const std::function<void(ModulatableSlider*)> callback;
+                std::unique_ptr<juce::Component> panel;
+                if (scope == 0)
+                {
+                    auto master = std::make_unique<GlobalPanel>(processor, callback, callback, callback, callback, callback);
+                    master->setScale(scale);
+                    panel = std::move(master);
+                }
+                else
+                {
+                    auto band = std::make_unique<BandPanel>(processor, callback, callback, callback, callback, callback);
+                    band->setScale(scale);
+                    panel = std::move(band);
+                }
+                panel->setSize(juce::roundToInt(984 * scale), juce::roundToInt(258 * scale));
+                panel->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+                panel->setVisible(true);
+
+                auto* select = findDescendantButton(*panel,
+                    type == fire::effects::Type::chordResonator ? "Resonator" : fire::effects::name(type));
+                REQUIRE(select != nullptr);
+                select->triggerClick();
+                auto graphs = directGraphs(*panel);
+                auto visible = std::find_if(graphs.begin(), graphs.end(), [](auto* graph) { return graph->isShowing(); });
+                REQUIRE(visible != graphs.end());
+                auto* graph = *visible;
+                InsertEffectControls* controls = nullptr;
+                for (auto* child : panel->getChildren())
+                    if (auto* candidate = dynamic_cast<InsertEffectControls*>(child)) controls = candidate;
+                REQUIRE(controls != nullptr);
+                REQUIRE(controls->isShowing());
+                const auto normalStates = captureDirectComponentStates(*panel);
+                std::vector<juce::Component*> knobs;
+                for (auto* child : controls->getChildren())
+                    if (dynamic_cast<ModulatableSlider*>(child) != nullptr && child->isShowing()) knobs.push_back(child);
+                REQUIRE_FALSE(knobs.empty());
+
+                REQUIRE(graph->getAccessibilityHandler()->getActions().invoke(juce::AccessibilityActionType::press));
+                REQUIRE(graph->getZoomState());
+                CHECK_FALSE(controls->isShowing());
+                panel->resized();
+                if (auto* band = dynamic_cast<BandPanel*>(panel.get())) band->animationTick(1.0f / 60.0f);
+                else dynamic_cast<GlobalPanel*>(panel.get())->animationTick(1.0f / 60.0f);
+                for (auto* knob : knobs) CHECK_FALSE(knob->isShowing());
+
+                REQUIRE(graph->getAccessibilityHandler()->getActions().invoke(juce::AccessibilityActionType::press));
+                CHECK_FALSE(graph->getZoomState());
+                for (auto* knob : knobs) CHECK(knob->isShowing());
+                for (const auto& state : normalStates) CHECK(state.component->isVisible() == state.visible);
+            }
+}
+
 TEST_CASE("Legacy graph layout clears an unavailable distortion zoom",
           "[graph][layout][legacy]")
 {

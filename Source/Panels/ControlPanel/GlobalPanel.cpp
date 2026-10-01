@@ -926,7 +926,7 @@ void GlobalPanel::hideComponentsObscuredByZoom(const GraphTemplate& graph)
         auto* component = getChildComponent(index);
         if (component == &graph || component == nullptr
             || component->getBounds().isEmpty()
-            || ! cover.contains(component->getBounds())
+            || ! cover.intersects(component->getBounds())
             || ! component->isVisible())
             continue;
 

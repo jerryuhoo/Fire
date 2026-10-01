@@ -956,7 +956,7 @@ void BandPanel::hideComponentsObscuredByZoom(const GraphTemplate& graph)
         auto* component = getChildComponent(index);
         if (component == &graph || component == &graphSelectorStrip || component == nullptr
             || component->getBounds().isEmpty()
-            || ! cover.contains(component->getBounds())
+            || ! cover.intersects(component->getBounds())
             || ! component->isVisible())
             continue;
 

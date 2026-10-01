@@ -102,7 +102,7 @@ TEST_CASE("Modern Drive compensation is appended while Link keeps its historical
           "[drive-comp][state][parameters][compatibility]")
 {
     FireAudioProcessor processor;
-    REQUIRE(processor.getParameters().size() == 1047 + fire::core_modules::parameterCount);
+    REQUIRE(processor.getParameters().size() == 1047 + fire::core_modules::parameterCount + fire::analog_params::parameterCount);
     auto* previousLast = processor.treeState.getParameter("bandFx8Resonator4");
     REQUIRE(previousLast != nullptr);
     CHECK(previousLast->getParameterIndex() == 1035);

@@ -9,5 +9,7 @@ the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Lice
 ✔ You **must** give appropriate credit.  
 ✔ If you modify these assets, you **must** distribute your modifications under the same license.  
 
-For full license details, see:  
+For full license details, see:
 🔗 https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
+
+The analog tube (unlit/lit) and tape reel PNG assets added for Fire 2.0 were generated for this project with OpenAI image generation. They are unbranded original UI artwork and use the repository's artwork license above.

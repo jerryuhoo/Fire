@@ -10,6 +10,7 @@ struct SlotParameters
     std::array<int, 3> cloudsSources {-1, -1, -1};
     int order = 0;
     int jitterSource = -1;
+    int analogDriveSource = -1;
     SlotParameters() { effect.normalised = true; }
 };
 using RackParameters = std::array<SlotParameters, slotCount>;
@@ -106,6 +107,9 @@ public:
         p.jitter.lfoSignal = juce::isPositiveAndBelow(parameters[static_cast<size_t>(slot)].jitterSource, lfo.getNumChannels())
             && sampleOffset >= 0 && sampleOffset + static_cast<int>(block.getNumSamples()) <= lfo.getNumSamples()
             ? lfo.getReadPointer(parameters[static_cast<size_t>(slot)].jitterSource) : nullptr;
+        p.analogDrive.lfoSignal = juce::isPositiveAndBelow(parameters[static_cast<size_t>(slot)].analogDriveSource, lfo.getNumChannels())
+            && sampleOffset >= 0 && sampleOffset + static_cast<int>(block.getNumSamples()) <= lfo.getNumSamples()
+            ? lfo.getReadPointer(parameters[static_cast<size_t>(slot)].analogDriveSource) : nullptr;
         (*effects)[static_cast<size_t>(slot)].process(block, p, sampleOffset,
                                                   &parameters[static_cast<size_t>(slot)].sources,
                                                   &parameters[static_cast<size_t>(slot)].cloudsSources);

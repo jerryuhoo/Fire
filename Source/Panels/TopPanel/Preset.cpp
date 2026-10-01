@@ -290,6 +290,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
     if (! validateParameterFamily(snapshot, processor, legacyWithoutLfoBank, "lfoBankSchemaVersion",
                                   fire::lfo_bank::isAppendedParameterID, fire::lfo_bank::schemaVersion))
         return false;
+    bool legacyWithoutAnalogShapes = false;
+    if (!validateParameterFamily(snapshot, processor, legacyWithoutAnalogShapes, "analogShapesSchemaVersion", fire::analog_params::isParameterID)) return false;
     bool legacyWithoutCoreModules = false;
     if (!validateParameterFamily(snapshot, processor, legacyWithoutCoreModules, "coreModulesSchemaVersion",
                                   fire::core_modules::isParameterID, fire::core_modules::schemaVersion)) return false;
@@ -325,6 +327,7 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (legacyWithoutLfoBank && fire::lfo_bank::isAppendedParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutAuxiliary && fire::mod_sources::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutAnalogShapes && fire::analog_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutCoreModules && fire::core_modules::isParameterID(parameterWithID->paramID)) continue;
         ++expectedParameterCount;
         const auto found = attributes.find(parameterWithID->paramID);
@@ -402,6 +405,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     if (! validateParameterFamily(xml, processor, legacyWithoutLfoBank, "lfoBankSchemaVersion",
                                   fire::lfo_bank::isAppendedParameterID, fire::lfo_bank::schemaVersion))
         return false;
+    bool legacyWithoutAnalogShapes = false;
+    if (!validateParameterFamily(xml, processor, legacyWithoutAnalogShapes, "analogShapesSchemaVersion", fire::analog_params::isParameterID)) return false;
     bool legacyWithoutCoreModules = false;
     if (!validateParameterFamily(xml, processor, legacyWithoutCoreModules, "coreModulesSchemaVersion",
                                   fire::core_modules::isParameterID, fire::core_modules::schemaVersion)) return false;
@@ -447,6 +452,7 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         if (legacyWithoutLfoBank && fire::lfo_bank::isAppendedParameterID(parameterWithID->paramID))
             continue;
         if (legacyWithoutAuxiliary && fire::mod_sources::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutAnalogShapes && fire::analog_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutCoreModules && fire::core_modules::isParameterID(parameterWithID->paramID)) continue;
         ++parameterCount;
         const auto found = attributes.find(parameterWithID->paramID);
@@ -508,6 +514,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("moduleOrderSchemaVersion", 1);
     xml.setAttribute("eqSchemaVersion", 1);
     xml.setAttribute("coreModulesSchemaVersion", fire::core_modules::schemaVersion);
+    xml.setAttribute("analogShapesSchemaVersion", fire::analog_params::schemaVersion);
     xml.setAttribute("lfoBankSchemaVersion", fire::lfo_bank::schemaVersion);
     xml.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xml.setAttribute("pluginVersion", VERSION);
@@ -668,7 +675,8 @@ namespace state
                     // value even though its APVTS raw value snaps to 0/1.
                     // Canonicalise this new family so Freeze/Engine, the
                     // saved snapshot and preset-equivalence checks agree.
-                    if (fire::core_modules::isParameterID(p->paramID)
+                    if (fire::analog_params::isParameterID(p->paramID)
+                        || fire::core_modules::isParameterID(p->paramID)
                         || fire::clouds_params::isParameterID(p->paramID)
                         || fire::resonator_params::isParameterID(p->paramID)
                         || fire::drive_comp::isParameterID(p->paramID)

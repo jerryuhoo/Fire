@@ -33,7 +33,8 @@ public:
     void process(juce::dsp::AudioBlock<float>, Type,
                  const std::array<ModulatedValueProvider, 6>&, bool normalised,
                  int offset, const std::array<int, 6>*,
-                 const std::array<EqNode, eq::maxNodes>&) noexcept;
+                 const std::array<EqNode, eq::maxNodes>&, int shapeModel = 0,
+                 const ModulatedValueProvider& analogDrive = {}, int analogDriveSource = -1) noexcept;
 private:
     struct Impl;
     std::unique_ptr<Impl> impl;

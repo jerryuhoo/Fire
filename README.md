@@ -551,6 +551,10 @@ OTT settings participate in presets, A/B comparisons and band copying. Older pro
 
 ### Master and Band insert effects
 
+Shape also offers twelve **Analog Hardware** colours: Warm Triode, Bright Pentode, Class A Console, Tweed Breakup, British Crunch, Modern High Gain, Diode Overdrive, Germanium Fuzz, Silicon Fuzz, MOSFET Drive, Transformer and Tape Saturation. These circuit-inspired colours combine nonlinear stages with input/tone filtering, power-supply sag and magnetic memory. The original twelve digital modes and their host automation ranges remain unchanged. New model selections use independent appended parameters and smooth mode transitions.
+
+Analog pages use a hardware faceplate. Tube filaments brighten with Drive and input energy; the tape transport turns while audio arrives and winds down when callbacks stop. The artwork is cached and animation runs only while its panel is visible. Both Band Shape and independently added Master/Band Shape instances offer these colours; each added analog Shape has its own Drive control.
+
 Use **CHAIN → +** in either **Master Lab** or **Band Lab** to select a DSP module. Both workspaces share Drive, Shape, Compressor, OTT, Stereo, EQ, Lo-Fi, Chorus, Flanger, Phaser, Delay, Reverb, Granular and Chord Resonator. Every row, including the initial modules, can be bypassed, moved or removed with its **−** button. Removed modules can be added again, and each chain supports up to eight additional independent instances. Master Analysis is a removable display page. The module rail keeps five fixed-height rows visible and scrolls as more effects are added. The selected module scrolls into view automatically.
 
 | Effect | Controls |

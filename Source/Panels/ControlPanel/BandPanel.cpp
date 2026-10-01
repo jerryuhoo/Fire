@@ -86,6 +86,10 @@ BandPanel::BandPanel(FireAudioProcessor& p,
         insertKnobs[i]->setInteractionOnlyReadout(true);
     }
     insertControls.setControls(insertKnobs);
+    createAndConfigureSlider("Analog Drive", "Drive", fire::ui::colours::drive);
+    auto& analogDrive = *modulatableSliderComponents.at("Analog Drive");
+    setupModulationCallbacks(analogDrive);
+    insertControls.setAnalogDriveControl(analogDrive);
     std::array<ModulatableSlider*, InsertEffectControls::cloudsExtraCount> cloudsKnobs {};
     const std::array<const char*, InsertEffectControls::cloudsExtraCount> cloudsNames { "Spread", "Feedback", "Reverb" };
     for (size_t i = 0; i < cloudsKnobs.size(); ++i)
@@ -138,6 +142,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     addAndMakeVisible(vuPanel);
     addAndMakeVisible(widthGraph);
     addAndMakeVisible(ottGraph);
+    addChildComponent(hardwareColour);
     configureGraphInteractions();
     configureGraphViewMenu();
 
@@ -154,6 +159,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     {
         driveParameterIds[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(DRIVE_ID, i);
         processor.treeState.addParameterListener(driveParameterIds[static_cast<size_t>(i)], this);
+        processor.treeState.addParameterListener(fire::analog_params::bandID(i), this);
         driveCompParameters[static_cast<size_t>(i)] = {
             processor.treeState.getRawParameterValue(fire::drive_comp::parameterID(i)),
             processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(LINKED_ID, i)),
@@ -200,6 +206,7 @@ BandPanel::~BandPanel()
     for (int i = 0; i < 4; ++i)
     {
         processor.treeState.removeParameterListener(driveParameterIds[static_cast<size_t>(i)], this);
+        processor.treeState.removeParameterListener(fire::analog_params::bandID(i), this);
 
         for (const auto& parameterIds : distortionGraphParameterIds)
             processor.treeState.removeParameterListener(parameterIds[static_cast<size_t>(i)], this);
@@ -392,34 +399,41 @@ void BandPanel::updateIconButtonSemantics()
 
 void BandPanel::createComboBoxes()
 {
+    const juce::Component::SafePointer<BandPanel> safe(this);
     for (size_t i = 0; i < distortionModes.size(); ++i)
     {
-        const auto parameterID = ParameterIDAndName::getIDString(
-            MODE_ID, static_cast<int>(i));
-        const auto bandNumber = juce::String(static_cast<int>(i) + 1);
-        auto* const parameter = processor.treeState.getParameter(parameterID);
-        jassert(parameter != nullptr);
-
-        distortionModes[i].setTitle("Band " + bandNumber
-                                    + " distortion mode");
-        distortionModes[i].setTooltip("Select the distortion mode for band "
-                                      + bandNumber);
-
-        distortionModes[i].configurePopupSession(
-            [this]
+        const auto legacyID = ParameterIDAndName::getIDString(MODE_ID, static_cast<int>(i));
+        const auto modelID = fire::analog_params::bandID(static_cast<int>(i));
+        auto& menu = distortionModes[i];
+        menu.setTitle("Band " + juce::String(static_cast<int>(i) + 1) + " distortion mode");
+        menu.setTooltip("Select the distortion mode for band " + juce::String(static_cast<int>(i) + 1));
+        menu.setComponentID(legacyID);
+        setMenu(&menu);
+        menu.configurePopupSession([safe] {return safe ? safe->distortionModeInteractionGeneration : 0;},
+            [safe, i] {return safe && safe->canOpenDistortionModePopup(i);},
+            [safe, i](int item)
             {
-                return distortionModeInteractionGeneration;
-            },
-            [this, i]
-            {
-                return canOpenDistortionModePopup(i);
-            },
-            parameter);
-        setMenu(&distortionModes[i]);
-        modeAttachments[i] = std::make_unique<ComboBoxAttachment>(
-            processor.treeState,
-            parameterID,
-            distortionModes[i]);
+                if (!safe || !safe->canOpenDistortionModePopup(i)) return;
+                const auto epoch = safe->distortionModeInteractionGeneration;
+                auto& selector = safe->distortionModes[i];
+                const int before = safe->processor.getShapeMode(static_cast<int>(i) + 1) + 1;
+                selector.setSelectedId(before, juce::dontSendNotification);
+                if (!safe) return;
+                selector.setSelectedId(item, juce::sendNotificationSync);
+                if (!safe || safe->distortionModeInteractionGeneration != epoch || !safe->canOpenDistortionModePopup(i)) return;
+                safe->processor.setShapeMode(static_cast<int>(i) + 1, -1, item - 1);
+            });
+        const auto update = [safe, i](float)
+        {
+            if (!safe) return;
+            safe->distortionModes[i].setSelectedId(safe->processor.getShapeMode(static_cast<int>(i) + 1) + 1, juce::dontSendNotification);
+            safe->updateDistortionGraphFromParameters();
+            if (safe) safe->applySelectedGraphView();
+            if (safe) safe->resized();
+        };
+        modeAttachments[i] = std::make_unique<juce::ParameterAttachment>(*processor.treeState.getParameter(legacyID), update, nullptr);
+        shapeModelAttachments[i] = std::make_unique<juce::ParameterAttachment>(*processor.treeState.getParameter(modelID), update, nullptr);
+        menu.setSelectedId(processor.getShapeMode(static_cast<int>(i) + 1) + 1, juce::dontSendNotification);
     }
 }
 
@@ -709,6 +723,26 @@ void BandPanel::resized()
     compactButtonRow.removeFromLeft(juce::jmin(compactButtonGap, compactButtonRow.getWidth()));
     extremeButton.setBounds(compactButtonRow);
 
+    hardwareColour.setBounds(contentArea(graphAreaRect).reduced(0, juce::roundToInt(12 * uiScale)));
+    if (usesAnalogShape())
+    {
+        auto module = contentArea(knobsAreaRect.getUnion(graphAreaRect));
+        hardwareColour.setBounds(module.removeFromLeft(module.getWidth() * 47 / 100));
+        module.removeFromLeft(juce::roundToInt(18 * uiScale));
+        auto controls = module;
+        auto menuBounds = controls.removeFromTop(modeHeight);
+        for (auto& menu : distortionModes) menu.setBounds(menuBounds.reduced(juce::roundToInt(12 * uiScale), 0));
+        controls.removeFromTop(controlGap);
+        auto utility = controls.removeFromBottom(dcReserve);
+        const auto size = fire::ui::ordinaryKnobWidth(uiScale, {(controls.getWidth() - controlGap * 3) / 4,
+            controls.getHeight() - valueHeight});
+        const auto height = fire::ui::ordinaryKnobHeight(size, uiScale);
+        auto strip = controls.withSizeKeepingCentre(size * 4 + controlGap * 3, height);
+        for (const char* name : {DRIVE_NAME, BIAS_NAME, REC_NAME, SHAPE_MIX_NAME})
+        {modulatableSliderComponents.at(name)->setBounds(strip.removeFromLeft(size)); strip.removeFromLeft(controlGap);}
+        dcFilterButton.setBounds(utility.withSizeKeepingCentre(juce::roundToInt(22 * uiScale), juce::roundToInt(20 * uiScale)));
+        dcFilterLabel.setBounds(dcFilterButton.getBounds().translated(juce::roundToInt(25 * uiScale), 0).withWidth(juce::roundToInt(28 * uiScale)));
+    }
     const juce::Component::SafePointer<BandPanel> safeThis(this);
     updateDriveCompensationPresentation(false);
     if (safeThis) invalidateChromeCache();
@@ -860,6 +894,7 @@ void BandPanel::applySelectedGraphView()
 {
     const juce::Component::SafePointer<BandPanel> safeThis(this);
     auto* selected = getSelectedModuleGraph();
+    const bool showHardware = usesAnalogShape() && selectedGraphView == 1 && zoomedGraph == nullptr;
     const bool available = selected != nullptr;
     if (graphSelectorStrip.isVisible() != available)
         dismissGraphViewMenu();
@@ -876,6 +911,11 @@ void BandPanel::applySelectedGraphView()
         graph->setVisible(graph == selected);
         if (! safeThis || graphViewGeneration != context) return;
     }
+    hardwareColour.setVisible(showHardware);
+    if (!safeThis) return;
+    if (shapeSwitch.getToggleState() && selectedInsert < 0)
+        modulatableSliderComponents.at(DRIVE_NAME)->setVisible(usesAnalogShape() && zoomedGraph == nullptr);
+    if (!safeThis) return;
     graphSelectorStrip.setVisible(available);
     if (safeThis && graphViewGeneration == context)
         updateGraphViewMenu();
@@ -889,6 +929,7 @@ void BandPanel::updateGraphViewMenu()
         if (graph == &vuPanel) return "Meters";
         if (graph == &widthGraph) return "Stereo";
         if (graph == &ottGraph) return "OTT dynamics";
+        if (graph == nullptr && usesAnalogShape()) return "Hardware";
         return "Waveform";
     };
     const juce::Component::SafePointer<BandPanel> safeThis(this);
@@ -1031,7 +1072,7 @@ GraphTemplate* BandPanel::getAutomaticModuleGraph() noexcept
     if (selectedInsert >= 0) return insertControls.usesFullWidthLayout() ? nullptr : &oscilloscope;
     if (ottSwitch.getToggleState()) return &ottGraph;
     if (shapeSwitch.getToggleState())
-        return &distortionGraph;
+        return usesAnalogShape() ? nullptr : &distortionGraph;
     if (compressorSwitch.getToggleState())
         return &vuPanel;
     if (widthSwitch.getToggleState())
@@ -1179,6 +1220,9 @@ void BandPanel::animationTick(float deltaSeconds)
     if (! safeOwner) return;
     insertControls.refresh();
     if (! safeOwner) return;
+    if (hardwareColour.isShowing())
+        hardwareColour.setState(processor.getShapeMode(focusBandNum + 1) - fire::analog::legacyCount,
+            static_cast<float>(getDriveKnob()->getValue()), juce::jmax(processor.getBandInputPeakLevel(focusBandNum, 0), processor.getBandInputPeakLevel(focusBandNum, 1)), deltaSeconds, processor.getAudioActivitySequence());
     updateDriveCompensationPresentation();
     if (! safeOwner) return;
     if (ottSwitch.getToggleState())
@@ -1764,7 +1808,7 @@ void BandPanel::updateDistortionGraphFromParameters()
     values.mix = readBandParameter(MIX_ID, 1.0f)
                  * (shapeEnabled ? readBandParameter(SHAPE_MIX_ID, 1.0f) : 1.0f);
     values.bias = shapeEnabled ? readBandParameter(BIAS_ID, 0.0f) : 0.0f;
-    values.mode = juce::roundToInt(readBandParameter(MODE_ID, 0.0f));
+    values.mode = processor.getShapeMode(focusBandNum + 1);
 
     const bool driveEnabled = readBandParameter(DRIVE_BYPASS_ID, 1.0f) > 0.5f;
     float driveAmount = driveEnabled ? readBandParameter(DRIVE_ID, 0.0f) : 0.0f;
@@ -2077,7 +2121,7 @@ void BandPanel::parameterChanged(const juce::String& parameterID, float newValue
         const auto bandMask = 1u << static_cast<unsigned int>(bandIndex);
         const bool isDriveParameter = parameterID == driveParameterIds[index];
 
-        bool affectsGraph = isDriveParameter;
+        bool affectsGraph = isDriveParameter || parameterID == fire::analog_params::bandID(bandIndex);
         for (const auto& parameterIds : distortionGraphParameterIds)
             affectsGraph = affectsGraph || parameterID == parameterIds[index];
 
@@ -2150,6 +2194,8 @@ void BandPanel::setMenu(juce::ComboBox* combobox)
     combobox->addItem("Logic", 11);
     combobox->addItem("Pit", 12);
     combobox->addSeparator();
+    combobox->addSectionHeading("Analog Hardware");
+    for (int model = 0; model < fire::analog::count; ++model) combobox->addItem(fire::analog::names[static_cast<size_t>(model)], fire::analog::legacyCount + model + 1);
     combobox->setJustificationType(juce::Justification::centred);
 }
 
@@ -2192,6 +2238,7 @@ void BandPanel::presentMeterValues(const MeterValues& values,
 
 void BandPanel::setGraphVisibilityForDriveDrag(bool isDragging)
 {
+    if (usesAnalogShape() && selectedGraphView == 1) return;
     const juce::Component::SafePointer<BandPanel> safeThis(this);
     if (isDragging)
     {

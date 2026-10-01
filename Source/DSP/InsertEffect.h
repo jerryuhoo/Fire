@@ -266,6 +266,9 @@ public:
         std::array<ModulatedValueProvider, controlCount> values;
         std::array<CoreEffect::EqNode, eq::maxNodes> eq;
         ModulatedValueProvider jitter;
+        int shapeModel = 0;
+        ModulatedValueProvider analogDrive;
+        int analogDriveSource = -1;
         explicit Parameters(Type kind = Type::none) : type(kind)
         {
             for (size_t i = 0; i < values.size(); ++i)
@@ -446,6 +449,7 @@ private:
         {
             coreLastParameters = requested;
             for (auto& value : coreLastParameters.values) value.lfoSignal = nullptr;
+            coreLastParameters.analogDrive.lfoSignal = nullptr;
             for (auto& node : coreLastParameters.eq) for (auto& value : node.controls) value.signal = nullptr;
         }
         if (juce::exactlyEqual(gate.getCurrentValue(), 0.0f) && ! gate.isSmoothing())
@@ -458,7 +462,7 @@ private:
             .getSubBlock(0, block.getNumSamples());
         wet.copyFrom(block);
         const auto& p = matches ? requested : coreLastParameters;
-        core->process(wet, currentType, p.values, currentNormalised, matches ? offset : 0, sources, p.eq);
+        core->process(wet, currentType, p.values, currentNormalised, matches ? offset : 0, sources, p.eq, p.shapeModel, p.analogDrive, p.analogDriveSource);
         for (size_t sample = 0; sample < block.getNumSamples(); ++sample)
         {
             const auto base = bases[5].getNextValue();

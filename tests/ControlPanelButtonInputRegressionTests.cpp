@@ -1859,8 +1859,7 @@ TEST_CASE("Context-aware ComboBox keyboard commits survive synchronous panel des
         auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(*panel);
         const auto nextIndex = target.getSelectedItemIndex() + 1;
         REQUIRE(juce::isPositiveAndBelow(nextIndex, target.getNumItems()));
-        const auto expectedValue = static_cast<float>(nextIndex)
-                                   / static_cast<float>(target.getNumItems() - 1);
+        const auto expectedValue = parameter->convertTo0to1(static_cast<float>(nextIndex));
         ParameterGestureRecorder gestures;
         OneShotParameterValueCallback destroyPanel { [&]
         {
@@ -1906,8 +1905,7 @@ TEST_CASE("Context-aware ComboBox keyboard commits survive synchronous panel des
         auto& target = BandPanelModeTestAccess::getModeBox(*panel, 0);
         const auto nextIndex = target.getSelectedItemIndex() + 1;
         REQUIRE(juce::isPositiveAndBelow(nextIndex, target.getNumItems()));
-        const auto expectedValue = static_cast<float>(nextIndex)
-                                   / static_cast<float>(target.getNumItems() - 1);
+        const auto expectedValue = parameter->convertTo0to1(static_cast<float>(nextIndex));
         ParameterGestureRecorder gestures;
         OneShotParameterValueCallback destroyPanel { [&]
         {

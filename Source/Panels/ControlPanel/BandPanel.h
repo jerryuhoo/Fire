@@ -12,6 +12,7 @@
 
 #include "../../GUI/ContextAwareComboBox.h"
 #include "../../GUI/LookAndFeel.h"
+#include "../../GUI/HardwareColourPanel.h"
 #include "../ControlPanel/Graph Components/DistortionGraph.h"
 #include "Graph Components/OttGraph.h"
 #include "../ControlPanel/Graph Components/Oscilloscope.h"
@@ -229,8 +230,10 @@ private:
         componentsHiddenForGraphZoom;
 
     // Distortion modes moved from PluginEditor
+    fire::ui::HardwareColourPanel hardwareColour;
+    bool usesAnalogShape() const {return selectedInsert < 0 && shapeSwitch.getToggleState() && processor.getShapeMode(focusBandNum + 1) >= fire::analog::legacyCount;}
     std::array<ContextAwareComboBox, 4> distortionModes;
-    std::array<std::unique_ptr<ComboBoxAttachment>, 4> modeAttachments;
+    std::array<std::unique_ptr<juce::ParameterAttachment>, 4> modeAttachments, shapeModelAttachments;
     std::uint64_t distortionModeInteractionGeneration = 0;
 
     enum class DriveGraphPreviewPhase

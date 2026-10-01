@@ -1316,6 +1316,8 @@ static bool pushToFifo(juce::AbstractFifo& fifo,
 // This is where we tell JUCE what to do when prepareToPlay is called for a single band.
 void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec, bool withInserts)
 {
+    analogShapeBaseRate = spec.sampleRate;
+    for (auto& bank : analogShapeBanks) for (auto& stage : bank) stage.prepare(spec.sampleRate);
     // Prepare all the DSP modules with the sample rate and block size.
     compressor.prepare(spec);
     ott.prepare(spec);
@@ -1420,6 +1422,7 @@ void BandProcessor::reset()
     shapeMixSmootherPrimed = false;
     compressorBaseSmoothersPrimed = false;
     waveshaperModeMixPrimed = false;
+    for (auto& bank : analogShapeBanks) for (auto& stage : bank) stage.reset();
     bandEnableMixPrimed = false;
     dcFilterMixPrimed = false;
     compressor.reset();
@@ -1476,6 +1479,7 @@ void BandProcessor::reset()
 
 void BandProcessor::resetQualityTransitionState() noexcept
 {
+    for (auto& bank : analogShapeBanks) for (auto& stage : bank) stage.reset();
     // The oversampler is the only per-band state that stops advancing in base
     // mode. Band/Enable mixers, the Shape Mix smoother, and their delay lines
     // consume every base-rate frame in both modes, so retaining them preserves
@@ -2277,7 +2281,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
         mSampleMaxValue.store(sampleMaxValue, std::memory_order_relaxed);
 
     const auto normaliseMode = [](int mode) noexcept
-    { return juce::isPositiveAndBelow(mode, 12) ? mode : 3; };
+    { return juce::isPositiveAndBelow(mode, fire::analog::modeCount) ? mode : 3; };
     const auto serviceModeRequest = [&](int rawRequestedMode)
     {
         const int requestedMode = normaliseMode(rawRequestedMode);
@@ -2501,9 +2505,17 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
             {
                 currentSample += currentState.bias;
 
-                const auto shapeAndRectify = [&](DistortionLogic::WaveshaperFunction function)
+                const auto shapeAndRectify = [&](DistortionLogic::WaveshaperFunction function, size_t bank)
                 {
-                    auto shaped = function(currentSample);
+                    auto shaped = currentSample;
+                    const auto mode = waveshaperModeSlots[bank];
+                    if (mode >= fire::analog::legacyCount)
+                    {
+                        auto& stage = analogShapeBanks[bank][static_cast<size_t>(juce::jmin(channel, 1))];
+                        stage.setProfile(mode, analogShapeBaseRate * smoothingStride);
+                        shaped = stage.process(currentSample);
+                    }
+                    else shaped = function(currentSample);
                     if (shaped < 0.0f)
                         shaped *= negativeScale;
                     return shaped;
@@ -2511,16 +2523,16 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
 
                 if (modeMix <= 0.0f)
                 {
-                    currentSample = shapeAndRectify(mode0Function);
+                    currentSample = shapeAndRectify(mode0Function, 0);
                 }
                 else if (modeMix >= 1.0f)
                 {
-                    currentSample = shapeAndRectify(mode1Function);
+                    currentSample = shapeAndRectify(mode1Function, 1);
                 }
                 else
                 {
-                    const auto mode0Sample = shapeAndRectify(mode0Function);
-                    const auto mode1Sample = shapeAndRectify(mode1Function);
+                    const auto mode0Sample = shapeAndRectify(mode0Function, 0);
+                    const auto mode1Sample = shapeAndRectify(mode1Function, 1);
                     currentSample = mode0Sample + modeMix * (mode1Sample - mode0Sample);
                 }
 
@@ -2901,6 +2913,7 @@ void FireAudioProcessor::initialiseParameterCache()
         parameters.enabled = indexed(BAND_ENABLE_ID, i);
         parameters.solo = indexed(BAND_SOLO_ID, i);
         parameters.mode = indexed(MODE_ID, i);
+        parameters.shapeModel = cacheParameter(fire::analog_params::bandID(i));
         parameters.linked = indexed(LINKED_ID, i);
         parameters.modernDriveComp = cacheParameter(fire::drive_comp::parameterID(i));
         parameters.safe = indexed(SAFE_ID, i);
@@ -2973,6 +2986,12 @@ void FireAudioProcessor::initialiseParameterCache()
         for (int slot = 0; slot < fire::modulation_fx::slotCount; ++slot)
             modulationEffectParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)]
                 = cacheParameter(fire::modulation_fx::parameterID(scope, slot));
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+        {
+            shapeModelParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)] = cacheParameter(fire::analog_params::parameterID(scope, slot));
+            analogDriveParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)] = cacheParameter(fire::analog_params::driveID(scope, slot));
+        }
     for (int scope = 0; scope < fire::resonator_params::scopeCount; ++scope)
         for (int slot = 0; slot < fire::resonator_params::slotCount; ++slot)
             resonatorParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)]
@@ -3341,7 +3360,10 @@ juce::StringArray legacyModuleParameters(int scope, int node)
         ids.add(fire::drive_comp::parameterID(scope - 1));
     }
     else if (node == 1)
+    {
         for (const auto* id : {SHAPE_BYPASS_ID, MODE_ID, BIAS_ID, REC_ID, SHAPE_MIX_ID, DC_FILTER_ID}) add(id);
+        ids.add(fire::analog_params::bandID(scope - 1));
+    }
     else if (node == 2)
         for (const auto* id : {COMP_BYPASS_ID, COMP_THRESH_ID, COMP_RATIO_ID, COMP_ATTACK_ID, COMP_RELEASE_ID, COMP_MIX_ID}) add(id);
     else if (node == 3)
@@ -3353,6 +3375,35 @@ juce::StringArray legacyModuleParameters(int scope, int node)
     }
     return ids;
 }
+}
+
+int FireAudioProcessor::getShapeMode(int scope, int slot) const
+{
+    const auto read = [](const CachedParameter& parameter)
+    {return parameter.ranged ? parameter.ranged->convertFrom0to1(parameter.ranged->getValue()) : 0.0f;};
+    if (slot < 0)
+    {
+        if (scope < 1 || scope > 4) return 3;
+        const auto& cache = bandParameterCache[static_cast<size_t>(scope - 1)];
+        return fire::analog::resolve(juce::roundToInt(read(cache.mode)), juce::roundToInt(read(cache.shapeModel)));
+    }
+    if (getInsertEffectType(scope, slot) != fire::effects::Type::shape) return 3;
+    const auto legacy = juce::roundToInt(read(insertParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][0]) * 11);
+    return fire::analog::resolve(legacy, juce::roundToInt(read(shapeModelParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)])));
+}
+bool FireAudioProcessor::setShapeMode(int scope, int slot, int mode)
+{
+    if (mode < 0 || mode >= fire::analog::modeCount || (slot < 0 ? scope < 1 || scope > 4 : getInsertEffectType(scope, slot) != fire::effects::Type::shape)) return false;
+    beginMultibandTopologyEdit();
+    const juce::ScopeGuard publish {[this] {finishMainStateEdit(false);}};
+    auto* legacy = treeState.getParameter(slot < 0 ? ParameterIDAndName::getIDString(MODE_ID, scope - 1) : fire::effects::parameterID(scope, slot, 0));
+    auto* model = treeState.getParameter(slot < 0 ? fire::analog_params::bandID(scope - 1) : fire::analog_params::parameterID(scope, slot));
+    const auto write = [](juce::RangedAudioParameter* parameter, float value)
+    {parameter->beginChangeGesture(); parameter->setValueNotifyingHost(value); parameter->endChangeGesture();};
+    if (mode < fire::analog::legacyCount)
+        write(legacy, slot < 0 ? legacy->convertTo0to1(static_cast<float>(mode)) : static_cast<float>(mode) / 11);
+    write(model, model->convertTo0to1(mode < fire::analog::legacyCount ? 0.0f : static_cast<float>(mode - fire::analog::legacyCount + 1)));
+    return true;
 }
 
 bool FireAudioProcessor::isModulePresent(int scope, int node) const
@@ -3557,6 +3608,12 @@ int FireAudioProcessor::addInsertEffect(int scope, fire::effects::Type type)
             ? parameter->convertTo0to1(static_cast<float>(fire::core_modules::encodeType(type))) : parameter->getDefaultValue());
         parameter->endChangeGesture();
     }
+    const auto driveID = fire::analog_params::driveID(scope, freeSlot);
+    clearModulationForParameter(driveID);
+    auto* analogDrive = treeState.getParameter(driveID);
+    analogDrive->beginChangeGesture(); analogDrive->setValueNotifyingHost(0); analogDrive->endChangeGesture();
+    auto* shapeModel = treeState.getParameter(fire::analog_params::parameterID(scope, freeSlot));
+    shapeModel->beginChangeGesture(); shapeModel->setValueNotifyingHost(0); shapeModel->endChangeGesture();
     // Reused storage slots still append to the visible chain, irrespective of
     // where their previous instance was located.
     auto nodes = visibleModuleOrder(scope);
@@ -3597,6 +3654,12 @@ void FireAudioProcessor::removeInsertEffect(int scope, int slot)
         auto* extra = treeState.getParameter(id);
         extra->beginChangeGesture(); extra->setValueNotifyingHost(extra->getDefaultValue()); extra->endChangeGesture();
     }
+    const auto driveID = fire::analog_params::driveID(scope, slot);
+    clearModulationForParameter(driveID);
+    auto* analogDrive = treeState.getParameter(driveID);
+    analogDrive->beginChangeGesture(); analogDrive->setValueNotifyingHost(0); analogDrive->endChangeGesture();
+    auto* shapeModel = treeState.getParameter(fire::analog_params::parameterID(scope, slot));
+    shapeModel->beginChangeGesture(); shapeModel->setValueNotifyingHost(0); shapeModel->endChangeGesture();
     auto* parameter = treeState.getParameter(parameterID(scope, slot, typeField));
     parameter->beginChangeGesture(); parameter->setValueNotifyingHost(0); parameter->endChangeGesture();
     auto* extendedType = treeState.getParameter(fire::modulation_fx::parameterID(scope, slot));
@@ -5342,6 +5405,7 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
 
 void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
+    audioActivitySequence.fetch_add(1, std::memory_order_relaxed);
     isBypassed.store(false, std::memory_order_release);
     hostBypassSessionActive = false;
 
@@ -5673,7 +5737,7 @@ void FireAudioProcessor::processWetBlock(
         if (driveEnabled && loadCachedParameter(parameters.extreme) > 0.5f)
             driveBase *= std::log2(10.0f);
 
-        vals.mode = juce::roundToInt(loadCachedParameter(parameters.mode));
+        vals.mode = fire::analog::resolve(juce::roundToInt(loadCachedParameter(parameters.mode)), juce::roundToInt(loadCachedParameter(parameters.shapeModel)));
         const bool isSafeModeOn = loadCachedParameter(parameters.safe) > 0.5f;
 
         float driveForCalc = driveBase * 6.5f / 100.0f;
@@ -5733,6 +5797,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xmlState.setAttribute("eqSchemaVersion", 1);
     xmlState.setAttribute("coreModulesSchemaVersion", fire::core_modules::schemaVersion);
+    xmlState.setAttribute("analogShapesSchemaVersion", fire::analog_params::schemaVersion);
     xmlState.setAttribute("lfoBankSchemaVersion", fire::lfo_bank::schemaVersion);
     xmlState.setAttribute("savedParameterCount",
                           mainState.parameterState.getNumChildren());
@@ -5930,6 +5995,14 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 if (! parseStrictFiniteDouble(child.getProperty("value").toString(), value)
                     || (value != 0.0 && value != 1.0)) return;
             }
+    }
+    int analogCount = 0;
+    for (const auto& id : incomingParameterIDs) if (fire::analog_params::isParameterID(id)) ++analogCount;
+    if (xmlState->hasAttribute("analogShapesSchemaVersion") || analogCount > 0)
+    {
+        int version = 1;
+        if ((xmlState->hasAttribute("analogShapesSchemaVersion") && (!parseStrictNonNegativeIntegerAttribute(*xmlState, "analogShapesSchemaVersion", version)
+                || version != fire::analog_params::schemaVersion)) || analogCount != fire::analog_params::parameterCount) return;
     }
     int coreModuleCount = 0;
     for (const auto& id : incomingParameterIDs) if (fire::core_modules::isParameterID(id)) ++coreModuleCount;
@@ -7438,6 +7511,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
             }
         }
     }
+    juce::StringArray shapeModels {"Legacy"};
+    for (auto name : fire::analog::names) shapeModels.add(name);
+    for (int band = 0; band < 4; ++band)
+        parameters.push_back(std::make_unique<PChoice>(juce::ParameterID{fire::analog_params::bandID(band), 13}, "Band " + juce::String(band + 1) + " Shape Model", shapeModels, 0));
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+            parameters.push_back(std::make_unique<PChoice>(juce::ParameterID{fire::analog_params::parameterID(scope, slot), 13},
+                (scope == 0 ? juce::String("Master") : "Band " + juce::String(scope)) + " FX " + juce::String(slot + 1) + " Shape Model", shapeModels, 0));
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+            parameters.push_back(std::make_unique<PFloat>(juce::ParameterID{fire::analog_params::driveID(scope, slot), 13},
+                (scope == 0 ? juce::String("Master") : "Band " + juce::String(scope)) + " FX " + juce::String(slot + 1) + " Analog Drive",
+                juce::NormalisableRange<float>{0, 100}, 0));
     return { parameters.begin(), parameters.end() };
 }
 
@@ -7453,6 +7539,16 @@ void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackP
         auto& target = destination[slot];
         target.effect.publicationSequence = multibandTopologyResetGeneration.load(std::memory_order_seq_cst) & ~std::uint32_t{1};
         target.effect.type = getInsertEffectType(scope, static_cast<int>(slot));
+        target.effect.shapeModel = juce::roundToInt(loadCachedParameter(shapeModelParameters[static_cast<size_t>(scope)][slot]));
+        const auto& analogDrive = analogDriveParameters[static_cast<size_t>(scope)][slot];
+        target.effect.analogDrive.baseValue = loadCachedParameter(analogDrive);
+        target.effect.analogDrive.range = {0, 100}; target.effect.analogDrive.modulationDepth = 0; target.effect.analogDrive.lfoSignal = nullptr;
+        target.analogDriveSource = -1;
+        LfoManager::AudioThreadRoutingInfo analogRouting;
+        if (analogDrive.ranged && lfoManager->getAudioThreadRoutingInfo(analogDrive.ranged, analogRouting))
+        {target.effect.analogDrive.modulationDepth = analogRouting.depth; target.effect.analogDrive.isBipolar = analogRouting.isBipolar; target.analogDriveSource = analogRouting.sourceLfoIndex;}
+        target.effect.analogDriveSource = target.analogDriveSource;
+
         target.effect.enabled = loadCachedParameter(cache[fire::effects::enabledField]) > 0.5f;
         target.effect.normalised = true;
         target.effect.bpm = bpm;
@@ -7643,7 +7739,7 @@ void FireAudioProcessor::prepareHqCallbackContext(
 
         BandProcessingParameters params;
         params.isBandEnabled = loadCachedParameter(parameters.enabled) > 0.5f;
-        params.mode = juce::roundToInt(loadCachedParameter(parameters.mode));
+        params.mode = fire::analog::resolve(juce::roundToInt(loadCachedParameter(parameters.mode)), juce::roundToInt(loadCachedParameter(parameters.shapeModel)));
         params.isOutputLinked = isModulePresent(i + 1, 0) && loadCachedParameter(parameters.linked) > 0.5f;
         params.useModernDriveComp = loadCachedParameter(parameters.modernDriveComp) > 0.5f;
         params.isDriveEnabled = isModulePresent(i + 1, 0) && loadCachedParameter(parameters.driveEnabled) > 0.5f;

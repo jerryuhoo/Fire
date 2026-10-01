@@ -162,6 +162,11 @@ TEST_CASE("Clouds appends a separate parameter family without changing original 
                 checkParameter(fire::core_modules::parameterID(scope, slot, field), 12);
     }
     CHECK(index == 1047 + fire::core_modules::parameterCount);
+    for (int band = 0; band < 4; ++band) checkParameter(fire::analog_params::bandID(band), 13);
+    for (int scope = 0; scope < 5; ++scope)
+        for (int slot = 0; slot < 8; ++slot) checkParameter(fire::analog_params::parameterID(scope, slot), 13);
+    for (int scope = 0; scope < 5; ++scope)
+        for (int slot = 0; slot < 8; ++slot) checkParameter(fire::analog_params::driveID(scope, slot), 13);
     CHECK(index == parameters.size());
     CHECK_FALSE(clouds::isParameterID("masterFx1CloudsBogus"));
     CHECK_FALSE(clouds::isParameterID("bandFx9CloudsEngine1"));

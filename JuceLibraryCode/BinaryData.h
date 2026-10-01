@@ -8,6 +8,15 @@
 
 namespace BinaryData
 {
+    extern const char*   analog_tube_off_png;
+    const int            analog_tube_off_pngSize = 985501;
+
+    extern const char*   analog_tube_on_png;
+    const int            analog_tube_on_pngSize = 940849;
+
+    extern const char*   analog_tape_reel_png;
+    const int            analog_tape_reel_pngSize = 2032806;
+
     extern const char*   fire_anime_png;
     const int            fire_anime_pngSize = 713474;
 
@@ -18,7 +27,7 @@ namespace BinaryData
     const int            firewingslogo_pngSize = 11396;
 
     // Number of elements in the namedResourceList and originalFileNames arrays.
-    const int namedResourceListSize = 3;
+    const int namedResourceListSize = 6;
 
     // Points to the start of a list of resource names.
     extern const char* namedResourceList[];

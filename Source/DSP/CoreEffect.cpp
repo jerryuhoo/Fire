@@ -23,7 +23,8 @@ void CoreEffect::reset() noexcept
 }
 void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
     const std::array<ModulatedValueProvider, 6>& values, bool normalised, int offset,
-    const std::array<int, 6>* sources, const std::array<EqNode, eq::maxNodes>& eqNodes) noexcept
+    const std::array<int, 6>* sources, const std::array<EqNode, eq::maxNodes>& eqNodes, int shapeModel,
+    const ModulatedValueProvider& analogDrive, int analogDriveSource) noexcept
 {
     if (block.getNumChannels() == 0 || block.getNumSamples() == 0) return;
     if (type == Type::eq)
@@ -80,10 +81,18 @@ void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
     else if (type == Type::shape)
     {
         p.isShapeEnabled = true;
-        p.mode = juce::jlimit(0, 11, juce::roundToInt(provider(0).baseValue));
+        p.mode = fire::analog::resolve(juce::roundToInt(provider(0).baseValue), shapeModel);
         p.biasVal = provider(1); p.biasLfoSourceIndex = source(1);
         p.recVal = provider(2); p.recLfoSourceIndex = source(2);
         p.isDcFilterEnabled = provider(3).baseValue >= 0.5f;
+        if (shapeModel > 0)
+        {
+            p.isDriveEnabled = true;
+            p.isSafeModeOn = false;
+            p.driveVal = analogDrive;
+            p.driveLfoSourceIndex = analogDriveSource;
+            if (p.driveVal.lfoSignal) p.driveVal.lfoSignal += offset;
+        }
     }
     else if (type == Type::compressor)
     {
@@ -107,7 +116,7 @@ void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
     if (type == Type::drive || type == Type::shape)
     {
         impl->band.processDriveShapeStage(buffer, p, impl->noLfo, 0, buffer.getMagnitude(0, buffer.getNumSamples()), false,
-                                         type == Type::drive, type == Type::shape);
+                                         type == Type::drive || (type == Type::shape && shapeModel > 0), type == Type::shape);
         if (type == Type::shape) impl->band.processDcFilter(buffer, p.isDcFilterEnabled);
     }
     else if (type == Type::compressor) impl->band.processCompressorStage(buffer, p);

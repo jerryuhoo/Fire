@@ -18,6 +18,7 @@
 #include "Utility/DriveCompensationParameters.h"
 #include "Utility/EqParameters.h"
 #include "Utility/CoreModuleParameters.h"
+#include "Utility/AnalogShapeParameters.h"
 #include "Utility/LfoBankParameters.h"
 #include "DSP/EqCoefficients.h"
 #include "DSP/EqProcessor.h"
@@ -284,6 +285,8 @@ struct BandProcessor
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
         waveshaperModeMixSmoother;
     std::array<int, 2> waveshaperModeSlots { 3, 3 };
+    std::array<std::array<fire::analog::Stage, 2>, 2> analogShapeBanks;
+    double analogShapeBaseRate = 48000;
     int requestedWaveshaperMode = 3;
     bool waveshaperModeMixPrimed = false;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bandEnableMixSmoother;
@@ -430,6 +433,8 @@ public:
     bool isModulePresent(int scope, int node) const;
     void removeModule(int scope, int node);
     bool restoreLegacyModule(int scope, int node);
+    int getShapeMode(int scope, int slot = -1) const;
+    bool setShapeMode(int scope, int slot, int mode);
     void moveInsertEffect(int scope, int slot, int direction);
     void moveInsertEffectToPosition(int scope, int slot, int position);
     fire::module_order::Order getModuleOrder(int scope) const;
@@ -574,6 +579,7 @@ public:
 
     // Getters for meter levels
     float getGlobalInputRMSLevel(int channel) const;
+    std::uint64_t getAudioActivitySequence() const noexcept {return audioActivitySequence.load(std::memory_order_relaxed);}
     float getGlobalOutputRMSLevel(int channel) const;
     float getGlobalInputPeakLevel(int channel) const;
     float getGlobalOutputPeakLevel(int channel) const;
@@ -718,6 +724,7 @@ private:
         CachedParameter enabled;
         CachedParameter solo;
         CachedParameter mode;
+        CachedParameter shapeModel;
         CachedParameter linked;
         CachedParameter modernDriveComp;
         CachedParameter safe;
@@ -882,6 +889,8 @@ private:
     fire::effects::InsertRack masterInserts;
     std::array<std::array<CachedParameter, fire::module_order::capacity>, fire::effects::scopeCount> moduleOrderParameters;
     std::array<std::array<CachedParameter, 5>, fire::effects::scopeCount> modulePresenceParameters;
+    std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> shapeModelParameters;
+    std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> analogDriveParameters;
     std::array<std::array<std::array<CachedParameter, fire::core_modules::slotFieldCount>, fire::effects::slotCount>, fire::effects::scopeCount> coreModuleParameters;
     fire::module_order::Transition masterOrderTransition;
     juce::AudioBuffer<float> masterOrderDry;
@@ -972,6 +981,7 @@ private:
     AudioCallbackParameterSnapshot activeAudioCallbackParameterSnapshot;
     bool activeAudioCallbackParameterSnapshotInitialised = false;
     std::uint32_t lastAudioCallbackGenerationAtStart = 0;
+    std::atomic<std::uint64_t> audioActivitySequence{0};
 
     friend class state::StateAB;
 

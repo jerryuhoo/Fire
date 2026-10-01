@@ -91,6 +91,10 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
         insertKnobs[i]->setInteractionOnlyReadout(true);
     }
     insertControls.setControls(insertKnobs);
+    createAndConfigureSlider("Analog Drive", "Drive", fire::ui::colours::drive);
+    auto& analogDrive = *modulatableSliderComponents.at("Analog Drive");
+    setupModulationCallbacks(analogDrive);
+    insertControls.setAnalogDriveControl(analogDrive);
     std::array<ModulatableSlider*, InsertEffectControls::cloudsExtraCount> cloudsKnobs {};
     const std::array<const char*, InsertEffectControls::cloudsExtraCount> cloudsNames { "Spread", "Feedback", "Reverb" };
     for (size_t i = 0; i < cloudsKnobs.size(); ++i)

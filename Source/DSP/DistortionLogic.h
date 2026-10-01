@@ -10,6 +10,7 @@
 
 #pragma once
 #include "ClippingFunctions.h"
+#include "AnalogDistortion.h"
 #include <cmath>
 
 namespace DistortionLogic
@@ -56,6 +57,18 @@ namespace DistortionLogic
                 return waveshaping::logicClip<float>;
             case 11:
                 return waveshaping::tanclip<float>;
+            case 12: return fire::analog::curve<0>;
+            case 13: return fire::analog::curve<1>;
+            case 14: return fire::analog::curve<2>;
+            case 15: return fire::analog::curve<3>;
+            case 16: return fire::analog::curve<4>;
+            case 17: return fire::analog::curve<5>;
+            case 18: return fire::analog::curve<6>;
+            case 19: return fire::analog::curve<7>;
+            case 20: return fire::analog::curve<8>;
+            case 21: return fire::analog::curve<9>;
+            case 22: return fire::analog::curve<10>;
+            case 23: return fire::analog::curve<11>;
             default:
                 return waveshaping::cubicSoftClipping<float>; // Fallback
         }

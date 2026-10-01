@@ -2,6 +2,7 @@
 #include "EffectRackNavigation.h"
 #include "ContextAwareComboBox.h"
 #include "EqControlsPanel.h"
+#include "HardwareColourPanel.h"
 #include "../DSP/ChordResonator.h"
 #include <atomic>
 #include "../Utility/CloudsParameters.h"
@@ -59,10 +60,13 @@ public:
             label->setJustificationType(juce::Justification::centredLeft);
         }
         addChildComponent(coreMode);
+        addChildComponent(hardwareColour);
         coreMode.setTitle("Shape mode");
         coreMode.setTooltip("Choose the waveshaping algorithm.");
         const juce::StringArray modes {"Arctan", "Exp", "Tanh", "Cubic", "Hard", "Sausage", "Sin", "Linear", "Limit", "Single Sin", "Logic", "Pit"};
         for (int index = 0; index < modes.size(); ++index) coreMode.addItem(modes[index], index + 1);
+        coreMode.addSectionHeading("Analog Hardware");
+        for (int index = 0; index < fire::analog::count; ++index) coreMode.addItem(fire::analog::names[static_cast<size_t>(index)], fire::analog::legacyCount + index + 1);
         for (size_t index = 0; index < coreSwitches.size(); ++index)
         {
             auto& button = coreSwitches[index];
@@ -93,10 +97,12 @@ public:
         addChildComponent(eqControls);
         eqControls.setKnobs(controls);
     }
+    void setAnalogDriveControl(ModulatableSlider& control) {analogDriveKnob = &control; addChildComponent(control);}
     bool usesExpandedLayout() const noexcept
     { return type == fire::effects::Type::granular; }
     bool usesFullWidthLayout() const noexcept
-    { return usesExpandedLayout() || type == fire::effects::Type::lofi || type == fire::effects::Type::eq; }
+    { return usesExpandedLayout() || type == fire::effects::Type::lofi || type == fire::effects::Type::eq || usesAnalogLayout(); }
+    bool usesAnalogLayout() const noexcept {return type == fire::effects::Type::shape && processor.getShapeMode(scope, slot) >= fire::analog::legacyCount;}
     void setActive(bool shouldBeActive)
     {
         const juce::Component::SafePointer<InsertEffectControls> safe(this);
@@ -122,6 +128,8 @@ public:
         for (auto& attachment : attachments) attachment.reset();
         for (auto& attachment : cloudsAttachments) attachment.reset();
         coreModeAttachment.reset();
+        shapeModelAttachment.reset();
+        analogDriveAttachment.reset();
         for (auto& attachment : coreSwitchAttachments) attachment.reset();
         freezeAttachment.reset();
         scope = targetScope; slot = targetSlot; type = targetType;
@@ -259,6 +267,16 @@ public:
         }
         if (type == fire::effects::Type::shape)
         {
+            if (analogDriveKnob)
+            {
+                const auto driveID = fire::analog_params::driveID(scope, slot);
+                analogDriveKnob->parameterID = driveID; analogDriveKnob->setComponentID(driveID);
+                analogDriveKnob->textFromValueFunction = {}; analogDriveKnob->valueFromTextFunction = {};
+                analogDriveKnob->setTextValueSuffix({}); analogDriveKnob->setLabel("Drive", fire::ui::colours::drive);
+                analogDriveKnob->setTitle("Analog Drive"); analogDriveKnob->setTooltip("Input gain into the analog model; filament exposure follows Drive and signal energy.");
+                analogDriveAttachment = std::make_unique<SliderAttachment>(processor.treeState, driveID, *analogDriveKnob);
+                if (!isCurrent()) return;
+            }
             const auto id = fire::effects::parameterID(scope, slot, 0);
             coreMode.setComponentID(id);
             auto* parameter = processor.treeState.getParameter(id);
@@ -266,15 +284,19 @@ public:
             {return safe && safe->bindingGeneration == request && safe->isShowing() && safe->isEnabled()
                 && safe->processor.getInsertEffectType(safe->scope, safe->slot) == fire::effects::Type::shape;};
             coreMode.configurePopupSession([safe] {return safe ? safe->choiceGeneration.load(std::memory_order_acquire) : 0;}, valid,
-                [safe, parameter, valid](int item)
-                {
-                    if (!parameter || !valid() || item < 1 || item > 12) return;
-                    parameter->beginChangeGesture();
-                    const juce::ScopeGuard finish {[parameter] {parameter->endChangeGesture();}};
-                    if (valid()) parameter->setValueNotifyingHost(static_cast<float>(item - 1) / 11.0f);
-                });
-            coreModeAttachment = std::make_unique<juce::ParameterAttachment>(*parameter, [safe, request](float value)
-            {if (safe && safe->bindingGeneration == request) safe->coreMode.setSelectedId(juce::jlimit(1, 12, juce::roundToInt(value * 11) + 1), juce::dontSendNotification);}, nullptr);
+                [safe, valid](int item)
+                {if (valid() && item >= 1 && item <= fire::analog::modeCount) safe->processor.setShapeMode(safe->scope, safe->slot, item - 1);});
+            const auto update = [safe, request](float)
+            {
+                if (!safe || safe->bindingGeneration != request) return;
+                safe->coreMode.setSelectedId(safe->processor.getShapeMode(safe->scope, safe->slot) + 1, juce::dontSendNotification);
+                if (!safe || safe->bindingGeneration != request) return;
+                safe->updateVisibility(); if (!safe) return;
+                safe->resized(); if (!safe) return;
+                auto callback = safe->onLayoutChanged; if (callback) callback();
+            };
+            coreModeAttachment = std::make_unique<juce::ParameterAttachment>(*parameter, update, nullptr);
+            shapeModelAttachment = std::make_unique<juce::ParameterAttachment>(*processor.treeState.getParameter(fire::analog_params::parameterID(scope, slot)), update, nullptr);
             coreModeAttachment->sendInitialUpdate();
             if (!isCurrent()) return;
         }
@@ -285,7 +307,21 @@ public:
         auto callback = onLayoutChanged;
         if (callback) callback();
     }
-    void refresh() { if (scope >= 0 && slot >= 0) bind(scope, slot); if (type == fire::effects::Type::eq) eqControls.animationTick(1.0f / 60.0f); }
+    void refresh()
+    {
+        const juce::Component::SafePointer<InsertEffectControls> safe(this);
+        if (scope >= 0 && slot >= 0) bind(scope, slot);
+        if (!safe) return;
+        if (type == fire::effects::Type::eq) eqControls.animationTick(1.0f / 60.0f);
+        if (!safe) return;
+        if (hardwareColour.isShowing())
+        {
+            const auto peak = scope == 0 ? juce::jmax(processor.getGlobalInputPeakLevel(0), processor.getGlobalInputPeakLevel(1))
+                : juce::jmax(processor.getBandInputPeakLevel(scope - 1, 0), processor.getBandInputPeakLevel(scope - 1, 1));
+            hardwareColour.setState(processor.getShapeMode(scope, slot) - fire::analog::legacyCount,
+                analogDriveKnob ? static_cast<float>(analogDriveKnob->getValue()) : 0, peak, 1.0f / 60.0f, processor.getAudioActivitySequence());
+        }
+    }
     void dismissButtons()
     {
         const juce::Component::SafePointer<InsertEffectControls> safe(this);
@@ -299,6 +335,8 @@ public:
         coreMode.dismissTransientInteraction();
         if (!safe) return;
         for (auto& button : coreSwitches) {button.dismissPointerGesture(); if (!safe) return;}
+        if (analogDriveKnob) analogDriveKnob->dismissTransientInteraction();
+        if (!safe) return;
         freezeButton.dismissPointerGesture();
     }
     void dismiss()
@@ -330,6 +368,24 @@ public:
     }
     void resized() override
     {
+        if (usesAnalogLayout())
+        {
+            auto area = getLocalBounds().reduced(juce::roundToInt(7 * scale));
+            hardwareColour.setBounds(area.removeFromLeft(area.getWidth() * 48 / 100));
+            area.removeFromLeft(juce::roundToInt(16 * scale));
+            coreMode.setBounds(area.removeFromTop(juce::roundToInt(32 * scale)));
+            area.removeFromTop(juce::roundToInt(8 * scale));
+            const auto footer = area.removeFromBottom(juce::roundToInt(28 * scale));
+            coreSwitches[0].setBounds(footer.withSizeKeepingCentre(juce::roundToInt(96 * scale), footer.getHeight()));
+            const int gap = juce::roundToInt(10 * scale);
+            const auto size = fire::ui::ordinaryKnobWidth(scale, {(area.getWidth() - gap * 3) / 4,
+                area.getHeight() - juce::roundToInt(fire::ui::Metrics::knobValueHeight * scale)});
+            const auto height = fire::ui::ordinaryKnobHeight(size, scale);
+            auto strip = area.withSizeKeepingCentre(size * 4 + gap * 3, height);
+            for (auto* knob : {analogDriveKnob, sliders[1], sliders[2], sliders[5]})
+            {if (knob) knob->setBounds(strip.removeFromLeft(size)); strip.removeFromLeft(gap);}
+            return;
+        }
         if (type == fire::effects::Type::eq)
         {
             auto area = getLocalBounds();
@@ -597,6 +653,10 @@ private:
         if (!current()) return;
         coreMode.setVisible(active && type == fire::effects::Type::shape);
         if (!current()) return;
+        hardwareColour.setVisible(active && usesAnalogLayout());
+        if (!current()) return;
+        if (analogDriveKnob) analogDriveKnob->setVisible(active && usesAnalogLayout());
+        if (!current()) return;
         for (size_t index = 0; index < coreSwitches.size(); ++index)
         {coreSwitches[index].setVisible(active && (type == fire::effects::Type::drive || (type == fire::effects::Type::shape && index == 0))); if (!current()) return;}
     }
@@ -607,9 +667,12 @@ private:
     EqControlsPanel::Knobs eqKnobs {};
     std::array<std::array<std::unique_ptr<SliderAttachment>, 3>, fire::eq::maxNodes> eqAttachments;
     ContextAwareComboBox coreMode;
+    fire::ui::HardwareColourPanel hardwareColour;
+    ModulatableSlider* analogDriveKnob = nullptr;
+    std::unique_ptr<SliderAttachment> analogDriveAttachment;
     std::array<PrimaryTextButton, 3> coreSwitches;
     std::array<std::unique_ptr<ButtonAttachment>, 3> coreSwitchAttachments;
-    std::unique_ptr<juce::ParameterAttachment> coreModeAttachment;
+    std::unique_ptr<juce::ParameterAttachment> coreModeAttachment, shapeModelAttachment;
     std::array<ModulatableSlider*, fire::effects::controlCount> sliders {};
     std::array<ModulatableSlider*, cloudsExtraCount> cloudsSliders {};
     PrimaryTextButton freezeButton;

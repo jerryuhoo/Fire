@@ -548,6 +548,15 @@ TEST_CASE("Primary button state callbacks may synchronously delete their control
         REQUIRE(button->isDown());
         juce::MessageManager::getInstance()->runDispatchLoopUntil(350);
 
+        // Native focus/hover messages delivered during the warm-up can cancel
+        // the synthetic press. Re-establish that precondition before installing
+        // the self-deleting callback, then detach without another message pump.
+        if (! button->isDown()
+            || ! PrimaryButtonTestAccess::hasPrimaryGesture(*button))
+            beginPointerGesture(*button, leftButton);
+        REQUIRE(button->isDown());
+        REQUIRE(PrimaryButtonTestAccess::hasPrimaryGesture(*button));
+
         bool callbackStarted = false;
         button->onStateChange = [&]
         {
@@ -555,7 +564,10 @@ TEST_CASE("Primary button state callbacks may synchronously delete their control
             button.reset();
         };
         desktopHost.removeFromDesktop();
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(35);
+        REQUIRE(dispatchUntil([&]
+        {
+            return callbackStarted && button == nullptr;
+        }));
 
         CHECK(callbackStarted);
         CHECK(button == nullptr);
@@ -724,7 +736,13 @@ TEST_CASE("Primary buttons clear settled hover and focus after peer detachment",
     juce::MessageManager::getInstance()->runDispatchLoopUntil(600);
     desktopHost.removeFromDesktop();
     REQUIRE_FALSE(button.isShowing());
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(35);
+    REQUIRE(dispatchUntil([&]
+    {
+        return button.getState() == juce::Button::buttonNormal
+            && button.getHoverAnimation() == 0.0f
+            && button.getPressAnimation() == 0.0f
+            && button.getFocusAnimation() == 0.0f;
+    }));
 
     CHECK(button.getState() == juce::Button::buttonNormal);
     // Peer loss starts a fresh modality session. A later first direct focus is

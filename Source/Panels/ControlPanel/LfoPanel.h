@@ -407,6 +407,7 @@ public:
 
 private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct SkinNavigationMotionTestAccess;
     friend struct LfoPanelDialogTestAccess;
     friend struct LfoFlowTestAccess;
     friend struct LfoPanelBrushTestAccess;

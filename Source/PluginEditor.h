@@ -136,6 +136,7 @@ private:
     friend struct DistortionGraphSourceEpochTestAccess;
     friend struct MeterFreshnessTestAccess;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct SkinNavigationMotionTestAccess;
     friend struct ModulationUiDispatchTestAccess;
     friend struct LfoBankUiTestAccess;
     friend struct EditorUpdateCheckLifecycleTestAccess;

@@ -4,6 +4,10 @@
 #include "ModuleDragButton.h"
 #include "../Panels/SpectrogramPanel/CloseButton.h"
 
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct SkinNavigationMotionTestAccess;
+#endif
+
 namespace fire::ui
 {
 inline juce::Colour effectColour(effects::Type type)
@@ -34,6 +38,9 @@ inline juce::Colour effectColour(effects::Type type)
 // viewport; adding modules extends the content, never shrinks existing rows.
 class EffectRackNavigation final : public juce::Component
 {
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct ::SkinNavigationMotionTestAccess;
+#endif
 public:
     struct Row { juce::TextButton* button; juce::ToggleButton* power; };
     EffectRackNavigation(FireAudioProcessor& p, int initialScope) : processor(p), content(*this)
@@ -239,7 +246,17 @@ public:
         refresh();
         if (! safe) return;
         updateSelection(false);
-        if (selectionY.advance(dt)) content.repaint();
+        if (isVintage(*this))
+        {
+            // Skin changes also settle an in-flight selection whose row was
+            // removed; drag auto-scroll below remains fully operational.
+            if (! selectionY.isSettled())
+            {
+                selectionY.snapTo(selectionY.target);
+                content.repaint();
+            }
+        }
+        else if (selectionY.advance(dt)) content.repaint();
         if (dragNode >= 0)
         {
             const auto edge = juce::jmin(26.0f * scale, viewport.getHeight() * 0.2f);
@@ -625,7 +642,13 @@ private:
         auto* selected = selectedButton();
         if (! selected) return;
         const auto y = static_cast<float>(selected->getY());
-        if (! selectionInitialised || ! isShowing()) selectionY.snapTo(y); else selectionY.setTarget(y);
+        if (! selectionInitialised || ! isShowing() || isVintage(*this))
+        {
+            const auto previousY = selectionY.current;
+            selectionY.snapTo(y);
+            if (previousY != selectionY.current) content.repaint();
+        }
+        else selectionY.setTarget(y);
         selectionInitialised = true;
         if (reveal)
         {
@@ -656,6 +679,13 @@ private:
             else if (result == 1 || result == 2) safe->processor.moveModuleBy(safe->scope, node, result == 1 ? -1 : 1);
             if (safe) safe->refresh();
         });
+    }
+    void lookAndFeelChanged() override
+    {
+        if (! isVintage(*this)) return;
+        updateSelection(false);
+        selectionY.snapTo(selectionY.target);
+        content.repaint();
     }
     void visibilityChanged() override { if (! isShowing()) dismiss(); }
     void enablementChanged() override { if (! isEnabled()) dismiss(); }

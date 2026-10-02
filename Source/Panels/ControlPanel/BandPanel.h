@@ -87,6 +87,9 @@ public:
     void setGraphVisibilityForDriveDrag(bool isDragging);
 
 private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct SkinNavigationMotionTestAccess;
+#endif
     friend struct BandPanelGraphTestAccess;
     friend struct BandPanelModeTestAccess;
     friend struct DriveCompensationUiTestAccess;

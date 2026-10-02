@@ -499,6 +499,8 @@ void BandPanel::setupComponentGroups()
 
 void BandPanel::lookAndFeelChanged()
 {
+    if (fire::ui::isVintage(*this))
+        moduleSelectionPosition.snapTo(moduleSelectionPosition.target);
     // A skin change can arrive at the same size and display scale. Never
     // reuse the previous skin's rasterised panel chrome in that case.
     invalidateChromeCache();
@@ -1127,6 +1129,12 @@ void BandPanel::setAnimatedModuleTarget(int moduleIndex)
 {
     moduleIndex = juce::jlimit(0, 4, moduleIndex);
     const auto targetPosition = static_cast<float>(moduleIndex);
+    if (fire::ui::isVintage(*this))
+    {
+        moduleSelectionPosition.snapTo(targetPosition);
+        repaint();
+        return;
+    }
     if (juce::approximatelyEqual(moduleSelectionPosition.target, targetPosition))
         return;
     if (isShowing())
@@ -1271,6 +1279,17 @@ void BandPanel::animationTick(float deltaSeconds)
         return;
     }
 
+    if (fire::ui::isVintage(*this))
+    {
+        const auto oldBounds = getModuleSelectionBounds(moduleSelectionPosition.current);
+        const bool moved = !juce::approximatelyEqual(moduleSelectionPosition.current,
+                                                     moduleSelectionPosition.target);
+        moduleSelectionPosition.snapTo(moduleSelectionPosition.target);
+        if (moved)
+            repaint(oldBounds.getUnion(getModuleSelectionBounds(moduleSelectionPosition.current))
+                        .expanded(3.0f * scale).getSmallestIntegerContainer());
+        return;
+    }
     if (moduleSelectionPosition.isSettled())
         return;
 

@@ -579,7 +579,9 @@ warm grey metal operating panels, physical keycaps, dark ribbed bakelite knobs
 and cream scales. The choice is saved as a local
 appearance preference. Existing open instances keep their selected skin;
 new instances use the saved preference. Switching skins preserves the current
-sound, preset and undo history. The tape display includes reel hubs, guide
+sound, preset and undo history. Vintage workspace, module and LFO selections
+change immediately; Modern retains its sliding selection indicators.
+The tape display includes reel hubs, guide
 rollers and a head shield; the colour display has graduated, uncalibrated
 intensity scales and a moving needle. Both skins keep the independent,
 continuous reel animation and signal-driven tube illumination.

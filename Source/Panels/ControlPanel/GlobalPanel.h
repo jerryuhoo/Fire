@@ -61,6 +61,9 @@ public:
     float scale = 1.0f;
 
 private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct SkinNavigationMotionTestAccess;
+#endif
     friend struct GlobalPanelSlopeTestAccess;
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;

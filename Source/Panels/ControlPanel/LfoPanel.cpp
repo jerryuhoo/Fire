@@ -3134,6 +3134,11 @@ void LfoPanel::removeBankLfo(int index)
 
 void LfoPanel::lookAndFeelChanged()
 {
+    if (fire::ui::isVintage(*this))
+    {
+        lfoSelectionPosition.snapTo(lfoSelectionPosition.target);
+        bankContent.repaint();
+    }
     chromeCache = {};
     if (auto* dialog = modulationMatrixDialog.getComponent())
         if (auto* content = dialog->getContentComponent())
@@ -3451,7 +3456,10 @@ void LfoPanel::animationTick(float deltaSeconds)
     }
 
     const auto previousSelectionPosition = lfoSelectionPosition.current;
-    lfoSelectionPosition.advance(deltaSeconds);
+    if (fire::ui::isVintage(*this))
+        lfoSelectionPosition.snapTo(lfoSelectionPosition.target);
+    else
+        lfoSelectionPosition.advance(deltaSeconds);
     if (! juce::approximatelyEqual(previousSelectionPosition, lfoSelectionPosition.current))
         bankContent.repaint();
 
@@ -3705,7 +3713,11 @@ void LfoPanel::setLfo(int newIndex)
     currentLfoIndex = newIndex;
     resetFlowPresentation();
     const auto row = std::find(visibleLfoSlots.begin(), visibleLfoSlots.end(), currentLfoIndex);
-    lfoSelectionPosition.setTarget(static_cast<float>(std::distance(visibleLfoSlots.begin(), row)));
+    const auto selectionPosition = static_cast<float>(std::distance(visibleLfoSlots.begin(), row));
+    if (fire::ui::isVintage(*this))
+        lfoSelectionPosition.snapTo(selectionPosition);
+    else
+        lfoSelectionPosition.setTarget(selectionPosition);
     revealSelectedLfo();
     const auto accent = fire::ui::lfoBankColour(currentLfoIndex);
     updateToolbarAppearance();

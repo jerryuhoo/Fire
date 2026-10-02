@@ -638,6 +638,8 @@ void FireAudioProcessorEditor::applySkin(fire::ui::Skin skin)
     if (previous == skin && getProperties().contains(fire::ui::skinProperty)) return;
     const juce::Component::SafePointer<FireAudioProcessorEditor> safe(this);
     fire::ui::setSkin(*this, skin);
+    if (skin == fire::ui::Skin::vintage)
+        workspaceSelection.snapTo(static_cast<float>(activeWorkspace));
     fireLookAndFeel.setSkin(skin);
     fire::ui::remapSkinColours(*this, previous, skin);
     if (!safe) return;
@@ -1350,7 +1352,12 @@ void FireAudioProcessorEditor::advanceAnimations(float deltaSeconds)
             ember.x -= 1.0f;
     }
 
-    if (workspaceSelection.advance(deltaSeconds))
+    if (fire::ui::isVintage(*this) && !workspaceSelection.isSettled())
+    {
+        workspaceSelection.snapTo(static_cast<float>(activeWorkspace));
+        repaint(navigationArea);
+    }
+    else if (!fire::ui::isVintage(*this) && workspaceSelection.advance(deltaSeconds))
         repaint(navigationArea);
 
     if (hostBypassIndicatorOpacity.advance(deltaSeconds, 0.10f))
@@ -1488,7 +1495,9 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
 
 void FireAudioProcessorEditor::drawWorkspaceSelection(juce::Graphics& g)
 {
-    if (navigationArea.isEmpty() || zoomButton.getToggleState())
+    // Vintage keys carry their own selected lamp; no sliding plate is drawn
+    // underneath them. Modern keeps its moving selection indicator.
+    if (fire::ui::isVintage(*this) || navigationArea.isEmpty() || zoomButton.getToggleState())
         return;
 
     const std::array<juce::Rectangle<float>, 3> tabBounds {
@@ -1879,7 +1888,7 @@ void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animate
     // Graph visibility callbacks can synchronously repaint, so changing the
     // source afterwards exposes one frame from the previous workspace.
     synchroniseHistorySourceForWorkspace(activeWorkspace);
-    if (animateSelection && isShowing() && ! navigationArea.isEmpty())
+    if (!fire::ui::isVintage(*this) && animateSelection && isShowing() && ! navigationArea.isEmpty())
         workspaceSelection.setTarget(static_cast<float>(activeWorkspace));
     else
         workspaceSelection.snapTo(static_cast<float>(activeWorkspace));

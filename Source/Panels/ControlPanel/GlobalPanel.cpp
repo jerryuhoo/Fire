@@ -611,6 +611,8 @@ void GlobalPanel::setRoundButton(juce::TextButton& button, juce::String, juce::S
 
 void GlobalPanel::lookAndFeelChanged()
 {
+    if (fire::ui::isVintage(*this))
+        selectionY.snapTo(selectionY.target);
     // A skin change can arrive at the same size and display scale. Never
     // reuse the previous skin's rasterised panel chrome in that case.
     invalidateChromeCache();
@@ -781,7 +783,14 @@ void GlobalPanel::animationTick(float deltaSeconds)
         return;
     }
 
-    bool changed = selectionY.advance(deltaSeconds);
+    bool changed = false;
+    if (fire::ui::isVintage(*this))
+    {
+        changed = !juce::approximatelyEqual(selectionY.current, selectionY.target);
+        selectionY.snapTo(selectionY.target);
+    }
+    else
+        changed = selectionY.advance(deltaSeconds);
 
     if (changed)
         repaint(tabAreaRect.expanded(juce::jmax(2, juce::roundToInt(3.0f * scale))));
@@ -822,7 +831,7 @@ void GlobalPanel::updateSelectionTarget(bool snap)
 
     const auto selectionInset = juce::jmax(0.5f, 1.0f * scale);
     const auto targetY = static_cast<float>(selectedSwitch->getY()) + selectionInset;
-    if (snap || ! selectionAnimationInitialised || ! isShowing())
+    if (snap || fire::ui::isVintage(*this) || ! selectionAnimationInitialised || ! isShowing())
     {
         selectionY.snapTo(targetY);
         selectionAnimationInitialised = true;

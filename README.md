@@ -1,14 +1,16 @@
 # Fire (Version 2.0.0) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://app.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
 
-![Alt text](Fire1.png?raw=true "Title")
+![Fire 2.0 Vintage skin with a sound-reactive Warm Triode tube and three-band processing](Fire1.png)
 
-![Alt text](Fire2.png?raw=true "Title")
+**Vintage · Amber Triode** — Walnut cabinet, hardware controls and tube filaments that respond to the input level, with Drive adding intensity.
 
-![Alt text](Fire3.png?raw=true "Title")
+![Fire 2.0 Modern skin with Tape Saturation, reel-to-reel hardware and three-band processing](Fire2.png)
+
+**Modern · Studio Tape** — Graphite and aluminium styling with signal-driven tape reels. Both skins share the same DSP and can be selected from **Menu → Skin** or **Settings**.
 
 ## 1. Introduce
 
-This is a multi-band distortion plugin [『Fire』](https://www.bluewingsmusic.com/fire.html). It can be used in DAWs which supports AU and Vst3 plugins such as Ableton Live, Fl Studio, etc.
+[『Fire』](https://www.bluewingsmusic.com/fire.html) is a multiband distortion and modulation effect for AU, VST3 and CLAP hosts. Build independent Band and Master effect chains with analogue distortion colours, dynamics, modulation, delay, reverb and granular processing. Explore 200 factory presets across ten collections in the full-page sound library.
 
 Demo video:
 

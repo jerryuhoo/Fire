@@ -890,12 +890,36 @@ TEST_CASE("LFO selection discards text that belongs to the old attachment",
 
     REQUIRE(valueLabel != nullptr);
     REQUIRE(valueLabel->isBeingEdited());
-    valueLabel->getCurrentTextEditor()->setText("19.0", false);
+    const juce::Component::SafePointer<juce::Label> oldValueLabel(valueLabel);
+    const juce::Component::SafePointer<juce::TextEditor> oldEditor(
+        valueLabel->getCurrentTextEditor());
+    REQUIRE(oldEditor != nullptr);
+    oldEditor->setText("19.0", false);
 
     lfoTwoButton->triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    const auto selectionStarted = juce::Time::getMillisecondCounter();
+    while (panel.getCurrentLfoIndex() != 1
+           && juce::Time::getMillisecondCounter() - selectionStarted < 1000)
+        if (! juce::MessageManager::getInstance()->runDispatchLoopUntil(5))
+            break;
+    REQUIRE(panel.getCurrentLfoIndex() == 1);
 
-    CHECK_FALSE(valueLabel->isBeingEdited());
+    // The new LFO accent calls Slider::colourChanged(), which synchronously
+    // rebuilds JUCE's value Label. The old raw pointer is no longer valid even
+    // when its allocation happens to be reused by the replacement Label.
+    CHECK(oldEditor == nullptr);
+    if (oldValueLabel != nullptr)
+        CHECK_FALSE(oldValueLabel->isBeingEdited());
+
+    juce::Label* currentValueLabel = nullptr;
+    for (auto* child : rateSlider->getChildren())
+        if (auto* candidate = dynamic_cast<juce::Label*>(child))
+        {
+            currentValueLabel = candidate;
+            break;
+        }
+    REQUIRE(currentValueLabel != nullptr);
+    CHECK_FALSE(currentValueLabel->isBeingEdited());
     CHECK(processor.treeState.getRawParameterValue(oldRateID)->load()
           == Catch::Approx(2.0f));
     CHECK(processor.treeState.getRawParameterValue(newRateID)->load()

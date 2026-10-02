@@ -38,6 +38,9 @@ inline int resolve(int legacy, int family) noexcept
 inline float transfer(int profile, float input) noexcept
 {
     if (!juce::isPositiveAndBelow(profile, count) || !std::isfinite(input)) return 0;
+    // Runtime libm and compiler-folded bias constants may differ by an ulp.
+    // Preserve the curve's exact zero crossing instead of exciting silence.
+    if (input == 0.0f) return 0.0f;
     const auto& p = profiles[static_cast<size_t>(profile)];
     const auto x = juce::jlimit(-32.0f, 32.0f, input) * p.gain;
     const auto soft = [](float value) {return value / std::sqrt(1.0f + value * value);};

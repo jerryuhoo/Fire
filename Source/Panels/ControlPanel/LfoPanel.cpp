@@ -3279,49 +3279,47 @@ void LfoPanel::resized()
     const auto topControlHeight =
         juce::jmax(16, juce::roundToInt(34.0f * uiScale));
     const auto topRowGap = juce::jmax(1, gap / 2);
-    // Keep buttons and the curve stationary when switching editing modes.
-    // The hidden picker consumes no horizontal slot, but never changes rows.
-    const auto requestedToolWidth = juce::roundToInt(478.0f * uiScale);
-    const bool useTwoTopRows = centreContent.getWidth() < requestedToolWidth;
-    const auto topRowsHeight = useTwoTopRows
-                                   ? topControlHeight * 2 + topRowGap
-                                   : topControlHeight;
+    // Reserve one toolbar row in both editing modes. Long Assign feedback
+    // keeps its complete semantic text, but may use its status icon visually
+    // instead of pushing the editor down or compressing all the hit targets.
     topRowArea = centreContent.removeFromTop(
-        juce::jmin(centreContent.getHeight(), topRowsHeight));
-    centreContent.removeFromTop(juce::jmin(centreContent.getHeight(),
-                                           topRowGap));
+        juce::jmin(centreContent.getHeight(), topControlHeight));
+    centreContent.removeFromTop(juce::jmin(centreContent.getHeight(), topRowGap));
     lfoEditor.setBounds(centreContent);
     emptyBankLabel.setBounds(centreContent);
 
-    const auto layoutTools = [uiScale](juce::Rectangle<int> row,
-                                         std::initializer_list<std::pair<juce::Component*, float>> items)
+    const int toolGap = juce::jmax(1, juce::roundToInt(4.0f * uiScale));
+    const int iconWidth = topControlHeight;
+    const int syncWidth = juce::jmax(iconWidth, juce::roundToInt(48.0f * uiScale));
+    const int pickerMinimum = juce::jmax(1, juce::roundToInt(72.0f * uiScale));
+    const int minimumToolbarWidth = 4 * iconWidth + syncWidth + pickerMinimum + 5 * toolGap;
+    // Only transient host sizes below the supported editor minimum need to
+    // shrink the icons. Keep even these layouts bounded and non-overlapping.
+    const auto fit = juce::jmin(1.0f, static_cast<float>(topRowArea.getWidth())
+        / static_cast<float>(juce::jmax(1, minimumToolbarWidth)));
+    const int fittedIcon = juce::roundToInt(iconWidth * fit);
+    const int fittedSync = juce::roundToInt(syncWidth * fit);
+    const int fittedGap = juce::roundToInt(toolGap * fit);
+    const int flexibleWidth = juce::jmax(0, topRowArea.getWidth()
+        - 3 * fittedIcon - fittedSync - 5 * fittedGap);
+    const int preferredAssign = juce::roundToInt(128.0f * uiScale * fit);
+    const int pickerWidth = juce::jmin(juce::roundToInt(120.0f * uiScale * fit),
+        juce::jmax(juce::roundToInt(pickerMinimum * fit), flexibleWidth - preferredAssign));
+    const int assignWidth = juce::jmin(preferredAssign, juce::jmax(0, flexibleWidth - pickerWidth));
+    auto tools = topRowArea;
+    const auto placeTool = [&tools, fittedGap](juce::Component& component, int width)
     {
-        const int gap = juce::jmax(1, juce::roundToInt(4 * uiScale));
-        float requested = 0;
-        int visibleCount = 0;
-        for (auto item : items)
-            if (item.first->isVisible()) { requested += item.second * uiScale; ++visibleCount; }
-        const auto available = juce::jmax(0, row.getWidth() - gap * juce::jmax(0, visibleCount - 1));
-        const auto fit = requested > 0 ? juce::jmin(1.0f, available / requested) : 1.0f;
-        for (auto item : items)
-        {
-            if (! item.first->isVisible()) continue;
-            const auto width = juce::jmin(row.getWidth(), juce::roundToInt(item.second * uiScale * fit));
-            item.first->setBounds(row.removeFromLeft(juce::jmax(0, width)));
-            row.removeFromLeft(juce::jmin(gap, row.getWidth()));
-        }
+        component.setBounds(tools.removeFromLeft(juce::jlimit(0, tools.getWidth(), width)));
+        tools.removeFromLeft(juce::jmin(fittedGap, tools.getWidth()));
     };
-    if (useTwoTopRows)
-    {
-        auto rows = topRowArea;
-        auto first = rows.removeFromTop(juce::jmin(topControlHeight, rows.getHeight()));
-        rows.removeFromTop(juce::jmin(topRowGap, rows.getHeight()));
-        layoutTools(first, {{&matrixButton, 34}, {&syncButton, 48}, {&assignButton, 184}});
-        layoutTools(rows, {{&editModeButton, 34}, {&brushModeButton, 34}, {&brushSelector, 120}});
-    }
-    else
-        layoutTools(topRowArea, {{&matrixButton, 34}, {&syncButton, 48}, {&assignButton, 184},
-                                {&editModeButton, 34}, {&brushModeButton, 34}, {&brushSelector, 120}});
+    placeTool(matrixButton, fittedIcon);
+    placeTool(syncButton, fittedSync);
+    placeTool(assignButton, assignWidth);
+    placeTool(editModeButton, fittedIcon);
+    placeTool(brushModeButton, fittedIcon);
+    // Reserve the picker even when hidden so mode changes do not move tools.
+    placeTool(brushSelector, pickerWidth);
+    updateAssignLabelVisibility();
 
     auto rightColumnWorkArea = rightColumnArea.reduced(contentInset);
     rightColumnWorkArea.removeFromTop(titleHeight);
@@ -3510,6 +3508,22 @@ void LfoPanel::updateFlowPresentation(float deltaSeconds)
     lfoEditor.setPlayheadOpacity(opacity);
 }
 
+void LfoPanel::updateAssignLabelVisibility()
+{
+    if (assignButton.getWidth() <= 0 || assignButton.getHeight() <= 0)
+        return;
+    const auto font = fire::ui::labelFont(juce::jmin(12.0f * scale,
+        static_cast<float>(assignButton.getHeight()) * 0.38f));
+    const auto availableTextWidth = static_cast<float>(assignButton.getWidth()) - 41.0f * scale;
+    const bool showText = juce::GlyphArrangement::getStringWidth(font, assignButton.getButtonText())
+        <= availableTextWidth;
+    if (static_cast<bool>(assignButton.getProperties().getWithDefault("fireToolLabel", true)) != showText)
+    {
+        assignButton.getProperties().set("fireToolLabel", showText);
+        assignButton.repaint();
+    }
+}
+
 void LfoPanel::updateToolbarAppearance()
 {
     const auto accent = currentLfoIndex >= 0 ? fire::ui::lfoBankColour(currentLfoIndex) : fire::ui::colours::modulation;
@@ -3523,6 +3537,7 @@ void LfoPanel::updateToolbarAppearance()
         ? juce::String("Arm Assign, then select a destination knob") : assignButton.getButtonText();
     assignButton.setTooltip(help);
     assignButton.setHelpText(help);
+    updateAssignLabelVisibility();
     assignButton.repaint();
 }
 

@@ -433,6 +433,7 @@ private:
     void resetFlowPresentation();
     void updateFlowPresentation(float deltaSeconds);
     void updateToolbarAppearance();
+    void updateAssignLabelVisibility();
 
     FireAudioProcessor& processor;
 

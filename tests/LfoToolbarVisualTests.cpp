@@ -82,8 +82,13 @@ void checkLayout(LfoPanel& panel, float scale)
             CHECK(std::abs(button.getWidth() - button.getHeight()) <= 1);
         controls.push_back(&button);
     }
-    CHECK(tool(panel, "lfo_assign").getWidth() >= juce::roundToInt(170.0f * scale) - 1);
+    CHECK(tool(panel, "lfo_assign").getWidth() <= juce::roundToInt(128.0f * scale));
     CHECK(tool(panel, "lfo_sync").getWidth() >= juce::roundToInt(48.0f * scale) - 1);
+    const auto firstRow = tool(panel, "lfo_matrix").getBounds();
+    // A second tool row previously consumed another 34 px plus its gap,
+    // substantially reducing the editable curve at the 1000 x 500 minimum.
+    CHECK(canvasBounds.getY() > firstRow.getBottom());
+    CHECK(canvasBounds.getY() - firstRow.getBottom() <= juce::roundToInt(7.0f * scale));
     auto& combo = brushMenu(panel);
     if (combo.isShowing()) controls.push_back(&combo);
     for (size_t first = 0; first < controls.size(); ++first)
@@ -91,6 +96,8 @@ void checkLayout(LfoPanel& panel, float scale)
         const auto bounds = panel.getLocalArea(controls[first], controls[first]->getLocalBounds());
         CAPTURE(controls[first]->getTitle(), bounds.toString());
         CHECK(panel.getLocalBounds().contains(bounds));
+        CHECK(bounds.getY() == firstRow.getY());
+        CHECK(bounds.getHeight() == firstRow.getHeight());
         CHECK(bounds.getBottom() <= canvasBounds.getY());
         for (size_t second = first + 1; second < controls.size(); ++second)
             CHECK_FALSE(bounds.intersects(panel.getLocalArea(controls[second], controls[second]->getLocalBounds())));
@@ -99,13 +106,22 @@ void checkLayout(LfoPanel& panel, float scale)
 
 void checkFeedbackFits(PrimaryTextButton& assign, float scale)
 {
-    // Measure the real theme font at its normal size. These status strings
-    // must fit beside the icon without ellipsis or horizontal compression.
+    // Keep full feedback available to assistive technology and tooltips.
+    // Only draw the text when it fits naturally beside the status icon.
     const auto font = fire::ui::labelFont(juce::jmin(12.0f * scale, assign.getHeight() * 0.38f));
     const auto textWidth = juce::GlyphArrangement::getStringWidth(font, assign.getButtonText());
     const auto availableWidth = assign.getWidth() - (16.0f + 20.0f + 5.0f) * scale;
     CAPTURE(assign.getButtonText(), textWidth, availableWidth, scale);
-    CHECK(textWidth <= availableWidth);
+    if (static_cast<bool>(assign.getProperties()["fireToolLabel"]))
+        CHECK(textWidth <= availableWidth);
+    else
+    {
+        CHECK(textWidth > availableWidth);
+        CHECK(assign.getTooltip() == assign.getButtonText());
+        CHECK(assign.getHelpText() == assign.getButtonText());
+        REQUIRE(assign.getAccessibilityHandler() != nullptr);
+        CHECK(assign.getAccessibilityHandler()->getHelp().contains(assign.getButtonText()));
+    }
 }
 
 bool snapshotsRequested()
@@ -141,7 +157,7 @@ void snapshot(juce::Component& component, const juce::String& name)
 }
 }
 
-TEST_CASE("LFO toolbar keeps themed hit targets and long Assign feedback across editor scales",
+TEST_CASE("LFO toolbar stays on one row with accessible Assign feedback across editor scales",
           "[lfo-toolbar][ui][layout][accessibility][snapshot]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
@@ -174,10 +190,16 @@ TEST_CASE("LFO toolbar keeps themed hit targets and long Assign feedback across 
         tool(panel, "lfo_edit_mode").triggerClick();
         REQUIRE_FALSE(brushMenu(panel).isShowing());
         checkLayout(panel, scale);
+        auto* curve = findToolbarComponent<LfoEditor>(panel, [](const auto&) { return true; });
+        REQUIRE(curve != nullptr);
+        const auto curveBounds = curve->getBounds();
+        const auto assignBounds = assign.getBounds();
         snapshot(editor, "lfo-toolbar-points-" + juce::String(width));
         tool(panel, "lfo_brush_mode").triggerClick();
         REQUIRE(brushMenu(panel).isShowing());
         checkLayout(panel, scale);
+        CHECK(curve->getBounds() == curveBounds);
+        CHECK(assign.getBounds() == assignBounds);
         snapshot(editor, "lfo-toolbar-brush-" + juce::String(width));
 
         panel.showAssignArmed(15);
@@ -195,6 +217,8 @@ TEST_CASE("LFO toolbar keeps themed hit targets and long Assign feedback across 
         CHECK_FALSE(assign.getAccessibilityHandler()->getCurrentState().isChecked());
         checkFeedbackFits(assign, scale);
         panel.showAssignUnchanged(15);
+        CHECK(assign.getBounds() == assignBounds);
+        CHECK(curve->getBounds() == curveBounds);
         CHECK(assign.getButtonText() == "LFO 16 Already Assigned");
         CHECK(static_cast<int>(assign.getProperties()["fireToolStatus"]) == 2);
         checkFeedbackFits(assign, scale);
@@ -211,7 +235,7 @@ TEST_CASE("LFO toolbar keeps themed hit targets and long Assign feedback across 
     }
 }
 
-TEST_CASE("Narrow LFO toolbars wrap without shrinking icon hit targets or covering the curve",
+TEST_CASE("Narrow LFO toolbars fit one row without shrinking icon hit targets or covering the curve",
           "[lfo-toolbar][ui][layout][narrow][snapshot]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
@@ -234,10 +258,52 @@ TEST_CASE("Narrow LFO toolbars wrap without shrinking icon hit targets or coveri
         tool(panel, "lfo_brush_mode").triggerClick();
         REQUIRE(brushMenu(panel).isShowing());
         checkLayout(panel, scale);
-        CHECK(tool(panel, "lfo_edit_mode").getY() > tool(panel, "lfo_matrix").getY());
+        CHECK(tool(panel, "lfo_edit_mode").getY() == tool(panel, "lfo_matrix").getY());
         panel.showAssignUnchanged(15);
         checkFeedbackFits(tool(panel, "lfo_assign"), scale);
         snapshot(panel, "lfo-toolbar-narrow-" + juce::String(juce::roundToInt(scale * 100)));
+    }
+    panel.setLookAndFeel(nullptr);
+}
+
+TEST_CASE("Compact Shape Forge toolbar reclaims the curve below the former wrap threshold",
+          "[lfo-toolbar][ui][layout][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    FireLookAndFeel theme;
+    LfoPanel panel(processor);
+    panel.setLookAndFeel(&theme);
+    panel.setSize(640, 300);
+    show(panel);
+    for (const int width : {640, 820, 940, 984})
+    {
+        CAPTURE(width);
+        panel.setSize(width, 300);
+        tool(panel, "lfo_brush_mode").triggerClick();
+        auto* curve = findToolbarComponent<LfoEditor>(panel, [](const auto&) { return true; });
+        REQUIRE(curve != nullptr);
+        if (width <= 940) CHECK(curve->getWidth() < 478);
+        checkLayout(panel, 1.0f);
+        const auto curveBounds = curve->getBounds();
+        panel.showAssignUnchanged(15);
+        checkFeedbackFits(tool(panel, "lfo_assign"), 1.0f);
+        CHECK(curve->getBounds() == curveBounds);
+        CHECK(curveBounds.getHeight() > 200);
+    }
+    // Hosts may momentarily restore below supported minimum dimensions.
+    // Those frames may reduce hit areas but must never overlap or spill out.
+    panel.setSize(400, 200);
+    std::vector<juce::Component*> controls;
+    for (const auto* id : {"lfo_matrix", "lfo_sync", "lfo_assign", "lfo_edit_mode", "lfo_brush_mode"})
+        controls.push_back(&tool(panel, id));
+    controls.push_back(&brushMenu(panel));
+    for (size_t index = 0; index < controls.size(); ++index)
+    {
+        CHECK(panel.getLocalBounds().contains(controls[index]->getBounds()));
+        for (size_t next = index + 1; next < controls.size(); ++next)
+            CHECK_FALSE(controls[index]->getBounds().intersects(controls[next]->getBounds()));
     }
     panel.setLookAndFeel(nullptr);
 }

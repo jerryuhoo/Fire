@@ -5410,7 +5410,8 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
 
 void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
-    audioActivitySequence.fetch_add(1, std::memory_order_relaxed);
+    if (buffer.getNumChannels() > 0 && buffer.getNumSamples() > 0)
+        audioActivitySequence.fetch_add(1, std::memory_order_relaxed);
     isBypassed.store(false, std::memory_order_release);
     hostBypassSessionActive = false;
 

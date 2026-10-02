@@ -18,19 +18,56 @@ public:
     {
         setInterceptsMouseClicks(false, false);
         setTitle("Analog hardware display");
-        setDescription("Tube filament brightness follows Drive and signal energy. Tape reels follow the audio transport.");
+        setDescription("Tube filaments follow input level, with Drive adding intensity. Silence extinguishes the glow. Tape reels follow the audio transport.");
     }
     void setState(int model, float drive, float peak, float dt = 1.0f / 60.0f, std::uint64_t sequence = std::numeric_limits<std::uint64_t>::max())
     {
         const auto now = juce::Time::getMillisecondCounter();
-        if (sequence != previousSequence) {previousSequence = sequence; lastFreshTick = now;}
-        if (sequence != std::numeric_limits<std::uint64_t>::max() && now - lastFreshTick > 180u) peak = 0;
+        auto time = juce::jlimit(0.0f, .1f, std::isfinite(dt) ? dt : 0.0f);
+        auto filamentTime = time;
+        if (sequence != untrackedSequence)
+        {
+            const auto elapsed = now - lastUiTick;
+            if (previousSequence == untrackedSequence || elapsed > 250u)
+            {
+                // A retained meter is not proof of current audio. Seed the
+                // stream on first display/resume, then wait for a new block.
+                previousSequence = sequence;
+                lastFreshTick = now;
+                receivedFreshAudio = false;
+                light = transport = 0.0f;
+            }
+            else
+            {
+                filamentTime = elapsed * .001f;
+                time = juce::jlimit(0.0f, .1f, elapsed * .001f);
+                if (sequence != previousSequence)
+                {
+                    previousSequence = sequence;
+                    lastFreshTick = now;
+                    receivedFreshAudio = true;
+                }
+            }
+            lastUiTick = now;
+            if (!receivedFreshAudio || now - lastFreshTick > 180u) peak = 0.0f;
+        }
+        else
+            previousSequence = untrackedSequence;
         model = juce::jlimit(0, analog::count - 1, model);
         const auto driveAmount = juce::jlimit(0.0f, 1.0f, std::isfinite(drive) ? drive * .01f : 0.0f);
         const auto input = juce::jlimit(0.0f, 1.0f, std::isfinite(peak) ? peak : 0.0f);
-        const auto target = .10f + .65f * std::sqrt(driveAmount) + .25f * std::sqrt(input);
-        const auto time = juce::jlimit(0.0f, .1f, dt);
-        light += (target - light) * (1 - std::exp(-time * 7));
+        const bool tube = model <= 5;
+        if (tube && currentModel > 5) light = 0.0f;
+        // Perceptual level mapping exposes quiet musical detail without
+        // amplifying the noise floor. Drive enhances light only when audio
+        // exists; its square-root taper is useful at normal low settings.
+        const auto level = juce::jlimit(0.0f, 1.0f,
+            (juce::Decibels::gainToDecibels(input, -72.0f) + 72.0f) / 72.0f);
+        const auto target = tube ? std::pow(level, 1.35f) * (.45f + .55f * std::sqrt(driveAmount))
+                                 : .10f + .65f * std::sqrt(driveAmount) + .25f * std::sqrt(input);
+        const auto response = tube ? (target > light ? 1.0f / .045f : 1.0f / .180f) : 7.0f;
+        light += (target - light) * (1 - std::exp(-(tube ? filamentTime : time) * response));
+        if (tube && target == 0.0f && light < .001f) light = 0.0f;
         const auto running = input > .0001f ? 1.0f : 0.0f;
         transport += (running - transport) * (1 - std::exp(-time * 5));
         const auto advance = time * transport * (1.5f + driveAmount * .5f);
@@ -39,11 +76,18 @@ public:
         phase = std::fmod(phase + advance, juce::MathConstants<float>::twoPi);
         rightPhase = std::fmod(rightPhase + advance * 1.075f, juce::MathConstants<float>::twoPi);
         const bool changed = currentModel != model || std::abs(light - paintedLight) > .003f
+                             || (light == 0.0f && paintedLight != 0.0f)
                              || std::abs(driveAmount - currentDrive) > .001f || (model == 11 && transport > .001f);
         currentModel = model; currentDrive = driveAmount;
         if (changed && isShowing()) {paintedLight = light; repaint();}
     }
-    float getFilamentBrightness() const noexcept {return light;}
+    float getFilamentBrightness() const noexcept
+    {
+        // The host may paint a retained editor before its UI timer resumes.
+        if (previousSequence != untrackedSequence
+            && juce::Time::getMillisecondCounter() - lastUiTick > 250u) return 0.0f;
+        return light;
+    }
     float getTransportPhase(int reel = 0) const noexcept {return reel == 0 ? phase : rightPhase;}
     void paint(juce::Graphics& g) override
     {
@@ -113,6 +157,15 @@ public:
         else paintCircuit(g, body);
     }
 private:
+    void visibilityChanged() override
+    {
+        if (!isShowing())
+        {
+            light = paintedLight = transport = 0.0f;
+            previousSequence = untrackedSequence;
+            receivedFreshAudio = false;
+        }
+    }
     struct Artwork
     {
         juce::Image off = juce::ImageFileFormat::loadFrom(BinaryData::analog_tube_off_png, BinaryData::analog_tube_off_pngSize);
@@ -145,12 +198,13 @@ private:
     {
         const bool vintage = isVintage(*this);
         const auto& images = artwork();
+        const auto brightness = getFilamentBrightness();
         const auto tubeHeight = body.getHeight() * .94f;
         auto tube = body.withSizeKeepingCentre(tubeHeight * .46f, tubeHeight).translated(0, -body.getHeight() * .025f);
         const auto socket = juce::Rectangle<float>(tube.getWidth() * 1.32f, body.getHeight() * .10f)
             .withCentre({tube.getCentreX(), tube.getBottom() - body.getHeight() * .014f});
         const auto glow = tube.expanded(tube.getWidth() * .38f, 0);
-        g.setGradientFill(juce::ColourGradient(juce::Colour(0xfff99a40).withAlpha(.12f + light * .18f), glow.getCentre(),
+        g.setGradientFill(juce::ColourGradient(juce::Colour(0xfff99a40).withAlpha(brightness * .30f), glow.getCentre(),
                                              juce::Colours::transparentBlack, glow.getCentre() + juce::Point<float>(glow.getWidth() * .5f, 0), true));
         g.fillEllipse(glow);
         // The perforated guard and socket ground the glass in the faceplate.
@@ -167,7 +221,7 @@ private:
         g.setColour(juce::Colour(0xffc0bba9).withAlpha(.6f)); g.drawEllipse(socket.reduced(1), .7f);
         g.setOpacity(.96f);
         g.drawImage(images.off, tube.getX(), tube.getY(), tube.getWidth(), tube.getHeight(), 354, 9, 518, 1220);
-        g.setOpacity(juce::jlimit(0.0f, 1.0f, light));
+        g.setOpacity(juce::jlimit(0.0f, 1.0f, brightness));
         g.drawImage(images.on, tube.getX(), tube.getY(), tube.getWidth(), tube.getHeight(), 354, 9, 518, 1220);
         g.setOpacity(1);
     }
@@ -311,8 +365,10 @@ private:
         g.drawText("COLOUR", juce::Rectangle<float>{chassis.getRight() - chassis.getWidth() * .30f, knob.y + 11 * unit, chassis.getWidth() * .27f, 11 * unit}, juce::Justification::centred);
     }
     int currentModel = 0;
-    float light = .1f, paintedLight = .1f, currentDrive = 0, transport = 0, phase = 0, rightPhase = .8f;
-    std::uint64_t previousSequence = std::numeric_limits<std::uint64_t>::max();
-    std::uint32_t lastFreshTick = 0;
+    static constexpr auto untrackedSequence = std::numeric_limits<std::uint64_t>::max();
+    float light = 0, paintedLight = 0, currentDrive = 0, transport = 0, phase = 0, rightPhase = .8f;
+    std::uint64_t previousSequence = untrackedSequence;
+    std::uint32_t lastFreshTick = 0, lastUiTick = 0;
+    bool receivedFreshAudio = false;
 };
 }

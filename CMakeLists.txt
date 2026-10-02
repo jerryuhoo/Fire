@@ -41,6 +41,11 @@ set(FORMATS AU VST3)
 string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" PROJECT_VERSION_NUMERIC "${CURRENT_VERSION}")
 project(${PROJECT_NAME} VERSION ${PROJECT_VERSION_NUMERIC})
 
+# Keep plugin, test and benchmark targets on the same standard as Fire.jucer.
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 # JUCE is setup as a submodule in the /JUCE folder
 # Locally, you must run `git submodule update --init --recursive` once
 # The recorded submodule revision pins the tested JUCE release (9.0.2).

@@ -39,7 +39,7 @@ Builds/Tests '[clouds],[clouds-ui],[control-panel][primary-button]' --reporter c
 独立 CPU 探针包含单个颗粒内核、反馈/混响和双向 SRC，不包含 Fire 其他 DSP、外层调制及 UI，不能直接当作 DAW 的 CPU 表读数。每个场景预热 1 秒，再取 5 轮各 2 秒音频处理时间的中位数：
 
 ```sh
-clang++ -std=c++17 -O3 -fno-fast-math -DNDEBUG -I Source \
+clang++ -std=c++23 -O3 -fno-fast-math -DNDEBUG -I Source \
   benchmarks/CloudsCpuProbe.cpp Source/DSP/Clouds/CloudsEngine.cpp \
   -o /tmp/fire-clouds-cpu
 /tmp/fire-clouds-cpu

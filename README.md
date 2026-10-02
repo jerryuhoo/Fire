@@ -109,6 +109,10 @@ Thank you for your understanding!
 
 ### ✅ OPTION 2 – Build with JUCE or CMake
 
+Fire uses **C++23** for both Projucer exports and CMake builds, including tests
+and benchmarks. Use a compiler with C++23 language-mode support. The standard
+is saved in `Fire.jucer`, so regenerating an IDE project retains this setting.
+
 The project pins **JUCE 9.0.2** in its `JUCE` submodule. Initialise submodules
 before building; CMake and every Projucer exporter use this local copy.
 To build plug-in bundles without installing them into the user's plug-in folders:

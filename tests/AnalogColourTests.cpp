@@ -120,3 +120,38 @@ TEST_CASE("Analog pages show hardware and the tube exposure follows Drive", "[an
     REQUIRE(processor.setShapeMode(1, -1, 3)); juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     CHECK_FALSE(hardware->isShowing());
 }
+
+TEST_CASE("Tape reels turn continuously across full rotations and transport changes", "[analog-colour][ui][hardware][animation][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    fire::ui::HardwareColourPanel panel;
+    constexpr auto twoPi = juce::MathConstants<float>::twoPi;
+    std::array<float, 2> previous {panel.getTransportPhase(0), panel.getTransportPhase(1)};
+    std::array<double, 2> distance {};
+    std::array<int, 2> fullRotations {};
+    for (int frame = 0; frame < 3600; ++frame)
+    {
+        // Vary the UI frame rate and Drive, pause, then resume the transport.
+        const float dt = frame % 3 == 0 ? 1.0f / 30.0f : 1.0f / 60.0f;
+        const float drive = frame < 900 ? 20.0f : frame < 1800 ? 95.0f : 50.0f;
+        const float peak = frame >= 1800 && frame < 2100 ? 0.0f : .2f;
+        panel.setState(11, drive, peak, dt);
+        for (int reel = 0; reel < 2; ++reel)
+        {
+            const auto index = static_cast<size_t>(reel);
+            const auto angle = panel.getTransportPhase(reel);
+            const auto step = std::remainder(angle - previous[index], twoPi);
+            CAPTURE(frame, reel, previous[index], angle);
+            REQUIRE(std::isfinite(angle));
+            // Forward motion must remain within one frame's maximum travel,
+            // including when either reel's visible orientation wraps to zero.
+            REQUIRE(step >= -1.0e-6f);
+            REQUIRE(step <= 2.0f * 1.075f * dt + 1.0e-5f);
+            if (angle < previous[index]) ++fullRotations[index];
+            distance[index] += step;
+            previous[index] = angle;
+        }
+    }
+    for (int turns : fullRotations) CHECK(turns > 10);
+    CHECK(distance[1] / distance[0] == Catch::Approx(1.075).margin(1.0e-4));
+}

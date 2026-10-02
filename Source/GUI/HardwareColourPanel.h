@@ -32,13 +32,17 @@ public:
         light += (target - light) * (1 - std::exp(-time * 7));
         const auto running = input > .0001f ? 1.0f : 0.0f;
         transport += (running - transport) * (1 - std::exp(-time * 5));
-        phase = std::fmod(phase + time * transport * (1.5f + driveAmount * .5f), juce::MathConstants<float>::twoPi);
+        const auto advance = time * transport * (1.5f + driveAmount * .5f);
+        // Each reel wraps its own angle. Scaling the already-wrapped left
+        // angle would snap the faster right reel backwards once per left turn.
+        phase = std::fmod(phase + advance, juce::MathConstants<float>::twoPi);
+        rightPhase = std::fmod(rightPhase + advance * 1.075f, juce::MathConstants<float>::twoPi);
         const bool changed = currentModel != model || std::abs(light - paintedLight) > .003f || (model == 11 && transport > .001f);
         currentModel = model;
         if (changed && isShowing()) {paintedLight = light; repaint();}
     }
     float getFilamentBrightness() const noexcept {return light;}
-    float getTransportPhase() const noexcept {return phase;}
+    float getTransportPhase(int reel = 0) const noexcept {return reel == 0 ? phase : rightPhase;}
     void paint(juce::Graphics& g) override
     {
         auto area = getLocalBounds().toFloat().reduced(4);
@@ -96,7 +100,7 @@ private:
         {
             const auto centre = reel == 0 ? left : right;
             juce::Graphics::ScopedSaveState save(g);
-            const auto angle = phase * (reel == 0 ? 1.0f : 1.075f) + (reel == 0 ? 0 : .8f);
+            const auto angle = getTransportPhase(reel);
             g.addTransform(juce::AffineTransform::rotation(angle, centre.x, centre.y));
             g.drawImage(image, juce::Rectangle<float>{size, size}.withCentre(centre), juce::RectanglePlacement::centred);
         }
@@ -126,7 +130,7 @@ private:
         g.setColour(juce::Colour(0xffa59b87)); g.drawEllipse(centre.x - 14, chassis.getBottom() - 43, 28, 28, 1);
     }
     int currentModel = 0;
-    float light = .1f, paintedLight = .1f, transport = 0, phase = 0;
+    float light = .1f, paintedLight = .1f, transport = 0, phase = 0, rightPhase = .8f;
     std::uint64_t previousSequence = std::numeric_limits<std::uint64_t>::max();
     std::uint32_t lastFreshTick = 0;
 };

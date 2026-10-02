@@ -12,6 +12,7 @@
 
 #include "LfoManager.h"
 #include "../GUI/InterfaceDefines.h"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -88,7 +89,7 @@ void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
     preparedSampleRate = std::isfinite(spec.sampleRate) && spec.sampleRate > 0.0 ? spec.sampleRate : 44100.0;
 
     // Keep the prepared capacity. Smaller blocks no longer resize this buffer on the audio thread.
-    const auto safeMaximumBlockSize = static_cast<int>(juce::jmin<uint64_t>(
+    const auto safeMaximumBlockSize = static_cast<int>(std::min<uint64_t>(
         spec.maximumBlockSize, static_cast<uint64_t>(std::numeric_limits<int>::max())));
     lfoOutputBuffer.setSize(fire::mod_sources::sourceCount, juce::jmax(1, safeMaximumBlockSize), false, true, false);
     auxiliary.prepare(preparedSampleRate);

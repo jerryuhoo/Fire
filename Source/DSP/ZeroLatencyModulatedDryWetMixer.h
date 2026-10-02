@@ -10,6 +10,7 @@
 
 #include "ModulatedValueProvider.h"
 #include "juce_dsp/juce_dsp.h"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -36,7 +37,7 @@ public:
         const auto channels = juce::jmax(1, static_cast<int>(spec.numChannels));
         const auto requestedCapacity = juce::jmax(
             1,
-            static_cast<int>(juce::jmin<juce::uint64>(
+            static_cast<int>(std::min<juce::uint64>(
                 spec.maximumBlockSize,
                 static_cast<juce::uint64>(std::numeric_limits<int>::max()))));
         const auto fifoCapacity = juce::nextPowerOfTwo(requestedCapacity);

@@ -59,7 +59,7 @@ struct StatePresetsScanTestAccess
             juce::jmax(0, limits.maximumCandidateFileCount),
             juce::jmax(0, limits.maximumDirectoryEntryCount),
             juce::jmax(0, limits.maximumRawDirectoryEntryCount),
-            juce::jmax<juce::int64>(0, limits.maximumParsedFileBytes)
+            std::max<juce::int64>(0, limits.maximumParsedFileBytes)
         };
     }
 

@@ -15,6 +15,7 @@
 #include "Utility/StrictNumberParser.h"
 #include "Utility/EditHistory.h"
 #include "Utility/FrozenAudioState.h"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -1344,7 +1345,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec, bool withInserts
     const auto numChannels = static_cast<int>(spec.numChannels);
     maximumPreparedBlockSize = juce::jmax(
         1,
-        static_cast<int>(juce::jmin<juce::uint64>(
+        static_cast<int>(std::min<juce::uint64>(
             spec.maximumBlockSize,
             static_cast<juce::uint64>(std::numeric_limits<int>::max()))));
     const auto maximumBlockSize = maximumPreparedBlockSize;

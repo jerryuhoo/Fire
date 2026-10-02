@@ -15,6 +15,7 @@
 #include "../../Utility/StrictNumberParser.h"
 #include "../../Utility/LfoBankParameters.h"
 #include "../../Utility/DriveCompensationParameters.h"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -1435,7 +1436,7 @@ namespace state
                 }
 
                 const auto parsedByteBudgetRemaining =
-                    juce::jmax<juce::int64>(
+                    std::max<juce::int64>(
                         0,
                         limits.maximumParsedFileBytes
                             - statistics.parsedFileBytes);

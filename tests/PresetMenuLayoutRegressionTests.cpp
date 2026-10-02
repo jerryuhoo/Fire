@@ -56,13 +56,39 @@ void dismissMenus()
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 }
 
+bool activateMenuHost(juce::Component& editor, juce::Button& menuButton)
+{
+    const auto started = juce::Time::getMillisecondCounter();
+    for (;;)
+    {
+        // X11 cannot grant input focus until the native window has mapped.
+        // Repeat the activation request while dispatching those native events.
+        editor.toFront(true);
+        menuButton.grabKeyboardFocus();
+        if (auto* peer = editor.getPeer(); peer != nullptr && peer->isFocused()
+            && menuButton.isShowing() && menuButton.hasKeyboardFocus(true))
+            return true;
+
+        if (juce::Time::getMillisecondCounter() - started >= 1000
+            || !juce::MessageManager::getInstance()->runDispatchLoopUntil(5))
+            return false;
+    }
+}
+
 void checkPresetMenuAtEditorSize(int width, int height, float expectedScale)
 {
+    const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay();
+    REQUIRE(display != nullptr);
+    const auto userArea = display->userBounds.getLargestIntegerWithin();
+
     FireAudioProcessor processor;
     processor.hasUpdateCheckBeenPerformed = true;
 
     auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
-    editor->setBounds(0, 0, width, height);
+    // Keep the header below system UI and its right-hand menu button on screen,
+    // even when the maximum test editor is wider than the available display.
+    editor->setBounds(userArea.getX() - juce::jmax(0, width - userArea.getWidth()),
+                      userArea.getY(), width, height);
     editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
     editor->setVisible(true);
 
@@ -70,7 +96,10 @@ void checkPresetMenuAtEditorSize(int width, int height, float expectedScale)
     REQUIRE(menuButton != nullptr);
     auto* stateComponent = findStateComponent(menuButton);
     REQUIRE(stateComponent != nullptr);
+    REQUIRE(activateMenuHost(*editor, *menuButton));
 
+    // Native mapping/focus may adjust the host position. Capture the same final
+    // target bounds that the menu activation path will use.
     const auto options = stateComponent->getPresetMenuOptionsForTesting();
     CHECK(options.getTargetComponent() == menuButton);
     CHECK(options.getTopLevelTargetComponent() == menuButton);
@@ -82,18 +111,13 @@ void checkPresetMenuAtEditorSize(int width, int height, float expectedScale)
           == juce::roundToInt(30.0f * expectedScale));
     CHECK_FALSE(options.hasWatchedComponentBeenDeleted());
 
-    if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()
-        == nullptr)
-    {
-        SUCCEED("Headless runner has no display for a real PopupMenu window");
-        return;
-    }
-
-    menuButton->triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
     const juce::ScopeGuard cleanup { [] { dismissMenus(); } };
+    menuButton->triggerClick();
 
-    auto* popup = findPopupMenu(*editor);
+    // PrimaryTextButton activates synchronously, and showMenuAsync constructs
+    // its MenuWindow before returning. Inspect that window before unrelated
+    // native focus/pointer events can legitimately dismiss the popup.
+    const juce::Component::SafePointer<juce::Component> popup(findPopupMenu(*editor));
     REQUIRE(popup != nullptr);
     CHECK(popup->getParentComponent() == editor.get());
     CHECK(popup->getWidth() >= options.getMinimumWidth());
@@ -104,6 +128,10 @@ void checkPresetMenuAtEditorSize(int width, int height, float expectedScale)
 
     const auto popupScreenBounds = popup->getScreenBounds();
     const auto targetScreenBounds = menuButton->getScreenBounds();
+    INFO("popup screen bounds: " << popupScreenBounds.toString().toStdString());
+    INFO("target screen bounds: " << targetScreenBounds.toString().toStdString());
+    INFO("editor screen bounds: " << editor->getScreenBounds().toString().toStdString());
+    INFO("display user area: " << userArea.toString().toStdString());
     CHECK(std::abs(popupScreenBounds.getY() - targetScreenBounds.getBottom()) <= 1);
 }
 } // namespace

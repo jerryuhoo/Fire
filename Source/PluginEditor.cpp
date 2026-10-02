@@ -1206,17 +1206,52 @@ void FireAudioProcessorEditor::rebuildBackgroundCache()
         cacheGraphics.fillRect(header);
         if (fire::ui::isVintage(*this))
         {
-            fire::ui::drawWalnut(cacheGraphics, header, 0);
             const auto scale = fireLookAndFeel.scale;
-            const auto plate = header.withTrimmedLeft(182 * scale).withTrimmedRight(110 * scale).reduced(3 * scale,5 * scale);
-            fire::ui::drawPanel(cacheGraphics,plate,fire::ui::paletteFor(*this).accent,false,fire::ui::Skin::vintage);
+            fire::ui::drawWalnutRail(cacheGraphics, header, scale);
+
+            // One recessed metal fascia carries the branding and every control.
+            // The thin wood frame has a routed lip, rather than a separate
+            // light-coloured control tray floating over a texture.
+            const auto plate = header.reduced(8.0f * scale, 0.0f)
+                                     .withTrimmedTop(7.0f * scale)
+                                     .withTrimmedBottom(6.0f * scale);
+            const auto radius = 2.0f * scale;
+            cacheGraphics.setColour(juce::Colour(0xff160f0a).withAlpha(0.90f));
+            cacheGraphics.fillRoundedRectangle(plate.expanded(1.5f * scale), radius + scale);
+            juce::ColourGradient metal(juce::Colour(0xff3c3d36), plate.getTopLeft(),
+                                       juce::Colour(0xff252822), plate.getBottomLeft(), false);
+            metal.addColour(0.20, juce::Colour(0xff34362f));
+            metal.addColour(0.76, juce::Colour(0xff2d3029));
+            cacheGraphics.setGradientFill(metal);
+            cacheGraphics.fillRoundedRectangle(plate, radius);
+            cacheGraphics.setColour(juce::Colour(0xffc7bea0).withAlpha(0.19f));
+            cacheGraphics.drawRoundedRectangle(plate.reduced(0.5f * scale), radius, 0.7f * scale);
+
+            // A shaded upper lip makes the faceplate sit inside the cabinet;
+            // its lower rim catches the same overhead light as the wood bevel.
+            const auto inset = plate.reduced(scale);
+            juce::ColourGradient lip(juce::Colours::black.withAlpha(0.30f), inset.getTopLeft(),
+                                    juce::Colours::transparentBlack,
+                                    inset.getTopLeft().translated(0.0f, 3.5f * scale), false);
+            cacheGraphics.setGradientFill(lip);
+            cacheGraphics.fillRect(inset.withHeight(3.5f * scale));
+            cacheGraphics.setColour(juce::Colour(0xffc5baa0).withAlpha(0.17f));
+            cacheGraphics.drawLine(plate.getX() + radius, plate.getBottom() - 0.5f * scale,
+                                   plate.getRight() - radius, plate.getBottom() - 0.5f * scale,
+                                   0.75f * scale);
+
+            const auto shadow = header.withY(header.getBottom()).withHeight(7.0f * scale);
+            cacheGraphics.setGradientFill(juce::ColourGradient(
+                juce::Colour(0xff352719).withAlpha(0.27f), shadow.getTopLeft(),
+                juce::Colour(0xff352719).withAlpha(0.0f), shadow.getBottomLeft(), false));
+            cacheGraphics.fillRect(shadow);
         }
-        cacheGraphics.setColour(
-            fire::ui::paletteFor(*this).hairline.withAlpha(0.82f));
-        cacheGraphics.drawHorizontalLine(
-            headerArea.getBottom() - 1,
-            0.0f,
-            static_cast<float>(getWidth()));
+        else
+        {
+            cacheGraphics.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(0.82f));
+            cacheGraphics.drawHorizontalLine(headerArea.getBottom() - 1, 0.0f,
+                                              static_cast<float>(getWidth()));
+        }
     }
 
     backgroundCache = std::move(newBackgroundCache);

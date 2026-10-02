@@ -573,8 +573,8 @@ Shape also offers twelve **Analog Hardware** colours: Warm Triode, Bright Pentod
 Analog pages use a hardware faceplate. Tube filaments brighten with Drive and input energy; the tape transport turns while audio arrives and winds down when callbacks stop. The artwork is cached and animation runs only while its panel is visible. Both Band Shape and independently added Master/Band Shape instances offer these colours; each added analog Shape has its own Drive control.
 
 Choose **Menu → Skin → Modern / Vintage**, or use the two appearance buttons
-in **Settings**. Modern uses graphite and aluminium; Vintage combines a real walnut top rail
-with a clean ivory metal chassis, physical keycaps, dark ribbed bakelite knobs
+in **Settings**. Modern uses graphite and aluminium; Vintage combines a bevelled walnut cabinet rail
+and recessed charcoal control fascia with a clean ivory metal chassis, physical keycaps, dark ribbed bakelite knobs
 and cream scales. The choice is saved as a local
 appearance preference. Existing open instances keep their selected skin;
 new instances use the saved preference. Switching skins preserves the current

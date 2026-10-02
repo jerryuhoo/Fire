@@ -3,6 +3,7 @@
 #include "FireTheme.h"
 #include "Skin.h"
 #include "PrimaryButton.h"
+#include "LookAndFeel.h"
 
 #include <cmath>
 #include <functional>
@@ -203,7 +204,10 @@ private:
                 return;
             const auto scale = juce::jlimit(0.4f, 3.0f, getHeight() / 32.0f);
             const auto& palette = paletteFor(*this);
-            const auto currentAccent = accent == colours::textMuted ? palette.textMuted
+            const bool vintage = isVintage(*this);
+            const auto currentAccent = vintage
+                ? vintageHeaderLegend(accent == colours::gold || accent == colours::positive)
+                : accent == colours::textMuted ? palette.textMuted
                 : accent == colours::textSecondary ? palette.textSecondary : accent;
             const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
             const auto radius = juce::jmin(Metrics::radiusSmall * scale, bounds.getHeight() * 0.5f);
@@ -216,23 +220,26 @@ private:
                 (getToggleState() ? 1.0f : 0.56f * hover + 0.72f * press + 0.34f * focus)
                     * (1.0f - disabled));
 
-            // Match shares the header's quiet idle chrome. Selection and
-            // keyboard focus use short rails, leaving the learning track clear.
-            if (washAlpha > 0.001f)
+            // Vintage Match uses the same dark physical key and inset status
+            // window as the surrounding instrument header.
+            if (vintage)
+                drawVintageHeaderKey(g, bounds, scale, hover, press, focus, alpha,
+                                     getToggleState(), getComponentID() == "loudnessMatchLearn");
+            else if (washAlpha > 0.001f)
             {
                 const auto wash = getToggleState() ? palette.raised
                     : palette.surface2.interpolatedWith(palette.raised, press);
                 g.setColour(wash.withAlpha(washAlpha));
                 g.fillRoundedRectangle(bounds, radius);
             }
-            if (getToggleState())
+            if (getToggleState() && !vintage)
             {
                 const auto rail = bounds.withSizeKeepingCentre(bounds.getWidth() * 0.42f, 2.0f * scale)
                                         .withBottomY(bounds.getBottom());
                 g.setColour(currentAccent.withAlpha(0.72f * (1.0f - disabled)));
                 g.fillRect(rail);
             }
-            if (focus > 0.001f)
+            if (focus > 0.001f && !vintage)
             {
                 const auto rail = bounds.withSizeKeepingCentre(bounds.getWidth() * 0.55f, scale)
                                         .withY(bounds.getY());
@@ -247,10 +254,18 @@ private:
                 g.setColour(currentAccent.withAlpha(0.72f));
                 g.fillRect(track.withWidth(track.getWidth() * progress));
             }
-            g.setColour(currentAccent.brighter(0.14f * hover).darker(0.08f * press).withMultipliedAlpha(alpha));
             g.setFont(bodyFont(10.5f * scale));
-            g.drawFittedText(getButtonText(), getLocalBounds().reduced(3, 2),
-                             juce::Justification::centred, 1);
+            auto textBounds = getLocalBounds().reduced(3, 2);
+            if (vintage)
+            {
+                if (getComponentID() == "loudnessMatchToggle")
+                    textBounds.translate(0, juce::roundToInt((press * 1.35f - 0.6f) * scale));
+                g.setColour(juce::Colour(0xff090b06).withAlpha(0.62f * alpha));
+                g.drawFittedText(getButtonText(), textBounds.translated(0, juce::jmax(1, juce::roundToInt(scale))),
+                                 juce::Justification::centred, 1);
+            }
+            g.setColour(currentAccent.brighter(0.14f * hover).darker(0.08f * press).withMultipliedAlpha(alpha));
+            g.drawFittedText(getButtonText(), textBounds, juce::Justification::centred, 1);
         }
 
         juce::Colour accent = colours::textSecondary;

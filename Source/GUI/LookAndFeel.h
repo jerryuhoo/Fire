@@ -24,6 +24,79 @@
 
 namespace fire::ui
 {
+inline bool isVintageHeaderControl(const juce::Component& component)
+{
+    for (auto* owner = &component; owner != nullptr; owner = owner->getParentComponent())
+    {
+        const auto& id = owner->getComponentID();
+        if (id.startsWith("header_") || id == "loudnessMatchToggle" || id == "loudnessMatchLearn")
+            return true;
+    }
+    return false;
+}
+
+inline juce::Colour vintageHeaderLegend(bool lit = false) noexcept
+{
+    return lit ? juce::Colour(0xffe8be78) : juce::Colour(0xffe6dfcc);
+}
+
+inline void drawVintageHeaderKey(juce::Graphics& g,
+                                 juce::Rectangle<float> bounds,
+                                 float scale,
+                                 float hover,
+                                 float press,
+                                 float focus,
+                                 float opacity,
+                                 bool selected,
+                                 bool displayWell = false)
+{
+    if (bounds.isEmpty()) return;
+    const auto unit = juce::jmax(0.65f, scale);
+    const auto radius = juce::jmin(3.0f * unit, bounds.getHeight() * 0.15f);
+    const auto depth = juce::jmin(2.5f * unit, bounds.getHeight() * 0.105f);
+    const auto shell = bounds.reduced(0.55f * unit);
+    const auto travel = displayWell ? 0.0f : press * depth * 0.65f;
+    const auto face = shell.withTrimmedBottom(displayWell ? 0.5f * unit : depth)
+        .translated(0.0f, travel);
+
+    g.setColour(juce::Colour(0xff11120f).withAlpha(0.82f * opacity));
+    g.fillRoundedRectangle(bounds, radius + 0.45f * unit);
+    g.setColour(juce::Colour(0xff111410).withAlpha(opacity));
+    g.fillRoundedRectangle(shell, radius);
+    const auto top = displayWell ? juce::Colour(0xff22261f)
+        : juce::Colour(0xff52554b).brighter(hover * 0.045f).darker(press * 0.10f);
+    const auto bottom = displayWell ? juce::Colour(0xff30332b)
+        : juce::Colour(0xff32352d).darker(press * 0.09f);
+    juce::ColourGradient key(top.withAlpha(opacity), face.getX(), face.getY(),
+                            bottom.withAlpha(opacity), face.getX(), face.getBottom(), false);
+    if (!displayWell) key.addColour(0.40, juce::Colour(0xff40443a).withAlpha(opacity));
+    g.setGradientFill(key);
+    g.fillRoundedRectangle(face, radius);
+    g.setColour(juce::Colour(0xff050703).withAlpha(0.54f * opacity));
+    g.drawRoundedRectangle(face, radius, 0.65f * unit);
+
+    const auto line = face.reduced(1.0f * unit);
+    g.setColour((displayWell ? juce::Colour(0xff080b06) : juce::Colour(0xffa4aa97))
+                    .withAlpha((displayWell ? 0.62f : 0.34f - press * 0.15f) * opacity));
+    g.drawLine(line.getX() + radius, line.getY(), line.getRight() - radius, line.getY(), 0.7f * unit);
+    g.setColour(juce::Colour(0xffb7bcaa).withAlpha((displayWell ? 0.14f : 0.035f) * opacity));
+    g.drawLine(line.getX() + radius, line.getBottom(), line.getRight() - radius, line.getBottom(), 0.65f * unit);
+    if (selected && bounds.getWidth() > 20.0f * unit)
+    {
+        const auto lamp = juce::Rectangle<float>(7.0f * unit, 1.3f * unit)
+            .withCentre({face.getCentreX(), face.getBottom() - 2.2f * unit});
+        g.setColour(juce::Colour(0xff060804).withAlpha(opacity));
+        g.fillRoundedRectangle(lamp.expanded(0.65f * unit), unit);
+        g.setColour(juce::Colour(0xffefb954).withAlpha(0.98f * opacity));
+        g.fillRoundedRectangle(lamp, 0.55f * unit);
+    }
+    if (focus > 0.01f)
+    {
+        g.setColour(vintageHeaderLegend(true).withAlpha(focus * 0.62f * opacity));
+        g.drawRoundedRectangle(bounds, radius + 0.45f * unit, 0.85f * unit);
+    }
+}
+
 inline float headerInteractionWashAlpha(float hover,
                                         float press,
                                         float focus,
@@ -297,7 +370,11 @@ public:
         auto base = themeColour(box.findColour(juce::ComboBox::backgroundColourId))
                         .interpolatedWith(themeColour(colours::raised), juce::jmax(focus * 0.85f, hover * 0.38f));
         base = base.darker(press * 0.10f).interpolatedWith(themeColour(colours::surface0), disabled * 0.48f);
-        if (currentSkin == Skin::vintage)
+        const bool darkHeader = currentSkin == Skin::vintage && isVintageHeaderControl(box);
+        if (darkHeader)
+            drawVintageHeaderKey(g, bounds, scale, hover, press, focus,
+                                 1.0f - disabled * 0.55f, false, true);
+        else if (currentSkin == Skin::vintage)
             drawVintageSurface(g, bounds, Metrics::radiusSmall * scale,
                                base, box.findColour(juce::ComboBox::focusedOutlineColourId),
                                press, focus, 1.0f - disabled * 0.65f);
@@ -314,7 +391,7 @@ public:
         arrow.startNewSubPath(centre.x - halfWidth, centre.y - halfWidth * 0.35f);
         arrow.lineTo(centre.x, centre.y + halfWidth * 0.55f);
         arrow.lineTo(centre.x + halfWidth, centre.y - halfWidth * 0.35f);
-        g.setColour(vintageInk(box.findColour(juce::ComboBox::arrowColourId))
+        g.setColour((darkHeader ? vintageHeaderLegend(true) : vintageInk(box.findColour(juce::ComboBox::arrowColourId)))
                         .withMultipliedAlpha(0.9f - 0.6f * disabled));
         g.strokePath(arrow, juce::PathStrokeType(1.5f * scale,
                                                 juce::PathStrokeType::curved,
@@ -426,7 +503,9 @@ public:
         if (! label.isBeingEdited())
         {
             auto textArea = label.getBorderSize().subtractedFrom(label.getLocalBounds());
-            g.setColour(vintageInk(themeColour(label.findColour(juce::Label::textColourId)))
+            g.setColour((currentSkin == Skin::vintage && isVintageHeaderControl(label)
+                            ? vintageHeaderLegend()
+                            : vintageInk(themeColour(label.findColour(juce::Label::textColourId))))
                             .withMultipliedAlpha(enabledAlpha));
             g.setFont(getLabelFont(label));
             g.drawFittedText(label.getText(), textArea, label.getJustificationType(),
@@ -595,6 +674,19 @@ public:
         if (accent.isTransparent() || accent == juce::Colours::black)
             accent = colours::flame;
 
+        if (currentSkin == Skin::vintage && isVintageHeaderControl(button))
+        {
+            drawVintageHeaderKey(g, bounds, scale, hoverAmount, pressAmount, focusAmount,
+                                 1.0f - disabledAmount * 0.52f, button.getToggleState(),
+                                 id == "header_preset_browser" || id == "header_preset");
+            const auto legend = vintageHeaderLegend(true).withMultipliedAlpha(1.0f - disabledAmount * 0.52f);
+            if (id == "header_previous" || id == "header_next")
+                drawArrowIcon(g, bounds, id, legend);
+            else if (id == "header_menu")
+                drawMenuIcon(g, bounds, legend);
+            return;
+        }
+
         if (static_cast<bool>(button.getProperties().getWithDefault("fireToolButton", false)))
         {
             accent = button.findColour(juce::TextButton::textColourOnId);
@@ -743,6 +835,7 @@ public:
         highlighted = animation.hover > 0.001f;
         down = animation.press > 0.001f;
         const auto id = button.getComponentID();
+        const bool darkHeader = currentSkin == Skin::vintage && isVintageHeaderControl(button);
         const auto icon = static_cast<Icon>(static_cast<int>(button.getProperties().getWithDefault("fireToolIcon", 0)));
         if (icon != Icon::none)
         {
@@ -752,8 +845,9 @@ public:
                                                                     : juce::TextButton::textColourOffId);
             if (status == 2) colour = colours::positive;
             else if (status == 3) colour = colours::warning;
-            colour = vintageInk(themeColour(colour)).interpolatedWith(themeColour(colours::textPrimary), animation.hover * 0.25f)
-                .withMultipliedAlpha(1.0f - animation.disabled * 0.68f);
+            colour = darkHeader ? vintageHeaderLegend(button.getToggleState() || status == 2 || status == 3)
+                : vintageInk(themeColour(colour)).interpolatedWith(themeColour(colours::textPrimary), animation.hover * 0.25f);
+            colour = colour.withMultipliedAlpha(1.0f - animation.disabled * 0.68f);
             auto area = button.getLocalBounds().toFloat().reduced(8 * scale, 3 * scale);
             auto iconBounds = labelled ? area.removeFromLeft(20 * scale) : area;
             const auto side = juce::jmin(19 * scale, iconBounds.getHeight());
@@ -795,9 +889,13 @@ public:
 
         auto colour = button.findColour(button.getToggleState() ? juce::TextButton::textColourOnId
                                                                 : juce::TextButton::textColourOffId);
-        colour = vintageInk(themeColour(colour)).brighter(0.14f * animation.hover)
-                       .darker(0.08f * animation.press)
-                       .interpolatedWith(themeColour(colours::textMuted).withAlpha(0.45f), animation.disabled);
+        if (darkHeader)
+            colour = vintageHeaderLegend(button.getToggleState() || id == "header_ab")
+                .brighter(animation.hover * 0.045f).withMultipliedAlpha(1.0f - animation.disabled * 0.52f);
+        else
+            colour = vintageInk(themeColour(colour)).brighter(0.14f * animation.hover)
+                           .darker(0.08f * animation.press)
+                           .interpolatedWith(themeColour(colours::textMuted).withAlpha(0.45f), animation.disabled);
 
         g.setColour(colour);
         g.setFont(getTextButtonFont(button, button.getHeight()));
@@ -812,8 +910,10 @@ public:
         }
         if (currentSkin == Skin::vintage)
         {
-            textBounds.translate(0, juce::roundToInt((animation.press * 1.35f - 0.6f) * scale));
-            g.setColour(juce::Colour(0xfffffff2).withAlpha(0.62f * (1.0f - animation.disabled)));
+            if (id != "header_preset_browser" && id != "header_preset")
+                textBounds.translate(0, juce::roundToInt((animation.press * 1.35f - 0.6f) * scale));
+            g.setColour((darkHeader ? juce::Colour(0xff090b06) : juce::Colour(0xfffffff2))
+                            .withAlpha(0.62f * (1.0f - animation.disabled)));
             g.drawFittedText(button.getButtonText(), textBounds.translated(0, juce::jmax(1, juce::roundToInt(scale))),
                              moduleRail ? juce::Justification::centredLeft
                                         : juce::Justification::centred, 1);

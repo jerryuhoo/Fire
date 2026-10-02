@@ -24,6 +24,57 @@
 namespace
 {
 constexpr juce::int64 maximumPresetFileBytes = 12 * 1024 * 1024;
+juce::CriticalSection& browserPreferencesLock()
+{ static juce::CriticalSection lock; return lock; }
+
+std::unique_ptr<juce::XmlElement> readBrowserPreferences(const juce::File& directory)
+{
+    const auto file = directory.getChildFile(".fire-library.xml");
+    if (!file.exists())
+    {
+        auto result = std::make_unique<juce::XmlElement>("FIRE_LIBRARY");
+        result->setAttribute("version", 1); return result;
+    }
+    if (file.isSymbolicLink() || file.getSize() > 2 * 1024 * 1024) return nullptr;
+    auto result = juce::XmlDocument::parse(file);
+    if (!result || !result->hasTagName("FIRE_LIBRARY") || result->getIntAttribute("version") != 1
+        || result->getNumChildElements() > 8192) return nullptr;
+    return result;
+}
+
+juce::XmlElement* browserPreference(juce::XmlElement& preferences, const juce::String& key, bool create = false)
+{
+    for (auto* child : preferences.getChildIterator())
+        if (child->hasTagName("ITEM") && child->getStringAttribute("key") == key) return child;
+    if (!create) return nullptr;
+    auto* result = preferences.createNewChildElement("ITEM"); result->setAttribute("key", key); return result;
+}
+
+bool writeBrowserPreferences(const juce::File& directory, const juce::XmlElement& preferences)
+{
+    juce::XmlElement compact(preferences);
+    for (auto* item = compact.getFirstChildElement(); item;)
+    {
+        auto* next = item->getNextElement();
+        if (!item->getBoolAttribute("favourite") && !item->getBoolAttribute("hidden") && item->getStringAttribute("archive").isEmpty())
+            compact.removeChildElement(item, true);
+        item = next;
+    }
+    if (compact.getNumChildElements() > 8192 || compact.toString().getNumBytesAsUTF8() > 2 * 1024 * 1024) return false;
+    if (directory.createDirectory().failed()) return false;
+    const auto file = directory.getChildFile(".fire-library.xml");
+    if (file.isSymbolicLink()) return false;
+    juce::TemporaryFile temporary(file);
+    return compact.writeTo(temporary.getFile()) && temporary.overwriteTargetFileWithTemporary();
+}
+
+bool hasSymbolicPresetPath(const juce::File& file, const juce::File& root)
+{
+    if (!file.isAChildOf(root)) return true;
+    for (auto path = file; path != root; path = path.getParentDirectory())
+        if (path.isSymbolicLink()) return true;
+    return false;
+}
 constexpr int maximumPresetFolderDepth = 16;
 constexpr int maximumPresetCount = 4096;
 constexpr int maximumPresetCandidateCount = maximumPresetCount * 2;
@@ -1564,8 +1615,10 @@ namespace state
         return expandedFactoryPreset.get();
     }
 
-    std::vector<StatePresets::BrowserEntry> StatePresets::getBrowserEntries() const
+    std::vector<StatePresets::BrowserEntry> StatePresets::getBrowserEntries(bool includeRemoved) const
     {
+        std::unique_ptr<juce::XmlElement> preferences;
+        {const juce::ScopedLock lock(browserPreferencesLock()); preferences = readBrowserPreferences(presetFile);}
         const juce::ScopedLock lock(identityLock);
         std::vector<BrowserEntry> result;
         std::function<void(const juce::XmlElement&, juce::String)> gather = [&](const auto& root, juce::String folder)
@@ -1576,12 +1629,87 @@ namespace state
                 else if (child->hasAttribute("presetName"))
                 {
                     const bool factory = child->getBoolAttribute("factoryPreset");
-                    result.push_back({child->getTagName(), child->getStringAttribute("presetKey"), child->getStringAttribute("presetName"),
-                        child->getStringAttribute("presetCategory", factory ? folder : "User"), child->getStringAttribute("presetDescription"), factory});
+                    const auto key = child->getStringAttribute("presetKey");
+                    auto* preference = preferences ? browserPreference(*preferences, key) : nullptr;
+                    const bool hidden = factory && preference && preference->getBoolAttribute("hidden");
+                    if (!hidden || includeRemoved)
+                        result.push_back({child->getTagName(), key, child->getStringAttribute("presetName"),
+                            child->getStringAttribute("presetCategory", factory ? folder : "User"), child->getStringAttribute("presetDescription"),
+                            factory, preference && preference->getBoolAttribute("favourite"), hidden});
                 }
             }
         };
-        gather(mPresetXml, {}); return result;
+        gather(mPresetXml, {});
+        if (includeRemoved && preferences)
+            for (auto* item : preferences->getChildIterator())
+            {
+                const auto archive = item->getStringAttribute("archive");
+                if (!item->hasTagName("ITEM") || archive.isEmpty() || archive.containsAnyOf("/\\")
+                    || !archive.endsWith(".fire-trash")) continue;
+                if (presetFile.getChildFile(".fire-recycle").getChildFile(archive).existsAsFile())
+                    result.push_back({{}, item->getStringAttribute("key"), item->getStringAttribute("name"), "User",
+                        item->getStringAttribute("description"), false, item->getBoolAttribute("favourite"), true});
+            }
+        return result;
+    }
+
+    bool StatePresets::setPresetFavourite(const juce::String& key, bool favourite)
+    {
+        const juce::ScopedLock lock(browserPreferencesLock());
+        const auto entries = getBrowserEntries(true);
+        if (std::none_of(entries.begin(), entries.end(), [&](const auto& entry) {return entry.key == key;})) return false;
+        auto preferences = readBrowserPreferences(presetFile); if (!preferences) return false;
+        browserPreference(*preferences, key, true)->setAttribute("favourite", favourite);
+        return writeBrowserPreferences(presetFile, *preferences);
+    }
+
+    bool StatePresets::removeBrowserPreset(const juce::String& key)
+    {
+        const juce::ScopedLock lock(browserPreferencesLock());
+        const auto entries = getBrowserEntries();
+        const auto found = std::find_if(entries.begin(), entries.end(), [&](const auto& entry) {return entry.key == key;});
+        if (found == entries.end()) return false;
+        auto preferences = readBrowserPreferences(presetFile); if (!preferences) return false;
+        auto* item = browserPreference(*preferences, key, true);
+        if (found->factory)
+        {item->setAttribute("hidden", true); return writeBrowserPreferences(presetFile, *preferences);}
+        if (normalisePresetKey(key) != key || key.startsWith("@factory/") || item->getStringAttribute("archive").isNotEmpty()) return false;
+        const auto source = presetFile.getChildFile(key);
+        const auto directory = presetFile.getChildFile(".fire-recycle");
+        if (!source.existsAsFile() || hasSymbolicPresetPath(source, presetFile) || directory.isSymbolicLink()
+            || directory.createDirectory().failed()) return false;
+        const auto archive = directory.getChildFile(juce::Uuid().toString() + ".fire-trash");
+        if (!source.moveFileTo(archive)) return false;
+        item->setAttribute("archive", archive.getFileName()); item->setAttribute("name", found->name);
+        item->setAttribute("description", found->description);
+        if (!writeBrowserPreferences(presetFile, *preferences))
+        {archive.moveFileTo(source); return false;}
+        {
+            const juce::ScopedLock identity(identityLock);
+            if (currentPresetKey == key) {currentPresetKey.clear(); statePresetName.clear(); mCurrentPresetId.store(0);}
+        }
+        scanAllPresets(); return true;
+    }
+
+    bool StatePresets::restoreBrowserPreset(const juce::String& key)
+    {
+        const juce::ScopedLock lock(browserPreferencesLock());
+        auto preferences = readBrowserPreferences(presetFile); if (!preferences) return false;
+        auto* item = browserPreference(*preferences, key); if (!item) return false;
+        if (key.startsWith("@factory/") && item->getBoolAttribute("hidden"))
+        {item->setAttribute("hidden", false); return writeBrowserPreferences(presetFile, *preferences);}
+        const auto name = item->getStringAttribute("archive");
+        if (normalisePresetKey(key) != key || name.isEmpty() || name.containsAnyOf("/\\")
+            || !name.endsWith(".fire-trash")) return false;
+        const auto archive = presetFile.getChildFile(".fire-recycle").getChildFile(name);
+        const auto destination = presetFile.getChildFile(key);
+        if (!archive.existsAsFile() || hasSymbolicPresetPath(archive, presetFile) || destination.exists()
+            || hasSymbolicPresetPath(destination, presetFile) || destination.getParentDirectory().createDirectory().failed()) return false;
+        if (!archive.moveFileTo(destination)) return false;
+        item->removeAttribute("archive");
+        if (!writeBrowserPreferences(presetFile, *preferences))
+        {destination.moveFileTo(archive); return false;}
+        scanAllPresets(); return true;
     }
 
     void StatePresets::enableFactoryPresets()

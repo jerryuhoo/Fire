@@ -200,6 +200,11 @@ Builds/Fire_artefacts/Release/
   auditioning; double-click, Escape or **Back to Reactor** returns to the
   processing page. Up/down arrows audition neighbouring sounds when the
   search field is not focused. The current sound stays highlighted.
+  Collections have distinct dark colour palettes. Use each row's star to
+  save it in **Favourites**; favourites persist in your local library.
+  Delete moves user files into Fire's **Recycle Bin** and hides factory
+  scenes. Restore returns them to their original collection, without
+  switching the current sound or overwriting an existing user file.
 - **Factory scenes**: 200 read-only starting points, with 20 scenes in each
   of Vocals, Synths, Drums, Bass, Guitar, Keys, Spaces, Lo-Fi, Rhythm and
   Effects. Scenes combine the analog circuits, spatial reverb models,

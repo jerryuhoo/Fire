@@ -105,3 +105,90 @@ TEST_CASE("Preset rows cannot replay commands after a different category or a cl
     row = find<PrimaryTextButton>(browser, [](auto& button) {return button.getComponentID().startsWith("presetSound:");}); REQUIRE(row);
     stale = row->onClick; browser.setVisible(false); stale(); CHECK(calls == 0);
 }
+
+TEST_CASE("Library favourites and hidden factory scenes persist without changing the sound", "[preset-browser][library][preferences][state]")
+{
+    FireAudioProcessor processor; LibraryFolder folder(processor);
+    auto& library=processor.statePresets;
+    const auto key=library.getBrowserEntries().front().key;
+    juce::MemoryBlock before,after;processor.getStateInformation(before);
+    REQUIRE(library.setPresetFavourite(key,true));
+    REQUIRE(library.removeBrowserPreset(key));
+    CHECK(library.getBrowserEntries().size()==199);CHECK(library.getNumFactoryPresets()==200);
+    library.scanAllPresets();CHECK(library.getBrowserEntries().size()==199);
+    FireAudioProcessor another;
+    another.statePresets.setPresetDirectoryForTesting(folder.file);another.statePresets.enableFactoryPresets();
+    auto entries=another.statePresets.getBrowserEntries(true);
+    auto entry=std::find_if(entries.begin(),entries.end(),[&](const auto& e){return e.key==key;});
+    REQUIRE(entry!=entries.end());CHECK(entry->removed);CHECK(entry->favourite);
+    REQUIRE(another.statePresets.restoreBrowserPreset(key));
+    entries=library.getBrowserEntries();CHECK(entries.size()==200);
+    entry=std::find_if(entries.begin(),entries.end(),[&](const auto& e){return e.key==key;});
+    REQUIRE(entry!=entries.end());CHECK(entry->favourite);CHECK_FALSE(entry->removed);
+    processor.getStateInformation(after);CHECK(before==after);
+}
+
+TEST_CASE("User presets recycle and restore their exact files while preserving live processing", "[preset-browser][library][filesystem][restore]")
+{
+    FireAudioProcessor processor;LibraryFolder folder(processor);auto& library=processor.statePresets;
+    const auto file=folder.file.getChildFile("User/My voice.fire");REQUIRE(library.savePreset(file).isNotEmpty());
+    const auto key=library.getCurrentPresetKey();REQUIRE(key=="User/My voice.fire");
+    REQUIRE(library.setPresetFavourite(key,true));
+    const auto parameters=processor.treeState.copyState().toXmlString();
+    const auto bytes=file.loadFileAsString();
+    REQUIRE(library.removeBrowserPreset(key));CHECK_FALSE(file.exists());CHECK(library.getCurrentPresetKey().isEmpty());
+    CHECK(processor.treeState.copyState().toXmlString()==parameters);
+    library.scanAllPresets();CHECK(library.getBrowserEntries().size()==200);
+    const auto entries=library.getBrowserEntries(true);
+    const auto entry=std::find_if(entries.begin(),entries.end(),[&](const auto& e){return e.key==key;});
+    REQUIRE(entry!=entries.end());CHECK(entry->removed);CHECK(entry->favourite);
+    REQUIRE(file.replaceWithText("A replacement file"));CHECK_FALSE(library.restoreBrowserPreset(key));
+    CHECK(file.loadFileAsString()=="A replacement file");REQUIRE(file.deleteFile());
+    REQUIRE(library.restoreBrowserPreset(key));CHECK(file.loadFileAsString()==bytes);
+    CHECK(library.getBrowserEntries().size()==201);CHECK(processor.treeState.copyState().toXmlString()==parameters);
+    CHECK_FALSE(library.removeBrowserPreset("../escape.fire"));CHECK_FALSE(library.restoreBrowserPreset("../escape.fire"));
+    REQUIRE(folder.file.getChildFile(".fire-library.xml").replaceWithText("<FIRE_LIBRARY version=\"99\"/>"));
+    CHECK_FALSE(library.setPresetFavourite(key,false));CHECK(file.loadFileAsString()==bytes);
+}
+
+TEST_CASE("Preset row favourites deletion and restore never audition a different sound", "[preset-browser][ui][library][actions]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;LibraryFolder folder(processor);fire::ui::PresetBrowserPanel browser(processor.statePresets);
+    browser.setSize(1000,500);browser.addToDesktop(juce::ComponentPeer::windowIsTemporary);browser.setVisible(true);browser.open();
+    int auditions=0;browser.onPresetSelected=[&](const auto&){++auditions;};browser.selectCategory("Vocals");
+    auto* favourite=find<juce::Button>(browser,[](auto& b){return b.getComponentID().startsWith("presetFavourite:");});REQUIRE(favourite);
+    const auto key=favourite->getComponentID().fromFirstOccurrenceOf("presetFavourite:",false,false);favourite->triggerClick();
+    CHECK(auditions==0);browser.selectCategory("Favourites");CHECK(browser.getVisiblePresetCount()==1);preview(browser,"library-favourites");
+    auto* remove=find<PrimaryTextButton>(browser,[](auto& b){return b.getComponentID().startsWith("presetDelete:");});REQUIRE(remove);
+    auto stale=remove->onClick;remove->triggerClick();CHECK(auditions==0);CHECK(browser.getVisiblePresetCount()==0);
+    browser.selectCategory("Recycle Bin");CHECK(browser.getVisiblePresetCount()==1);preview(browser,"library-recycle-bin");
+    auto* restore=find<juce::Button>(browser,[](auto& b){return b.getComponentID().startsWith("presetRestore:");});REQUIRE(restore);restore->triggerClick();
+    CHECK(browser.getVisiblePresetCount()==0);CHECK(auditions==0);stale();
+    browser.selectCategory("Favourites");CHECK(browser.getVisiblePresetCount()==1);
+    const auto entries=processor.statePresets.getBrowserEntries();
+    CHECK(std::any_of(entries.begin(),entries.end(),[&](const auto& e){return e.key==key && e.favourite;}));
+    browser.setVisible(false);remove=find<PrimaryTextButton>(browser,[](auto& b){return b.getComponentID().startsWith("presetDelete:");});REQUIRE(remove);
+    stale=remove->onClick;stale();CHECK(processor.statePresets.getBrowserEntries().size()==200);
+}
+
+TEST_CASE("Library search and return button remain separate and collections have distinct dark palettes", "[preset-browser][ui][layout][render]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;LibraryFolder folder(processor);fire::ui::PresetBrowserPanel browser(processor.statePresets);
+    browser.setSize(1000,500);browser.open();
+    auto* search=find<juce::TextEditor>(browser,[](auto& e){return e.getComponentID()=="preset_search";});REQUIRE(search);
+    auto* back=find<juce::Button>(browser,[](auto& b){return b.getComponentID()=="preset_browser_close";});REQUIRE(back);
+    for(int width:{1000,1400,2000})
+    {
+        browser.setSize(width,width/2);CHECK(back->getX()-search->getRight()>=juce::roundToInt(16.0f*width/1000));
+        CHECK(browser.getLocalBounds().contains(search->getBounds()));CHECK(browser.getLocalBounds().contains(back->getBounds()));
+        auto* recycle=find<juce::Button>(browser,[](auto& b){return b.getComponentID()=="presetCategory:Recycle Bin";});REQUIRE(recycle);
+        CHECK(browser.getLocalBounds().contains(browser.getLocalArea(recycle,recycle->getLocalBounds())));
+    }
+    const auto rounded=search->createComponentSnapshot(search->getLocalBounds());CHECK(rounded.getPixelAt(0,0).getAlpha()<30);
+    browser.setSize(1000,500);browser.selectCategory("Vocals");
+    const auto red=browser.createComponentSnapshot(browser.getLocalBounds()).getPixelAt(995,250);preview(browser,"library-vocals-colour");
+    browser.selectCategory("Drums");const auto amber=browser.createComponentSnapshot(browser.getLocalBounds()).getPixelAt(995,250);preview(browser,"library-drums-colour");
+    CHECK(red!=amber);browser.setSize(2000,1000);preview(browser,"library-drums-large");
+}

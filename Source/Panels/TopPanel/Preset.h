@@ -122,8 +122,15 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         void enableFactoryPresets();
         int getNumFactoryPresets() const noexcept;
         juce::String getCurrentPresetDescription() const;
-        struct BrowserEntry {juce::String tag, key, name, category, description; bool factory = false;};
-        std::vector<BrowserEntry> getBrowserEntries() const;
+        struct BrowserEntry
+        {
+            juce::String tag, key, name, category, description;
+            bool factory = false, favourite = false, removed = false;
+        };
+        std::vector<BrowserEntry> getBrowserEntries(bool includeRemoved = false) const;
+        bool setPresetFavourite(const juce::String& key, bool favourite);
+        bool removeBrowserPreset(const juce::String& key);
+        bool restoreBrowserPreset(const juce::String& key);
         const juce::XmlElement* getPresetForComparison(const juce::XmlElement& preset) const;
         juce::String getNextAvailablePresetId();
         struct PresetIdentitySnapshot

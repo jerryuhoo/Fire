@@ -479,6 +479,20 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     const juce::Component::SafePointer<FireAudioProcessorEditor> safeBrowserOwner(this);
     stateComponent.configureFullPageBrowser([safeBrowserOwner] {if (safeBrowserOwner) safeBrowserOwner->showPresetBrowser();});
     presetBrowser->onClose = [safeBrowserOwner] {if (safeBrowserOwner) safeBrowserOwner->hidePresetBrowser();};
+    presetBrowser->onLibraryChanged = [safeBrowserOwner]
+    {
+        if (!safeBrowserOwner) return;
+        auto* box = safeBrowserOwner->stateComponent.getPresetBox();
+        const auto previousName = box->getText();
+        safeBrowserOwner->stateComponent.synchronisePresetSelectionFromManager();
+        if (!safeBrowserOwner) return;
+        if (safeBrowserOwner->processor.statePresets.getCurrentPresetKey().isEmpty() && previousName.isNotEmpty())
+        {
+            box->setText(previousName, juce::dontSendNotification);
+            safeBrowserOwner->stateComponent.markAsDirty();
+        }
+        safeBrowserOwner->presetBrowser->refreshSelection();
+    };
     presetBrowser->onPresetSelected = [safeBrowserOwner](const juce::String& tag)
     {
         if (!safeBrowserOwner || !safeBrowserOwner->presetBrowser->isShowing()) return;
@@ -619,7 +633,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
 {
     stateComponent.onBrowserRequested = nullptr;
-    if (presetBrowser) {presetBrowser->onClose = nullptr; presetBrowser->onPresetSelected = nullptr;}
+    if (presetBrowser) {presetBrowser->onClose = nullptr; presetBrowser->onPresetSelected = nullptr; presetBrowser->onLibraryChanged = nullptr;}
     // Stop the high-frequency modulation channel before any child control is
     // torn down. A worker may still publish a revision, but it can no longer
     // queue an editor callback against partially destroyed GUI state.

@@ -294,3 +294,54 @@ TEST_CASE("Real module rails freely interleave builtin modules and inserts and r
         }
     }
 }
+
+TEST_CASE("Compressor rail labels fit beside power and removal controls at every editor scale", "[ui][layout][module-rail][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;processor.hasUpdateCheckBeenPerformed=true;
+    REQUIRE(processor.addInsertEffect(0,fire::effects::Type::compressor)==0);
+    REQUIRE(processor.addInsertEffect(1,fire::effects::Type::compressor)==0);
+    FireAudioProcessorEditor editor(processor);editor.stopTimer();editor.setVisible(true);
+    auto findText=[](auto&& self,juce::Component& root,const juce::String& name)->juce::TextButton*
+    {
+        if(!root.isVisible()) return nullptr;
+        if(auto* b=dynamic_cast<juce::TextButton*>(&root);b && b->getButtonText()==name) return b;
+        for(auto* child:root.getChildren()) if(auto* b=self(self,*child,name)) return b;
+        return nullptr;
+    };
+    for(int width:{1000,1250,1400,2000})
+    {
+        editor.setSize(width,width/2);
+        const float scale=static_cast<float>(width)/1000;
+        for(const auto* workspace:{"BAND LAB","MASTER LAB"})
+        {
+            auto* tab=findText(findText,editor,workspace);REQUIRE(tab);tab->triggerClick();
+            int checked=0;
+            auto check=[&](auto&& self,juce::Component& root)->void
+            {
+                if(!root.isVisible()) return;
+                if(auto* row=dynamic_cast<juce::TextButton*>(&root);row && row->getButtonText()=="Compressor"
+                    && static_cast<bool>(row->getProperties().getWithDefault("fireModuleRail",false)))
+                {
+                    const auto font=row->getLookAndFeel().getTextButtonFont(*row,row->getHeight());
+                    const auto required=juce::GlyphArrangement::getStringWidth(font,row->getButtonText());
+                    auto text=row->getLocalBounds().reduced(juce::roundToInt(7*scale),1);
+                    text.removeFromLeft(juce::roundToInt(25*scale));
+                    text.removeFromRight(juce::roundToInt(static_cast<float>(row->getProperties().getWithDefault("fireModuleTrailingSpace",0.0f))));
+                    CAPTURE(width,workspace,row->getWidth(),text.getWidth(),required);
+                    CHECK(static_cast<float>(text.getWidth())>=required);++checked;
+                }
+                for(auto* child:root.getChildren()) self(self,*child);
+            };
+            check(check,editor);CHECK(checked>0);
+            if(auto* row=findText(findText,editor,"Compressor")) row->triggerClick();
+            const auto path=juce::SystemStats::getEnvironmentVariable("FIRE_RAIL_PREVIEW_DIR",{});
+            if(path.isNotEmpty())
+            {
+                auto file=juce::File(path).getChildFile(juce::String(workspace).replaceCharacter(' ','-')+"-"+juce::String(width)+".png");
+                file.getParentDirectory().createDirectory();auto output=file.createOutputStream();REQUIRE(output);
+                output->setPosition(0);output->truncate();CHECK(juce::PNGImageFormat{}.writeImageToStream(editor.createComponentSnapshot(editor.getLocalBounds()),*output));
+            }
+        }
+    }
+}

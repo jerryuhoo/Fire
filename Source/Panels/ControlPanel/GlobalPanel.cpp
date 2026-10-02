@@ -635,9 +635,7 @@ void GlobalPanel::resized()
         return;
     }
 
-    const int navWidth = juce::roundToInt(juce::jlimit(120.0f * uiScale,
-                                                       165.0f * uiScale,
-                                                       static_cast<float>(getWidth()) * 0.14f));
+    const int navWidth = fire::ui::moduleRailWidth(uiScale, getWidth());
     const int outputWidth = juce::roundToInt(juce::jlimit(205.0f * uiScale,
                                                           240.0f * uiScale,
                                                           static_cast<float>(getWidth()) * 0.22f));

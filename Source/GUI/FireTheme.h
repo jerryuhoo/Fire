@@ -398,6 +398,16 @@ inline juce::Font labelFont(float height = 11.0f)
     return juce::Font { juce::FontOptions().withHeight(height).withStyle("Bold") };
 }
 
+inline int moduleRailWidth(float scale, int panelWidth)
+{
+    const auto proportional = juce::roundToInt(juce::jlimit(120.0f * scale,
+        165.0f * scale, static_cast<float>(panelWidth) * .14f));
+    // Reserve the card/viewport insets, row margins, power and remove controls
+    // around the longest displayed module name, at the row font's maximum size.
+    const auto label = juce::GlyphArrangement::getStringWidth(labelFont(15 * scale), "Compressor");
+    return juce::jmax(proportional, static_cast<int>(std::ceil(label + 98 * scale)));
+}
+
 inline juce::Font displayFont(float height = 15.0f)
 {
     return juce::Font { juce::FontOptions().withHeight(height).withStyle("Bold") };

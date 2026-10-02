@@ -521,15 +521,18 @@ void BandPanel::resized()
         return;
     }
 
-    const int navWidth = juce::roundToInt(juce::jlimit(120.0f * uiScale,
+    const int previousNavWidth = juce::roundToInt(juce::jlimit(120.0f * uiScale,
                                                        165.0f * uiScale,
                                                        static_cast<float>(getWidth()) * 0.14f));
+    const int navWidth = fire::ui::moduleRailWidth(uiScale, getWidth());
     const int outputWidth = juce::roundToInt(juce::jlimit(205.0f * uiScale,
                                                           240.0f * uiScale,
                                                           static_cast<float>(getWidth()) * 0.22f));
-    const int graphWidth = juce::roundToInt(juce::jlimit(220.0f * uiScale,
+    // Take the additional rail width from the visualiser so the dial grid
+    // retains its established dimensions at the minimum editor size.
+    const int graphWidth = juce::jmax(1, juce::roundToInt(juce::jlimit(220.0f * uiScale,
                                                          320.0f * uiScale,
-                                                         static_cast<float>(getWidth()) * 0.27f));
+                                                         static_cast<float>(getWidth()) * 0.27f)) - (navWidth - previousNavWidth));
 
     tabAreaRect = layoutArea.removeFromLeft(juce::jmin(navWidth, layoutArea.getWidth()));
     layoutArea.removeFromLeft(juce::jmin(gap, layoutArea.getWidth()));

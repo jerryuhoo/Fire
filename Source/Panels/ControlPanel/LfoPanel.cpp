@@ -3214,14 +3214,10 @@ void LfoPanel::resized()
 
     auto mainArea = getLocalBounds().reduced(outer);
     const auto availableColumnWidth = juce::jmax(0, mainArea.getWidth() - 2 * gap);
-    const auto leftMinimum = juce::jmax(1, juce::roundToInt(120.0f * uiScale));
-    const auto leftMaximum = juce::jmax(leftMinimum,
-                                         juce::roundToInt(165.0f * uiScale));
     const auto rightMinimum = juce::jmax(1, juce::roundToInt(248.0f * uiScale));
     const auto rightMaximum = juce::jmax(rightMinimum,
                                           juce::roundToInt(340.0f * uiScale));
-    auto leftWidth = juce::jlimit(leftMinimum, leftMaximum,
-                                  juce::roundToInt(getWidth() * 0.14f));
+    auto leftWidth = fire::ui::moduleRailWidth(uiScale, getWidth());
     auto rightWidth = juce::jlimit(rightMinimum, rightMaximum,
                                    juce::roundToInt(mainArea.getWidth() * 0.29f));
 

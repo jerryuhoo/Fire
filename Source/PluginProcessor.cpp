@@ -5028,7 +5028,7 @@ bool FireAudioProcessor::tryCaptureMultibandTopologySnapshot(
         captureHook();
 #endif
 
-    MultibandTopologySnapshot candidate;
+    auto& candidate = audioCallbackWorkspace->candidateTopology;
     candidate.publicationSequence = sequenceBefore;
     candidate.dspResetSequence = multibandDspResetSequence.load(std::memory_order_relaxed);
     candidate.numBands = juce::jlimit(
@@ -5040,7 +5040,7 @@ bool FireAudioProcessor::tryCaptureMultibandTopologySnapshot(
     prepareHqCallbackContext(lfoOutputs,
                              candidate.numBands,
                              candidate.callbackContext);
-    AudioCallbackParameterSnapshot candidateCallbackParameters;
+    auto& candidateCallbackParameters = audioCallbackWorkspace->candidateParameters;
     prepareAudioCallbackParameterSnapshot(sequenceBefore,
                                           candidateCallbackParameters);
 
@@ -5096,8 +5096,8 @@ void FireAudioProcessor::publishMultibandTelemetry(
 void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
 {
     juce::AudioBuffer<float> noLfoOutputs;
-    MultibandTopologySnapshot requestedSnapshot;
-    AudioCallbackParameterSnapshot requestedCallbackParameters;
+    auto& requestedSnapshot = audioCallbackWorkspace->resetTopology;
+    auto& requestedCallbackParameters = audioCallbackWorkspace->resetParameters;
     const auto sequenceAtReset = multibandTopologyResetGeneration.load(
         std::memory_order_acquire);
     // A lifecycle reset runs before the callback's non-blocking LFO routing
@@ -5531,7 +5531,7 @@ void FireAudioProcessor::processWetBlock(
             lfoManager->abortAudioThreadStateCapture();
     } };
 
-    HqCallbackContext callbackContext;
+    auto& callbackContext = audioCallbackWorkspace->blockContext;
     const bool capturedStableCallbackState = updateParameters(
         lfoOutputBuffer,
         topologySequenceAtCallbackStart,
@@ -7671,8 +7671,8 @@ bool FireAudioProcessor::updateParameters(
     // 1. Update Global and Crossover Parameters
     //==============================================================================
 
-    MultibandTopologySnapshot requestedSnapshot;
-    AudioCallbackParameterSnapshot requestedCallbackParameters;
+    auto& requestedSnapshot = audioCallbackWorkspace->requestedTopology;
+    auto& requestedCallbackParameters = audioCallbackWorkspace->requestedParameters;
     const bool hasStablePublication = tryCaptureMultibandTopologySnapshot(
         lfoOutputs,
         topologySequenceAtCallbackStart,
@@ -7745,7 +7745,10 @@ void FireAudioProcessor::prepareHqCallbackContext(
     HqCallbackContext& callbackContext)
 {
     juce::ignoreUnused(lfoOutputs);
-    callbackContext = HqCallbackContext {};
+    // Reconstruct directly in caller-owned storage. Assigning a default
+    // HqCallbackContext creates a six-figure-byte temporary on the audio stack.
+    std::destroy_at(std::addressof(callbackContext));
+    std::construct_at(std::addressof(callbackContext));
     callbackContext.anySoloActive = false;
 
     snapshotNumBands = juce::jlimit(1, 4, snapshotNumBands);
@@ -7858,7 +7861,8 @@ void FireAudioProcessor::prepareAudioCallbackParameterSnapshot(
     std::uint32_t publicationSequence,
     AudioCallbackParameterSnapshot& snapshot) const
 {
-    snapshot = AudioCallbackParameterSnapshot {};
+    std::destroy_at(std::addressof(snapshot));
+    std::construct_at(std::addressof(snapshot));
     snapshot.publicationSequence = publicationSequence;
     snapshot.requestedHq = loadCachedParameter(hqParameter) > 0.5f;
     snapshot.downsampleEnabled =
@@ -9456,8 +9460,8 @@ void FireAudioProcessor::processTopologyTransitionBlock(
                         samplesInRange,
                         sampleRate);
 
-        HqCallbackContext rangeContext =
-            activeMultibandTopologySnapshot.callbackContext;
+        auto& rangeContext = audioCallbackWorkspace->topologyRangeContext;
+        rangeContext = activeMultibandTopologySnapshot.callbackContext;
         const std::array<juce::AudioBuffer<float>*, 4> fullBandBuffers {
             &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4
         };

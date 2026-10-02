@@ -821,6 +821,26 @@ private:
         int numBands = 1;
     };
 
+    // Large callback recipes contain per-slot parameter ranges. Keep scratch
+    // storage off the host's audio-thread stack, allocated with the processor.
+    // Only serialized audio callbacks and their prepare/reset lifecycle use
+    // this workspace; message-thread state writers never access it.
+    struct AudioCallbackWorkspace
+    {
+        HqCallbackContext blockContext;
+        HqCallbackContext topologyRangeContext;
+        MultibandTopologySnapshot requestedTopology;
+        AudioCallbackParameterSnapshot requestedParameters;
+        // updateParameters may enter reset synchronisation before consuming
+        // its request, so the reset request must have independent storage.
+        MultibandTopologySnapshot resetTopology;
+        AudioCallbackParameterSnapshot resetParameters;
+        // Capture commits these candidates only after the publication checks.
+        // The caller's requested/reset snapshots must not alias the candidates.
+        MultibandTopologySnapshot candidateTopology;
+        AudioCallbackParameterSnapshot candidateParameters;
+    };
+
     struct SerializableMainStateSnapshot
     {
         juce::ValueTree parameterState;
@@ -977,6 +997,8 @@ private:
     std::function<void()> audioCallbackStateCaptureHookForTesting;
     std::function<void()> multibandDeleteSnapshotHookForTesting;
 #endif
+    std::unique_ptr<AudioCallbackWorkspace> audioCallbackWorkspace =
+        std::make_unique<AudioCallbackWorkspace>();
     std::uint32_t appliedMultibandTopologyResetGeneration = 0;
     MultibandTopologySnapshot activeMultibandTopologySnapshot;
     bool activeMultibandTopologySnapshotInitialised = false;

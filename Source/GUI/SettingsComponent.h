@@ -170,7 +170,7 @@ private:
         fire::ui::remapSkinColours(*this, previous, skin);
         skinLabel.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textMuted);
         companyLabel.setColour(juce::HyperlinkButton::textColourId,
-            skin == fire::ui::Skin::vintage ? juce::Colour(0xff226a74) : fire::ui::colours::signalCool);
+            skin == fire::ui::Skin::vintage ? juce::Colour(0xffa8c7bf) : fire::ui::colours::signalCool);
         modernSkin.setToggleState(skin == fire::ui::Skin::modern, juce::dontSendNotification);
         vintageSkin.setToggleState(skin == fire::ui::Skin::vintage, juce::dontSendNotification);
         sendLookAndFeelChange(); repaint();

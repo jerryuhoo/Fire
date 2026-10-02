@@ -433,7 +433,9 @@ inline void drawCanvas(juce::Graphics& g, juce::Rectangle<float> bounds, Skin sk
     const auto& palette = skinPalette(skin);
     if (skin == Skin::vintage)
     {
-        g.setGradientFill(juce::ColourGradient(palette.surface2, bounds.getTopLeft(),
+        // A quiet painted-metal desk; the editor owns the separate walnut
+        // cheeks and rails, so the body stays a consistent warm neutral.
+        g.setGradientFill(juce::ColourGradient(palette.surface0.brighter(0.018f), bounds.getTopLeft(),
             palette.canvas, bounds.getBottomLeft(), false));
         g.fillRect(bounds);
         return;
@@ -492,13 +494,21 @@ inline void drawPanel(juce::Graphics& g, juce::Rectangle<float> bounds,
     if (bounds.isEmpty()) return;
     const auto& palette = skinPalette(skin);
     const auto area = bounds.reduced(.5f);
-    g.setGradientFill(juce::ColourGradient(palette.surface2, area.getTopLeft(),
-        palette.surface0, area.getBottomRight(), false));
+    juce::ColourGradient metal(palette.surface1.brighter(0.045f), area.getTopLeft(),
+                               palette.surface0, area.getBottomLeft(), false);
+    metal.addColour(0.42, palette.surface1);
+    g.setGradientFill(metal);
     g.fillRoundedRectangle(area, Metrics::radius);
-    g.setColour(palette.hairline.withAlpha(.55f));
+    g.setColour(palette.canvas.darker(0.17f).withAlpha(.82f));
     g.drawRoundedRectangle(area, Metrics::radius, 1);
-    g.setColour(juce::Colours::white.withAlpha(.4f));
-    g.drawRoundedRectangle(area.reduced(1.5f), Metrics::radius - 1, 1);
+    // One restrained upper lip reads as folded metal, without a white frame.
+    const auto inset = area.reduced(1.5f);
+    g.setColour(palette.textPrimary.withAlpha(.095f));
+    g.drawLine(inset.getX() + Metrics::radius, inset.getY(),
+               inset.getRight() - Metrics::radius, inset.getY(), .8f);
+    g.setColour(palette.canvas.darker(.20f).withAlpha(.45f));
+    g.drawLine(inset.getX() + Metrics::radius, inset.getBottom(),
+               inset.getRight() - Metrics::radius, inset.getBottom(), .8f);
 }
 
 inline void drawGlassPill(juce::Graphics& g,

@@ -104,4 +104,85 @@ inline void drawWalnutRail(juce::Graphics& g, juce::Rectangle<float> bounds, flo
                bounds.getRight() - radius, bounds.getBottom() - .55f * scale, .85f * scale);
 }
 
+
+// Pass only the editor body below the existing header. The centre stays
+// untouched: inset the dark operating panels by 20 * scale at either side
+// and 12 * scale above the bottom to expose the cabinet and its contact gap.
+inline void drawWalnutBodyFrame(juce::Graphics& g, juce::Rectangle<float> bounds, float scale)
+{
+    if (bounds.isEmpty()) return;
+    scale = juce::jmax(.25f, scale);
+    const auto cheekWidth = juce::jmin(16.0f * scale, bounds.getWidth() * .08f);
+    const auto bottomHeight = juce::jmin(8.0f * scale, bounds.getHeight() * .10f);
+    const auto contactGap = juce::jmin(3.0f * scale, cheekWidth * .25f);
+    const auto radius = juce::jmin(2.0f * scale, cheekWidth * .20f);
+    static const juce::Image grain = juce::ImageFileFormat::loadFrom(
+        BinaryData::vintage_walnut_png, BinaryData::vintage_walnut_pngSize);
+    juce::Graphics::ScopedSaveState frameState(g);
+    g.reduceClipRegion(bounds.toNearestInt());
+
+    for (bool left : {true, false})
+    {
+        const auto cheek = left ? bounds.withWidth(cheekWidth) : bounds.withLeft(bounds.getRight() - cheekWidth);
+        const auto contact = left ? cheek.withLeft(cheek.getRight()).withWidth(contactGap)
+                                  : cheek.withRight(cheek.getX()).withLeft(cheek.getX() - contactGap);
+        g.setGradientFill(juce::ColourGradient(juce::Colours::black.withAlpha(.68f),
+                                             left ? contact.getTopLeft() : contact.getTopRight(),
+                                             juce::Colours::transparentBlack,
+                                             left ? contact.getTopRight() : contact.getTopLeft(), false));
+        g.fillRect(contact);
+
+        juce::Graphics::ScopedSaveState cheekState(g);
+        juce::Path outline;
+        outline.addRoundedRectangle(cheek, radius);
+        g.reduceClipRegion(outline);
+        g.setColour(juce::Colour(0xff51453a));
+        g.fillRect(cheek);
+        if (grain.isValid())
+        {
+            // Each solid side board follows the source's long vertical grain.
+            // Uniform sampling keeps pores natural instead of compressing the
+            // whole texture into a narrow strip. Opposite boards use distinct
+            // sections of the same walnut stock.
+            const auto textureScale = cheek.getHeight() / static_cast<float>(grain.getHeight());
+            const auto sourceCentre = static_cast<float>(grain.getWidth()) * (left ? .23f : .71f);
+            g.setOpacity(.68f);
+            g.drawImageTransformed(grain, juce::AffineTransform(
+                textureScale, 0.0f, cheek.getCentreX() - sourceCentre * textureScale,
+                0.0f, textureScale, cheek.getY()));
+            g.setOpacity(1.0f);
+        }
+        g.setColour(juce::Colour(0xff49423a).withAlpha(.23f));
+        g.fillRect(cheek);
+        const auto outer = left ? cheek.getTopLeft() : cheek.getTopRight();
+        const auto inner = left ? cheek.getTopRight() : cheek.getTopLeft();
+        juce::ColourGradient profile(juce::Colour(0xff17130f).withAlpha(.44f), outer,
+                                    juce::Colour(0xff100d0a).withAlpha(.48f), inner, false);
+        profile.addColour(.13, juce::Colour(0xffe3cfac).withAlpha(left ? .23f : .12f));
+        profile.addColour(.32, juce::Colours::transparentBlack);
+        profile.addColour(.78, juce::Colour(0xff211a14).withAlpha(.08f));
+        g.setGradientFill(profile);
+        g.fillRect(cheek);
+        const auto highlightX = left ? cheek.getX() + 2.0f * scale : cheek.getRight() - 2.0f * scale;
+        g.setColour(juce::Colour(0xffeddbbe).withAlpha(left ? .15f : .08f));
+        g.drawLine(highlightX, cheek.getY() + radius, highlightX, cheek.getBottom() - bottomHeight, .65f * scale);
+        const auto innerX = left ? cheek.getRight() - .5f * scale : cheek.getX() + .5f * scale;
+        g.setColour(juce::Colour(0xff160f0b).withAlpha(.72f));
+        g.drawLine(innerX, cheek.getY(), innerX, cheek.getBottom() - bottomHeight, .85f * scale);
+    }
+
+    const auto lowerRail = bounds.withTop(bounds.getBottom() - bottomHeight);
+    const auto lowerContact = juce::Rectangle<float>(bounds.getX() + cheekWidth, lowerRail.getY() - contactGap,
+                                                     juce::jmax(0.0f, bounds.getWidth() - 2.0f * cheekWidth), contactGap);
+    g.setGradientFill(juce::ColourGradient(juce::Colours::transparentBlack, lowerContact.getTopLeft(),
+                                         juce::Colours::black.withAlpha(.70f), lowerContact.getBottomLeft(), false));
+    g.fillRect(lowerContact);
+    // The lower front board has horizontal long grain and the exact finish
+    // of the approved header; only this separate bottom strip is drawn here.
+    drawWalnutRail(g, lowerRail, scale);
+    g.setColour(juce::Colour(0xff170f09).withAlpha(.58f));
+    for (float x : {bounds.getX() + cheekWidth, bounds.getRight() - cheekWidth})
+        g.drawLine(x, lowerRail.getY() + .8f * scale, x, lowerRail.getBottom() - .8f * scale, .65f * scale);
+}
+
 }

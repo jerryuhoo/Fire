@@ -29,8 +29,8 @@ class PresetBrowserPanel final : public juce::Component
     {
         const auto tones = palette(category);
         if (!isVintage(owner)) return tones;
-        return {skinPalette(Skin::vintage).surface0.interpolatedWith(tones.accent,.11f),
-                tones.accent.withMultipliedBrightness(.48f)};
+        return {skinPalette(Skin::vintage).surface0.interpolatedWith(tones.base,.42f),
+                tones.accent.interpolatedWith(skinPalette(Skin::vintage).textPrimary,.12f)};
     }
     enum class Icon {star, remove, restore, back};
     class ActionButton final : public PrimaryTextButton
@@ -212,7 +212,7 @@ public:
         {
             row->favourite.accent = isVintage(*this) ? tones.accent : colours::gold;
             row->remove.accent = row->entry.removed ? categoryPalette(*this,row->entry.category).accent
-                : isVintage(*this) ? juce::Colour(0xff9e5148) : juce::Colour(0xffd59191);
+                : isVintage(*this) ? juce::Colour(0xffd5a08c) : juce::Colour(0xffd59191);
         }
         refreshCategorySelection(); repaint();
     }
@@ -334,7 +334,7 @@ private:
             row->favourite.setTitle((entry.favourite?"Unfavourite ":"Favourite ")+entry.name);row->favourite.setComponentID("presetFavourite:"+entry.key);
             row->favourite.setTooltip(entry.favourite?"Remove from favourites":"Add to favourites");
             row->remove.icon=entry.removed?Icon::restore:Icon::remove;row->remove.accent=entry.removed?categoryPalette(*this,entry.category).accent:
-                isVintage(*this)?juce::Colour(0xff9e5148):juce::Colour(0xffd59191);
+                isVintage(*this)?juce::Colour(0xffd5a08c):juce::Colour(0xffd59191);
             row->remove.setTitle((entry.removed?"Restore ":"Delete ")+entry.name);row->remove.setComponentID((entry.removed?"presetRestore:":"presetDelete:")+entry.key);
             row->remove.setTooltip(entry.removed?"Restore to the original collection":entry.factory?"Hide this factory sound. Restore it from Recycle Bin.":"Move this user preset into Recycle Bin. Restore it at any time.");
             const auto live=[safe,epoch] {return safe && safe->generation==epoch && safe->isShowing() && safe->isEnabled();};

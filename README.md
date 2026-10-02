@@ -574,7 +574,8 @@ Analog pages use a hardware faceplate. Tube filaments brighten with Drive and in
 
 Choose **Menu → Skin → Modern / Vintage**, or use the two appearance buttons
 in **Settings**. Modern uses graphite and aluminium; Vintage combines a bevelled walnut cabinet rail
-and recessed charcoal control fascia with a clean ivory metal chassis, physical keycaps, dark ribbed bakelite knobs
+and recessed charcoal control fascia with solid walnut side cheeks and a front rail,
+warm grey metal operating panels, physical keycaps, dark ribbed bakelite knobs
 and cream scales. The choice is saved as a local
 appearance preference. Existing open instances keep their selected skin;
 new instances use the saved preference. Switching skins preserves the current
@@ -696,9 +697,10 @@ masks are cached; movement redraws only the old and new highlight regions.
 ### Light, motion and analysis displays
 
 Shape Forge uses a compact icon toolbar: a grid opens **Matrix**, connected
-points select **Edit Mode**, and a brush selects **Brush Mode**. **Assign** keeps
-its routing icon and a text confirmation so the armed, assigned and full states
-remain explicit. Hover tooltips, keyboard focus and accessible names explain
+points select **Edit Mode**, and a brush selects **Brush Mode**. Controls stay
+on one row at supported window sizes. **Assign** uses a routing/status icon,
+with a text confirmation when space permits; full status text remains available
+through its tooltip and accessibility description. Hover tooltips, keyboard focus and accessible names explain
 each control. Active tools pick up the selected LFO colour; switching edit modes
 keeps the toolbar and curve in place.
 

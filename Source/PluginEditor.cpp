@@ -644,6 +644,8 @@ void FireAudioProcessorEditor::applySkin(fire::ui::Skin skin)
     sendLookAndFeelChange();
     if (!safe) return;
     backgroundCache = {};
+    resized();
+    if (!safe) return;
     requestBackgroundCacheRebuild();
     repaint();
 }
@@ -830,6 +832,7 @@ void FireAudioProcessorEditor::paintOverChildren(juce::Graphics& g)
 
 void FireAudioProcessorEditor::resized()
 {
+    const auto previousNavigationArea = navigationArea;
     processor.setSavedEditorSize(getWidth(), getHeight());
 
     const float scale = juce::jmin(getHeight() / (float) INIT_HEIGHT, getWidth() / (float) INIT_WIDTH);
@@ -860,7 +863,10 @@ void FireAudioProcessorEditor::resized()
     headerContent.removeFromRight(gap);
     stateComponent.setBounds(headerContent);
 
-    bounds.reduce(gap, gap);
+    bounds.reduce(fire::ui::isVintage(*this)
+                      ? juce::roundToInt(20.0f * scale) : gap, gap);
+    if (fire::ui::isVintage(*this))
+        bounds.removeFromBottom(juce::roundToInt(4.0f * scale));
     contentArea = {};
     navigationArea = {};
     const bool spectrumCollapsed = activeWorkspace == 1
@@ -932,6 +938,12 @@ void FireAudioProcessorEditor::resized()
             hideValuePopup();
     }
 
+    // Same-size workspace/zoom changes move the wooden cross rail immediately.
+    // Actual window resizing still reuses the old image until the resize burst
+    // settles, preserving the existing allocation/debounce behaviour.
+    if (fire::ui::isVintage(*this) && previousNavigationArea != navigationArea
+        && backgroundCacheLogicalSize == juce::Point<int>(getWidth(), getHeight()))
+        backgroundCache = {};
     requestBackgroundCacheRebuild();
 }
 
@@ -1186,6 +1198,17 @@ void FireAudioProcessorEditor::rebuildBackgroundCache()
         cacheGraphics.addTransform(
             juce::AffineTransform::scale(displayScale));
         fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat(), fire::ui::skinFor(*this));
+        if (fire::ui::isVintage(*this))
+        {
+            const auto scale = fireLookAndFeel.scale;
+            fire::ui::drawWalnutBodyFrame(cacheGraphics,
+                getLocalBounds().toFloat().withTrimmedTop(static_cast<float>(headerArea.getBottom())), scale);
+            if (!navigationArea.isEmpty() && !zoomButton.getToggleState())
+            {
+                const auto beam = navigationArea.toFloat().expanded(0.0f, 3.0f * scale);
+                fire::ui::drawWalnutRail(cacheGraphics, beam, scale);
+            }
+        }
         if (!fire::ui::isVintage(*this)) fire::ui::drawTechGrid(
             cacheGraphics,
             getLocalBounds().toFloat(),
@@ -1194,14 +1217,15 @@ void FireAudioProcessorEditor::rebuildBackgroundCache()
 
         auto header = headerArea.toFloat();
         juce::ColourGradient headerFill(
-            fire::ui::paletteFor(*this).surface2,
+            fire::ui::isVintage(*this) ? juce::Colour(0xfff1eee5) : fire::ui::paletteFor(*this).surface2,
             header.getX(),
             header.getY(),
-            fire::ui::paletteFor(*this).surface0,
+            fire::ui::isVintage(*this) ? juce::Colour(0xffe8e4d8) : fire::ui::paletteFor(*this).surface0,
             header.getRight(),
             header.getBottom(),
             false);
-        headerFill.addColour(0.56, fire::ui::paletteFor(*this).surface1);
+        headerFill.addColour(0.56, fire::ui::isVintage(*this)
+            ? juce::Colour(0xffd9d5c8) : fire::ui::paletteFor(*this).surface1);
         cacheGraphics.setGradientFill(headerFill);
         cacheGraphics.fillRect(header);
         if (fire::ui::isVintage(*this))

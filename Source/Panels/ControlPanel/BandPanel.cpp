@@ -32,8 +32,8 @@ void drawMinimalSurface(juce::Graphics& g, const juce::Component& owner, juce::R
     g.fillRoundedRectangle(bounds, fire::ui::Metrics::radius);
     if (fire::ui::isVintage(owner))
     {
-        g.setColour(juce::Colours::black.withAlpha(.18f)); g.drawRoundedRectangle(bounds,fire::ui::Metrics::radius,1);
-        g.setColour(juce::Colours::white.withAlpha(.55f));
+        g.setColour(juce::Colours::black.withAlpha(.48f)); g.drawRoundedRectangle(bounds,fire::ui::Metrics::radius,1);
+        g.setColour(juce::Colour(0xffded3b7).withAlpha(.14f));
         g.drawRoundedRectangle(bounds.reduced(1.5f),fire::ui::Metrics::radius-1,1);
     }
 }

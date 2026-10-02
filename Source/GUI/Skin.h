@@ -32,9 +32,9 @@ inline const SkinPalette& skinPalette(Skin skin)
         juce::Colour(0xff182131), juce::Colour(0xff202b3a), juce::Colour(0xff2a3545),
         juce::Colour(0xfff3f6fa), juce::Colour(0xffa8b2c1), juce::Colour(0xff8590a1), juce::Colour(0xffffc247)};
     static const SkinPalette vintage {
-        juce::Colour(0xffdedbd0), juce::Colour(0xffe8e4d8), juce::Colour(0xffd9d5c8),
-        juce::Colour(0xfff1eee5), juce::Colour(0xffc7c1b0), juce::Colour(0xffa6a18f),
-        juce::Colour(0xff30352f), juce::Colour(0xff50574e), juce::Colour(0xff72796e), juce::Colour(0xff966d35)};
+        juce::Colour(0xff35362f), juce::Colour(0xff3a3b33), juce::Colour(0xff43443a),
+        juce::Colour(0xff505146), juce::Colour(0xff5b5b4e), juce::Colour(0xff777765),
+        juce::Colour(0xffeee6cf), juce::Colour(0xffc3baa2), juce::Colour(0xffa89f89), juce::Colour(0xffdfb572)};
     return skin == Skin::vintage ? vintage : modern;
 }
 inline const SkinPalette& paletteFor(const juce::Component& component) { return skinPalette(skinFor(component)); }

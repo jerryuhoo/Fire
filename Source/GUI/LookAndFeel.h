@@ -912,7 +912,7 @@ public:
         {
             if (id != "header_preset_browser" && id != "header_preset")
                 textBounds.translate(0, juce::roundToInt((animation.press * 1.35f - 0.6f) * scale));
-            g.setColour((darkHeader ? juce::Colour(0xff090b06) : juce::Colour(0xfffffff2))
+            g.setColour((darkHeader ? juce::Colour(0xff090b06) : juce::Colour(0xff20251b))
                             .withAlpha(0.62f * (1.0f - animation.disabled)));
             g.drawFittedText(button.getButtonText(), textBounds.translated(0, juce::jmax(1, juce::roundToInt(scale))),
                              moduleRail ? juce::Justification::centredLeft
@@ -952,15 +952,15 @@ public:
             const auto opacity = isEnabled ? 1.0f : 0.42f;
             g.setColour(juce::Colour(0xff090b08).withAlpha(opacity));
             g.fillEllipse(bezel.translated(0.0f, 0.85f * scale));
-            juce::ColourGradient metal(juce::Colour(0xffc3c3b7).withAlpha(opacity),
+            juce::ColourGradient metal(juce::Colour(0xffa5a590).withAlpha(opacity),
                                       bezel.getX(), bezel.getY(),
-                                      juce::Colour(0xff797d6d).withAlpha(opacity),
+                                      juce::Colour(0xff626951).withAlpha(opacity),
                                       bezel.getRight(), bezel.getBottom(), false);
             g.setGradientFill(metal);
             g.fillEllipse(bezel);
             const auto cap = bezel.reduced(juce::jmax(0.7f, 0.85f * scale));
-            juce::ColourGradient finish(juce::Colour(down ? 0xffd7d6c8 : 0xfff2f0e4).withAlpha(opacity),
-                                       cap.getX(), cap.getY(), juce::Colour(0xffb7b9aa).withAlpha(opacity),
+            juce::ColourGradient finish(juce::Colour(down ? 0xff434b39 : 0xff59604c).withAlpha(opacity),
+                                       cap.getX(), cap.getY(), juce::Colour(0xff343d2b).withAlpha(opacity),
                                        cap.getX(), cap.getBottom(), false);
             g.setGradientFill(finish);
             g.fillEllipse(cap);
@@ -1088,14 +1088,20 @@ private:
         return mapped.withAlpha(colour.getFloatAlpha());
     }
 
-    juce::Colour vintageInk(juce::Colour colour, float maximumBrightness = 0.38f) const noexcept
+    juce::Colour vintageInk(juce::Colour colour, float minimumBrightness = 0.64f) const noexcept
     {
         if (currentSkin == fire::ui::Skin::modern || colour.isTransparent())
             return colour;
+        // Screen-printed legends must stay legible on the warm metal body.
+        // Lift dim custom accents gently toward cream while retaining hue;
+        // the header owns its fixed legend colours and bypasses this helper.
+        const auto floor = juce::jmax(0.60f, minimumBrightness);
         const auto brightness = colour.getPerceivedBrightness();
-        return brightness > maximumBrightness
-            ? colour.darker(brightness / maximumBrightness - 1.0f)
-            : colour;
+        if (brightness >= floor) return colour;
+        const auto cream = fire::ui::skinPalette(currentSkin).textPrimary;
+        const auto amount = juce::jlimit(0.0f, 1.0f, (floor - brightness)
+            / juce::jmax(0.01f, cream.getPerceivedBrightness() - brightness));
+        return colour.interpolatedWith(cream.withAlpha(colour.getFloatAlpha()), amount);
     }
 
     void drawVintageSurface(juce::Graphics& g,
@@ -1117,26 +1123,26 @@ private:
         const auto shell = bounds.reduced(0.65f * unit);
         auto face = shell.withTrimmedBottom(depth).translated(0.0f, travel);
         const auto faceColour = base.withAlpha(1.0f)
-            .interpolatedWith(juce::Colour(0xfff1eee3), 0.74f)
-            .interpolatedWith(juce::Colour(0xffc6b997), selected ? 0.12f : 0.0f);
+            .interpolatedWith(juce::Colour(0xff515348), 0.64f)
+            .interpolatedWith(juce::Colour(0xff847358), selected ? 0.12f : 0.0f);
 
-        g.setColour(juce::Colour(0xff36372f).withAlpha(0.75f * opacity));
+        g.setColour(juce::Colour(0xff24291f).withAlpha(0.82f * opacity));
         g.fillRoundedRectangle(bounds, radius + 0.6f * unit);
-        g.setColour(juce::Colour(0xfff8f5e9).withAlpha(0.65f * opacity));
+        g.setColour(juce::Colour(0xffd2ccba).withAlpha(0.085f * opacity));
         g.drawRoundedRectangle(bounds, radius + 0.6f * unit, 0.7f * unit);
 
-        juce::ColourGradient wall(juce::Colour(0xffb0ab9c).withAlpha(opacity),
+        juce::ColourGradient wall(juce::Colour(0xff414639).withAlpha(opacity),
                                   shell.getX(), shell.getY(),
-                                  juce::Colour(0xff77786b).withAlpha(opacity),
+                                  juce::Colour(0xff292f25).withAlpha(opacity),
                                   shell.getX(), shell.getBottom(), false);
         g.setGradientFill(wall);
         g.fillRoundedRectangle(shell, radius);
-        g.setColour(juce::Colours::black.withAlpha(0.28f * opacity));
+        g.setColour(juce::Colour(0xff161c13).withAlpha(0.50f * opacity));
         g.drawRoundedRectangle(shell, radius, juce::jmax(0.7f, unit * 0.65f));
 
-        juce::ColourGradient cap(faceColour.brighter(0.055f).darker(press * 0.055f).withAlpha(opacity),
+        juce::ColourGradient cap(faceColour.brighter(0.075f).darker(press * 0.10f).withAlpha(opacity),
                                  face.getX(), face.getY(),
-                                 faceColour.darker(0.075f + press * 0.045f).withAlpha(opacity),
+                                 faceColour.darker(0.12f + press * 0.07f).withAlpha(opacity),
                                  face.getX(), face.getBottom(), false);
         cap.addColour(0.18, faceColour.brighter(0.015f).withAlpha(opacity));
         cap.addColour(0.76, faceColour.withAlpha(opacity));
@@ -1151,9 +1157,9 @@ private:
         upperBevel.quadraticTo(inner.getX(), inner.getY(), inner.getX() + radius, inner.getY());
         upperBevel.lineTo(inner.getRight() - radius, inner.getY());
         upperBevel.quadraticTo(inner.getRight(), inner.getY(), inner.getRight(), inner.getY() + radius);
-        g.setColour(juce::Colour(0xfffffdf3).withAlpha((0.90f - press * 0.38f) * opacity));
+        g.setColour(juce::Colour(0xffe0d8c0).withAlpha((0.24f - press * 0.13f) * opacity));
         g.strokePath(upperBevel, juce::PathStrokeType(0.75f * unit));
-        g.setColour(juce::Colour(0xff777365).withAlpha(0.38f * opacity));
+        g.setColour(juce::Colour(0xff242a1e).withAlpha(0.58f * opacity));
         g.drawLine(inner.getX() + radius, inner.getBottom(),
                    inner.getRight() - radius, inner.getBottom(), 0.85f * unit);
 

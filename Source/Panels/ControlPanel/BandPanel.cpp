@@ -1133,7 +1133,7 @@ void BandPanel::setAnimatedModuleTarget(int moduleIndex)
         moduleSelectionPosition.setTarget(targetPosition);
     else
         moduleSelectionPosition.snapTo(targetPosition);
-    startContentTransition(knobsAreaRect.getUnion(graphAreaRect));
+    repaint(knobsAreaRect.getUnion(graphAreaRect));
 }
 
 void BandPanel::selectInsertEffect(int slot)
@@ -1178,7 +1178,7 @@ void BandPanel::selectInsertEffect(int slot)
     if (! safeThis) return;
     modulatableSliderComponents.at(OUTPUT_NAME)->setInteractionOnlyReadout(true);
     modulatableSliderComponents.at(MIX_NAME)->setInteractionOnlyReadout(true);
-    startContentTransition(knobsAreaRect.getUnion(graphAreaRect));
+    repaint(knobsAreaRect.getUnion(graphAreaRect));
     resized(); invalidateChromeCache();
     auto callback = onModuleChanged;
     if (callback) callback();
@@ -1265,7 +1265,6 @@ void BandPanel::animationTick(float deltaSeconds)
         ottGraph.advanceVisuals(deltaSeconds, reading, getOttPreviewDirection() | spectrumOttInteraction);
     }
     else ottGraph.resetVisuals();
-    advanceContentTransition(deltaSeconds);
     if (! isShowing())
     {
         moduleSelectionPosition.snapTo(moduleSelectionPosition.target);

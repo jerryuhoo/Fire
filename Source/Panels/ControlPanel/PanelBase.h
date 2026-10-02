@@ -24,14 +24,11 @@ class PanelBase : public juce::Component
 {
 public:
     std::vector<ModulatableSlider*>& getModulatableSliders() { return modulatableSliders; }
-    void paintOverChildren(juce::Graphics& g) override;
 
 protected: // Use protected so derived classes can access these members
     // Make constructor protected so only derived classes can call it.
     explicit PanelBase(FireAudioProcessor& p);
     ~PanelBase() override;
-    void startContentTransition(juce::Rectangle<int> bounds);
-    void advanceContentTransition(float deltaSeconds);
 
     // This helper function, promoted from BandPanel, will be shared by all panels.
     void createAndConfigureSlider(const juce::String& paramName,
@@ -55,8 +52,6 @@ protected: // Use protected so derived classes can access these members
     std::map<juce::String, std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliderAttachments;
 
 private:
-    juce::Rectangle<int> transitioningContent;
-    float contentReveal = 1.0f;
     // Callbacks can be passed in from the editor and handled here if needed,
     // for this example, we keep the simple callback assignment in derived classes.
 

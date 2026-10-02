@@ -770,11 +770,6 @@ void FireAudioProcessorEditor::paintOverChildren(juce::Graphics& g)
 {
     if (presetBrowser && presetBrowser->isVisible()) return;
 
-    if (workspaceReveal < 0.999f && ! contentArea.isEmpty())
-    {
-        g.setColour(fire::ui::colours::surface0.withAlpha(1.0f - workspaceReveal));
-        g.fillRect(contentArea);
-    }
     const auto opacity = juce::jlimit(0.0f,
                                       1.0f,
                                       hostBypassIndicatorOpacity.current);
@@ -1358,15 +1353,6 @@ void FireAudioProcessorEditor::advanceAnimations(float deltaSeconds)
     if (workspaceSelection.advance(deltaSeconds))
         repaint(navigationArea);
 
-    if (workspaceReveal < 1.0f)
-    {
-        workspaceReveal += (1.0f - workspaceReveal)
-                           * fire::ui::Motion::step(deltaSeconds, fire::ui::Motion::page);
-        if (workspaceReveal > 0.998f)
-            workspaceReveal = 1.0f;
-        repaint(contentArea);
-    }
-
     if (hostBypassIndicatorOpacity.advance(deltaSeconds, 0.10f))
         repaint(spectrumCardArea);
 }
@@ -1883,8 +1869,9 @@ void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animate
             return;
     }
 
-    const bool workspaceChanged = activeWorkspace != targetWorkspace;
-    workspaceReveal = workspaceChanged && animateSelection && isShowing() ? 0.15f : 1.0f;
+    // Reveal the selected page immediately. Only the navigation indicator
+    // moves; a dark content mask would flash on every switch and could remain
+    // visible while the UI clock is paused or busy.
     activeWorkspace = targetWorkspace;
     multiband.setOttMode(activeWorkspace == 0 && bandPanel.isOttSelected());
     if (safeThis == nullptr) return;

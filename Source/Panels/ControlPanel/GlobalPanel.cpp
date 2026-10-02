@@ -772,7 +772,6 @@ void GlobalPanel::animationTick(float deltaSeconds)
     if (! safeOwner) return;
     insertControls.refresh();
     if (! safeOwner) return;
-    advanceContentTransition(deltaSeconds);
     if (! selectionAnimationInitialised)
         return;
 
@@ -1082,7 +1081,7 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
         if (! safeThis) return;
         modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setInteractionOnlyReadout(downsampleSwitch.getToggleState());
         modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setInteractionOnlyReadout(downsampleSwitch.getToggleState());
-        startContentTransition(controlsAreaRect);
+        repaint(controlsAreaRect);
         resized();
         if (safeThis == nullptr)
             return;
@@ -1127,7 +1126,7 @@ void GlobalPanel::selectInsertEffect(int slot)
     if (! safeThis) return;
     modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setInteractionOnlyReadout(true);
     modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setInteractionOnlyReadout(true);
-    startContentTransition(controlsAreaRect);
+    repaint(controlsAreaRect);
     resized(); invalidateChromeCache();
 }
 

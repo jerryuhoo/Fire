@@ -231,7 +231,6 @@ private:
     juce::Rectangle<int> spectrumCardArea;
     juce::Rectangle<int> navigationArea;
     juce::Rectangle<int> contentArea;
-    float workspaceReveal = 1.0f;
 
     // create own knob style
     FireLookAndFeel fireLookAndFeel;

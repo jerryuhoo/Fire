@@ -1,4 +1,5 @@
 #include "LfoPanel.h"
+#include "../../GUI/Skin.h"
 #include "../../GUI/FireIcons.h"
 #include "../../DSP/LfoShapeGenerator.h"
 #include "../../GUI/FireTheme.h"
@@ -658,7 +659,7 @@ void LfoEditor::paint(juce::Graphics& g)
         const auto pointBounds = juce::Rectangle<float>(currentPointRadius * 2.0f,
                                                         currentPointRadius * 2.0f)
                                      .withCentre(localPoint);
-        g.setColour(fire::ui::colours::canvas.withAlpha(0.95f));
+        g.setColour(fire::ui::paletteFor(*this).canvas.withAlpha(0.95f));
         g.fillEllipse(pointBounds);
         g.setColour(currentPointColour.withAlpha(0.88f + hover * 0.12f));
         g.drawEllipse(pointBounds.reduced(0.5f), isSelected ? 2.0f : 1.3f);
@@ -689,6 +690,14 @@ void LfoEditor::paint(juce::Graphics& g)
     }
 
     drawFocusRing();
+}
+
+void LfoEditor::lookAndFeelChanged()
+{
+    gridCache = {};
+    waveCache = {};
+    flowMask = {};
+    repaint();
 }
 
 void LfoEditor::resized()
@@ -736,11 +745,12 @@ void LfoEditor::rebuildGridCache(float physicalScale)
                             true);
     juce::Graphics cacheGraphics(gridCache);
     cacheGraphics.addTransform(juce::AffineTransform::scale(cachedGridScale));
-    fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat());
+    if (fire::ui::isVintage(*this)) cacheGraphics.fillAll(fire::ui::paletteFor(*this).canvas);
+    else fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat());
     fire::ui::drawTechGrid(cacheGraphics, getLocalBounds().toFloat(),
-                           juce::jmax(12.0f, 20.0f), 0.075f);
+                           juce::jmax(12.0f, 20.0f), 0.075f, fire::ui::skinFor(*this));
 
-    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.32f));
+    cacheGraphics.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(0.32f));
     for (int i = 1; i < hGridDivs; ++i)
         cacheGraphics.drawVerticalLine(juce::roundToInt(getWidth() * i / static_cast<float>(hGridDivs)),
                                        0.0f, static_cast<float>(getHeight()));
@@ -748,7 +758,7 @@ void LfoEditor::rebuildGridCache(float physicalScale)
         cacheGraphics.drawHorizontalLine(juce::roundToInt(getHeight() * i / static_cast<float>(vGridDivs)),
                                          0.0f, static_cast<float>(getWidth()));
 
-    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.48f));
+    cacheGraphics.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(0.48f));
     cacheGraphics.drawRect(getLocalBounds(), 1);
 }
 
@@ -2795,13 +2805,13 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     bankViewport.setViewedComponent(&bankContent, false);
     bankViewport.setScrollBarsShown(true, false);
     bankViewport.setScrollOnDragMode(juce::Viewport::ScrollOnDragMode::never);
-    bankViewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, fire::ui::colours::textMuted.withAlpha(0.25f));
+    bankViewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, fire::ui::paletteFor(*this).textMuted.withAlpha(0.25f));
     addAndMakeVisible(bankViewport);
     addAndMakeVisible(addLfoButton);
     addLfoButton.setComponentID("addLfo");
     addLfoButton.setTitle("Add LFO");
     addLfoButton.setTooltip("Add a modulation source (up to 16 LFOs)");
-    addLfoButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::raised);
+    addLfoButton.setColour(juce::TextButton::buttonColourId, fire::ui::paletteFor(*this).raised);
     addLfoButton.onClick = [safe = juce::Component::SafePointer<LfoPanel>(this)]
     {
         if (! safe || ! safe->isShowing() || ! safe->isEnabled()) return;
@@ -2819,7 +2829,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     addChildComponent(emptyBankLabel);
     emptyBankLabel.setText("Add an LFO to start modulating", juce::dontSendNotification);
     emptyBankLabel.setJustificationType(juce::Justification::centred);
-    emptyBankLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    emptyBankLabel.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textSecondary);
     emptyBankLabel.setInterceptsMouseClicks(false, false);
     lfoSelectButtons[0]->setToggleState(true, juce::dontSendNotification);
     lfoSelectionPosition.snapTo(0.0f);
@@ -2908,7 +2918,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
             .withHeight(KNOB_FONT_SIZE)
             .withStyle("Plain") });
     rateLabel.attachToComponent(&rateSlider, false);
-    rateLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    rateLabel.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textSecondary);
     rateLabel.setJustificationType(juce::Justification::centred);
 
     addAndMakeVisible(gridXSlider);
@@ -2968,7 +2978,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
             .withHeight(KNOB_FONT_SIZE)
             .withStyle("Plain") });
     lfoSmoothLabel.attachToComponent(&lfoSmoothSlider, false);
-    lfoSmoothLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    lfoSmoothLabel.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textSecondary);
     lfoSmoothLabel.setJustificationType(juce::Justification::centred);
 
     // Initialize the phase slider and label.
@@ -2989,7 +2999,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
             .withHeight(KNOB_FONT_SIZE)
             .withStyle("Plain") });
     lfoPhaseLabel.attachToComponent(&lfoPhaseSlider, false);
-    lfoPhaseLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    lfoPhaseLabel.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textSecondary);
     lfoPhaseLabel.setJustificationType(juce::Justification::centred);
 
     // Attachments
@@ -3122,6 +3132,18 @@ void LfoPanel::removeBankLfo(int index)
     if (safe) refreshBank(true);
 }
 
+void LfoPanel::lookAndFeelChanged()
+{
+    chromeCache = {};
+    if (auto* dialog = modulationMatrixDialog.getComponent())
+        if (auto* content = dialog->getContentComponent())
+        {
+            fire::ui::setSkin(*content, fire::ui::skinFor(*this));
+            content->sendLookAndFeelChange();
+        }
+    repaint();
+}
+
 void LfoPanel::paint(juce::Graphics& g)
 {
     if (getWidth() <= 0 || getHeight() <= 0)
@@ -3145,9 +3167,9 @@ void LfoPanel::paint(juce::Graphics& g)
 
 void LfoPanel::paintChrome(juce::Graphics& g) const
 {
-    fire::ui::drawCanvas(g, getLocalBounds().toFloat());
-    fire::ui::drawPanel(g, centerColumnArea.toFloat(), fire::ui::colours::modulation, false);
-    fire::ui::drawPanel(g, rightColumnArea.toFloat(), fire::ui::colours::flame, false);
+    fire::ui::drawCanvas(g, getLocalBounds().toFloat(), fire::ui::skinFor(*this));
+    fire::ui::drawPanel(g, centerColumnArea.toFloat(), fire::ui::colours::modulation, false, fire::ui::skinFor(*this));
+    fire::ui::drawPanel(g, rightColumnArea.toFloat(), fire::ui::colours::flame, false, fire::ui::skinFor(*this));
 
     const auto titleHeight = juce::jmax(9.0f, 21.0f * scale);
     const auto drawPlainTitle = [&g, titleHeight, this](juce::Rectangle<int> area,
@@ -3155,13 +3177,13 @@ void LfoPanel::paintChrome(juce::Graphics& g) const
     {
         auto titleArea = area.toFloat().removeFromTop(titleHeight)
                              .withTrimmedLeft(juce::jmax(7.0f, 10.0f * scale));
-        g.setColour(fire::ui::colours::textSecondary);
+        g.setColour(fire::ui::paletteFor(*this).textSecondary);
         g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, titleHeight * 0.46f)));
         g.drawText(title, titleArea, juce::Justification::centredLeft);
     };
     auto bankTitle = leftColumnArea.reduced(juce::roundToInt(8.0f * scale))
         .removeFromTop(juce::roundToInt(22.0f * scale));
-    g.setColour(fire::ui::colours::textSecondary.withAlpha(0.82f));
+    g.setColour(fire::ui::paletteFor(*this).textSecondary.withAlpha(0.82f));
     g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, bankTitle.getHeight() * 0.46f)));
     g.drawText("LFO BANK", bankTitle.withTrimmedRight(juce::roundToInt(25 * scale)), juce::Justification::centredLeft);
     drawPlainTitle(centerColumnArea, "SHAPE FORGE");
@@ -3169,7 +3191,7 @@ void LfoPanel::paintChrome(juce::Graphics& g) const
 
     if (! separatorLine.isEmpty())
     {
-        g.setColour(fire::ui::colours::hairline.withAlpha(0.68f));
+        g.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(0.68f));
         g.fillRect(separatorLine);
     }
 }
@@ -3196,7 +3218,7 @@ void LfoPanel::paintSelection(juce::Graphics& g)
     const auto radius = juce::jmin(selectionBounds.getHeight() * 0.5f,
                                    fire::ui::Metrics::radius * scale);
 
-    g.setColour(fire::ui::colours::raised);
+    g.setColour(fire::ui::paletteFor(*this).raised);
     g.fillRoundedRectangle(selectionBounds, radius);
 }
 
@@ -3788,11 +3810,13 @@ void LfoPanel::configureModulationMatrixDialog(
     juce::DialogWindow::LaunchOptions& launchOptions)
 {
     launchOptions.content.setOwned(new ModulationMatrixPanel(processor));
+    fire::ui::setSkin(*launchOptions.content, fire::ui::skinFor(*this));
+    launchOptions.content->sendLookAndFeelChange();
     const auto initialSize =
         getModulationMatrixInitialContentSize(*this);
     launchOptions.content->setSize(initialSize.x, initialSize.y);
     launchOptions.dialogTitle = "Modulation Matrix";
-    launchOptions.dialogBackgroundColour = fire::ui::colours::canvas;
+    launchOptions.dialogBackgroundColour = fire::ui::paletteFor(*this).canvas;
     launchOptions.useNativeTitleBar = true;
     launchOptions.escapeKeyTriggersCloseButton = true;
     launchOptions.resizable = true;
@@ -4214,11 +4238,11 @@ void LfoPanel::setEditMode(LfoEditMode newMode)
 void LfoPanel::styleButton(juce::Button& button, bool isToggle)
 {
     button.addListener(this);
-    button.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
-    button.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
-    button.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    button.setColour(juce::TextButton::buttonColourId, fire::ui::paletteFor(*this).surface0);
+    button.setColour(juce::TextButton::buttonOnColourId, fire::ui::paletteFor(*this).surface2);
+    button.setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
     button.setColour(juce::TextButton::textColourOnId, fire::ui::colours::whiteHot);
-    button.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
+    button.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textSecondary);
 
     // Specific style for toggle buttons
     if (isToggle)
@@ -4382,7 +4406,7 @@ void LfoPanel::styleLfoSelectButton(juce::TextButton& button, juce::Colour colou
     button.setClickingTogglesState(true);
     button.setRadioGroupId(1);
     button.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
-    button.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
+    button.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textMuted);
     button.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
     button.setColour(juce::TextButton::textColourOnId, colour);
     button.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);

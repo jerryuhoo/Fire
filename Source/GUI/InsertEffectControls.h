@@ -23,16 +23,16 @@ public:
         freezeButton.setTooltip("Hold the recorded audio while grains keep playing. Turn off to record new audio. "
                                 "Frozen recordings are saved in presets, projects and A/B states. "
                                 "With an empty recording, Freeze first captures about one second of new audio.");
-        freezeButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface1);
+        freezeButton.setColour(juce::TextButton::buttonColourId, fire::ui::paletteFor(*this).surface1);
         freezeButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::granular.withAlpha(0.25f));
-        freezeButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
+        freezeButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textSecondary);
         freezeButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::whiteHot);
         for (auto* menu : {&rootMenu, &chordMenu})
         {
             addChildComponent(menu);
-            menu->setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface0);
-            menu->setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
-            menu->setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
+            menu->setColour(juce::ComboBox::backgroundColourId, fire::ui::paletteFor(*this).surface0);
+            menu->setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
+            menu->setColour(juce::ComboBox::textColourId, fire::ui::paletteFor(*this).textPrimary);
             menu->setColour(juce::ComboBox::arrowColourId, fire::ui::colours::chordResonator);
         }
         for (int midi = fire::chord_resonator::minimumRoot; midi <= fire::chord_resonator::maximumRoot; ++midi)
@@ -55,7 +55,7 @@ public:
         for (auto* label : {&rootLabel, &chordLabel, &chordNotes})
         {
             addChildComponent(label);
-            label->setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+            label->setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textSecondary);
             label->setInterceptsMouseClicks(false, false);
             label->setJustificationType(juce::Justification::centredLeft);
         }
@@ -64,7 +64,7 @@ public:
         reverbModelMenu.setTitle("Reverb algorithm"); reverbModelMenu.setTooltip("Choose Classic, Room, Hall, Plate, Spring or Chamber.");
         for (int model = 0; model < fire::space::count; ++model) reverbModelMenu.addItem(fire::space::names[static_cast<size_t>(model)], model + 1);
         addChildComponent(reverbModelLabel); reverbModelLabel.setText("Algorithm", juce::dontSendNotification);
-        reverbModelLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+        reverbModelLabel.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textSecondary);
         reverbModelLabel.setJustificationType(juce::Justification::centred); reverbModelLabel.setInterceptsMouseClicks(false, false);
         addChildComponent(hardwareColour);
         coreMode.setTitle("Shape mode");

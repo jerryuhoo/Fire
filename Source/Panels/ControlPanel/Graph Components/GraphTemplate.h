@@ -28,6 +28,7 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    void lookAndFeelChanged() override;
     void setScale(float scale);
     float getScale() const noexcept;
     bool getZoomState() const noexcept;

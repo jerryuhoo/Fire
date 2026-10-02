@@ -43,13 +43,13 @@ public:
         content.addMouseListener(this, true);
         viewport.setScrollBarsShown(true, false);
         viewport.setScrollOnDragMode(juce::Viewport::ScrollOnDragMode::never);
-        viewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, colours::textMuted.withAlpha(0.25f));
+        viewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, paletteFor(*this).textMuted.withAlpha(0.25f));
         addAndMakeVisible(viewport);
         addAndMakeVisible(addButton);
         addButton.setButtonText("+"); addButton.setTitle("Add effect");
         addButton.setTooltip("Add a DSP module to this chain");
-        addButton.setColour(juce::TextButton::buttonColourId, colours::raised);
-        addButton.setColour(juce::TextButton::textColourOffId, colours::textSecondary);
+        addButton.setColour(juce::TextButton::buttonColourId, paletteFor(*this).raised);
+        addButton.setColour(juce::TextButton::textColourOffId, paletteFor(*this).textSecondary);
         addButton.onClick = [this] { showAddMenu(); };
         for (int slot = 0; slot < effects::slotCount; ++slot)
         {
@@ -62,8 +62,8 @@ public:
             button.getProperties().set("fireModuleRail", true);
             button.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
             button.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
-            button.setColour(juce::TextButton::textColourOffId, colours::textSecondary);
-            button.setColour(juce::TextButton::textColourOnId, colours::textPrimary);
+            button.setColour(juce::TextButton::textColourOffId, paletteFor(*this).textSecondary);
+            button.setColour(juce::TextButton::textColourOnId, paletteFor(*this).textPrimary);
             button.onClick = [this, slot] { if (onSelectEffect) onSelectEffect(slot); };
             configureDragButton(button, module_order::firstInsert + slot);
             remove.onClick = [this, slot] {
@@ -398,7 +398,7 @@ private:
             const auto margin = juce::jmax(1.0f, 2.0f * owner.scale);
             auto bounds = juce::Rectangle<float>(margin, owner.selectionY.current, getWidth() - margin * 2,
                                                  owner.rowPitch - margin * 2);
-            g.setColour(colours::raised);
+            g.setColour(paletteFor(*this).raised);
             g.fillRoundedRectangle(bounds, Metrics::radius * owner.scale);
         }
         void paintOverChildren(juce::Graphics& g) override { owner.paintDrag(g); }
@@ -553,15 +553,15 @@ private:
             dragViewPoint.y + view.getY() - dragOffset), content.getWidth() - margin * 2, height);
         g.setColour(juce::Colours::black.withAlpha(0.3f));
         g.fillRoundedRectangle(bounds.translated(0, 3 * scale), Metrics::radius * scale);
-        g.setColour(colours::raised.brighter(0.08f));
+        g.setColour(paletteFor(*this).raised.brighter(0.08f));
         g.fillRoundedRectangle(bounds, Metrics::radius * scale);
         auto& button = *rowForNode(dragNode).button;
         g.setFont(getLookAndFeel().getTextButtonFont(button, rowPitch));
-        g.setColour(colours::textPrimary);
+        g.setColour(paletteFor(*this).textPrimary);
         g.drawFittedText(button.getButtonText(), bounds.reduced(12 * scale, 0).toNearestInt(), juce::Justification::centredLeft, 1);
         if (dragTarget >= 0)
         {
-            g.setColour(colours::textPrimary.withAlpha(0.85f));
+            g.setColour(paletteFor(*this).textPrimary.withAlpha(0.85f));
             const auto y = juce::jlimit(view.getY() + 1, view.getBottom() - 2, dropLineY);
             g.fillRoundedRectangle(margin, y, content.getWidth() - margin * 2, 2 * scale, scale);
         }

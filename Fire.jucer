@@ -14,6 +14,7 @@
         <FILE id="analogArt1" name="analog_tube_off.png" compile="0" resource="1" file="assets/analog_tube_off.png"/>
         <FILE id="analogArt2" name="analog_tube_on.png" compile="0" resource="1" file="assets/analog_tube_on.png"/>
         <FILE id="analogArt3" name="analog_tape_reel.png" compile="0" resource="1" file="assets/analog_tape_reel.png"/>
+        <FILE id="woodArt1" name="vintage_walnut.png" compile="0" resource="1" file="assets/vintage_walnut.png"/>
         <FILE id="SoUMNs" name="fire_anime.png" compile="0" resource="1" file="assets/images/fire_anime.png"/>
         <FILE id="IePV5S" name="firelogo.png" compile="0" resource="1" file="assets/images/firelogo.png"/>
         <FILE id="fireLogoSvg" name="firelogo.svg" compile="0" resource="0" file="assets/images/firelogo.svg"/>
@@ -200,6 +201,8 @@
         <FILE id="insertFx1" name="InsertEffect.h" compile="0" resource="0" file="Source/DSP/InsertEffect.h"/>
         <FILE id="presetUi1" name="PresetBrowserPanel.h" compile="0" resource="0" file="Source/GUI/PresetBrowserPanel.h"/>
         <FILE id="analogUi1" name="HardwareColourPanel.h" compile="0" resource="0" file="Source/GUI/HardwareColourPanel.h"/>
+        <FILE id="skinUi1" name="Skin.h" compile="0" resource="0" file="Source/GUI/Skin.h"/>
+        <FILE id="woodUi1" name="VintageMaterials.h" compile="0" resource="0" file="Source/GUI/VintageMaterials.h"/>
         <FILE id="spaceFx1" name="SpatialReverb.h" compile="0" resource="0" file="Source/DSP/SpatialReverb.h"/>
         <FILE id="spaceFx2" name="ReverbModelParameters.h" compile="0" resource="0" file="Source/Utility/ReverbModelParameters.h"/>
         <FILE id="analogFx1" name="AnalogDistortion.h" compile="0" resource="0" file="Source/DSP/AnalogDistortion.h"/>

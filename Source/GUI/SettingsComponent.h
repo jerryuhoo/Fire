@@ -67,6 +67,31 @@ public:
             bool newValue = autoUpdateToggle.getToggleState();
             appProperties.setValue(AUTO_UPDATE_ID, newValue);
         };
+        skinLabel.setText("APPEARANCE", juce::dontSendNotification);
+        skinLabel.setFont(fire::ui::labelFont(10)); addAndMakeVisible(skinLabel);
+        const juce::Component::SafePointer<SettingsComponent> safe(this);
+        for (auto* button : {&modernSkin, &vintageSkin})
+        {
+            addAndMakeVisible(*button); button->setClickingTogglesState(true); button->setRadioGroupId(7301);
+        }
+        modernSkin.setButtonText("Modern"); modernSkin.setTitle("Modern skin"); modernSkin.setComponentID("skinModern");
+        vintageSkin.setButtonText("Vintage"); vintageSkin.setTitle("Vintage skin"); vintageSkin.setComponentID("skinVintage");
+        modernSkin.setTooltip("Graphite, aluminium and contemporary controls");
+        vintageSkin.setTooltip("Warm metal, brass and vintage studio controls");
+        const auto select = [safe](fire::ui::Skin skin)
+        {
+            const auto alive = safe;
+            if (!alive) return;
+            alive->applySkin(skin);
+            if (!alive) return;
+            alive->appProperties.setValue(fire::ui::skinSetting, static_cast<int>(skin));
+            if (alive) alive->appProperties.saveIfNeeded();
+        };
+        modernSkin.onClick = [safe, select]
+        {if (safe && safe->modernSkin.getToggleState()) {auto action = select; action(fire::ui::Skin::modern);}};
+        vintageSkin.onClick = [safe, select]
+        {if (safe && safe->vintageSkin.getToggleState()) {auto action = select; action(fire::ui::Skin::vintage);}};
+        applySkin(fire::ui::skinFromValue(appProperties.getIntValue(fire::ui::skinSetting, 0)));
     }
 
     ~SettingsComponent() override
@@ -89,11 +114,11 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        fire::ui::drawCanvas(g, getLocalBounds().toFloat());
-        fire::ui::drawTechGrid(g, getLocalBounds().toFloat(), 26.0f, 0.06f);
+        fire::ui::drawCanvas(g, getLocalBounds().toFloat(), fire::ui::skinFor(*this));
+        fire::ui::drawTechGrid(g, getLocalBounds().toFloat(), 26.0f, 0.06f, fire::ui::skinFor(*this));
         fire::ui::drawPanel(g, getLocalBounds().toFloat().reduced(12.0f),
                             fire::ui::colours::ember, true,
-                            fire::ui::Metrics::radiusLarge);
+                            fire::ui::skinFor(*this));
         fire::ui::drawFireGlyph(g, fireGlyphArea.toFloat());
     }
 
@@ -104,14 +129,14 @@ public:
         // tests and unusual embedders: proportional outer padding preserves
         // useful controls before the preferred 28 px inset is available.
         const int horizontalInset = juce::jlimit(12, 28, getWidth() / 10);
-        const int verticalInset = juce::jlimit(12, 28, getHeight() / 9);
+        const int verticalInset = juce::jlimit(12, 20, getHeight() / 12);
         auto bounds = getLocalBounds().reduced(horizontalInset, verticalInset);
-        const auto logoHeight = juce::roundToInt(bounds.getHeight() * 0.30f);
+        const auto logoHeight = juce::jmin(58, juce::roundToInt(bounds.getHeight() * 0.20f));
         auto logoArea = bounds.removeFromTop(logoHeight);
         fireGlyphArea = logoArea.withSizeKeepingCentre(juce::jmin(logoHeight, 72),
                                                        juce::jmin(logoHeight, 72));
 
-        bounds.removeFromTop(14);
+        bounds.removeFromTop(8);
 
         // 2. Place the version label
         versionLabel.setBounds(bounds.removeFromTop(20));
@@ -123,7 +148,12 @@ public:
 
         // 4. Place the company label
         companyLabel.setBounds(bounds.removeFromTop(20));
-        bounds.removeFromTop(20); // More space before the setting
+        bounds.removeFromTop(8);
+        skinLabel.setBounds(bounds.removeFromTop(16));
+        auto skinRow = bounds.removeFromTop(30);
+        const int skinWidth = (skinRow.getWidth() - 8) / 2;
+        modernSkin.setBounds(skinRow.removeFromLeft(skinWidth)); skinRow.removeFromLeft(8);
+        vintageSkin.setBounds(skinRow); bounds.removeFromTop(8);
 
         // 5. Place the toggle button
         autoUpdateToggle.setBounds(bounds.removeFromTop(24));
@@ -133,6 +163,18 @@ public:
 
 private:
     friend struct SettingsComponentTestAccess;
+    void applySkin(fire::ui::Skin skin)
+    {
+        const auto previous = fire::ui::skinFor(*this);
+        fire::ui::setSkin(*this, skin); fireLookAndFeel.setSkin(skin);
+        fire::ui::remapSkinColours(*this, previous, skin);
+        skinLabel.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textMuted);
+        companyLabel.setColour(juce::HyperlinkButton::textColourId,
+            skin == fire::ui::Skin::vintage ? juce::Colour(0xff226a74) : fire::ui::colours::signalCool);
+        modernSkin.setToggleState(skin == fire::ui::Skin::modern, juce::dontSendNotification);
+        vintageSkin.setToggleState(skin == fire::ui::Skin::vintage, juce::dontSendNotification);
+        sendLookAndFeelChange(); repaint();
+    }
 
     /** Settings-page link chrome which consumes PrimaryPointerButton's shared
         animation state instead of falling back to JUCE's abrupt hyperlink
@@ -268,6 +310,8 @@ private:
 
         if (safeThis != nullptr)
             autoUpdateToggle.dismissPointerGesture();
+        if (safeThis != nullptr) modernSkin.dismissPointerGesture();
+        if (safeThis != nullptr) vintageSkin.dismissPointerGesture();
     }
 
     juce::PropertiesFile& appProperties;
@@ -276,6 +320,8 @@ private:
     FireLookAndFeel fireLookAndFeel;
     juce::Label versionLabel;
     juce::Label authorLabel;
+    juce::Label skinLabel;
+    DialogSessionButton<PrimaryTextButton> modernSkin, vintageSkin;
     DialogSessionButton<SettingsLinkButton> companyLabel;
 
     DialogSessionButton<PrimaryToggleButton> autoUpdateToggle;

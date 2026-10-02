@@ -16,6 +16,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "BrandMarks.h"
+#include "Skin.h"
+#include "VintageMaterials.h"
 #include "../Utility/LfoBankParameters.h"
 #include "../Utility/ModulationSources.h"
 #include <array>
@@ -426,11 +428,19 @@ inline float pixelAligned(float value, float physicalScale = 1.0f)
     return (std::floor(value * physicalScale) + 0.5f) / physicalScale;
 }
 
-inline void drawCanvas(juce::Graphics& g, juce::Rectangle<float> bounds)
+inline void drawCanvas(juce::Graphics& g, juce::Rectangle<float> bounds, Skin skin = Skin::modern)
 {
-    juce::ColourGradient gradient(colours::surface1, bounds.getX(), bounds.getY(),
-                                  colours::canvas, bounds.getX(), bounds.getBottom(), false);
-    gradient.addColour(0.42, colours::surface0);
+    const auto& palette = skinPalette(skin);
+    if (skin == Skin::vintage)
+    {
+        g.setGradientFill(juce::ColourGradient(palette.surface2, bounds.getTopLeft(),
+            palette.canvas, bounds.getBottomLeft(), false));
+        g.fillRect(bounds);
+        return;
+    }
+    juce::ColourGradient gradient(palette.surface1, bounds.getX(), bounds.getY(),
+                                  palette.canvas, bounds.getX(), bounds.getBottom(), false);
+    gradient.addColour(0.42, palette.surface0);
     g.setGradientFill(gradient);
     g.fillRect(bounds);
 }
@@ -438,14 +448,15 @@ inline void drawCanvas(juce::Graphics& g, juce::Rectangle<float> bounds)
 inline void drawTechGrid(juce::Graphics& g,
                          juce::Rectangle<float> bounds,
                          float spacing = 24.0f,
-                         float alpha = 0.10f)
+                         float alpha = 0.10f,
+                         Skin skin = Skin::modern)
 {
     if (bounds.isEmpty() || spacing <= 1.0f)
         return;
 
     const juce::Graphics::ScopedSaveState state(g);
     g.reduceClipRegion(bounds.getSmallestIntegerContainer());
-    g.setColour(colours::hairline.withAlpha(alpha));
+    g.setColour(skinPalette(skin).hairline.withAlpha(alpha));
 
     const auto firstX = std::floor(bounds.getX() / spacing) * spacing;
     const auto firstY = std::floor(bounds.getY() / spacing) * spacing;
@@ -472,6 +483,22 @@ inline void drawPanel(juce::Graphics& g,
     juce::ignoreUnused(active);
 
     juce::ignoreUnused(accent);
+}
+
+inline void drawPanel(juce::Graphics& g, juce::Rectangle<float> bounds,
+                      juce::Colour accent, bool active, Skin skin)
+{
+    if (skin == Skin::modern) {drawPanel(g, bounds, accent, active); return;}
+    if (bounds.isEmpty()) return;
+    const auto& palette = skinPalette(skin);
+    const auto area = bounds.reduced(.5f);
+    g.setGradientFill(juce::ColourGradient(palette.surface2, area.getTopLeft(),
+        palette.surface0, area.getBottomRight(), false));
+    g.fillRoundedRectangle(area, Metrics::radius);
+    g.setColour(palette.hairline.withAlpha(.55f));
+    g.drawRoundedRectangle(area, Metrics::radius, 1);
+    g.setColour(juce::Colours::white.withAlpha(.4f));
+    g.drawRoundedRectangle(area.reduced(1.5f), Metrics::radius - 1, 1);
 }
 
 inline void drawGlassPill(juce::Graphics& g,

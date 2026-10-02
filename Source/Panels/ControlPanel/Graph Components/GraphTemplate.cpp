@@ -9,6 +9,7 @@
 */
 
 #include "GraphTemplate.h"
+#include "../../../GUI/Skin.h"
 #include "../../../GUI/FireIcons.h"
 
 #include <utility>
@@ -106,9 +107,17 @@ void GraphTemplate::paint(juce::Graphics& g)
         auto header = getGraphHeaderBounds();
         const auto icon = header.removeFromRight(18 * scale).withSizeKeepingCentre(14 * scale, 14 * scale);
         fire::ui::drawIcon(g, mZoomState ? fire::ui::Icon::restore : fire::ui::Icon::expand,
-                          icon, fire::ui::colours::textMuted.interpolatedWith(getGraphAccent(), emphasis)
+                          icon, fire::ui::paletteFor(*this).textMuted.interpolatedWith(getGraphAccent(), emphasis)
                               .withAlpha((0.6f + emphasis * 0.35f) * (1 - disabled * 0.65f)));
     }
+}
+
+void GraphTemplate::lookAndFeelChanged()
+{
+    staticLayer = {};
+    staticLayerBounds = {};
+    staticLayerScale = 0.0f;
+    repaint();
 }
 
 void GraphTemplate::resized()
@@ -532,17 +541,34 @@ void GraphTemplate::rebuildStaticLayer(float displayScale)
 
     const auto accent = getGraphAccent();
     const auto bounds = getLocalBounds().toFloat();
-    fire::ui::drawPanel(cacheGraphics, bounds, accent, true);
+    fire::ui::drawPanel(cacheGraphics, bounds, accent, true, fire::ui::skinFor(*this));
 
     auto plotBounds = getGraphPlotBounds();
-    cacheGraphics.setColour(fire::ui::colours::canvas.withAlpha(0.50f));
-    cacheGraphics.fillRoundedRectangle(plotBounds, fire::ui::Metrics::radiusSmall);
+    if (fire::ui::isVintage(*this))
+    {
+        // The warm metal surround holds a dark instrument screen. Preserve
+        // contrast for the bright signal traces without changing their colours.
+        cacheGraphics.setGradientFill(juce::ColourGradient(
+            juce::Colour(0xff1d2926), plotBounds.getTopLeft(),
+            juce::Colour(0xff101b18), plotBounds.getBottomRight(), false));
+        cacheGraphics.fillRoundedRectangle(plotBounds, fire::ui::Metrics::radiusSmall);
+        cacheGraphics.setColour(juce::Colour(0xff0b1210));
+        cacheGraphics.drawRoundedRectangle(plotBounds, fire::ui::Metrics::radiusSmall, 1.0f);
+        cacheGraphics.setColour(juce::Colour(0xff6a7870).withAlpha(0.46f));
+        cacheGraphics.drawRoundedRectangle(plotBounds.reduced(1.0f),
+                                            fire::ui::Metrics::radiusSmall - 1.0f, 1.0f);
+    }
+    else
+    {
+        cacheGraphics.setColour(fire::ui::paletteFor(*this).canvas.withAlpha(0.50f));
+        cacheGraphics.fillRoundedRectangle(plotBounds, fire::ui::Metrics::radiusSmall);
+    }
     fire::ui::drawTechGrid(cacheGraphics,
                            plotBounds,
                            juce::jmax(12.0f, 20.0f * scale),
-                           0.08f);
+                           0.08f, fire::ui::skinFor(*this));
 
-    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.27f));
+    cacheGraphics.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(0.27f));
     cacheGraphics.drawHorizontalLine(juce::roundToInt(plotBounds.getCentreY()),
                                      plotBounds.getX(),
                                      plotBounds.getRight());
@@ -552,5 +578,9 @@ void GraphTemplate::rebuildStaticLayer(float displayScale)
 
     auto headerBounds = getGraphHeaderBounds();
     headerBounds.removeFromRight(20 * scale);
-    fire::ui::drawSectionTitle(cacheGraphics, headerBounds, graphTitle, accent);
+    cacheGraphics.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 22.0f, headerBounds.getHeight() * 0.46f)));
+    cacheGraphics.setColour(fire::ui::paletteFor(*this).textSecondary);
+    cacheGraphics.drawText(graphTitle.toUpperCase(),
+                           headerBounds.withTrimmedLeft(fire::ui::Metrics::space8),
+                           juce::Justification::centredLeft);
 }

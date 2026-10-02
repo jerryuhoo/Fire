@@ -9,6 +9,7 @@
 */
 
 #include "ModulationMatrixPanel.h"
+#include "../../GUI/Skin.h"
 #include "../../Utility/AudioHelpers.h"
 #include "../../GUI/ModulationSourceControls.h"
 
@@ -565,8 +566,8 @@ void ModulationMatrixPrimaryButton::paintButton(juce::Graphics& g, bool, bool)
     const auto enabledAlpha = isEnabled() ? 1.0f : 0.42f;
     const bool active = getToggleState();
     auto ink = findColour(active ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId);
-    auto fill = colours::surface1.interpolatedWith(colours::raised, hover * 0.65f + press * 0.25f);
-    auto outline = colours::hairline.withAlpha(0.70f + hover * 0.30f);
+    auto fill = paletteFor(*this).surface1.interpolatedWith(paletteFor(*this).raised, hover * 0.65f + press * 0.25f);
+    auto outline = paletteFor(*this).hairline.withAlpha(0.70f + hover * 0.30f);
     if (appearance == Appearance::add)
     {
         ink = colours::whiteHot;
@@ -575,15 +576,15 @@ void ModulationMatrixPrimaryButton::paintButton(juce::Graphics& g, bool, bool)
     }
     else if (appearance == Appearance::enable)
     {
-        ink = active ? colours::positive : colours::textMuted;
+        ink = active ? colours::positive : paletteFor(*this).textMuted;
         fill = active ? colours::positive.withAlpha(0.08f + hover * 0.05f) : fill;
         outline = active ? colours::positive.withAlpha(0.22f + hover * 0.25f) : outline;
     }
     else if (appearance == Appearance::remove)
     {
-        ink = colours::textMuted.interpolatedWith(colours::danger, juce::jmax(hover, press));
+        ink = paletteFor(*this).textMuted.interpolatedWith(colours::danger, juce::jmax(hover, press));
         fill = colours::danger.withAlpha(hover * 0.09f + press * 0.07f);
-        outline = colours::hairline.withAlpha(hover * 0.60f);
+        outline = paletteFor(*this).hairline.withAlpha(hover * 0.60f);
     }
     g.setColour(fill.withMultipliedAlpha(enabledAlpha));
     g.fillRoundedRectangle(bounds, 6.0f);
@@ -664,7 +665,7 @@ ModulationMatrixHeader::ModulationMatrixHeader()
 
     for (auto* label : { &sourceLabel, &amountLabel, &polarityLabel, &bypassLabel, &destinationLabel })
     {
-        label->setColour(juce::Label::textColourId, fire::ui::colours::textMuted);
+        label->setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textMuted);
         label->setFont(fire::ui::labelFont(9.0f));
         label->setBorderSize({});
     }
@@ -672,7 +673,7 @@ ModulationMatrixHeader::ModulationMatrixHeader()
 
 void ModulationMatrixHeader::paint(juce::Graphics& g)
 {
-    g.setColour(fire::ui::colours::hairline.withAlpha(0.55f));
+    g.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(0.55f));
     g.drawHorizontalLine(getHeight() - 1, 0.0f, static_cast<float>(getWidth()));
 }
 
@@ -1079,7 +1080,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
                                  ? routing.sourceLfoIndex + 1 : 0,
                              juce::dontSendNotification);
     sourceMenu.addListener(this);
-    sourceMenu.setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface0);
+    sourceMenu.setColour(juce::ComboBox::backgroundColourId, fire::ui::paletteFor(*this).surface0);
     sourceMenu.setColour(juce::ComboBox::outlineColourId,
                          sourceColour.withAlpha(0.45f));
     sourceMenu.setColour(juce::ComboBox::textColourId, sourceColour);
@@ -1106,7 +1107,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     amountSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 50, 24);
     amountSlider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
     amountSlider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-    amountSlider.setColour(juce::Slider::textBoxTextColourId, fire::ui::colours::textPrimary);
+    amountSlider.setColour(juce::Slider::textBoxTextColourId, fire::ui::paletteFor(*this).textPrimary);
     amountSlider.setColour(juce::Slider::trackColourId, sourceColour);
     amountSlider.setScrollWheelEnabled(false);
     amountSlider.onPointerDispatchComplete =
@@ -1123,11 +1124,11 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
                              + " between bipolar and unipolar");
     bipolarButton.setComponentID("rounded");
     bipolarButton.setAppearance(ModulationMatrixPrimaryButton::Appearance::polarity);
-    bipolarButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
-    bipolarButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
+    bipolarButton.setColour(juce::TextButton::buttonColourId, fire::ui::paletteFor(*this).surface0);
+    bipolarButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::paletteFor(*this).surface2);
     bipolarButton.setColour(juce::TextButton::textColourOnId, sourceColour);
-    bipolarButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
-    bipolarButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    bipolarButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textMuted);
+    bipolarButton.setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
     bipolarButton.setClickingTogglesState(true);
     bipolarButton.setToggleState(routing.isBipolar, juce::dontSendNotification);
     bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
@@ -1139,11 +1140,11 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     bypassButton.setTooltip("Enable or bypass modulation routing " + routingNumber);
     bypassButton.setComponentID("rounded");
     bypassButton.setAppearance(ModulationMatrixPrimaryButton::Appearance::enable);
-    bypassButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
-    bypassButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
+    bypassButton.setColour(juce::TextButton::buttonColourId, fire::ui::paletteFor(*this).surface0);
+    bypassButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::paletteFor(*this).surface2);
     bypassButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::positive);
-    bypassButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
-    bypassButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    bypassButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textMuted);
+    bypassButton.setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
     bypassButton.setClickingTogglesState(true);
     bypassButton.setToggleState(! routing.isBypassed, juce::dontSendNotification);
     bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
@@ -1191,10 +1192,10 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     }
 
     destinationMenu.addListener(this);
-    destinationMenu.setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface0);
-    destinationMenu.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
-    destinationMenu.setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
-    destinationMenu.setColour(juce::ComboBox::arrowColourId, fire::ui::colours::textSecondary);
+    destinationMenu.setColour(juce::ComboBox::backgroundColourId, fire::ui::paletteFor(*this).surface0);
+    destinationMenu.setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
+    destinationMenu.setColour(juce::ComboBox::textColourId, fire::ui::paletteFor(*this).textPrimary);
+    destinationMenu.setColour(juce::ComboBox::arrowColourId, fire::ui::paletteFor(*this).textSecondary);
 
     const auto configureRoutingMenu = [this](auto& menu)
     {
@@ -1221,10 +1222,10 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     removeButton.setTooltip("Remove modulation routing " + routingNumber);
     removeButton.setComponentID("remove_button");
     removeButton.setAppearance(ModulationMatrixPrimaryButton::Appearance::remove);
-    removeButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
+    removeButton.setColour(juce::TextButton::buttonColourId, fire::ui::paletteFor(*this).surface0);
     removeButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::danger);
-    removeButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
-    removeButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    removeButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textMuted);
+    removeButton.setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
     removeButton.addListener(this);
     sourceMenu.setExplicitFocusOrder(1);
     destinationMenu.setExplicitFocusOrder(2);
@@ -1235,14 +1236,23 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     updateVisualState();
 }
 
+void ModulationMatrixRow::lookAndFeelChanged()
+{
+    const auto nextSkin = fire::ui::skinFor(*this);
+    const auto previousSkin = fireLookAndFeel.getSkin();
+    fireLookAndFeel.setSkin(nextSkin);
+    fire::ui::remapSkinColours(*this, previousSkin, nextSkin);
+    repaint();
+}
+
 void ModulationMatrixRow::paint(juce::Graphics& g)
 {
     const bool bypassed = ! bypassButton.getToggleState();
     const auto accent = fire::ui::modulationSourceColour(expectedRouting.sourceLfoIndex);
     const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
-    g.setColour(bypassed ? fire::ui::colours::surface0 : fire::ui::colours::surface1);
+    g.setColour(bypassed ? fire::ui::paletteFor(*this).surface0 : fire::ui::paletteFor(*this).surface1);
     g.fillRoundedRectangle(bounds, 8.0f);
-    g.setColour(fire::ui::colours::hairline.withAlpha(bypassed ? 0.35f : 0.60f));
+    g.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(bypassed ? 0.35f : 0.60f));
     g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
     g.setColour(accent.withAlpha(bypassed ? 0.22f : 0.85f));
     g.fillRoundedRectangle(3.0f, 12.0f, 2.0f, juce::jmax(0.0f, getHeight() - 24.0f), 1.0f);
@@ -1254,7 +1264,7 @@ void ModulationMatrixRow::paint(juce::Graphics& g)
     direction.startNewSubPath(centre.x + 1.0f, centre.y - 3.0f);
     direction.lineTo(centre.x + 4.0f, centre.y);
     direction.lineTo(centre.x + 1.0f, centre.y + 3.0f);
-    g.setColour(fire::ui::colours::textMuted.withAlpha(bypassed ? 0.35f : 0.80f));
+    g.setColour(fire::ui::paletteFor(*this).textMuted.withAlpha(bypassed ? 0.35f : 0.80f));
     g.strokePath(direction, juce::PathStrokeType(1.25f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
@@ -1313,6 +1323,7 @@ void ModulationMatrixRow::enablementChanged()
 void ModulationMatrixRow::parentHierarchyChanged()
 {
     juce::Component::parentHierarchyChanged();
+    lookAndFeelChanged();
     if (! isShowing())
         dismissTransientInteractions();
 }
@@ -1617,7 +1628,7 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
     viewport.setScrollBarsShown(true, false);
     viewport.setScrollBarThickness(10);
     viewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId,
-                                             fire::ui::colours::textMuted.withAlpha(0.24f));
+                                             fire::ui::paletteFor(*this).textMuted.withAlpha(0.24f));
     viewport.setViewedComponent(&contentComponent, false);
     addAndMakeVisible(addButton);
     addButton.addListener(this);
@@ -1626,10 +1637,10 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
     addButton.setTitle("Add modulation routing");
     addButton.setTooltip("Connect an LFO, the input envelope or a macro to a control.");
     addButton.setAppearance(ModulationMatrixPrimaryButton::Appearance::add);
-    addButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface1);
+    addButton.setColour(juce::TextButton::buttonColourId, fire::ui::paletteFor(*this).surface1);
     addButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::modulation);
     addButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::modulation);
-    addButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    addButton.setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
     addAndMakeVisible(sourceControlsButton);
     sourceControlsButton.setComponentID("modulation_source_controls");
     sourceControlsButton.setTooltip("Open input envelope settings and four automatable macros.");
@@ -1640,8 +1651,8 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
     emptyDescription.setText("Connect an LFO, envelope or macro to a control.", juce::dontSendNotification);
     emptyTitle.setFont(fire::ui::displayFont(16.0f));
     emptyDescription.setFont(fire::ui::bodyFont(11.5f));
-    emptyTitle.setColour(juce::Label::textColourId, fire::ui::colours::textPrimary);
-    emptyDescription.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    emptyTitle.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textPrimary);
+    emptyDescription.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textSecondary);
     for (auto* label : { &emptyTitle, &emptyDescription })
     {
         label->setJustificationType(juce::Justification::centred);
@@ -1661,15 +1672,36 @@ ModulationMatrixPanel::~ModulationMatrixPanel()
     setLookAndFeel(nullptr);
 }
 
+void ModulationMatrixPanel::lookAndFeelChanged()
+{
+    const auto nextSkin = fire::ui::skinFor(*this);
+    const auto previousSkin = fireLookAndFeel.getSkin();
+    fireLookAndFeel.setSkin(nextSkin);
+    fire::ui::remapSkinColours(*this, previousSkin, nextSkin);
+    if (auto* dialog = sourceControlsDialog.getComponent())
+        if (auto* content = dialog->getContentComponent())
+        {
+            fire::ui::setSkin(*content, nextSkin);
+            content->sendLookAndFeelChange();
+        }
+    repaint();
+}
+
+void ModulationMatrixPanel::parentHierarchyChanged()
+{
+    juce::Component::parentHierarchyChanged();
+    lookAndFeelChanged();
+}
+
 void ModulationMatrixPanel::paint(juce::Graphics& g)
 {
-    g.fillAll(fire::ui::colours::canvas);
+    g.fillAll(fire::ui::paletteFor(*this).canvas);
     auto heading = titleArea.withTrimmedRight(300);
     g.setFont(fire::ui::displayFont(20.0f));
-    g.setColour(fire::ui::colours::textPrimary);
+    g.setColour(fire::ui::paletteFor(*this).textPrimary);
     g.drawText("Modulation", heading.removeFromTop(28), juce::Justification::centredLeft);
     g.setFont(fire::ui::bodyFont(11.5f));
-    g.setColour(fire::ui::colours::textMuted);
+    g.setColour(fire::ui::paletteFor(*this).textMuted);
     g.drawText("Choose source, destination and depth.", heading.removeFromTop(20), juce::Justification::centredLeft);
     g.setFont(fire::ui::labelFont(9.5f));
     g.drawText(juce::String(static_cast<int>(rows.size())) + (rows.size() == 1 ? " routing" : " routings")
@@ -1687,9 +1719,9 @@ void ModulationMatrixPanel::paint(juce::Graphics& g)
         g.setFont(fire::ui::labelFont(11.0f));
         g.setColour(fire::ui::colours::modulation);
         g.drawText("LFO", source, juce::Justification::centred);
-        g.setColour(fire::ui::colours::surface2);
+        g.setColour(fire::ui::paletteFor(*this).surface2);
         g.fillRoundedRectangle(target, 8.0f);
-        g.setColour(fire::ui::colours::textSecondary);
+        g.setColour(fire::ui::paletteFor(*this).textSecondary);
         g.drawEllipse(target.withSizeKeepingCentre(14.0f, 14.0f), 1.25f);
         g.drawLine(target.getCentreX(), target.getCentreY(), target.getCentreX() + 3.0f,
                    target.getCentreY() - 5.0f, 1.25f);
@@ -1699,7 +1731,7 @@ void ModulationMatrixPanel::paint(juce::Graphics& g)
         arrow.startNewSubPath(target.getX() - 14.0f, centre.y - 3.0f);
         arrow.lineTo(target.getX() - 10.0f, centre.y);
         arrow.lineTo(target.getX() - 14.0f, centre.y + 3.0f);
-        g.setColour(fire::ui::colours::textMuted);
+        g.setColour(fire::ui::paletteFor(*this).textMuted);
         g.strokePath(arrow, juce::PathStrokeType(1.25f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 }
@@ -1777,8 +1809,10 @@ void ModulationMatrixPanel::buttonClicked(juce::Button* button)
         if (sourceControlsDialog != nullptr) { sourceControlsDialog->toFront(true); return; }
         juce::DialogWindow::LaunchOptions options;
         options.content.setOwned(new fire::ui::ModulationSourceControls(processor));
+        fire::ui::setSkin(*options.content, fire::ui::skinFor(*this));
+        options.content->sendLookAndFeelChange();
         options.dialogTitle = "Envelope and Macros";
-        options.dialogBackgroundColour = fire::ui::colours::canvas;
+        options.dialogBackgroundColour = fire::ui::paletteFor(*this).canvas;
         options.escapeKeyTriggersCloseButton = true;
         options.useNativeTitleBar = true; options.resizable = false;
         sourceControlsDialog = options.launchAsync();

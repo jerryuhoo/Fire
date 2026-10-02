@@ -10,6 +10,7 @@
 #pragma once
 
 #include "FireTheme.h"
+#include "Skin.h"
 #include "FireIcons.h"
 #include "FocusAwareComboBox.h"
 #include "InterfaceDefines.h"
@@ -65,49 +66,75 @@ public:
 
     FireLookAndFeel()
     {
+        modernButtonBackground = findColour(juce::TextButton::buttonColourId);
+        modernButtonOnBackground = findColour(juce::TextButton::buttonOnColourId);
+        modernButtonText = findColour(juce::TextButton::textColourOffId);
+        modernButtonOnText = findColour(juce::TextButton::textColourOnId);
+        setSkin(fire::ui::Skin::modern);
+    }
+
+    fire::ui::Skin getSkin() const noexcept { return currentSkin; }
+
+    void setSkin(fire::ui::Skin skin)
+    {
+        currentSkin = skin;
         using namespace fire::ui;
+        const auto vintage = skin == Skin::vintage;
+        const auto& palette = skinPalette(skin);
+        const auto primaryAccent = vintage ? palette.accent : colours::ember;
+        const auto secondaryAccent = vintage ? palette.accent : colours::flame;
 
-        setColour(juce::Slider::textBoxTextColourId, colours::textPrimary);
-        setColour(juce::Slider::textBoxBackgroundColourId, colours::surface0.withAlpha(0.94f));
-        setColour(juce::Slider::textBoxOutlineColourId, colours::hairline);
-        setColour(juce::Slider::textBoxHighlightColourId, colours::ember.withAlpha(0.35f));
-        setColour(juce::Slider::trackColourId, colours::ember);
-        setColour(juce::Slider::thumbColourId, colours::whiteHot);
-        setColour(juce::Slider::backgroundColourId, colours::surface2);
+        setColour(juce::TextButton::buttonColourId,
+                  vintage ? palette.surface2 : modernButtonBackground);
+        setColour(juce::TextButton::buttonOnColourId,
+                  vintage ? palette.raised : modernButtonOnBackground);
+        setColour(juce::TextButton::textColourOffId,
+                  vintage ? palette.textSecondary : modernButtonText);
+        setColour(juce::TextButton::textColourOnId,
+                  vintage ? palette.textPrimary : modernButtonOnText);
 
-        setColour(juce::Label::textColourId, colours::textSecondary);
-        setColour(juce::Label::textWhenEditingColourId, colours::textPrimary);
-        setColour(juce::Label::backgroundWhenEditingColourId, colours::surface0);
+        setColour(juce::Slider::textBoxTextColourId, themeColour(colours::textPrimary));
+        setColour(juce::Slider::textBoxBackgroundColourId, themeColour(colours::surface0).withAlpha(0.94f));
+        setColour(juce::Slider::textBoxOutlineColourId, themeColour(colours::hairline));
+        setColour(juce::Slider::textBoxHighlightColourId, primaryAccent.withAlpha(0.35f));
+        setColour(juce::Slider::trackColourId, primaryAccent);
+        setColour(juce::Slider::thumbColourId, themeColour(colours::whiteHot));
+        setColour(juce::Slider::backgroundColourId, themeColour(colours::surface2));
+
+        setColour(juce::Label::textColourId, themeColour(colours::textSecondary));
+        setColour(juce::Label::textWhenEditingColourId, themeColour(colours::textPrimary));
+        setColour(juce::Label::backgroundWhenEditingColourId, themeColour(colours::surface0));
         setColour(juce::Label::outlineColourId, juce::Colours::transparentBlack);
-        setColour(juce::Label::outlineWhenEditingColourId, colours::ember.withAlpha(0.65f));
+        setColour(juce::Label::outlineWhenEditingColourId, primaryAccent.withAlpha(0.65f));
 
-        setColour(juce::ComboBox::backgroundColourId, colours::surface1);
-        setColour(juce::ComboBox::outlineColourId, colours::hairline);
-        setColour(juce::ComboBox::focusedOutlineColourId, colours::ember);
-        setColour(juce::ComboBox::textColourId, colours::textPrimary);
-        setColour(juce::ComboBox::arrowColourId, colours::flame);
+        setColour(juce::ComboBox::backgroundColourId, themeColour(colours::surface1));
+        setColour(juce::ComboBox::outlineColourId, themeColour(colours::hairline));
+        setColour(juce::ComboBox::focusedOutlineColourId, primaryAccent);
+        setColour(juce::ComboBox::textColourId, themeColour(colours::textPrimary));
+        setColour(juce::ComboBox::arrowColourId, secondaryAccent);
 
         // A non-opaque menu peer lets the rounded Fire surface keep genuinely
         // transparent corners instead of JUCE's opaque white fallback fill.
         setColour(juce::PopupMenu::backgroundColourId,
-                  colours::surface0.withAlpha(0.98f));
-        setColour(juce::PopupMenu::textColourId, colours::textSecondary);
-        setColour(juce::PopupMenu::highlightedBackgroundColourId, colours::raised);
-        setColour(juce::PopupMenu::highlightedTextColourId, colours::whiteHot);
-        setColour(juce::PopupMenu::headerTextColourId, colours::flame);
+                  themeColour(colours::surface0).withAlpha(0.98f));
+        setColour(juce::PopupMenu::textColourId, themeColour(colours::textSecondary));
+        setColour(juce::PopupMenu::highlightedBackgroundColourId, themeColour(colours::raised));
+        setColour(juce::PopupMenu::highlightedTextColourId,
+                  vintage ? palette.textPrimary : colours::whiteHot);
+        setColour(juce::PopupMenu::headerTextColourId, secondaryAccent);
 
-        setColour(juce::TooltipWindow::backgroundColourId, colours::surface1);
-        setColour(juce::TooltipWindow::textColourId, colours::textPrimary);
+        setColour(juce::TooltipWindow::backgroundColourId, themeColour(colours::surface1));
+        setColour(juce::TooltipWindow::textColourId, themeColour(colours::textPrimary));
         setColour(juce::TooltipWindow::outlineColourId,
-                  colours::hairline.withAlpha(0.78f));
+                  themeColour(colours::hairline).withAlpha(0.78f));
 
-        setColour(juce::TextEditor::backgroundColourId, colours::surface0);
-        setColour(juce::TextEditor::textColourId, colours::textPrimary);
-        setColour(juce::TextEditor::outlineColourId, colours::hairline);
-        setColour(juce::TextEditor::focusedOutlineColourId, colours::ember);
+        setColour(juce::TextEditor::backgroundColourId, themeColour(colours::surface0));
+        setColour(juce::TextEditor::textColourId, themeColour(colours::textPrimary));
+        setColour(juce::TextEditor::outlineColourId, themeColour(colours::hairline));
+        setColour(juce::TextEditor::focusedOutlineColourId, primaryAccent);
 
-        setColour(juce::ToggleButton::textColourId, colours::textSecondary);
-        setColour(juce::ToggleButton::tickColourId, colours::flame);
+        setColour(juce::ToggleButton::textColourId, themeColour(colours::textSecondary));
+        setColour(juce::ToggleButton::tickColourId, secondaryAccent);
         setColour(juce::ToggleButton::tickDisabledColourId, colours::disabled);
     }
 
@@ -267,11 +294,18 @@ public:
         auto bounds = juce::Rectangle<float>(0.5f, 0.5f,
                                               static_cast<float>(width) - 1.0f,
                                               static_cast<float>(height) - 1.0f);
-        auto base = box.findColour(juce::ComboBox::backgroundColourId)
-                        .interpolatedWith(colours::raised, juce::jmax(focus * 0.85f, hover * 0.38f));
-        base = base.darker(press * 0.10f).interpolatedWith(colours::surface0, disabled * 0.48f);
-        g.setColour(base);
-        g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
+        auto base = themeColour(box.findColour(juce::ComboBox::backgroundColourId))
+                        .interpolatedWith(themeColour(colours::raised), juce::jmax(focus * 0.85f, hover * 0.38f));
+        base = base.darker(press * 0.10f).interpolatedWith(themeColour(colours::surface0), disabled * 0.48f);
+        if (currentSkin == Skin::vintage)
+            drawVintageSurface(g, bounds, Metrics::radiusSmall * scale,
+                               base, box.findColour(juce::ComboBox::focusedOutlineColourId),
+                               press, focus, 1.0f - disabled * 0.65f);
+        else
+        {
+            g.setColour(base);
+            g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
+        }
 
         auto arrowArea = bounds.removeFromRight(juce::jmax(18.0f * scale, bounds.getHeight() * 0.82f));
         const auto centre = arrowArea.getCentre();
@@ -280,7 +314,7 @@ public:
         arrow.startNewSubPath(centre.x - halfWidth, centre.y - halfWidth * 0.35f);
         arrow.lineTo(centre.x, centre.y + halfWidth * 0.55f);
         arrow.lineTo(centre.x + halfWidth, centre.y - halfWidth * 0.35f);
-        g.setColour(box.findColour(juce::ComboBox::arrowColourId)
+        g.setColour(vintageInk(box.findColour(juce::ComboBox::arrowColourId))
                         .withMultipliedAlpha(0.9f - 0.6f * disabled));
         g.strokePath(arrow, juce::PathStrokeType(1.5f * scale,
                                                 juce::PathStrokeType::curved,
@@ -293,9 +327,13 @@ public:
         auto bounds = juce::Rectangle<float>(0.5f, 0.5f,
                                               static_cast<float>(width) - 1.0f,
                                               static_cast<float>(height) - 1.0f);
-        g.setColour(colours::surface1);
+        g.setColour(themeColour(colours::surface1));
         g.fillRoundedRectangle(bounds, Metrics::radius);
-
+        if (currentSkin == Skin::vintage)
+        {
+            g.setColour(skinPalette(currentSkin).hairline);
+            g.drawRoundedRectangle(bounds, Metrics::radius, 1.0f);
+        }
     }
 
     void drawPopupMenuItem(juce::Graphics& g,
@@ -313,7 +351,7 @@ public:
         using namespace fire::ui;
         if (isSeparator)
         {
-            g.setColour(colours::hairline.withAlpha(0.75f));
+            g.setColour(themeColour(colours::hairline).withAlpha(0.75f));
             g.fillRect(area.reduced(9, 0).withHeight(1).withCentre(area.getCentre()));
             return;
         }
@@ -321,12 +359,13 @@ public:
         auto row = area.reduced(4, 2);
         if (isHighlighted && isActive)
         {
-            drawGlassPill(g, row.toFloat(), colours::ember, true, true, false);
-            g.setColour(colours::whiteHot);
+            drawThemedPill(g, row.toFloat(), currentSkin == Skin::vintage
+                ? skinPalette(currentSkin).accent : colours::ember, true, true, false);
+            g.setColour(currentSkin == Skin::vintage ? skinPalette(currentSkin).textPrimary : colours::whiteHot);
         }
         else
         {
-            g.setColour((textColourToUse != nullptr ? *textColourToUse : colours::textSecondary)
+            g.setColour(vintageInk(textColourToUse != nullptr ? themeColour(*textColourToUse) : themeColour(colours::textSecondary))
                             .withMultipliedAlpha(isActive ? 1.0f : 0.38f));
         }
 
@@ -336,7 +375,7 @@ public:
             icon->drawWithin(g, iconArea, juce::RectanglePlacement::centred, 1.0f);
         else if (isTicked)
         {
-            g.setColour(colours::flame);
+            g.setColour(vintageInk(colours::flame));
             g.fillEllipse(iconArea.withSizeKeepingCentre(5.0f * scale, 5.0f * scale));
         }
 
@@ -354,7 +393,7 @@ public:
         g.drawFittedText(text, content, juce::Justification::centredLeft, 1);
         if (shortcutKeyText.isNotEmpty())
         {
-            g.setColour(colours::textMuted);
+            g.setColour(themeColour(colours::textMuted));
             g.drawText(shortcutKeyText, content, juce::Justification::centredRight);
         }
     }
@@ -375,7 +414,7 @@ public:
         {
             // Editing keeps a clear focus cue through a solid surface, with
             // the TextEditor remaining the sole owner of the visible glyphs.
-            g.setColour(colours::raised);
+            g.setColour(themeColour(colours::raised));
             g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
         }
 
@@ -387,7 +426,7 @@ public:
         if (! label.isBeingEdited())
         {
             auto textArea = label.getBorderSize().subtractedFrom(label.getLocalBounds());
-            g.setColour(label.findColour(juce::Label::textColourId)
+            g.setColour(vintageInk(themeColour(label.findColour(juce::Label::textColourId)))
                             .withMultipliedAlpha(enabledAlpha));
             g.setFont(getLabelFont(label));
             g.drawFittedText(label.getText(), textArea, label.getJustificationType(),
@@ -487,13 +526,13 @@ public:
         const auto track = area.reduced(6.0f * scale, area.getHeight() * 0.42f);
         const auto configuredTrackColour =
             slider.findColour(juce::Slider::trackColourId);
-        const auto trackAccent = configuredTrackColour.isTransparent()
+        const auto trackAccent = vintageInk(configuredTrackColour.isTransparent()
                                    ? colours::ember
-                                   : configuredTrackColour;
-        g.setColour(colours::surface2.interpolatedWith(colours::raised,
+                                   : configuredTrackColour, 0.46f);
+        g.setColour(themeColour(colours::surface2).interpolatedWith(themeColour(colours::raised),
                                                        animation.focus * 0.52f));
         g.fillRoundedRectangle(track, track.getHeight() * 0.5f);
-        g.setColour(colours::hairline.interpolatedWith(trackAccent,
+        g.setColour(themeColour(colours::hairline).interpolatedWith(trackAccent,
                                                        juce::jmax(animation.focus,
                                                                   animation.hover * 0.36f))
                         .withMultipliedAlpha(1.0f - 0.66f * animation.disabled));
@@ -511,10 +550,21 @@ public:
         g.fillRoundedRectangle(valueBounds, track.getHeight() * 0.5f);
 
         const auto thumbScale = 1.0f + animation.hover * 0.10f - animation.press * 0.08f;
-        g.setColour(colours::whiteHot.withMultipliedAlpha(1.0f - 0.65f * animation.disabled));
-        g.fillEllipse(juce::Rectangle<float>(8.0f * scale * thumbScale,
-                                             8.0f * scale * thumbScale)
-                          .withCentre({ sliderPos, centreY }));
+        const auto thumb = juce::Rectangle<float>(8.0f * scale * thumbScale,
+                                                  8.0f * scale * thumbScale)
+            .withCentre({sliderPos, centreY});
+        if (currentSkin == Skin::vintage)
+        {
+            g.setColour(juce::Colour(0xff343b30).withAlpha(0.42f * (1.0f - animation.disabled)));
+            g.fillEllipse(thumb.translated(0, 1.1f * scale).expanded(0.7f * scale));
+        }
+        g.setColour(themeColour(colours::whiteHot).withMultipliedAlpha(1.0f - 0.65f * animation.disabled));
+        g.fillEllipse(thumb);
+        if (currentSkin == Skin::vintage)
+        {
+            g.setColour(juce::Colour(0xff6d7465).withAlpha(1.0f - 0.65f * animation.disabled));
+            g.drawEllipse(thumb.reduced(0.4f * scale), 0.8f * scale);
+        }
     }
 
     void drawButtonBackground(juce::Graphics& g,
@@ -554,7 +604,15 @@ public:
             const bool active = button.getToggleState();
             const auto radius = juce::jmin(bounds.getHeight() * 0.25f, Metrics::radius * scale);
             const auto opacity = 1.0f - disabledAmount * 0.7f;
-            g.setColour(colours::surface0.interpolatedWith(colours::surface2,
+            if (currentSkin == Skin::vintage)
+            {
+                drawVintageSurface(g, bounds, radius,
+                                   skinPalette(currentSkin).surface1.brighter(hoverAmount * 0.08f),
+                                   accent, pressAmount, focusAmount, opacity,
+                                   active || status == 2 || status == 3);
+                return;
+            }
+            g.setColour(themeColour(colours::surface0).interpolatedWith(themeColour(colours::surface2),
                 (active ? 0.55f : 0.10f) + pressAmount * 0.25f));
             g.fillRoundedRectangle(bounds, radius);
             const float wash = (active ? 0.11f : 0.0f) + focusAmount * 0.06f + hoverAmount * 0.035f;
@@ -581,6 +639,22 @@ public:
             if (! headerAccent.isTransparent() && headerAccent != juce::Colours::black)
                 accent = headerAccent;
 
+            if (currentSkin == Skin::vintage)
+            {
+                const auto& palette = skinPalette(currentSkin);
+                auto surface = palette.surface1.interpolatedWith(
+                    palette.raised, visuallySelected ? 0.8f : hoverAmount * 0.48f);
+                drawVintageSurface(g, bounds, Metrics::radiusSmall * scale,
+                                   surface, accent, pressAmount,
+                                   focusAmount,
+                                   1.0f - disabledAmount * 0.65f, button.getToggleState());
+                if (id == "header_previous" || id == "header_next")
+                    drawArrowIcon(g, bounds, id, vintageInk(accent).withMultipliedAlpha(1.0f - 0.60f * disabledAmount));
+                else if (id == "header_menu")
+                    drawMenuIcon(g, bounds, vintageInk(accent).withMultipliedAlpha(1.0f - 0.60f * disabledAmount));
+                return;
+            }
+
             // Header controls are intentionally borderless.  State is conveyed
             // by a quiet surface wash and a short accent rail instead of by a
             // stack of outlines around every control.
@@ -588,12 +662,12 @@ public:
             {
                 if (visuallySelected)
                 {
-                    g.setColour(colours::raised);
+                    g.setColour(themeColour(colours::raised));
                     g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
                 }
                 else if (hoverAmount > 0.001f || pressAmount > 0.001f || focusAmount > 0.001f)
                 {
-                    auto wash = colours::surface2.interpolatedWith(colours::raised, pressAmount);
+                    auto wash = themeColour(colours::surface2).interpolatedWith(themeColour(colours::raised), pressAmount);
                     // Hover, press, and keyboard focus overlap during a normal
                     // mouse click. Their visual weights are additive, so the
                     // transient total can exceed Colour::withAlpha's [0, 1]
@@ -608,7 +682,7 @@ public:
 
             if (disabledAmount > 0.001f)
             {
-                g.setColour(colours::canvas.withAlpha(0.42f * disabledAmount));
+                g.setColour(themeColour(colours::canvas).withAlpha(0.42f * disabledAmount));
                 g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
             }
 
@@ -620,26 +694,36 @@ public:
             return;
         }
 
-        auto base = visuallySelected ? colours::raised : backgroundColour;
+        auto base = visuallySelected ? themeColour(colours::raised) : themeColour(backgroundColour);
         const auto emphasis = juce::jmax(hoverAmount * 0.45f, focusAmount * 0.80f);
         if (base.isTransparent())
-            base = colours::raised.withAlpha(emphasis);
+            base = currentSkin == Skin::vintage
+                ? skinPalette(currentSkin).surface1
+                : themeColour(colours::raised).withAlpha(emphasis);
         else
-            base = base.interpolatedWith(colours::raised.brighter(0.08f), emphasis)
+            base = base.interpolatedWith(themeColour(colours::raised).brighter(0.08f), emphasis)
                        .darker(0.10f * pressAmount);
         const auto radius = juce::jmin(bounds.getHeight() * 0.5f, Metrics::radius);
         if (! base.isTransparent())
         {
-            g.setColour(base);
-            g.fillRoundedRectangle(bounds, radius);
+            if (currentSkin == Skin::vintage)
+                drawVintageSurface(g, bounds, radius, base, accent, pressAmount,
+                                   focusAmount,
+                                   1.0f - disabledAmount * 0.65f, button.getToggleState());
+            else
+            {
+                g.setColour(base);
+                g.fillRoundedRectangle(bounds, radius);
+            }
         }
 
         if (disabledAmount > 0.001f)
         {
-            g.setColour(colours::canvas.withAlpha(0.45f * disabledAmount));
+            g.setColour(themeColour(colours::canvas).withAlpha(0.45f * disabledAmount));
             g.fillRoundedRectangle(bounds, juce::jmin(bounds.getHeight() * 0.5f, Metrics::radius));
         }
 
+        accent = vintageInk(accent);
         if (id == "zoom")
             drawZoomIcon(g, bounds, accent);
         else if (id == "slider_up_arrow" || id == "slider_down_arrow"
@@ -668,7 +752,7 @@ public:
                                                                     : juce::TextButton::textColourOffId);
             if (status == 2) colour = colours::positive;
             else if (status == 3) colour = colours::warning;
-            colour = colour.interpolatedWith(colours::textPrimary, animation.hover * 0.25f)
+            colour = vintageInk(themeColour(colour)).interpolatedWith(themeColour(colours::textPrimary), animation.hover * 0.25f)
                 .withMultipliedAlpha(1.0f - animation.disabled * 0.68f);
             auto area = button.getLocalBounds().toFloat().reduced(8 * scale, 3 * scale);
             auto iconBounds = labelled ? area.removeFromLeft(20 * scale) : area;
@@ -701,7 +785,7 @@ public:
             cross.startNewSubPath(area.getTopRight());
             cross.lineTo(area.getBottomLeft());
             const auto emphasis = juce::jmax(animation.hover, animation.focus);
-            g.setColour(colours::textMuted.interpolatedWith(colours::danger, emphasis)
+            g.setColour(themeColour(colours::textMuted).interpolatedWith(colours::danger, emphasis)
                             .withMultipliedAlpha(1.0f - 0.60f * animation.disabled));
             g.strokePath(cross, juce::PathStrokeType(1.4f * scale,
                                                     juce::PathStrokeType::curved,
@@ -711,9 +795,9 @@ public:
 
         auto colour = button.findColour(button.getToggleState() ? juce::TextButton::textColourOnId
                                                                 : juce::TextButton::textColourOffId);
-        colour = colour.brighter(0.14f * animation.hover)
+        colour = vintageInk(themeColour(colour)).brighter(0.14f * animation.hover)
                        .darker(0.08f * animation.press)
-                       .interpolatedWith(colours::textMuted.withAlpha(0.45f), animation.disabled);
+                       .interpolatedWith(themeColour(colours::textMuted).withAlpha(0.45f), animation.disabled);
 
         g.setColour(colour);
         g.setFont(getTextButtonFont(button, button.getHeight()));
@@ -725,6 +809,15 @@ public:
             textBounds.removeFromLeft(juce::roundToInt(25.0f * scale));
             textBounds.removeFromRight(juce::roundToInt(static_cast<float>(
                 button.getProperties().getWithDefault("fireModuleTrailingSpace", 0.0f))));
+        }
+        if (currentSkin == Skin::vintage)
+        {
+            textBounds.translate(0, juce::roundToInt((animation.press * 1.35f - 0.6f) * scale));
+            g.setColour(juce::Colour(0xfffffff2).withAlpha(0.62f * (1.0f - animation.disabled)));
+            g.drawFittedText(button.getButtonText(), textBounds.translated(0, juce::jmax(1, juce::roundToInt(scale))),
+                             moduleRail ? juce::Justification::centredLeft
+                                        : juce::Justification::centred, 1);
+            g.setColour(colour);
         }
         g.drawFittedText(button.getButtonText(), textBounds,
                          moduleRail ? juce::Justification::centredLeft
@@ -747,13 +840,33 @@ public:
         {
             auto bounds = component.getLocalBounds().toFloat().reduced(1.0f);
             auto accent = component.findColour(juce::ToggleButton::tickColourId);
-            drawGlassPill(g, bounds, accent, ticked, highlighted, down);
+            drawThemedPill(g, bounds, accent, ticked, highlighted, down);
             return;
         }
 
         auto bounds = juce::Rectangle<float>(x, y, w, h);
-        auto colour = ticked ? component.findColour(juce::ToggleButton::tickColourId)
-                             : colours::textMuted;
+        if (currentSkin == Skin::vintage)
+        {
+            const auto extent = juce::jmin(w, h) * 0.85f;
+            const auto bezel = bounds.withSizeKeepingCentre(extent, extent);
+            const auto opacity = isEnabled ? 1.0f : 0.42f;
+            g.setColour(juce::Colour(0xff090b08).withAlpha(opacity));
+            g.fillEllipse(bezel.translated(0.0f, 0.85f * scale));
+            juce::ColourGradient metal(juce::Colour(0xffc3c3b7).withAlpha(opacity),
+                                      bezel.getX(), bezel.getY(),
+                                      juce::Colour(0xff797d6d).withAlpha(opacity),
+                                      bezel.getRight(), bezel.getBottom(), false);
+            g.setGradientFill(metal);
+            g.fillEllipse(bezel);
+            const auto cap = bezel.reduced(juce::jmax(0.7f, 0.85f * scale));
+            juce::ColourGradient finish(juce::Colour(down ? 0xffd7d6c8 : 0xfff2f0e4).withAlpha(opacity),
+                                       cap.getX(), cap.getY(), juce::Colour(0xffb7b9aa).withAlpha(opacity),
+                                       cap.getX(), cap.getBottom(), false);
+            g.setGradientFill(finish);
+            g.fillEllipse(cap);
+        }
+        auto colour = vintageInk(ticked ? component.findColour(juce::ToggleButton::tickColourId)
+                                        : themeColour(colours::textMuted));
         if (highlighted && isEnabled)
             colour = colour.brighter(0.18f);
         if (down && isEnabled)
@@ -789,7 +902,7 @@ public:
             || animation.focus > 0.001f)
         {
             auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
-            g.setColour(colours::raised.withAlpha(
+            g.setColour(themeColour(colours::raised).withAlpha(
                 juce::jmax(animation.hover * 0.45f, animation.focus * 0.80f)
                 * (1.0f - animation.disabled)));
             g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
@@ -828,10 +941,10 @@ public:
                 textArea.removeFromLeft(juce::roundToInt(tickExtent + juce::jmax(3.0f, 4.0f * scale)));
             }
 
-            auto textColour = button.findColour(juce::ToggleButton::textColourId)
+            auto textColour = vintageInk(themeColour(button.findColour(juce::ToggleButton::textColourId)))
                                   .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.35f);
             textColour = textColour.brighter(0.12f * animation.hover)
-                                   .interpolatedWith(colours::textMuted.withAlpha(0.35f),
+                                   .interpolatedWith(themeColour(colours::textMuted).withAlpha(0.35f),
                                                      animation.disabled);
 
             g.setColour(textColour);
@@ -846,6 +959,224 @@ public:
     }
 
 private:
+    fire::ui::Skin currentSkin = fire::ui::Skin::modern;
+    juce::Colour modernButtonBackground;
+    juce::Colour modernButtonOnBackground;
+    juce::Colour modernButtonText;
+    juce::Colour modernButtonOnText;
+
+    juce::Colour themeColour(juce::Colour colour) const noexcept
+    {
+        if (currentSkin == fire::ui::Skin::modern)
+            return colour;
+
+        using namespace fire::ui;
+        const auto& palette = skinPalette(currentSkin);
+        const auto opaque = colour.withAlpha(1.0f);
+        auto mapped = opaque;
+        if (opaque == colours::canvas) mapped = palette.canvas;
+        else if (opaque == colours::surface0) mapped = palette.surface0;
+        else if (opaque == colours::surface1) mapped = palette.surface1;
+        else if (opaque == colours::surface2) mapped = palette.surface2;
+        else if (opaque == colours::raised) mapped = palette.raised;
+        else if (opaque == colours::hairline) mapped = palette.hairline;
+        else if (opaque == colours::textPrimary || opaque == juce::Colours::white)
+            mapped = palette.textPrimary;
+        else if (opaque == colours::textSecondary) mapped = palette.textSecondary;
+        else if (opaque == colours::textMuted) mapped = palette.textMuted;
+        else if (opaque == colours::whiteHot) mapped = juce::Colour(0xffffedc8);
+        return mapped.withAlpha(colour.getFloatAlpha());
+    }
+
+    juce::Colour vintageInk(juce::Colour colour, float maximumBrightness = 0.38f) const noexcept
+    {
+        if (currentSkin == fire::ui::Skin::modern || colour.isTransparent())
+            return colour;
+        const auto brightness = colour.getPerceivedBrightness();
+        return brightness > maximumBrightness
+            ? colour.darker(brightness / maximumBrightness - 1.0f)
+            : colour;
+    }
+
+    void drawVintageSurface(juce::Graphics& g,
+                            juce::Rectangle<float> bounds,
+                            float radius,
+                            juce::Colour base,
+                            juce::Colour accent,
+                            float press,
+                            float focus,
+                            float opacity,
+                            bool selected = false) const
+    {
+        // A dark mounting recess, a visible side wall and a separate cap give
+        // these controls physical depth without moving their hit rectangles.
+        const auto unit = juce::jmax(0.75f, scale);
+        radius = juce::jmin(radius, juce::jmin(2.6f * unit, bounds.getHeight() * 0.16f));
+        const auto depth = juce::jmin(2.6f * unit, bounds.getHeight() * 0.12f);
+        const auto travel = press * depth * 0.72f;
+        const auto shell = bounds.reduced(0.65f * unit);
+        auto face = shell.withTrimmedBottom(depth).translated(0.0f, travel);
+        const auto faceColour = base.withAlpha(1.0f)
+            .interpolatedWith(juce::Colour(0xfff1eee3), 0.74f)
+            .interpolatedWith(juce::Colour(0xffc6b997), selected ? 0.12f : 0.0f);
+
+        g.setColour(juce::Colour(0xff36372f).withAlpha(0.75f * opacity));
+        g.fillRoundedRectangle(bounds, radius + 0.6f * unit);
+        g.setColour(juce::Colour(0xfff8f5e9).withAlpha(0.65f * opacity));
+        g.drawRoundedRectangle(bounds, radius + 0.6f * unit, 0.7f * unit);
+
+        juce::ColourGradient wall(juce::Colour(0xffb0ab9c).withAlpha(opacity),
+                                  shell.getX(), shell.getY(),
+                                  juce::Colour(0xff77786b).withAlpha(opacity),
+                                  shell.getX(), shell.getBottom(), false);
+        g.setGradientFill(wall);
+        g.fillRoundedRectangle(shell, radius);
+        g.setColour(juce::Colours::black.withAlpha(0.28f * opacity));
+        g.drawRoundedRectangle(shell, radius, juce::jmax(0.7f, unit * 0.65f));
+
+        juce::ColourGradient cap(faceColour.brighter(0.055f).darker(press * 0.055f).withAlpha(opacity),
+                                 face.getX(), face.getY(),
+                                 faceColour.darker(0.075f + press * 0.045f).withAlpha(opacity),
+                                 face.getX(), face.getBottom(), false);
+        cap.addColour(0.18, faceColour.brighter(0.015f).withAlpha(opacity));
+        cap.addColour(0.76, faceColour.withAlpha(opacity));
+        g.setGradientFill(cap);
+        g.fillRoundedRectangle(face, radius);
+
+        // The bevel catches light from above; the lower cap edge is a sharp
+        // shadow instead of a gold outline. Pressing lowers and darkens it.
+        const auto inner = face.reduced(0.8f * unit);
+        juce::Path upperBevel;
+        upperBevel.startNewSubPath(inner.getX(), inner.getY() + radius);
+        upperBevel.quadraticTo(inner.getX(), inner.getY(), inner.getX() + radius, inner.getY());
+        upperBevel.lineTo(inner.getRight() - radius, inner.getY());
+        upperBevel.quadraticTo(inner.getRight(), inner.getY(), inner.getRight(), inner.getY() + radius);
+        g.setColour(juce::Colour(0xfffffdf3).withAlpha((0.90f - press * 0.38f) * opacity));
+        g.strokePath(upperBevel, juce::PathStrokeType(0.75f * unit));
+        g.setColour(juce::Colour(0xff777365).withAlpha(0.38f * opacity));
+        g.drawLine(inner.getX() + radius, inner.getBottom(),
+                   inner.getRight() - radius, inner.getBottom(), 0.85f * unit);
+
+        if (selected && bounds.getWidth() >= 21.0f * unit && bounds.getHeight() >= 17.0f * unit)
+        {
+            const auto lamp = juce::Rectangle<float>(7.5f * unit, 1.45f * unit)
+                .withCentre({face.getCentreX(), face.getBottom() - 2.8f * unit});
+            g.setColour(juce::Colours::black.withAlpha(0.85f * opacity));
+            g.fillRoundedRectangle(lamp.expanded(0.85f * unit), 1.0f * unit);
+            const juce::Colour lampColour(0xffefa646);
+            g.setColour(lampColour.withAlpha(0.20f * opacity));
+            g.fillRoundedRectangle(lamp.expanded(1.3f * unit), 1.4f * unit);
+            g.setColour(lampColour.interpolatedWith(juce::Colour(0xffffedbd), 0.30f).withAlpha(0.98f * opacity));
+            g.fillRoundedRectangle(lamp, 0.65f * unit);
+        }
+        if (focus > 0.01f)
+        {
+            g.setColour(vintageInk(accent).withAlpha(focus * 0.56f * opacity));
+            g.drawRoundedRectangle(bounds, radius + 0.6f * unit, 0.8f * unit);
+        }
+    }
+
+    void drawThemedPill(juce::Graphics& g,
+                       juce::Rectangle<float> bounds,
+                       juce::Colour accent,
+                       bool selected,
+                       bool highlighted,
+                       bool down) const
+    {
+        if (currentSkin == fire::ui::Skin::modern)
+        {
+            fire::ui::drawGlassPill(g, bounds, accent, selected, highlighted, down);
+            return;
+        }
+        const auto& palette = fire::ui::skinPalette(currentSkin);
+        const auto base = (selected ? palette.raised : palette.surface1)
+            .interpolatedWith(accent, selected ? 0.12f : 0.0f);
+        drawVintageSurface(g, bounds,
+                           juce::jmin(bounds.getHeight() * 0.5f, fire::ui::Metrics::radius),
+                           base, accent, down ? 1.0f : 0.0f,
+                           highlighted ? 0.4f : 0.0f, 1.0f, selected);
+    }
+
+    void drawVintageDialSurface(juce::Graphics& g,
+                                juce::Rectangle<float> disc,
+                                float hover,
+                                float disabled,
+                                float angle) const
+    {
+        const auto opacity = 1.0f - disabled * 0.62f;
+        const auto unit = juce::jmax(0.75f, scale);
+        const auto centre = disc.getCentre();
+        const auto collar = disc.expanded(juce::jmin(1.8f * unit, disc.getWidth() * 0.035f));
+        g.setColour(juce::Colours::black.withAlpha(0.18f * opacity));
+        g.fillEllipse(collar.translated(0.0f, 2.7f * unit).expanded(1.6f * unit));
+        g.setColour(juce::Colours::black.withAlpha(0.66f * opacity));
+        g.fillEllipse(collar.translated(0.0f, 1.8f * unit).expanded(0.5f * unit));
+
+        // The fixed machined collar catches a narrow, cool brass reflection.
+        // Most of the control is dark moulded bakelite, rather than gold trim.
+        juce::ColourGradient metal(juce::Colour(0xffd8cdb3).withAlpha(opacity),
+                                    collar.getX(), collar.getY(),
+                                    juce::Colour(0xff6f6654).withAlpha(opacity),
+                                    collar.getRight(), collar.getBottom(), false);
+        metal.addColour(0.22, juce::Colour(0xffafa58f).withAlpha(opacity));
+        metal.addColour(0.47, juce::Colour(0xff4c493f).withAlpha(opacity));
+        metal.addColour(0.72, juce::Colour(0xffc1b59a).withAlpha(opacity));
+        g.setGradientFill(metal);
+        g.fillEllipse(collar);
+        g.setColour(juce::Colour(0xffede3ca).withAlpha(0.24f * opacity));
+        g.drawEllipse(collar.reduced(0.6f * unit), 0.65f * unit);
+
+        const auto skirt = disc.reduced(juce::jmin(1.0f * unit, disc.getWidth() * 0.025f));
+        juce::ColourGradient grip(juce::Colour(0xff49483e).withAlpha(opacity),
+                                  skirt.getX(), skirt.getY(),
+                                  juce::Colour(0xff0d100d).withAlpha(opacity),
+                                  skirt.getRight(), skirt.getBottom(), false);
+        grip.addColour(0.45, juce::Colour(0xff22251f).withAlpha(opacity));
+        g.setGradientFill(grip);
+        g.fillEllipse(skirt);
+
+        const auto radius = skirt.getWidth() * 0.5f;
+        const auto ribCount = disc.getWidth() >= 55.0f * unit ? 48 : 36;
+        for (int rib = 0; rib < ribCount; ++rib)
+        {
+            const auto phase = angle + static_cast<float>(rib)
+                * juce::MathConstants<float>::twoPi / static_cast<float>(ribCount);
+            const juce::Point<float> direction { std::sin(phase), -std::cos(phase) };
+            const juce::Point<float> tangent { std::cos(phase), std::sin(phase) };
+            const auto outer = centre + direction * (radius * 0.98f);
+            const auto inner = centre + direction * (radius * 0.79f);
+            const auto light = juce::jlimit(0.0f, 1.0f,
+                                           0.50f - direction.x * 0.29f - direction.y * 0.32f);
+            const auto offset = tangent * (0.48f * unit);
+            g.setColour(juce::Colour(0xff090c09).withAlpha(0.72f * opacity));
+            g.drawLine({inner, outer}, juce::jmax(0.65f, unit * 0.68f));
+            g.setColour(juce::Colour(0xffdbd4bc).withAlpha((0.035f + light * 0.24f) * opacity));
+            g.drawLine({inner + offset, outer + offset}, juce::jmax(0.40f, unit * 0.43f));
+        }
+
+        const auto face = skirt.reduced(skirt.getWidth() * 0.105f);
+        g.setColour(juce::Colours::black.withAlpha(0.78f * opacity));
+        g.fillEllipse(face.expanded(0.5f * unit));
+        juce::ColourGradient crown(juce::Colour(0xff57584b).brighter(hover * 0.045f).withAlpha(opacity),
+                                   face.getCentreX() - face.getWidth() * 0.20f,
+                                   face.getCentreY() - face.getHeight() * 0.32f,
+                                   juce::Colour(0xff141711).withAlpha(opacity),
+                                   face.getRight(), face.getBottom(), true);
+        crown.addColour(0.40, juce::Colour(0xff34372e).withAlpha(opacity));
+        crown.addColour(0.73, juce::Colour(0xff252820).withAlpha(opacity));
+        g.setGradientFill(crown);
+        g.fillEllipse(face);
+        g.setColour(juce::Colour(0xffefe6ce).withAlpha(0.15f * opacity));
+        g.drawEllipse(face.reduced(0.50f * unit), juce::jmax(0.55f, 0.55f * unit));
+
+        juce::Path shoulder;
+        const auto shoulderRadius = face.getWidth() * 0.465f;
+        shoulder.addCentredArc(centre.x, centre.y, shoulderRadius, shoulderRadius,
+                              0.0f, -1.05f, 0.42f, true);
+        g.setColour(juce::Colour(0xfff6e8c6).withAlpha(0.13f * opacity));
+        g.strokePath(shoulder, juce::PathStrokeType(0.85f * unit));
+    }
+
     struct ComboBoxAnimation
     {
         juce::Component::SafePointer<juce::ComboBox> box;
@@ -1056,15 +1387,16 @@ private:
         auto accent = slider.findColour(juce::Slider::rotarySliderFillColourId);
         if (accent.isTransparent())
             accent = colours::flame;
+        accent = vintageInk(accent, 0.45f);
 
         juce::Path track;
         track.addCentredArc(centre.x, centre.y, trackRadius, trackRadius, 0.0f,
                             startAngle, endAngle, true);
-        g.setColour(colours::canvas.withAlpha(0.85f));
+        g.setColour(themeColour(colours::canvas).withAlpha(0.85f));
         g.strokePath(track, juce::PathStrokeType(stroke + 2.0f * scale,
                                                 juce::PathStrokeType::curved,
                                                 juce::PathStrokeType::rounded));
-        g.setColour(colours::hairline.interpolatedWith(accent, focusAmount * 0.52f)
+        g.setColour(themeColour(colours::hairline).interpolatedWith(accent, focusAmount * 0.52f)
                         .withAlpha(0.9f - 0.55f * disabledAmount));
         g.strokePath(track, juce::PathStrokeType(stroke,
                                                 juce::PathStrokeType::curved,
@@ -1108,14 +1440,19 @@ private:
         }
 
         auto disc = bounds.reduced(radius * dialDiscInsetProportion);
-        juce::ColourGradient metal(colours::surface2.brighter(hoverAmount * 0.06f),
-                                   centre.x, disc.getY(), colours::surface0,
-                                   centre.x, disc.getBottom(), false);
-        metal.addColour(0.42, colours::surface1);
-        g.setGradientFill(metal);
-        g.fillEllipse(disc);
-        g.setColour(colours::textPrimary.withAlpha(0.08f));
-        g.drawEllipse(disc.reduced(0.5f), 1.0f);
+        if (currentSkin == Skin::vintage)
+            drawVintageDialSurface(g, disc, hoverAmount, disabledAmount, valueAngle);
+        else
+        {
+            juce::ColourGradient metal(themeColour(colours::surface2).brighter(hoverAmount * 0.06f),
+                                       centre.x, disc.getY(), themeColour(colours::surface0),
+                                       centre.x, disc.getBottom(), false);
+            metal.addColour(0.42, themeColour(colours::surface1));
+            g.setGradientFill(metal);
+            g.fillEllipse(disc);
+            g.setColour(themeColour(colours::textPrimary).withAlpha(0.08f));
+            g.drawEllipse(disc.reduced(0.5f), 1.0f);
+        }
 
         const auto indicatorLength = disc.getHeight() * (isDrive ? 0.33f : 0.31f);
         const auto indicatorStart = disc.getHeight() * 0.08f;
@@ -1125,9 +1462,19 @@ private:
         indicator.startNewSubPath(0.0f, -indicatorStart);
         indicator.lineTo(0.0f, -indicatorLength);
         auto tickColour = isDrive && sampleMaxValue > 0.0001f
-                              ? colours::whiteHot.interpolatedWith(colours::danger,
+                              ? themeColour(colours::whiteHot).interpolatedWith(colours::danger,
                                                                    juce::jlimit(0.0f, 1.0f, sampleMaxValue * 2.0f))
-                              : colours::whiteHot;
+                              : themeColour(colours::whiteHot);
+        if (currentSkin == Skin::vintage)
+        {
+            g.setColour(juce::Colours::black.withAlpha(slider.isEnabled() ? 0.82f : 0.25f));
+            g.strokePath(indicator,
+                         juce::PathStrokeType(indicatorWidth + 0.85f * scale,
+                                              juce::PathStrokeType::curved,
+                                              juce::PathStrokeType::rounded),
+                         juce::AffineTransform::rotation(valueAngle)
+                             .translated(centre.x, centre.y + 0.5f * scale));
+        }
         g.setColour(tickColour.withMultipliedAlpha(slider.isEnabled() ? 0.96f : 0.3f));
         g.strokePath(indicator,
                      juce::PathStrokeType(indicatorWidth,
@@ -1207,9 +1554,9 @@ private:
                 const auto pointBounds = juce::Rectangle<float>(
                                              pointDiameter, pointDiameter)
                                              .withCentre(point);
-                g.setColour(colours::canvas.withAlpha(0.96f));
+                g.setColour(themeColour(colours::canvas).withAlpha(0.96f));
                 g.fillEllipse(pointBounds.expanded(pointBorder));
-                g.setColour(bankAccent.interpolatedWith(colours::whiteHot, 0.60f));
+                g.setColour(bankAccent.interpolatedWith(themeColour(colours::whiteHot), 0.60f));
                 g.fillEllipse(pointBounds);
             }
 
@@ -1231,9 +1578,9 @@ private:
                     centre + baseDirection * originOuter
                 };
                 const auto originWidth = juce::jmin(1.3f * scale, discRadius * 0.09f);
-                g.setColour(colours::canvas.withAlpha(0.92f));
+                g.setColour(themeColour(colours::canvas).withAlpha(0.92f));
                 g.drawLine(origin, originWidth + pointBorder * 2.0f);
-                g.setColour(colours::whiteHot.withAlpha(slider.isBypassed ? 0.48f : 0.96f));
+                g.setColour(themeColour(colours::whiteHot).withAlpha(slider.isBypassed ? 0.48f : 0.96f));
                 g.drawLine(origin, originWidth);
             }
         }
@@ -1249,8 +1596,8 @@ private:
             const auto accent = modulationAccent;
             const auto useDarkLabel = slider.isEnabled() && ! slider.isBypassed
                                       && hasValidSource;
-            const auto labelColour = useDarkLabel ? colours::canvas
-                                                   : colours::textPrimary;
+            const auto labelColour = useDarkLabel ? themeColour(colours::canvas)
+                                                   : themeColour(colours::textPrimary);
 
             if (slider.isEnabled() && (hover > 0.001f || press > 0.001f))
             {
@@ -1261,7 +1608,7 @@ private:
                 g.fillEllipse(handle.expanded(haloExpansion));
             }
 
-            g.setColour(colours::canvas.withAlpha(0.92f));
+            g.setColour(themeColour(colours::canvas).withAlpha(0.92f));
             g.fillEllipse(handle.expanded((1.0f + hover * 0.65f) * scale));
             g.setColour(accent.brighter(hover * 0.12f + press * 0.06f)
                             .withAlpha(slider.isEnabled()

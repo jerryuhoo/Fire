@@ -56158,6 +56158,7 @@ const char* getNamedResource (const char* resourceNameUTF8, int& numBytes)
         case 0x3381278d:  numBytes = 985501; return analog_tube_off_png;
         case 0x86382915:  numBytes = 940849; return analog_tube_on_png;
         case 0xc8fc97f2:  numBytes = 2032806; return analog_tape_reel_png;
+        case 0x42edec8e:  numBytes = 2600048; return vintage_walnut_png;
         case 0xe78d2d15:  numBytes = 713474; return fire_anime_png;
         case 0xe32839cb:  numBytes = 9722; return firelogo_png;
         case 0x26eb34e7:  numBytes = 11396; return firewingslogo_png;
@@ -56173,6 +56174,7 @@ const char* namedResourceList[] =
     "analog_tube_off_png",
     "analog_tube_on_png",
     "analog_tape_reel_png",
+    "vintage_walnut_png",
     "fire_anime_png",
     "firelogo_png",
     "firewingslogo_png"
@@ -56183,6 +56185,7 @@ const char* originalFilenames[] =
     "analog_tube_off.png",
     "analog_tube_on.png",
     "analog_tape_reel.png",
+    "vintage_walnut.png",
     "fire_anime.png",
     "firelogo.png",
     "firewingslogo.png"

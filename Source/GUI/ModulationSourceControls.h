@@ -1,6 +1,7 @@
 #pragma once
 #include "PrimarySlider.h"
 #include "LookAndFeel.h"
+#include "Skin.h"
 #include "../PluginProcessor.h"
 
 namespace fire::ui
@@ -21,13 +22,13 @@ public:
                 : index == 2 ? juce::String("Sensitivity") : "Macro " + juce::String(static_cast<int>(index) - 2);
             slider.setTitle(title); label.setText(title, juce::dontSendNotification);
             label.setJustificationType(juce::Justification::centred);
-            label.setColour(juce::Label::textColourId, colours::textSecondary);
+            label.setColour(juce::Label::textColourId, paletteFor(*this).textSecondary);
             label.setFont(bodyFont(12));
             slider.setColour(juce::Slider::rotarySliderFillColourId,
                 modulationSourceColour(index < 3 ? mod_sources::envelope : mod_sources::firstMacro + static_cast<int>(index) - 3));
-            slider.setColour(juce::Slider::textBoxTextColourId, colours::textPrimary);
-            slider.setColour(juce::Slider::textBoxBackgroundColourId, colours::surface0);
-            slider.setColour(juce::Slider::textBoxOutlineColourId, colours::hairline);
+            slider.setColour(juce::Slider::textBoxTextColourId, paletteFor(*this).textPrimary);
+            slider.setColour(juce::Slider::textBoxBackgroundColourId, paletteFor(*this).surface0);
+            slider.setColour(juce::Slider::textBoxOutlineColourId, paletteFor(*this).hairline);
             slider.setTooltip(index < 3 ? "Shape the input envelope before using Envelope as a matrix source."
                 : "Assign this macro to one or more destinations in the modulation matrix. Automate it in the DAW.");
             addAndMakeVisible(label); addAndMakeVisible(slider);
@@ -42,6 +43,15 @@ public:
         }
     }
     ~ModulationSourceControls() override { stopTimer(); setLookAndFeel(nullptr); }
+    void lookAndFeelChanged() override
+    {
+        const auto nextSkin = skinFor(*this);
+        const auto previousSkin = lookAndFeel.getSkin();
+        lookAndFeel.setSkin(nextSkin);
+        remapSkinColours(*this, previousSkin, nextSkin);
+        repaint();
+    }
+    void parentHierarchyChanged() override { lookAndFeelChanged(); }
     void visibilityChanged() override
     {
         if (isShowing()) startTimerHz(30);
@@ -71,16 +81,16 @@ public:
     }
     void paint(juce::Graphics& g) override
     {
-        drawCanvas(g, getLocalBounds().toFloat());
-        drawPanel(g, envelopeArea.toFloat(), colours::flame, false);
-        drawPanel(g, macrosArea.toFloat(), colours::modulation, false);
-        g.setFont(labelFont(12)); g.setColour(colours::textPrimary);
+        drawCanvas(g, getLocalBounds().toFloat(), skinFor(*this));
+        drawPanel(g, envelopeArea.toFloat(), colours::flame, false, skinFor(*this));
+        drawPanel(g, macrosArea.toFloat(), colours::modulation, false, skinFor(*this));
+        g.setFont(labelFont(12)); g.setColour(paletteFor(*this).textPrimary);
         g.drawText("INPUT ENVELOPE", envelopeArea.reduced(12, 0).removeFromTop(28), juce::Justification::centredLeft);
         g.drawText("MACROS  /  ASSIGN IN MATRIX", macrosArea.reduced(12, 0).removeFromTop(28), juce::Justification::centredLeft);
         auto bar = meterArea.withHeight(12).withY(meterArea.getCentreY() - 6).toFloat();
-        g.setColour(colours::surface0); g.fillRoundedRectangle(bar, 4);
+        g.setColour(paletteFor(*this).surface0); g.fillRoundedRectangle(bar, 4);
         g.setColour(colours::flame); g.fillRoundedRectangle(bar.withWidth(bar.getWidth() * level), 4);
-        g.setFont(bodyFont(11)); g.setColour(colours::textSecondary);
+        g.setFont(bodyFont(11)); g.setColour(paletteFor(*this).textSecondary);
         g.drawText(juce::String(juce::roundToInt(level * 100)) + " %", meterArea.withTrimmedTop(meterArea.getHeight() / 2 + 10), juce::Justification::centred);
     }
     bool keyPressed(const juce::KeyPress& key) override

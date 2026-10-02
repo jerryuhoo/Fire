@@ -26,6 +26,7 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    void lookAndFeelChanged() override;
 
 private:
     void createBackgroundImage();

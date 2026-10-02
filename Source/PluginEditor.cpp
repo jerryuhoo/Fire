@@ -513,7 +513,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     hqButton.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
     hqButton.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
     hqButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::flame);
-    hqButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
+    hqButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textMuted);
     hqButton.setButtonText("HQ");
     hqButton.setComponentID("header_hq");
     hqButton.setTitle("High-quality oversampling");
@@ -529,7 +529,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     windowLeftButton.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
     windowLeftButton.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
     windowLeftButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::flame);
-    windowLeftButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
+    windowLeftButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textMuted);
     windowLeftButton.setComponentID("workspace_tab");
     windowLeftButton.setTitle("Band processing workspace");
     windowLeftButton.setTooltip("Edit multiband processing");
@@ -546,7 +546,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     windowRightButton.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
     windowRightButton.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
     windowRightButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::flame);
-    windowRightButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
+    windowRightButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textMuted);
     windowRightButton.setComponentID("workspace_tab");
     windowRightButton.setTitle("Master processing workspace");
     windowRightButton.setTooltip("Edit global processing and filters");
@@ -563,7 +563,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     windowLfoButton.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
     windowLfoButton.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
     windowLfoButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::modulation);
-    windowLfoButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
+    windowLfoButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textMuted);
     windowLfoButton.setComponentID("workspace_tab");
     windowLfoButton.setTitle("LFO modulation workspace");
     windowLfoButton.setTooltip("Edit and assign LFO modulation");
@@ -595,7 +595,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     zoomButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
     zoomButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
     zoomButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::whiteHot);
-    zoomButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
+    zoomButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textSecondary);
     zoomButton.setComponentID("zoom");
     zoomButton.setTitle("Toggle spectrum zoom");
     zoomButton.setTooltip("Toggle spectrum zoom");
@@ -608,8 +608,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     spectrumCollapseButton.setTooltip("Give the LFO editor more space by hiding the spectrum");
     spectrumCollapseButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
     spectrumCollapseButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
-    spectrumCollapseButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
-    spectrumCollapseButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::textPrimary);
+    spectrumCollapseButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textSecondary);
+    spectrumCollapseButton.setColour(juce::TextButton::textColourOnId, fire::ui::paletteFor(*this).textPrimary);
     spectrumCollapseButton.addListener(this);
 
     initialiseHeaderEmbers();
@@ -628,10 +628,37 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
     multiband.resortAndRedrawLines();
 
+    applySkin(fire::ui::skinFromValue(processor.getAppSettings().getIntValue(fire::ui::skinSetting, 0)));
+    processor.getAppSettings().addChangeListener(this);
+}
+
+void FireAudioProcessorEditor::applySkin(fire::ui::Skin skin)
+{
+    const auto previous = fire::ui::skinFor(*this);
+    if (previous == skin && getProperties().contains(fire::ui::skinProperty)) return;
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safe(this);
+    fire::ui::setSkin(*this, skin);
+    fireLookAndFeel.setSkin(skin);
+    fire::ui::remapSkinColours(*this, previous, skin);
+    if (!safe) return;
+    sendLookAndFeelChange();
+    if (!safe) return;
+    backgroundCache = {};
+    requestBackgroundCacheRebuild();
+    repaint();
+}
+
+void FireAudioProcessorEditor::setSkinPreference(fire::ui::Skin skin)
+{
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safe(this);
+    applySkin(skin); if (!safe) return;
+    processor.getAppSettings().setValue(fire::ui::skinSetting, static_cast<int>(skin));
+    if (safe) processor.getAppSettings().saveIfNeeded();
 }
 
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
 {
+    processor.getAppSettings().removeChangeListener(this);
     stateComponent.onBrowserRequested = nullptr;
     if (presetBrowser) {presetBrowser->onClose = nullptr; presetBrowser->onPresetSelected = nullptr; presetBrowser->onLibraryChanged = nullptr;}
     // Stop the high-frequency modulation channel before any child control is
@@ -731,7 +758,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
     if (! backgroundCache.isNull())
         g.drawImage(backgroundCache, getLocalBounds().toFloat());
     else
-        fire::ui::drawCanvas(g, getLocalBounds().toFloat());
+        fire::ui::drawCanvas(g, getLocalBounds().toFloat(), fire::ui::skinFor(*this));
 
     drawWorkspaceSelection(g);
     drawAnimatedHeader(g);
@@ -794,7 +821,7 @@ void FireAudioProcessorEditor::paintOverChildren(juce::Graphics& g)
                                                12.0f,
                                                10.5f * scale))
                   .withExtraKerningFactor(0.08f));
-    g.setColour(fire::ui::colours::textPrimary);
+    g.setColour(fire::ui::paletteFor(*this).textPrimary);
     g.drawText("HOST BYPASS",
                textArea,
                juce::Justification::centred,
@@ -1158,27 +1185,34 @@ void FireAudioProcessorEditor::rebuildBackgroundCache()
         juce::Graphics cacheGraphics(newBackgroundCache);
         cacheGraphics.addTransform(
             juce::AffineTransform::scale(displayScale));
-        fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat());
-        fire::ui::drawTechGrid(
+        fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat(), fire::ui::skinFor(*this));
+        if (!fire::ui::isVintage(*this)) fire::ui::drawTechGrid(
             cacheGraphics,
             getLocalBounds().toFloat(),
             juce::jmax(20.0f, 28.0f * fireLookAndFeel.scale),
-            0.055f);
+            0.055f, fire::ui::skinFor(*this));
 
         auto header = headerArea.toFloat();
         juce::ColourGradient headerFill(
-            fire::ui::colours::surface2,
+            fire::ui::paletteFor(*this).surface2,
             header.getX(),
             header.getY(),
-            fire::ui::colours::surface0,
+            fire::ui::paletteFor(*this).surface0,
             header.getRight(),
             header.getBottom(),
             false);
-        headerFill.addColour(0.56, fire::ui::colours::surface1);
+        headerFill.addColour(0.56, fire::ui::paletteFor(*this).surface1);
         cacheGraphics.setGradientFill(headerFill);
         cacheGraphics.fillRect(header);
+        if (fire::ui::isVintage(*this))
+        {
+            fire::ui::drawWalnut(cacheGraphics, header, 0);
+            const auto scale = fireLookAndFeel.scale;
+            const auto plate = header.withTrimmedLeft(182 * scale).withTrimmedRight(110 * scale).reduced(3 * scale,5 * scale);
+            fire::ui::drawPanel(cacheGraphics,plate,fire::ui::paletteFor(*this).accent,false,fire::ui::Skin::vintage);
+        }
         cacheGraphics.setColour(
-            fire::ui::colours::hairline.withAlpha(0.82f));
+            fire::ui::paletteFor(*this).hairline.withAlpha(0.82f));
         cacheGraphics.drawHorizontalLine(
             headerArea.getBottom() - 1,
             0.0f,
@@ -1387,10 +1421,10 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
     brand.removeFromLeft(5.0f * fireLookAndFeel.scale);
     auto title = brand.removeFromTop(brand.getHeight() * 0.62f);
     g.setFont(fire::ui::displayFont(18.0f * fireLookAndFeel.scale));
-    g.setColour(fire::ui::colours::textPrimary);
+    g.setColour((fire::ui::isVintage(*this)?juce::Colour(0xfff0e2bd):fire::ui::paletteFor(*this).textPrimary));
     g.drawText("FIRE", title, juce::Justification::centredLeft);
     g.setFont(fire::ui::labelFont(9.0f * fireLookAndFeel.scale));
-    g.setColour(fire::ui::colours::textMuted);
+    g.setColour((fire::ui::isVintage(*this)?juce::Colour(0xfff0e2bd):fire::ui::paletteFor(*this).textMuted));
     g.drawText("MULTIBAND REACTOR", brand, juce::Justification::centredLeft);
 
     auto signature = wingsArea.toFloat().reduced(4.0f, 5.0f);
@@ -1399,11 +1433,11 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
                                                                28.0f * fireLookAndFeel.scale));
     signature.removeFromLeft(4.0f * fireLookAndFeel.scale);
     g.setFont(fire::ui::labelFont(8.0f * fireLookAndFeel.scale));
-    g.setColour(fire::ui::colours::textSecondary);
+    g.setColour((fire::ui::isVintage(*this)?juce::Colour(0xfff0e2bd):fire::ui::paletteFor(*this).textSecondary));
     g.drawText("BLUE WINGS", signature.removeFromTop(signature.getHeight() * 0.55f),
                juce::Justification::centredLeft);
     g.setFont(fire::ui::bodyFont(9.0f * fireLookAndFeel.scale));
-    g.setColour(fire::ui::colours::textMuted);
+    g.setColour((fire::ui::isVintage(*this)?juce::Colour(0xfff0e2bd):fire::ui::paletteFor(*this).textMuted));
     g.drawText("v" VERSION, signature, juce::Justification::centredLeft);
 }
 
@@ -2401,6 +2435,11 @@ void FireAudioProcessorEditor::exitAssignMode(bool showCancellationFeedback)
 
 void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
+    if (source == &processor.getAppSettings())
+    {
+        applySkin(fire::ui::skinFromValue(processor.getAppSettings().getIntValue(fire::ui::skinSetting, 0)));
+        return;
+    }
     if (processor.isModulationUiChangeSource(source))
     {
         const auto revision = processor.getModulationUiRevision();

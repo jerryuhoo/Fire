@@ -9,6 +9,7 @@
 */
 
 #include "SpectrumBackground.h"
+#include "../../GUI/Skin.h"
 #include "../../Utility/AudioHelpers.h" // Assuming transformToLog is here
 
 const int SpectrumBackground::frequenciesForLines[] = { 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 20000 };
@@ -47,6 +48,14 @@ void SpectrumBackground::paint(juce::Graphics& g)
         g.drawImage(cachedBackground, getLocalBounds().toFloat());
 }
 
+void SpectrumBackground::lookAndFeelChanged()
+{
+    cachedBackground = {};
+    cachedLogicalBounds = {};
+    createBackgroundImage();
+    repaint();
+}
+
 void SpectrumBackground::resized()
 {
     if (auto* editor = findParentComponentOfClass<juce::AudioProcessorEditor>())
@@ -82,21 +91,22 @@ void SpectrumBackground::createBackgroundImage()
     g.addTransform(juce::AffineTransform::scale(lastDisplayScale));
 
     const auto area = bounds.toFloat();
-    fire::ui::drawCanvas(g, area);
+    if (fire::ui::isVintage(*this)) g.fillAll(fire::ui::paletteFor(*this).canvas);
+    else fire::ui::drawCanvas(g, area);
 
     // A very restrained technical grid gives the analyser depth without
     // competing with the moving spectrum.
-    fire::ui::drawTechGrid(g, area, 24.0f * scale, 0.055f);
+    fire::ui::drawTechGrid(g, area, 24.0f * scale, 0.055f, fire::ui::skinFor(*this));
 
     const float headerHeight = juce::jmax(22.0f * scale, area.getHeight() * 0.19f);
-    juce::ColourGradient headerShade(fire::ui::colours::surface2.withAlpha(0.72f),
+    juce::ColourGradient headerShade(fire::ui::paletteFor(*this).surface2.withAlpha(0.72f),
                                      area.getX(), area.getY(),
-                                     fire::ui::colours::surface0.withAlpha(0.16f),
+                                     fire::ui::paletteFor(*this).surface0.withAlpha(0.16f),
                                      area.getX(), area.getY() + headerHeight, false);
     g.setGradientFill(headerShade);
     g.fillRect(area.withHeight(headerHeight));
 
-    g.setColour(fire::ui::colours::hairline.withAlpha(0.26f));
+    g.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(0.26f));
     for (int division = 1; division < 5; ++division)
     {
         const float y = fire::ui::pixelAligned(area.getY() + area.getHeight() * division / 5.0f,
@@ -110,12 +120,12 @@ void SpectrumBackground::createBackgroundImage()
                                                    lastDisplayScale);
         const bool major = freq == 20 || freq == 100 || freq == 200 || freq == 1000
                         || freq == 2000 || freq == 10000 || freq == 20000;
-        g.setColour(fire::ui::colours::hairline.withAlpha(major ? 0.30f : 0.12f));
+        g.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(major ? 0.30f : 0.12f));
         g.drawVerticalLine(juce::roundToInt(xPos), headerHeight, area.getBottom());
     }
 
     g.setFont(fire::ui::bodyFont(11.0f * scale));
-    g.setColour(fire::ui::colours::textSecondary.withAlpha(0.84f));
+    g.setColour(fire::ui::paletteFor(*this).textSecondary.withAlpha(0.84f));
     for (const auto freq : frequenciesForTextLabels)
     {
         const float xPos = transformToLog(freq) * area.getWidth();

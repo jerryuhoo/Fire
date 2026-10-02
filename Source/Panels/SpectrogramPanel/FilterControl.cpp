@@ -289,7 +289,7 @@ void FilterControl::paint(juce::Graphics& g)
     if (! responseFillCurve.isEmpty())
     {
         const auto accent = isFilterEnabled ? fire::ui::colours::filter
-                                            : fire::ui::colours::textMuted;
+                                            : fire::ui::paletteFor(*this).textMuted;
         juce::ColourGradient fill(accent.withAlpha(isFilterEnabled ? 0.14f : 0.055f),
                                   bounds.getCentreX(), bounds.getCentreY(),
                                   accent.withAlpha(0.0f), bounds.getCentreX(), bounds.getBottom(), false);
@@ -368,7 +368,7 @@ void FilterControl::paint(juce::Graphics& g)
         g.drawText(frequencyText, textArea.removeFromTop(textArea.getHeight() * 0.54f),
                    juce::Justification::centredLeft);
         g.setFont(fire::ui::bodyFont(10.0f));
-        g.setColour(fire::ui::colours::textSecondary);
+        g.setColour(fire::ui::paletteFor(*this).textSecondary);
         g.drawText(juce::String(dragGain, 1) + " dB", textArea,
                    juce::Justification::centredLeft);
     }

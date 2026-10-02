@@ -572,6 +572,17 @@ Shape also offers twelve **Analog Hardware** colours: Warm Triode, Bright Pentod
 
 Analog pages use a hardware faceplate. Tube filaments brighten with Drive and input energy; the tape transport turns while audio arrives and winds down when callbacks stop. The artwork is cached and animation runs only while its panel is visible. Both Band Shape and independently added Master/Band Shape instances offer these colours; each added analog Shape has its own Drive control.
 
+Choose **Menu → Skin → Modern / Vintage**, or use the two appearance buttons
+in **Settings**. Modern uses graphite and aluminium; Vintage combines a real walnut top rail
+with a clean ivory metal chassis, physical keycaps, dark ribbed bakelite knobs
+and cream scales. The choice is saved as a local
+appearance preference. Existing open instances keep their selected skin;
+new instances use the saved preference. Switching skins preserves the current
+sound, preset and undo history. The tape display includes reel hubs, guide
+rollers and a head shield; the colour display has graduated, uncalibrated
+intensity scales and a moving needle. Both skins keep the independent,
+continuous reel animation and signal-driven tube illumination.
+
 Use **CHAIN → +** in either **Master Lab** or **Band Lab** to select a DSP module. Both workspaces share Drive, Shape, Compressor, OTT, Stereo, EQ, Lo-Fi, Chorus, Flanger, Phaser, Delay, Reverb, Granular and Chord Resonator. Every row, including the initial modules, can be bypassed, moved or removed with its **−** button. Removed modules can be added again, and each chain supports up to eight additional independent instances. Master Analysis is a removable display page. The module rail keeps five fixed-height rows visible and scrolls as more effects are added. The selected module scrolls into view automatically.
 
 | Effect | Controls |

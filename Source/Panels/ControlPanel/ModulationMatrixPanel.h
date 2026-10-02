@@ -160,6 +160,7 @@ public:
                         std::function<void(std::uint64_t,
                                            ModulationRouting)> onDelete);
     ~ModulationMatrixRow() override;
+    void lookAndFeelChanged() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -286,6 +287,8 @@ public:
 
     ModulationMatrixPanel(FireAudioProcessor& p);
     ~ModulationMatrixPanel() override;
+    void lookAndFeelChanged() override;
+    void parentHierarchyChanged() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;

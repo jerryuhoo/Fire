@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FireTheme.h"
+#include "Skin.h"
 #include "PrimaryButton.h"
 
 #include <cmath>
@@ -201,6 +202,9 @@ private:
             if (getWidth() <= 1 || getHeight() <= 1)
                 return;
             const auto scale = juce::jlimit(0.4f, 3.0f, getHeight() / 32.0f);
+            const auto& palette = paletteFor(*this);
+            const auto currentAccent = accent == colours::textMuted ? palette.textMuted
+                : accent == colours::textSecondary ? palette.textSecondary : accent;
             const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
             const auto radius = juce::jmin(Metrics::radiusSmall * scale, bounds.getHeight() * 0.5f);
             const auto hover = getHoverAnimation();
@@ -216,8 +220,8 @@ private:
             // keyboard focus use short rails, leaving the learning track clear.
             if (washAlpha > 0.001f)
             {
-                const auto wash = getToggleState() ? colours::raised
-                    : colours::surface2.interpolatedWith(colours::raised, press);
+                const auto wash = getToggleState() ? palette.raised
+                    : palette.surface2.interpolatedWith(palette.raised, press);
                 g.setColour(wash.withAlpha(washAlpha));
                 g.fillRoundedRectangle(bounds, radius);
             }
@@ -225,7 +229,7 @@ private:
             {
                 const auto rail = bounds.withSizeKeepingCentre(bounds.getWidth() * 0.42f, 2.0f * scale)
                                         .withBottomY(bounds.getBottom());
-                g.setColour(accent.withAlpha(0.72f * (1.0f - disabled)));
+                g.setColour(currentAccent.withAlpha(0.72f * (1.0f - disabled)));
                 g.fillRect(rail);
             }
             if (focus > 0.001f)
@@ -238,12 +242,12 @@ private:
             if (progressVisible)
             {
                 auto track = bounds.reduced(3.0f * scale, 0.0f).removeFromBottom(2.0f * scale);
-                g.setColour(accent.withAlpha(0.18f));
+                g.setColour(currentAccent.withAlpha(0.18f));
                 g.fillRect(track);
-                g.setColour(accent.withAlpha(0.72f));
+                g.setColour(currentAccent.withAlpha(0.72f));
                 g.fillRect(track.withWidth(track.getWidth() * progress));
             }
-            g.setColour(accent.brighter(0.14f * hover).darker(0.08f * press).withMultipliedAlpha(alpha));
+            g.setColour(currentAccent.brighter(0.14f * hover).darker(0.08f * press).withMultipliedAlpha(alpha));
             g.setFont(bodyFont(10.5f * scale));
             g.drawFittedText(getButtonText(), getLocalBounds().reduced(3, 2),
                              juce::Justification::centred, 1);

@@ -10,6 +10,7 @@
 
 #include "BandPanel.h"
 #include "../../GUI/FireTheme.h"
+#include "../../GUI/Skin.h"
 #include "../../Utility/AudioHelpers.h"
 #include "../../Utility/DriveCompensationParameters.h"
 #include <algorithm>
@@ -17,26 +18,32 @@
 
 namespace
 {
-void drawMinimalSurface(juce::Graphics& g, juce::Rectangle<float> bounds)
+void drawMinimalSurface(juce::Graphics& g, const juce::Component& owner, juce::Rectangle<float> bounds)
 {
     if (bounds.isEmpty())
         return;
 
     bounds = bounds.reduced(0.5f);
-    juce::ColourGradient fill(fire::ui::colours::surface1.withAlpha(0.72f),
+    juce::ColourGradient fill(fire::ui::paletteFor(owner).surface1.withAlpha(fire::ui::isVintage(owner) ? 1.0f : 0.72f),
                               bounds.getX(), bounds.getY(),
-                              fire::ui::colours::surface0.withAlpha(0.88f),
+                              fire::ui::paletteFor(owner).surface0.withAlpha(fire::ui::isVintage(owner) ? 1.0f : 0.88f),
                               bounds.getX(), bounds.getBottom(), false);
     g.setGradientFill(fill);
     g.fillRoundedRectangle(bounds, fire::ui::Metrics::radius);
+    if (fire::ui::isVintage(owner))
+    {
+        g.setColour(juce::Colours::black.withAlpha(.18f)); g.drawRoundedRectangle(bounds,fire::ui::Metrics::radius,1);
+        g.setColour(juce::Colours::white.withAlpha(.55f));
+        g.drawRoundedRectangle(bounds.reduced(1.5f),fire::ui::Metrics::radius-1,1);
+    }
 }
 
-void drawMinimalTitle(juce::Graphics& g,
+void drawMinimalTitle(juce::Graphics& g, const juce::Component& owner,
                       juce::Rectangle<float> bounds,
                       const juce::String& text)
 {
     g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, bounds.getHeight() * 0.46f)));
-    g.setColour(fire::ui::colours::textSecondary.withAlpha(0.82f));
+    g.setColour(fire::ui::paletteFor(owner).textSecondary.withAlpha(0.82f));
     g.drawText(text.toUpperCase(), bounds, juce::Justification::centredLeft);
 }
 
@@ -288,7 +295,7 @@ void BandPanel::createLabels()
         addAndMakeVisible(label);
         label.setText(text, juce::dontSendNotification);
         label.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
-        label.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+        label.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textSecondary);
         juce::ignoreUnused(colour);
         label.setJustificationType(juce::Justification::centred);
     };
@@ -301,7 +308,7 @@ void BandPanel::createButtons()
     initFlatButton(linkedButton, "Gain Comp");
     addAndMakeVisible(driveCompReadout);
     driveCompReadout.setComponentID("driveCompensationReadout");
-    driveCompReadout.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    driveCompReadout.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textSecondary);
     driveCompReadout.setJustificationType(juce::Justification::centred);
     driveCompReadout.setInterceptsMouseClicks(false, false);
     initFlatButton(upgradeDriveCompButton, "Use Drive Comp");
@@ -343,11 +350,11 @@ void BandPanel::createButtons()
         btn.getProperties().set("fireModuleRail", true);
 
         btn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
-        btn.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
+        btn.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textSecondary);
         juce::ignoreUnused(colour);
 
         btn.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
-        btn.setColour(juce::TextButton::textColourOnId, fire::ui::colours::textPrimary);
+        btn.setColour(juce::TextButton::textColourOnId, fire::ui::paletteFor(*this).textPrimary);
 
         btn.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
 
@@ -488,6 +495,13 @@ void BandPanel::setupComponentGroups()
     allControls.add(&insertControls);
     for (auto& modeBox : distortionModes)
         allControls.add(&modeBox);
+}
+
+void BandPanel::lookAndFeelChanged()
+{
+    // A skin change can arrive at the same size and display scale. Never
+    // reuse the previous skin's rasterised panel chrome in that case.
+    invalidateChromeCache();
 }
 
 void BandPanel::paint(juce::Graphics& g)
@@ -766,8 +780,8 @@ void BandPanel::rebuildChromeCache(float displayScale)
     juce::Graphics cacheGraphics(chromeCache);
     cacheGraphics.addTransform(juce::AffineTransform::scale(displayScale));
 
-    fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat());
-    drawMinimalSurface(cacheGraphics, knobsAreaRect.getUnion(outputAreaRect).toFloat());
+    fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat(), fire::ui::skinFor(*this));
+    drawMinimalSurface(cacheGraphics, *this, knobsAreaRect.getUnion(outputAreaRect).toFloat());
 
     const auto titleHeight = juce::roundToInt(22.0f * scale);
     const auto titleInset = juce::roundToInt(8.0f * scale);
@@ -794,13 +808,13 @@ void BandPanel::rebuildChromeCache(float displayScale)
     if (ottSwitch.getToggleState()) moduleTitle = "OTT";
 
     if (selectedInsert >= 0) moduleTitle = fire::effects::name(processor.getInsertEffectType(focusBandNum + 1, selectedInsert));
-    drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "CHAIN");
+    drawMinimalTitle(cacheGraphics, *this, titleFor(tabAreaRect), "CHAIN");
     const bool expandedInsert = selectedInsert >= 0 && insertControls.usesExpandedLayout();
     const bool fullWidthInsert = selectedInsert >= 0 && insertControls.usesFullWidthLayout();
-    drawMinimalTitle(cacheGraphics,
+    drawMinimalTitle(cacheGraphics, *this,
                      titleFor(fullWidthInsert ? knobsAreaRect.getUnion(graphAreaRect) : knobsAreaRect),
                      expandedInsert ? "GRANULAR / CLOUDS" : moduleTitle);
-    drawMinimalTitle(cacheGraphics,
+    drawMinimalTitle(cacheGraphics, *this,
                      titleFor(outputAreaRect),
                      "BAND " + juce::String(focusBandNum + 1));
 
@@ -839,16 +853,16 @@ void BandPanel::configureGraphViewMenu()
     graphViewLabel.setText("VIEW", juce::dontSendNotification);
     graphViewLabel.setBorderSize({});
     graphViewLabel.setInterceptsMouseClicks(false, false);
-    graphViewLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    graphViewLabel.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textSecondary);
     graphViewMenu.setComponentID("band_graph_view");
     graphViewMenu.addItem("Auto: Waveform", 1);
     graphViewMenu.addItem("Waveform", 2);
     graphViewMenu.addItem("Transfer", 3);
     graphViewMenu.addItem("Meters", 4);
     graphViewMenu.addItem("Stereo", 5);
-    graphViewMenu.setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface0);
-    graphViewMenu.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
-    graphViewMenu.setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
+    graphViewMenu.setColour(juce::ComboBox::backgroundColourId, fire::ui::paletteFor(*this).surface0);
+    graphViewMenu.setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
+    graphViewMenu.setColour(juce::ComboBox::textColourId, fire::ui::paletteFor(*this).textPrimary);
     graphViewMenu.setColour(juce::ComboBox::arrowColourId, fire::ui::colours::signalCool);
     const juce::Component::SafePointer<BandPanel> safeThis(this);
     graphViewMenu.configurePopupSession(
@@ -1490,11 +1504,11 @@ void BandPanel::initFlatButton(juce::TextButton& button, juce::String buttonName
     addAndMakeVisible(button);
     button.setClickingTogglesState(true);
     button.setComponentID("rounded");
-    button.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface1);
-    button.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::raised);
-    button.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    button.setColour(juce::TextButton::buttonColourId, fire::ui::paletteFor(*this).surface1);
+    button.setColour(juce::TextButton::buttonOnColourId, fire::ui::paletteFor(*this).raised);
+    button.setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
     button.setColour(juce::TextButton::textColourOnId, fire::ui::colours::gold);
-    button.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
+    button.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textSecondary);
     button.setButtonText(buttonName);
 }
 
@@ -2173,9 +2187,9 @@ void BandPanel::presentDistortionGraphValues(const DistortionGraphValues& values
 void BandPanel::setMenu(juce::ComboBox* combobox)
 {
     addAndMakeVisible(combobox);
-    combobox->setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface1);
-    combobox->setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
-    combobox->setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
+    combobox->setColour(juce::ComboBox::backgroundColourId, fire::ui::paletteFor(*this).surface1);
+    combobox->setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
+    combobox->setColour(juce::ComboBox::textColourId, fire::ui::paletteFor(*this).textPrimary);
     combobox->setColour(juce::ComboBox::arrowColourId, fire::ui::colours::shape);
     combobox->addSectionHeading("Soft Clipping");
     combobox->addItem("Arctan", 1);

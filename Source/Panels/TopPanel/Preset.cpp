@@ -3729,10 +3729,16 @@ namespace state
         presetMenu.addItem(4, "Give a Star on GitHub!", true);
         presetMenu.addItem(5, "Check for New Version", true);
         presetMenu.addItem(6, "Settings", true);
+        juce::PopupMenu skins;
+        const auto currentSkin = fire::ui::skinFor(*this);
+        skins.addItem(9, "Modern", true, currentSkin == fire::ui::Skin::modern);
+        skins.addItem(10, "Vintage", true, currentSkin == fire::ui::Skin::vintage);
+        presetMenu.addSubMenu("Skin", skins);
 
         const auto menuScale = getPresetMenuScale();
         auto menuLookAndFeel = std::make_shared<FireLookAndFeel>();
         menuLookAndFeel->scale = menuScale;
+        menuLookAndFeel->setSkin(currentSkin);
         presetMenu.setLookAndFeel(menuLookAndFeel.get());
 
         presetMenu.showMenuAsync(createPresetMenuOptions(menuScale),
@@ -3783,6 +3789,14 @@ namespace state
 
     void StateComponent::handlePresetMenuResult(int result)
     {
+        if (result == 9 || result == 10)
+        {
+            const juce::Component::SafePointer<StateComponent> safe(this);
+            auto& properties = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor()).getAppSettings();
+            properties.setValue(fire::ui::skinSetting, result == 10 ? 1 : 0);
+            if (safe) properties.saveIfNeeded();
+            return;
+        }
         if (result == 7 || result == 8)
         {
             auto& processor = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());

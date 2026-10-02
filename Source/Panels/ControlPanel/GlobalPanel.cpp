@@ -10,32 +10,39 @@
 
 #include "GlobalPanel.h"
 #include "../../GUI/FireTheme.h"
+#include "../../GUI/Skin.h"
 #include "../../Utility/AudioHelpers.h"
 #include <algorithm>
 #include <array>
 
 namespace
 {
-void drawMinimalSurface(juce::Graphics& g, juce::Rectangle<float> bounds)
+void drawMinimalSurface(juce::Graphics& g, const juce::Component& owner, juce::Rectangle<float> bounds)
 {
     if (bounds.isEmpty())
         return;
 
     bounds = bounds.reduced(0.5f);
-    juce::ColourGradient fill(fire::ui::colours::surface1.withAlpha(0.72f),
+    juce::ColourGradient fill(fire::ui::paletteFor(owner).surface1.withAlpha(fire::ui::isVintage(owner) ? 1.0f : 0.72f),
                               bounds.getX(), bounds.getY(),
-                              fire::ui::colours::surface0.withAlpha(0.88f),
+                              fire::ui::paletteFor(owner).surface0.withAlpha(fire::ui::isVintage(owner) ? 1.0f : 0.88f),
                               bounds.getX(), bounds.getBottom(), false);
     g.setGradientFill(fill);
     g.fillRoundedRectangle(bounds, fire::ui::Metrics::radius);
+    if (fire::ui::isVintage(owner))
+    {
+        g.setColour(juce::Colours::black.withAlpha(.18f)); g.drawRoundedRectangle(bounds,fire::ui::Metrics::radius,1);
+        g.setColour(juce::Colours::white.withAlpha(.55f));
+        g.drawRoundedRectangle(bounds.reduced(1.5f),fire::ui::Metrics::radius-1,1);
+    }
 }
 
-void drawMinimalTitle(juce::Graphics& g,
+void drawMinimalTitle(juce::Graphics& g, const juce::Component& owner,
                       juce::Rectangle<float> bounds,
                       const juce::String& text)
 {
     g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, bounds.getHeight() * 0.46f)));
-    g.setColour(fire::ui::colours::textSecondary.withAlpha(0.82f));
+    g.setColour(fire::ui::paletteFor(owner).textSecondary.withAlpha(0.82f));
     g.drawText(text.toUpperCase(), bounds, juce::Justification::centredLeft);
 }
 
@@ -350,7 +357,7 @@ void GlobalPanel::createLabels()
         addAndMakeVisible(label);
         label.setText(text, juce::dontSendNotification);
         label.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
-        label.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+        label.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textSecondary);
         juce::ignoreUnused(colour);
         label.setJustificationType(juce::Justification::centred);
     };
@@ -371,10 +378,10 @@ void GlobalPanel::createButtons()
         btn.setRadioGroupId(switchButtonsGlobal);
 
         btn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
-        btn.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
+        btn.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textSecondary);
         juce::ignoreUnused(colour);
         btn.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
-        btn.setColour(juce::TextButton::textColourOnId, fire::ui::colours::textPrimary);
+        btn.setColour(juce::TextButton::textColourOnId, fire::ui::paletteFor(*this).textPrimary);
         btn.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
         btn.getProperties().set("fireAnimatedSelection", true);
         btn.getProperties().set("fireModuleRail", true);
@@ -453,9 +460,9 @@ void GlobalPanel::createComboBoxes()
 
     for (auto* menu : { &lowcutSlopeMode, &highcutSlopeMode })
     {
-        menu->setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface1);
-        menu->setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
-        menu->setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
+        menu->setColour(juce::ComboBox::backgroundColourId, fire::ui::paletteFor(*this).surface1);
+        menu->setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
+        menu->setColour(juce::ComboBox::textColourId, fire::ui::paletteFor(*this).textPrimary);
         menu->setColour(juce::ComboBox::arrowColourId, fire::ui::colours::filter);
     }
 
@@ -589,17 +596,24 @@ void GlobalPanel::setRoundButton(juce::TextButton& button, juce::String, juce::S
 {
     addAndMakeVisible(button);
     button.setClickingTogglesState(true);
-    button.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface1);
-    button.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::raised);
-    button.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    button.setColour(juce::TextButton::buttonColourId, fire::ui::paletteFor(*this).surface1);
+    button.setColour(juce::TextButton::buttonOnColourId, fire::ui::paletteFor(*this).raised);
+    button.setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
     button.setColour(juce::TextButton::textColourOnId, fire::ui::colours::filter);
-    button.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
+    button.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textMuted);
     if (button.getComponentID().isEmpty())
     {
         button.setComponentID("rounded");
         button.setButtonText(buttonName);
     }
     button.addListener(this);
+}
+
+void GlobalPanel::lookAndFeelChanged()
+{
+    // A skin change can arrive at the same size and display scale. Never
+    // reuse the previous skin's rasterised panel chrome in that case.
+    invalidateChromeCache();
 }
 
 void GlobalPanel::paint(juce::Graphics& g)
@@ -834,8 +848,8 @@ void GlobalPanel::rebuildChromeCache(float displayScale)
     juce::Graphics cacheGraphics(chromeCache);
     cacheGraphics.addTransform(juce::AffineTransform::scale(displayScale));
 
-    fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat());
-    drawMinimalSurface(cacheGraphics, controlsAreaRect.getUnion(outputAreaRect).toFloat());
+    fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat(), fire::ui::skinFor(*this));
+    drawMinimalSurface(cacheGraphics, *this, controlsAreaRect.getUnion(outputAreaRect).toFloat());
 
     const int titleHeight = juce::roundToInt(22.0f * scale);
     const int titleInset = juce::roundToInt(8.0f * scale);
@@ -854,9 +868,9 @@ void GlobalPanel::rebuildChromeCache(float displayScale)
     else if (graphSwitch.getToggleState())
         sectionTitle = "ANALYSIS";
 
-    drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "CHAIN");
-    drawMinimalTitle(cacheGraphics, titleFor(controlsAreaRect), sectionTitle);
-    drawMinimalTitle(cacheGraphics, titleFor(outputAreaRect), "MASTER");
+    drawMinimalTitle(cacheGraphics, *this, titleFor(tabAreaRect), "CHAIN");
+    drawMinimalTitle(cacheGraphics, *this, titleFor(controlsAreaRect), sectionTitle);
+    drawMinimalTitle(cacheGraphics, *this, titleFor(outputAreaRect), "MASTER");
 
     chromeCacheDirty = false;
 }

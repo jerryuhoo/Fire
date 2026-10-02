@@ -13,3 +13,5 @@ For full license details, see:
 🔗 https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
 
 The analog tube (unlit/lit) and tape reel PNG assets added for Fire 2.0 were generated for this project with OpenAI image generation. They are unbranded original UI artwork and use the repository's artwork license above.
+
+`assets/vintage_walnut.png` was generated with the built-in OpenAI image generation tool for the Vintage skin and uses the same artwork license. Prompt: "Production material texture for a premium vintage audio plugin GUI: seamless square swatch of real dark American walnut hardwood, straight-on orthographic photograph, fine long vertical grain, warm chocolate brown and restrained amber highlights, oiled satin finish, subtle pores, even soft studio lighting, edge-to-edge texture. No objects, bevel, perspective, text, logo, border, vignette, repeating stripes or black gaps. Scaled beneath code-drawn wooden bevels and controls."

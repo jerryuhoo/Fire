@@ -113,6 +113,8 @@ class FireAudioProcessorEditor : public juce::AudioProcessorEditor,
 public:
     FireAudioProcessorEditor(FireAudioProcessor&);
     ~FireAudioProcessorEditor() override;
+    void setSkinPreference(fire::ui::Skin skin);
+    fire::ui::Skin getSkinPreference() const { return fire::ui::skinFor(*this); }
 
     //==============================================================================
     void paint(juce::Graphics& g) override;
@@ -130,6 +132,7 @@ public:
     void hideValuePopup();
 
 private:
+    void applySkin(fire::ui::Skin skin);
     friend struct DistortionGraphSourceEpochTestAccess;
     friend struct MeterFreshnessTestAccess;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS

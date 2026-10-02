@@ -1064,6 +1064,9 @@ private:
     int activeCrossovers = 0;
 
     std::unique_ptr<juce::PropertiesFile> appProperties;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct SkinSwitchingTestAccess;
+#endif
 
     // Oscilloscope
     static constexpr int historyLength = 400;

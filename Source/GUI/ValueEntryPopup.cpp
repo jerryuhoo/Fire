@@ -1,5 +1,6 @@
 #include "ValueEntryPopup.h"
 #include "InterfaceDefines.h"
+#include "Skin.h"
 #include "../Utility/StrictNumberParser.h"
 #include <cmath>
 
@@ -105,7 +106,7 @@ void ValueEntryPopup::resized()
 void ValueEntryPopup::paint(juce::Graphics& g)
 {
     fire::ui::drawPanel(g, getLocalBounds().toFloat(), fire::ui::colours::ember, true,
-                        fire::ui::Metrics::radius);
+                        fire::ui::skinFor(*this));
 }
 
 bool ValueEntryPopup::keyPressed(const juce::KeyPress& key)

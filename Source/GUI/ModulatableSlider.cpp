@@ -266,8 +266,8 @@ void ModulatableSlider::paintOverChildren(juce::Graphics& g)
     if (getTextBoxPosition() != juce::Slider::NoTextBox)
         return;
 
-    g.setColour((isEnabled() ? fire::ui::colours::textSecondary
-                            : fire::ui::colours::textMuted).withAlpha(readoutOpacity));
+    g.setColour((isEnabled() ? fire::ui::paletteFor(*this).textSecondary
+                            : fire::ui::paletteFor(*this).textMuted).withAlpha(readoutOpacity));
     g.setFont(fire::ui::valueFont(12.0f * getUiScale()));
     g.drawFittedText(getTextFromValue(getValue()), getValueDisplayBounds(),
                      juce::Justification::centred, 1, 0.85f);
@@ -1119,7 +1119,7 @@ void ModulatableSlider::executeModulationMenuCommand(
 void ModulatableSlider::setLabel(const juce::String& text, juce::Colour colour)
 {
     label.setText(text, juce::dontSendNotification);
-    label.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
+    label.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textSecondary);
     juce::ignoreUnused(colour);
     setTitle(text);
 }

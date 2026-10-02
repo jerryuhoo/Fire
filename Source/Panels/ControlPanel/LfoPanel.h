@@ -68,6 +68,7 @@ public:
     //==============================================================================
     void paint(juce::Graphics& g) override;
     void resized() override;
+    void lookAndFeelChanged() override;
 
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
@@ -374,6 +375,7 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    void lookAndFeelChanged() override;
 
     /** Called by the editor's shared UI clock. */
     void animationTick(float deltaSeconds = 1.0f / 60.0f);

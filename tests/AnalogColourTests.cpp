@@ -117,6 +117,21 @@ TEST_CASE("Analog pages show hardware and the tube exposure follows Drive", "[an
     preview(panel, "band-analog-tube");
     for (int frame = 0; frame < 60; ++frame) hardware->setState(11, 50, .2f);
     CHECK(hardware->getTransportPhase() > 0); preview(*hardware, "tape-transport");
+    if (std::getenv("FIRE_HARDWARE_PREVIEW_DIR") != nullptr)
+    {
+        fire::ui::HardwareColourPanel detail;
+        detail.setSize(500, 370);
+        for (auto skin : {fire::ui::Skin::modern, fire::ui::Skin::vintage})
+        {
+            fire::ui::setSkin(detail, skin);
+            const auto prefix = skin == fire::ui::Skin::vintage ? "vintage-" : "modern-";
+            for (int model : {0, 6, 11})
+            {
+                for (int frame = 0; frame < 90; ++frame) detail.setState(model, 65, .3f);
+                preview(detail, juce::String(prefix) + (model == 0 ? "tube" : model == 6 ? "diode" : "tape"));
+            }
+        }
+    }
     REQUIRE(processor.setShapeMode(1, -1, 3)); juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     CHECK_FALSE(hardware->isShowing());
 }
@@ -135,6 +150,9 @@ TEST_CASE("Tape reels turn continuously across full rotations and transport chan
         const float dt = frame % 3 == 0 ? 1.0f / 30.0f : 1.0f / 60.0f;
         const float drive = frame < 900 ? 20.0f : frame < 1800 ? 95.0f : 50.0f;
         const float peak = frame >= 1800 && frame < 2100 ? 0.0f : .2f;
+        // Changing only the skin must not restart or re-phase either reel.
+        if (frame % 180 == 0)
+            fire::ui::setSkin(panel, frame % 360 == 0 ? fire::ui::Skin::vintage : fire::ui::Skin::modern);
         panel.setState(11, drive, peak, dt);
         for (int reel = 0; reel < 2; ++reel)
         {

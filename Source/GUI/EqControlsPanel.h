@@ -35,9 +35,9 @@ public:
         powerButton.setColour(juce::ToggleButton::tickColourId, fire::ui::colours::filter);
         for (auto* menu : {&typeMenu, &slopeMenu})
         {
-            menu->setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface1);
-            menu->setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
-            menu->setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
+            menu->setColour(juce::ComboBox::backgroundColourId, fire::ui::paletteFor(*this).surface1);
+            menu->setColour(juce::ComboBox::outlineColourId, fire::ui::paletteFor(*this).hairline);
+            menu->setColour(juce::ComboBox::textColourId, fire::ui::paletteFor(*this).textPrimary);
             menu->setColour(juce::ComboBox::arrowColourId, fire::ui::colours::filter);
         }
         const char* types[] {"Bell", "Low cut", "High cut", "Low shelf", "High shelf", "Notch", "Band pass"};
@@ -339,7 +339,7 @@ public:
     }
     void paint(juce::Graphics& g) override
     {
-        g.setColour(fire::ui::colours::textSecondary);
+        g.setColour(fire::ui::paletteFor(*this).textSecondary);
         g.setFont(fire::ui::labelFont(11 * scale));
         auto title = header.withTrimmedRight(juce::roundToInt(115 * scale));
         if (selected >= 0)
@@ -347,7 +347,7 @@ public:
             const auto ordinal = navigation[static_cast<size_t>(selected)].ordinal;
             g.drawText("POINT " + juce::String(ordinal).paddedLeft('0', 2), title, juce::Justification::centredLeft);
             g.drawText("FILTER TYPE", typeLabel, juce::Justification::centredLeft);
-            if (! slopeMenu.isEnabled()) g.setColour(fire::ui::colours::textMuted.withAlpha(0.55f));
+            if (! slopeMenu.isEnabled()) g.setColour(fire::ui::paletteFor(*this).textMuted.withAlpha(0.55f));
             g.drawText("SLOPE", slopeLabel, juce::Justification::centredLeft);
         }
         else
@@ -398,7 +398,7 @@ private:
         {
             const float size = juce::jmin(getWidth(), getHeight()) * (0.29f + 0.48f * expansion.current);
             auto dot = getLocalBounds().toFloat().withSizeKeepingCentre(size, size);
-            const auto colour = getToggleState() ? fire::ui::colours::filter : fire::ui::colours::textMuted;
+            const auto colour = getToggleState() ? fire::ui::colours::filter : fire::ui::paletteFor(*this).textMuted;
             g.setColour(colour.withAlpha(getToggleState() ? 0.20f : (isMouseOver() ? 0.7f : 0.32f)));
             g.fillEllipse(dot);
             if (getToggleState() || hasKeyboardFocus(false))
@@ -407,7 +407,7 @@ private:
             }
             if (expansion.current > 0.45f)
             {
-                g.setColour(fire::ui::colours::textPrimary.withAlpha(expansion.current));
+                g.setColour(fire::ui::paletteFor(*this).textPrimary.withAlpha(expansion.current));
                 g.setFont(fire::ui::labelFont(juce::jmax(9.0f, size * 0.51f)));
                 g.drawText(juce::String(ordinal), dot, juce::Justification::centred);
             }

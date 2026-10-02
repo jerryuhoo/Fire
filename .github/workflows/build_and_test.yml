@@ -62,8 +62,21 @@ jobs:
       - name: Install JUCE's Linux Deps
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update && sudo apt-get install -y libasound2-dev libx11-dev libxinerama-dev libxext-dev libxi-dev libegl-dev libfreetype6-dev libwebkit2gtk-4.0-dev libglu1-mesa-dev xvfb ninja-build
-          sudo /usr/bin/Xvfb $DISPLAY &
+          sudo apt-get update && sudo apt-get install -y libasound2-dev libx11-dev libxinerama-dev libxext-dev libxi-dev libegl-dev libfreetype6-dev libwebkit2gtk-4.0-dev libglu1-mesa-dev xvfb openbox x11-utils ninja-build
+          /usr/bin/Xvfb "$DISPLAY" -screen 0 1920x1080x24 -nolisten tcp > "$RUNNER_TEMP/fire-xvfb.log" 2>&1 &
+          for attempt in {1..40}; do
+            if xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then break; fi
+            sleep 0.25
+          done
+          xdpyinfo -display "$DISPLAY" >/dev/null
+          # Native JUCE windows require EWMH atoms from a window manager.
+          # A bare Xvfb server otherwise produces BadAtom test failures.
+          openbox --sm-disable > "$RUNNER_TEMP/fire-openbox.log" 2>&1 &
+          for attempt in {1..40}; do
+            if xprop -root _NET_SUPPORTING_WM_CHECK | grep -q 'window id'; then break; fi
+            sleep 0.25
+          done
+          xprop -root _NET_SUPPORTING_WM_CHECK | grep -q 'window id'
 
       # NOTE: The fragile, hardcoded IPP installation has been removed.
       # The build will now proceed without it. If IPP is a requirement,

@@ -50,6 +50,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Locally, you must run `git submodule update --init --recursive` once
 # The recorded submodule revision pins the tested JUCE release (9.0.2).
 # On Github Actions, this is done as a part of actions/checkout
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake-overrides/JuceCallbackSafety.cmake")
 add_subdirectory(JUCE)
 
 # Add CLAP format
@@ -270,6 +271,19 @@ include(Tests)
 
 # A separate target for Benchmarks (keeps the Tests target fast)
 include(Benchmarks)
+
+# Fixtures keep multiple complete processors/editors on the stack. Increase
+# only the Windows test executables; plug-ins retain their host's stack and
+# are separately exercised on a native thread with a 256 KiB reservation.
+if (WIN32)
+    foreach (FireTestTarget IN ITEMS Tests Benchmarks)
+        if (MINGW)
+            target_link_options(${FireTestTarget} PRIVATE "LINKER:--stack,16777216")
+        else ()
+            target_link_options(${FireTestTarget} PRIVATE "LINKER:/STACK:16777216")
+        endif ()
+    endforeach ()
+endif ()
 
 # Output some config for CI (like our PRODUCT_NAME)
 include(GitHubENV)

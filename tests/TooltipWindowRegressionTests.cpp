@@ -56,12 +56,13 @@ TEST_CASE("Editor-owned tooltips expose help using the Fire theme",
     CHECK(tooltip->getConfiguredDelayMilliseconds() == 900);
     CHECK_FALSE(tooltip->isOpaque());
     CHECK(hqButton->getTooltip() == "High-quality oversampling");
+    const auto& palette = fire::ui::paletteFor(*editor);
     CHECK(tooltip->findColour(juce::TooltipWindow::backgroundColourId)
-          == fire::ui::colours::surface1);
+          == palette.surface1);
     CHECK(tooltip->findColour(juce::TooltipWindow::textColourId)
-          == fire::ui::colours::textPrimary);
+          == palette.textPrimary);
     CHECK(tooltip->findColour(juce::TooltipWindow::outlineColourId)
-          == fire::ui::colours::hairline.withAlpha(0.78f));
+          == palette.hairline.withAlpha(0.78f));
 
     auto* fireLookAndFeel = dynamic_cast<FireLookAndFeel*>(
         &editor->getLookAndFeel());
@@ -91,8 +92,10 @@ TEST_CASE("Editor-owned tooltips expose help using the Fire theme",
                              tooltip->getWidth(),
                              tooltip->getHeight(),
                              true);
-    juce::Graphics tooltipGraphics(tooltipImage);
-    tooltip->paintEntireComponent(tooltipGraphics, true);
+    {
+        juce::Graphics tooltipGraphics(tooltipImage);
+        tooltip->paintEntireComponent(tooltipGraphics, true);
+    }
 
     // The neutral Fire card has truly transparent rounded corners rather
     // than JUCE's opaque square backing or the previous bright orange frame.
@@ -102,7 +105,10 @@ TEST_CASE("Editor-owned tooltips expose help using the Fire theme",
     const auto edgePixel = tooltipImage.getPixelAt(
         0, tooltipImage.getHeight() / 2);
     CHECK(edgePixel.getRed() < fire::ui::colours::flame.getRed() / 2);
-    CHECK(edgePixel.getBlue() >= edgePixel.getRed());
+    if (fire::ui::isVintage(*editor))
+        CHECK(edgePixel.getRed() >= edgePixel.getBlue());
+    else
+        CHECK(edgePixel.getBlue() >= edgePixel.getRed());
 
     editor->setVisible(false);
     CHECK_FALSE(tooltip->isVisible());

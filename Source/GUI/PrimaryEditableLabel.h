@@ -144,6 +144,7 @@ private:
         juce::Time eventTime;
         juce::Time mouseDownTime;
         int clickCount = 0;
+        juce::uint32 peerID = 0;
     };
 
     void mouseDown(const juce::MouseEvent& event) override
@@ -151,6 +152,7 @@ private:
         completedDoubleClick.reset();
 
         if (pointerGesture == PointerGesture::primary
+            && pointerPeerID == currentPeerID()
             && ! isPointerSource(event))
             return;
 
@@ -168,6 +170,7 @@ private:
                              : PointerGesture::rejected;
         pointerSourceType = event.source.getType();
         pointerSourceIndex = event.source.getIndex();
+        pointerPeerID = currentPeerID();
         startLifecycleMonitor();
 
         if (pointerGesture == PointerGesture::primary)
@@ -176,6 +179,12 @@ private:
 
     void mouseDrag(const juce::MouseEvent& event) override
     {
+        if (pointerGesture != PointerGesture::none && pointerPeerID != currentPeerID())
+        {
+            dismissPointerGesture();
+            return;
+        }
+
         if (pointerGesture != PointerGesture::primary
             || ! isPointerSource(event))
             return;
@@ -218,6 +227,12 @@ private:
 
     void mouseUp(const juce::MouseEvent& event) override
     {
+        if (pointerGesture != PointerGesture::none && pointerPeerID != currentPeerID())
+        {
+            dismissPointerGesture();
+            return;
+        }
+
         if (pointerGesture == PointerGesture::none
             || ! isPointerSource(event))
             return;
@@ -237,7 +252,8 @@ private:
                 event.source.getIndex(),
                 event.eventTime,
                 event.mouseDownTime,
-                event.getNumberOfClicks()
+                event.getNumberOfClicks(),
+                currentPeerID()
             });
         }
 
@@ -253,6 +269,7 @@ private:
     void mouseDoubleClick(const juce::MouseEvent& event) override
     {
         const bool wasAuthorised = completedDoubleClick.has_value()
+            && completedDoubleClick->peerID == currentPeerID()
             && matchesCompletedClick(event, *completedDoubleClick);
         completedDoubleClick.reset();
 
@@ -308,7 +325,7 @@ private:
         const juce::Component::SafePointer<PrimaryEditableLabel> safeThis(this);
         juce::Label::parentHierarchyChanged();
 
-        if (safeThis == nullptr || isShowing())
+        if (safeThis == nullptr || (isShowing() && ! hasStalePeerSession()))
             return;
 
         dismissPointerGesture();
@@ -320,9 +337,21 @@ private:
             hideEditor(true);
     }
 
+    void textEditorReturnKeyPressed(juce::TextEditor& editor) override
+    {
+        if (! isEditorPeerCurrent())
+        {
+            dismissPointerGesture();
+            hideEditor(true);
+            return;
+        }
+
+        juce::Label::textEditorReturnKeyPressed(editor);
+    }
+
     void textEditorFocusLost(juce::TextEditor& editor) override
     {
-        if (! isShowing() || ! isEnabled())
+        if (! isEditorPeerCurrent())
         {
             // A hidden or disabled lifecycle transition must not commit text
             // that was typed for the previous UI context. onEditorHide may
@@ -338,6 +367,7 @@ private:
 
     void editorShown(juce::TextEditor* editor) override
     {
+        editorPeerID = currentPeerID();
         const juce::Component::SafePointer<PrimaryEditableLabel> safeThis(this);
         juce::Label::editorShown(editor);
 
@@ -345,9 +375,20 @@ private:
             startLifecycleMonitor();
     }
 
+    void editorAboutToBeHidden(juce::TextEditor* editor) override
+    {
+        // Label::hideEditor(false) is non-virtual and can be called through a
+        // Label reference. Neutralise stale text before that base path copies
+        // it into the Label or publishes a change after this callback.
+        if (editor != nullptr && ! isEditorPeerCurrent())
+            editor->setText(getText(), false);
+        editorPeerID = 0;
+        juce::Label::editorAboutToBeHidden(editor);
+    }
+
     void timerCallback() override
     {
-        if (isShowing())
+        if (isShowing() && ! hasStalePeerSession())
         {
             if (pointerGesture == PointerGesture::none
                 && ! completedDoubleClick.has_value()
@@ -365,11 +406,33 @@ private:
         stopTimer();
 
         // Component::removeFromDesktop does not emit a hierarchy callback.
-        // Poll only while a click or editor is active so a lost top-level
-        // peer still becomes an immediate cancellation boundary. hideEditor
+        // Poll only while a click or editor is active; also compare the peer
+        // ID so a detach/reattach between polls cannot revive the old session.
+        // hideEditor
         // may delete this Label through onEditorHide and must remain last.
         if (isBeingEdited())
             hideEditor(true);
+    }
+
+    juce::uint32 currentPeerID() const noexcept
+    {
+        if (const auto* peer = getPeer())
+            return peer->getUniqueID();
+        return 0;
+    }
+
+    bool isEditorPeerCurrent() const noexcept
+    {
+        return isShowing() && isEnabled() && editorPeerID != 0
+            && editorPeerID == currentPeerID();
+    }
+
+    bool hasStalePeerSession() const noexcept
+    {
+        const auto peerID = currentPeerID();
+        return (pointerGesture != PointerGesture::none && pointerPeerID != peerID)
+            || (completedDoubleClick.has_value() && completedDoubleClick->peerID != peerID)
+            || (isBeingEdited() && editorPeerID != peerID);
     }
 
     bool isCompletePrimaryDown(const juce::MouseEvent& event) const noexcept
@@ -413,7 +476,8 @@ private:
             || ! isPointerSource(event))
             return;
 
-        if (! event.mods.isAnyMouseButtonDown()
+        if (pointerPeerID != currentPeerID()
+            || ! event.mods.isAnyMouseButtonDown()
             || (pointerGesture == PointerGesture::primary
                 && ! isCompletePrimaryDown(event)))
             dismissPointerGesture();
@@ -423,6 +487,7 @@ private:
     {
         pointerGesture = PointerGesture::none;
         pointerSourceIndex = -1;
+        pointerPeerID = 0;
     }
 
     void startLifecycleMonitor()
@@ -436,5 +501,6 @@ private:
     juce::MouseInputSource::InputSourceType pointerSourceType =
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;
+    juce::uint32 pointerPeerID = 0, editorPeerID = 0;
     std::optional<CompletedClick> completedDoubleClick;
 };

@@ -145,18 +145,22 @@ TEST_CASE("Host bypass status paints a themed overlay above the spectrum card",
                            editor.getWidth(),
                            editor.getHeight(),
                            true);
-    juce::Graphics clearGraphics(clearImage);
-    SpectrumHostBypassPresentationTestAccess::snapIndicator(editor, 0.0f);
-    editor.paintOverChildren(clearGraphics);
+    {
+        juce::Graphics clearGraphics(clearImage);
+        SpectrumHostBypassPresentationTestAccess::snapIndicator(editor, 0.0f);
+        editor.paintOverChildren(clearGraphics);
+    }
     CHECK(clearImage.getPixelAt(centre.x, centre.y).getAlpha() == 0);
 
     juce::Image bypassImage(juce::Image::ARGB,
                             editor.getWidth(),
                             editor.getHeight(),
                             true);
-    juce::Graphics bypassGraphics(bypassImage);
-    SpectrumHostBypassPresentationTestAccess::snapIndicator(editor, 1.0f);
-    editor.paintOverChildren(bypassGraphics);
+    {
+        juce::Graphics bypassGraphics(bypassImage);
+        SpectrumHostBypassPresentationTestAccess::snapIndicator(editor, 1.0f);
+        editor.paintOverChildren(bypassGraphics);
+    }
     CHECK(bypassImage.getPixelAt(centre.x, centre.y).getAlpha() > 0);
 }
 

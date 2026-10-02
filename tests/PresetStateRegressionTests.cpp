@@ -1228,7 +1228,8 @@ TEST_CASE("Preset scan depth limit includes level sixteen only",
     auto level = scanRoot;
     for (int depth = 1; depth <= 17; ++depth)
     {
-        level = level.getChildFile("Level-" + juce::String(depth));
+        // Exercise directory depth, not Windows' legacy path-length limit.
+        level = level.getChildFile("d");
         REQUIRE(level.createDirectory().wasOk());
         if (depth == 16)
             writePresetFile(processor,

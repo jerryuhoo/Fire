@@ -181,8 +181,10 @@ std::uint64_t renderFingerprint(ModulatableSlider& slider)
                       juce::jmax(1, slider.getWidth()),
                       juce::jmax(1, slider.getHeight()),
                       true);
-    juce::Graphics graphics(image);
-    slider.paintEntireComponent(graphics, true);
+    {
+        juce::Graphics graphics(image);
+        slider.paintEntireComponent(graphics, true);
+    }
 
     std::uint64_t fingerprint = 1469598103934665603ull;
     for (int y = 0; y < image.getHeight(); ++y)
@@ -1561,8 +1563,10 @@ TEST_CASE("Modulation overlays follow the assigned LFO bank palette",
     {
         slider.lfoSource = source;
         juce::Image image(juce::Image::ARGB, 180, 180, true);
-        juce::Graphics graphics(image);
-        slider.paintEntireComponent(graphics, true);
+        {
+            juce::Graphics graphics(image);
+            slider.paintEntireComponent(graphics, true);
+        }
 
         const auto expected = fire::ui::lfoBankColourForSource(source);
         const auto expectedRed = static_cast<float>(expected.getRed()) - fallback.getRed();

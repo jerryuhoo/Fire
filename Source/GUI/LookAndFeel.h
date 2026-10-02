@@ -1683,7 +1683,9 @@ private:
                     centre + baseDirection * originInner,
                     centre + baseDirection * originOuter
                 };
-                const auto originWidth = juce::jmin(1.3f * scale, discRadius * 0.09f);
+                // At 1x a centred stroke straddles two pixels. Keep enough
+                // coverage for a clear origin mark on Direct2D as well.
+                const auto originWidth = juce::jmin(1.5f * scale, discRadius * 0.09f);
                 g.setColour(themeColour(colours::canvas).withAlpha(0.92f));
                 g.drawLine(origin, originWidth + pointBorder * 2.0f);
                 g.setColour(themeColour(colours::whiteHot).withAlpha(slider.isBypassed ? 0.48f : 0.96f));

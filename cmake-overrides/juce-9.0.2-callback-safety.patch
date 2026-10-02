@@ -1,0 +1,147 @@
+diff --git a/modules/juce_gui_basics/buttons/juce_Button.cpp b/modules/juce_gui_basics/buttons/juce_Button.cpp
+index bd63c29804..dfef8f829f 100644
+--- a/modules/juce_gui_basics/buttons/juce_Button.cpp
++++ b/modules/juce_gui_basics/buttons/juce_Button.cpp
+@@ -281,8 +281,11 @@ void Button::turnOffOtherButtonsInGroup (NotificationType clickNotification, Not
+ //==============================================================================
+ void Button::enablementChanged()
+ {
++    Component::BailOutChecker checker (this);
+     updateState();
+-    repaint();
++
++    if (! checker.shouldBailOut())
++        repaint();
+ }
+ 
+ Button::ButtonState Button::updateState()
+diff --git a/modules/juce_gui_basics/components/juce_Component.cpp b/modules/juce_gui_basics/components/juce_Component.cpp
+index ecfe10fdd2..9898396068 100644
+--- a/modules/juce_gui_basics/components/juce_Component.cpp
++++ b/modules/juce_gui_basics/components/juce_Component.cpp
+@@ -3135,20 +3135,29 @@ void Component::setEnabled (bool shouldBeEnabled)
+     if (flags.isDisabledFlag == shouldBeEnabled)
+     {
+         flags.isDisabledFlag = ! shouldBeEnabled;
++        BailOutChecker checker (this);
+ 
+         // if any parent components are disabled, setting our flag won't make a difference,
+         // so no need to send a change message
+         if (parentComponent == nullptr || parentComponent->isEnabled())
+             sendEnablementChangeMessage();
+ 
+-        BailOutChecker checker (this);
++        if (checker.shouldBailOut())
++            return;
++
+         componentListeners.callChecked (checker, [this] (ComponentListener& l) { l.componentEnablementChanged (*this); });
+ 
++        if (checker.shouldBailOut())
++            return;
++
+         if (! shouldBeEnabled && hasKeyboardFocus (true))
+         {
+             if (parentComponent != nullptr)
+                 parentComponent->grabKeyboardFocus();
+ 
++            if (checker.shouldBailOut())
++                return;
++
+             // ensure that keyboard focus is given away if it wasn't taken by parent
+             giveAwayKeyboardFocus();
+         }
+diff --git a/modules/juce_gui_basics/widgets/juce_Slider.cpp b/modules/juce_gui_basics/widgets/juce_Slider.cpp
+index 50ec122f0f..89e8c91405 100644
+--- a/modules/juce_gui_basics/widgets/juce_Slider.cpp
++++ b/modules/juce_gui_basics/widgets/juce_Slider.cpp
+@@ -352,8 +352,12 @@ public:
+     {
+         if (notification != dontSendNotification)
+         {
++            Component::BailOutChecker checker (&owner);
+             owner.valueChanged();
+ 
++            if (checker.shouldBailOut())
++                return;
++
+             if (notification == sendNotificationSync)
+                 handleAsyncUpdate();
+             else
+@@ -395,10 +399,13 @@ public:
+ 
+     void sendDragEnd()
+     {
++        Component::BailOutChecker checker (&owner);
+         owner.stoppedDragging();
+-        sliderBeingDragged = -1;
+ 
+-        Component::BailOutChecker checker (&owner);
++        if (checker.shouldBailOut())
++            return;
++
++        sliderBeingDragged = -1;
+         listeners.callChecked (checker, [&] (Slider::Listener& l) { l.sliderDragEnded (&owner); });
+ 
+         if (checker.shouldBailOut())
+@@ -972,6 +979,8 @@ public:
+ 
+     void mouseUp()
+     {
++        Component::BailOutChecker checker (&owner);
++
+         if (owner.isEnabled()
+              && useDragEvents
+              && (normRange.end > normRange.start)
+@@ -979,16 +988,40 @@ public:
+         {
+             restoreMouseIfHidden();
+ 
++            if (checker.shouldBailOut())
++                return;
++
+             if (sendChangeOnlyOnRelease && ! approximatelyEqual (valueOnMouseDown, static_cast<double> (currentValue.getValue())))
+                 triggerChangeMessage (sendNotificationAsync);
+ 
+-            currentDrag.reset();
+-            popupDisplay.reset();
++            if (checker.shouldBailOut())
++                return;
++
++            // Ending a drag can synchronously delete the slider and this Pimpl.
++            // Keep the notifying objects outside the Pimpl during destruction.
++            auto dragToFinish = std::move (currentDrag);
++            dragToFinish.reset();
++
++            if (checker.shouldBailOut())
++                return;
++
++            auto popupToDismiss = std::move (popupDisplay);
++            popupToDismiss.reset();
++
++            if (checker.shouldBailOut())
++                return;
+ 
+             if (style == IncDecButtons)
+             {
+                 incButton->setState (Button::buttonNormal);
++
++                if (checker.shouldBailOut())
++                    return;
++
+                 decButton->setState (Button::buttonNormal);
++
++                if (checker.shouldBailOut())
++                    return;
+             }
+         }
+         else if (popupDisplay != nullptr)
+@@ -996,7 +1029,8 @@ public:
+             popupDisplay->startTimer (200);
+         }
+ 
+-        currentDrag.reset();
++        auto dragToFinish = std::move (currentDrag);
++        dragToFinish.reset();
+     }
+ 
+     void mouseMove()

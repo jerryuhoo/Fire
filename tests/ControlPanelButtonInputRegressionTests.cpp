@@ -33,6 +33,11 @@ struct ContextAwareComboBoxTestAccess
         return comboBox.cancelPendingPointerRelease;
     }
 
+    static bool hasPendingPopupRequest(const ContextAwareComboBox& comboBox)
+    {
+        return comboBox.popupRequestArmed;
+    }
+
     static juce::MouseInputSource::InputSourceType getPointerSourceType(
         const ContextAwareComboBox& comboBox)
     {
@@ -137,6 +142,19 @@ struct GlobalPanelSlopeTestAccess
 
 namespace
 {
+template <typename Predicate>
+bool dispatchUntil(const Predicate& finished)
+{
+    const auto started = juce::Time::getMillisecondCounter();
+    while (!finished())
+    {
+        if (juce::Time::getMillisecondCounter() - started >= 1000
+            || !juce::MessageManager::getInstance()->runDispatchLoopUntil(5))
+            return false;
+    }
+    return true;
+}
+
 class ParameterGestureRecorder final
     : public juce::AudioProcessorParameter::Listener
 {
@@ -956,7 +974,10 @@ TEST_CASE("GlobalPanel closes queued slope popups across context ABA",
                 boundary();
 
                 CHECK_FALSE(target.isPopupActive());
-                juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+                REQUIRE(dispatchUntil([&]
+                {
+                    return !ContextAwareComboBoxTestAccess::hasPendingPopupRequest(targetContext);
+                }));
                 CHECK_FALSE(GlobalPanelSlopeTestAccess::getSlopeBox(panel).isPopupActive());
                 CHECK(lowParameter->getValue()
                       == Catch::Approx(initialLowValue));
@@ -1061,7 +1082,10 @@ TEST_CASE("GlobalPanel late slope label release cannot reopen a popup",
                         true));
 
                 component.mouseUp(makeMouseEvent(*label, {}, dragged));
-                juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+                REQUIRE(dispatchUntil([&]
+                {
+                    return !ContextAwareComboBoxTestAccess::hasPendingPopupRequest(targetContext);
+                }));
 
                 CHECK_FALSE(target.isPopupActive());
                 CHECK(target.getSelectedId() == initialSelectedId);
@@ -1598,7 +1622,10 @@ TEST_CASE("Context-aware ComboBox owns and recovers its opener pointer",
 
         selectGlobalSlopeType(panel, false);
         selectGlobalSlopeType(panel, true);
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        REQUIRE(dispatchUntil([&]
+        {
+            return !ContextAwareComboBoxTestAccess::hasPendingPopupRequest(target);
+        }));
         REQUIRE_FALSE(target.isPopupActive());
         REQUIRE(ContextAwareComboBoxTestAccess::isCancelPending(target));
 

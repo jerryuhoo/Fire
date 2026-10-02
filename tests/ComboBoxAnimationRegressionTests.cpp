@@ -86,8 +86,10 @@ std::uint64_t renderFingerprint(FocusAwareComboBox& comboBox)
                       comboBox.getWidth(),
                       comboBox.getHeight(),
                       true);
-    juce::Graphics graphics(image);
-    comboBox.paintEntireComponent(graphics, true);
+    {
+        juce::Graphics graphics(image);
+        comboBox.paintEntireComponent(graphics, true);
+    }
     comboBox.setLookAndFeel(nullptr);
 
     std::uint64_t fingerprint = 1469598103934665603ull;

@@ -318,20 +318,25 @@ TEST_CASE("Selected controls and menu rows use uninterrupted solid fills",
 {
     FireLookAndFeel look;
     juce::Image image(juce::Image::ARGB, 200, 40, true);
-    juce::Graphics graphics(image);
-    graphics.fillAll(fire::ui::colours::canvas);
     juce::TextButton control;
     control.setBounds(0, 0, 200, 40);
     control.setToggleState(true, juce::dontSendNotification);
     control.setColour(juce::TextButton::textColourOffId, fire::ui::colours::filter);
     control.setColour(juce::TextButton::textColourOnId, fire::ui::colours::filter);
-    look.drawButtonBackground(graphics, control, juce::Colours::transparentBlack, false, false);
+    {
+        juce::Graphics graphics(image);
+        graphics.fillAll(fire::ui::colours::canvas);
+        look.drawButtonBackground(graphics, control, juce::Colours::transparentBlack, false, false);
+    }
     CHECK(image.getPixelAt(1, 20) == fire::ui::colours::raised);
     CHECK(image.getPixelAt(1, 20) == image.getPixelAt(100, 20));
 
-    graphics.fillAll(fire::ui::colours::surface1);
-    look.drawPopupMenuItem(graphics, {0, 0, 200, 40}, false, true, true,
-                           false, false, "Preset", {}, nullptr, nullptr);
+    {
+        juce::Graphics graphics(image);
+        graphics.fillAll(fire::ui::colours::surface1);
+        look.drawPopupMenuItem(graphics, {0, 0, 200, 40}, false, true, true,
+                               false, false, "Preset", {}, nullptr, nullptr);
+    }
     CHECK(image.getPixelAt(4, 20) == fire::ui::colours::raised.brighter(0.06f));
     CHECK(image.getPixelAt(4, 20) == image.getPixelAt(8, 20));
 }

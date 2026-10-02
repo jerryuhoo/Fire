@@ -12,6 +12,12 @@
 struct PrimaryButtonTestAccess
 {
     template <typename ButtonType>
+    static bool hasPrimaryGesture(const PrimaryPointerButton<ButtonType>& button) noexcept
+    {
+        return button.pointerGesture == PrimaryPointerButton<ButtonType>::PointerGesture::primary;
+    }
+
+    template <typename ButtonType>
     static void setTrackedPointerSource(
         PrimaryPointerButton<ButtonType>& button,
         juce::MouseInputSource::InputSourceType type,
@@ -51,6 +57,19 @@ struct PrimaryButtonTestAccess
 
 namespace
 {
+template <typename Predicate>
+bool dispatchUntil(const Predicate& finished)
+{
+    const auto started = juce::Time::getMillisecondCounter();
+    while (!finished())
+    {
+        if (juce::Time::getMillisecondCounter() - started >= 1000
+            || !juce::MessageManager::getInstance()->runDispatchLoopUntil(5))
+            return false;
+    }
+    return true;
+}
+
 juce::MouseEvent makeMouseEvent(juce::Component& component,
                                 juce::ModifierKeys modifiers,
                                 bool wasDragged = false)
@@ -661,7 +680,10 @@ TEST_CASE("Primary buttons discard gestures at hierarchy and peer boundaries",
             REQUIRE(button.isDown());
             desktopHost.removeFromDesktop();
             REQUIRE_FALSE(button.isShowing());
-            juce::MessageManager::getInstance()->runDispatchLoopUntil(35);
+            REQUIRE(dispatchUntil([&]
+            {
+                return !button.isDown() && !PrimaryButtonTestAccess::hasPrimaryGesture(button);
+            }));
 
             CHECK_FALSE(button.isDown());
             desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
@@ -1157,12 +1179,14 @@ TEST_CASE("Overlapping workspace hover press and focus keep a valid opacity",
     CHECK(fire::ui::headerInteractionWashAlpha(1.0f, 1.0f, 1.0f, 0.0f)
           == 1.0f);
     juce::Image image(juce::Image::ARGB, 120, 28, true);
-    juce::Graphics graphics(image);
-    lookAndFeel.drawButtonBackground(graphics,
-                                     button,
-                                     juce::Colours::transparentBlack,
-                                     true,
-                                     true);
+    {
+        juce::Graphics graphics(image);
+        lookAndFeel.drawButtonBackground(graphics,
+                                         button,
+                                         juce::Colours::transparentBlack,
+                                         true,
+                                         true);
+    }
 
     CHECK(image.getPixelAt(60, 14).getAlpha() > 0);
 }

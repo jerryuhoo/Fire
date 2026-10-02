@@ -253,6 +253,7 @@ public:
     void mouseDown(const juce::MouseEvent& event) override
     {
         if (pointerGesture == PointerGesture::primary
+            && isPointerPeerCurrent()
             && ! isPointerSource(event))
             return;
 
@@ -279,6 +280,7 @@ public:
             focusModality.notePointer();
             pointerSourceType = event.source.getType();
             pointerSourceIndex = event.source.getIndex();
+            pointerPeerID = currentPeerID();
             ButtonType::mouseDown(event);
             if (safeThis != nullptr)
                 updateAnimationTargets();
@@ -287,6 +289,12 @@ public:
 
     void mouseDrag(const juce::MouseEvent& event) override
     {
+        if (pointerGesture != PointerGesture::none && ! isPointerPeerCurrent())
+        {
+            dismissPointerGesture();
+            return;
+        }
+
         if (pointerGesture == PointerGesture::primary
             && isPointerSource(event))
         {
@@ -299,6 +307,12 @@ public:
 
     void mouseEnter(const juce::MouseEvent& event) override
     {
+        if (pointerGesture != PointerGesture::none && ! isPointerPeerCurrent())
+        {
+            dismissPointerGesture();
+            return;
+        }
+
         if (pointerGesture == PointerGesture::primary
             && ! isPointerSource(event))
             return;
@@ -317,6 +331,12 @@ public:
 
     void mouseMove(const juce::MouseEvent& event) override
     {
+        if (pointerGesture != PointerGesture::none && ! isPointerPeerCurrent())
+        {
+            dismissPointerGesture();
+            return;
+        }
+
         if (pointerGesture == PointerGesture::primary
             && ! isPointerSource(event))
             return;
@@ -335,6 +355,12 @@ public:
 
     void mouseExit(const juce::MouseEvent& event) override
     {
+        if (pointerGesture != PointerGesture::none && ! isPointerPeerCurrent())
+        {
+            dismissPointerGesture();
+            return;
+        }
+
         if (pointerGesture == PointerGesture::primary
             && ! isPointerSource(event))
             return;
@@ -353,6 +379,12 @@ public:
 
     void mouseUp(const juce::MouseEvent& event) override
     {
+        if (pointerGesture != PointerGesture::none && ! isPointerPeerCurrent())
+        {
+            dismissPointerGesture();
+            return;
+        }
+
         if (pointerGesture == PointerGesture::primary
             && ! isPointerSource(event))
             return;
@@ -360,6 +392,7 @@ public:
         const auto completedGesture = pointerGesture;
         pointerGesture = PointerGesture::none;
         pointerSourceIndex = -1;
+        pointerPeerID = 0;
         const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
 
         if (completedGesture == PointerGesture::primary)
@@ -376,8 +409,11 @@ public:
         if (this->hasKeyboardFocus(true)
             && ! focusModality.isKeyboardVisible())
         {
+            const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
             focusModality.noteKeyboard();
             updateAnimationTargets();
+            if (safeThis == nullptr)
+                return false;
         }
 
         const bool isActivationKey =
@@ -471,6 +507,7 @@ public:
     {
         pointerGesture = PointerGesture::none;
         pointerSourceIndex = -1;
+        pointerPeerID = 0;
 
         const auto restingState = this->isEnabled()
                                       && this->isShowing()
@@ -508,6 +545,18 @@ private:
             && event.source.getIndex() == pointerSourceIndex;
     }
 
+    juce::uint32 currentPeerID() const noexcept
+    {
+        if (const auto* peer = this->getPeer())
+            return peer->getUniqueID();
+        return 0;
+    }
+
+    bool isPointerPeerCurrent() const noexcept
+    {
+        return pointerPeerID == currentPeerID();
+    }
+
     void recoverMissingPointerUp(const juce::MouseEvent& event)
     {
         if (pointerGesture == PointerGesture::primary
@@ -518,6 +567,18 @@ private:
 
     void updateAnimationTargets()
     {
+        // A native peer can disappear and be replaced without a hierarchy
+        // notification or a timer tick. Drop its gesture before the hidden
+        // branch stops monitoring. Never-peered explicit input keeps its
+        // existing off-desktop contract (both peer IDs are zero).
+        if (pointerGesture != PointerGesture::none
+            && (! isPointerPeerCurrent()
+                || (pointerPeerID != 0 && ! this->isShowing())))
+        {
+            dismissPointerGesture();
+            return;
+        }
+
         if (! this->isShowing())
         {
             stopTimer();
@@ -573,6 +634,12 @@ private:
 
     void timerCallback() override
     {
+        if (pointerGesture != PointerGesture::none && ! isPointerPeerCurrent())
+        {
+            dismissPointerGesture();
+            return;
+        }
+
         if (! this->isShowing())
         {
             const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
@@ -605,6 +672,7 @@ private:
     juce::MouseInputSource::InputSourceType pointerSourceType =
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;
+    juce::uint32 pointerPeerID = 0;
     fire::ui::KeyboardFocusModalityState focusModality;
     float hoverAnimation = 0.0f;
     float pressAnimation = 0.0f;

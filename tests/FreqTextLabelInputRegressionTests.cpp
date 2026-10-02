@@ -41,6 +41,19 @@ struct PrimaryEditableLabelTestAccess
 
 namespace
 {
+template <typename Predicate>
+bool dispatchUntil(const Predicate& finished)
+{
+    const auto started = juce::Time::getMillisecondCounter();
+    while (!finished())
+    {
+        if (juce::Time::getMillisecondCounter() - started >= 1000
+            || !juce::MessageManager::getInstance()->runDispatchLoopUntil(5))
+            return false;
+    }
+    return true;
+}
+
 template <typename ComponentType>
 ComponentType* findDescendant(juce::Component& root)
 {
@@ -296,7 +309,11 @@ TEST_CASE("Frequency labels recover missing releases across lifecycle boundaries
         editor->setText("2 kHz", false);
 
         desktopHost.removeFromDesktop();
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        REQUIRE(dispatchUntil([&]
+        {
+            return !PrimaryEditableLabelTestAccess::hasPrimaryGesture(label)
+                && !label.isBeingEdited() && editorLifetime == nullptr;
+        }));
 
         CHECK_FALSE(PrimaryEditableLabelTestAccess::hasPrimaryGesture(label));
         CHECK_FALSE(label.isBeingEdited());
@@ -558,23 +575,29 @@ TEST_CASE("Fire label painting leaves editable text to the active editor",
     };
 
     juce::Image normalLayer(juce::Image::ARGB, 90, 24, true);
-    juce::Graphics normalGraphics(normalLayer);
-    lookAndFeel.drawLabel(normalGraphics, label);
+    {
+        juce::Graphics normalGraphics(normalLayer);
+        lookAndFeel.drawLabel(normalGraphics, label);
+    }
     CHECK(countPaintedPixels(normalLayer) > 0);
 
     label.showEditor();
     REQUIRE(label.isBeingEdited());
 
     juce::Image transparentEditingLayer(juce::Image::ARGB, 90, 24, true);
-    juce::Graphics transparentEditingGraphics(transparentEditingLayer);
-    lookAndFeel.drawLabel(transparentEditingGraphics, label);
+    {
+        juce::Graphics transparentEditingGraphics(transparentEditingLayer);
+        lookAndFeel.drawLabel(transparentEditingGraphics, label);
+    }
     CHECK(countPaintedPixels(transparentEditingLayer) == 0);
 
     label.setColour(juce::Label::outlineWhenEditingColourId,
                     juce::Colours::red);
     juce::Image outlinedEditingLayer(juce::Image::ARGB, 90, 24, true);
-    juce::Graphics outlinedEditingGraphics(outlinedEditingLayer);
-    lookAndFeel.drawLabel(outlinedEditingGraphics, label);
+    {
+        juce::Graphics outlinedEditingGraphics(outlinedEditingLayer);
+        lookAndFeel.drawLabel(outlinedEditingGraphics, label);
+    }
     CHECK(countPaintedPixels(outlinedEditingLayer) > 0);
     CHECK(outlinedEditingLayer.getPixelAt(45, 12) == fire::ui::colours::raised);
 

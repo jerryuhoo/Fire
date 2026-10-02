@@ -457,8 +457,10 @@ std::uint64_t renderFingerprint(LfoEditor& editor)
                       juce::jmax(1, editor.getWidth()),
                       juce::jmax(1, editor.getHeight()),
                       true);
-    juce::Graphics graphics(image);
-    editor.paintEntireComponent(graphics, true);
+    {
+        juce::Graphics graphics(image);
+        editor.paintEntireComponent(graphics, true);
+    }
 
     std::uint64_t fingerprint = 1469598103934665603ull;
     for (int y = 0; y < image.getHeight(); ++y)

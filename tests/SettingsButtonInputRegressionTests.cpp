@@ -192,8 +192,10 @@ std::uint64_t renderFingerprint(juce::Component& component)
                       component.getWidth(),
                       component.getHeight(),
                       true);
-    juce::Graphics graphics(image);
-    component.paintEntireComponent(graphics, true);
+    {
+        juce::Graphics graphics(image);
+        component.paintEntireComponent(graphics, true);
+    }
 
     std::uint64_t fingerprint = 1469598103934665603ull;
     for (int y = 0; y < image.getHeight(); ++y)

@@ -9,9 +9,11 @@ namespace
 juce::Image renderFire(float energy, float phase, float attack = 0.0f)
 {
     juce::Image image(juce::Image::ARGB, 128, 128, true);
-    juce::Graphics graphics(image);
-    fire::ui::brand::drawFireMark(graphics, image.getBounds().toFloat(),
-                                 energy, phase, attack);
+    {
+        juce::Graphics graphics(image);
+        fire::ui::brand::drawFireMark(graphics, image.getBounds().toFloat(),
+                                     energy, phase, attack);
+    }
     return image;
 }
 
@@ -129,14 +131,23 @@ TEST_CASE("Small brand marks stay in their bounds and restore the graphics state
         for (const auto drawFire : {false, true})
         {
             juce::Image image(juce::Image::ARGB, 64, 64, true);
-            juce::Graphics graphics(image);
             const juce::Rectangle<int> bounds(9, 7, width, 40);
-            graphics.setColour(juce::Colours::magenta);
-            if (drawFire)
-                fire::ui::brand::drawFireMark(graphics, bounds.toFloat(),
-                                             1.0f, 1.8f, 1.0f);
-            else
-                fire::ui::brand::drawWingsMark(graphics, bounds.toFloat());
+            const auto drawMark = [&](juce::Graphics& graphics)
+            {
+                if (drawFire)
+                    fire::ui::brand::drawFireMark(graphics, bounds.toFloat(),
+                                                 1.0f, 1.8f, 1.0f);
+                else
+                    fire::ui::brand::drawWingsMark(graphics, bounds.toFloat());
+            };
+            {
+                juce::Graphics graphics(image);
+                graphics.setColour(juce::Colours::magenta);
+                drawMark(graphics);
+            }
+
+            // Native Direct2D drawing is committed when Graphics is destroyed;
+            // inspect the clipping result only after that drawing session ends.
 
             int visible = 0;
             int escaped = 0;
@@ -150,7 +161,14 @@ TEST_CASE("Small brand marks stay in their bounds and restore the graphics state
             CHECK(visible > width * width / (drawFire ? 4 : 5));
             CHECK(escaped == 0);
 
-            graphics.fillRect(0, 0, 2, 2);
+            {
+                juce::Graphics graphics(image);
+                graphics.setColour(juce::Colours::magenta);
+                drawMark(graphics);
+                // The sentinel must use the same context as drawMark to verify
+                // that it restored both colour and clipping, not a fresh context.
+                graphics.fillRect(0, 0, 2, 2);
+            }
             CHECK(image.getPixelAt(0, 0) == juce::Colours::magenta);
         }
     }

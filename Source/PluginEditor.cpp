@@ -876,13 +876,22 @@ void FireAudioProcessorEditor::resized()
     }
     else
     {
-        const auto spectrumHeight = spectrumCollapsed ? 0
-            : juce::roundToInt(static_cast<float>(bounds.getHeight()) * 0.28f);
+        // Preserve two standard rotary rows after reserving the wooden front
+        // rail. The analyser gives up a few pixels before dials are shrunk.
+        const auto navigationHeight = juce::roundToInt(34.0f * scale);
+        const auto dialRowsHeight = 2 * fire::ui::ordinaryKnobHeight(
+            fire::ui::ordinaryKnobWidth(scale), scale) + juce::roundToInt(8.0f * scale);
+        const auto panelFrameHeight = 2 * juce::roundToInt(10.0f * scale)
+            + 2 * juce::roundToInt(8.0f * scale) + juce::roundToInt(22.0f * scale);
+        const auto spectrumLimit = juce::jmax(0, bounds.getHeight() - navigationHeight
+            - gap * 2 - dialRowsHeight - panelFrameHeight);
+        const auto spectrumHeight = spectrumCollapsed ? 0 : juce::jmin(spectrumLimit,
+            juce::roundToInt(static_cast<float>(bounds.getHeight()) * 0.28f));
         spectrumCardArea = bounds.removeFromTop(spectrumHeight);
         if (! spectrumCollapsed)
             bounds.removeFromTop(gap);
 
-        navigationArea = bounds.removeFromTop(juce::roundToInt(34.0f * scale));
+        navigationArea = bounds.removeFromTop(navigationHeight);
         bounds.removeFromTop(gap);
         contentArea = bounds;
 

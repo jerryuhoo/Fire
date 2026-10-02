@@ -240,7 +240,7 @@
     </GROUP>
   </MAINGROUP>
   <EXPORTFORMATS>
-    <XCODE_MAC targetFolder="Builds/MacOSX">
+    <XCODE_MAC targetFolder="Builds/MacOSX" prebuildCommand="sh &quot;${SRCROOT}/../../cmake-overrides/apply-juce-callback-safety.sh&quot;">
       <CONFIGURATIONS>
         <CONFIGURATION isDebug="1" name="Debug" enablePluginBinaryCopyStep="0"/>
         <CONFIGURATION isDebug="0" name="Release"/>
@@ -266,8 +266,8 @@
     </XCODE_MAC>
     <VS2019 targetFolder="Builds/VisualStudio2019">
       <CONFIGURATIONS>
-        <CONFIGURATION name="Debug" isDebug="1" enablePluginBinaryCopyStep="0"/>
-        <CONFIGURATION isDebug="0" name="Release"/>
+        <CONFIGURATION name="Debug" isDebug="1" enablePluginBinaryCopyStep="0" prebuildCommand="call &quot;$(ProjectDir)..\..\cmake-overrides\apply-juce-callback-safety.cmd&quot;"/>
+        <CONFIGURATION isDebug="0" name="Release" prebuildCommand="call &quot;$(ProjectDir)..\..\cmake-overrides\apply-juce-callback-safety.cmd&quot;"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
         <MODULEPATH id="juce_opengl" path="JUCE/modules"/>
@@ -290,8 +290,8 @@
     </VS2019>
     <VS2017 targetFolder="Builds/VisualStudio2017">
       <CONFIGURATIONS>
-        <CONFIGURATION isDebug="1" name="Debug" enablePluginBinaryCopyStep="0"/>
-        <CONFIGURATION isDebug="0" name="Release"/>
+        <CONFIGURATION isDebug="1" name="Debug" enablePluginBinaryCopyStep="0" prebuildCommand="call &quot;$(ProjectDir)..\..\cmake-overrides\apply-juce-callback-safety.cmd&quot;"/>
+        <CONFIGURATION isDebug="0" name="Release" prebuildCommand="call &quot;$(ProjectDir)..\..\cmake-overrides\apply-juce-callback-safety.cmd&quot;"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
         <MODULEPATH id="juce_opengl" path="JUCE/modules"/>
@@ -314,8 +314,8 @@
     </VS2017>
     <VS2022 targetFolder="Builds/VisualStudio2022">
       <CONFIGURATIONS>
-        <CONFIGURATION isDebug="1" name="Debug" enablePluginBinaryCopyStep="0"/>
-        <CONFIGURATION isDebug="0" name="Release"/>
+        <CONFIGURATION isDebug="1" name="Debug" enablePluginBinaryCopyStep="0" prebuildCommand="call &quot;$(ProjectDir)..\..\cmake-overrides\apply-juce-callback-safety.cmd&quot;"/>
+        <CONFIGURATION isDebug="0" name="Release" prebuildCommand="call &quot;$(ProjectDir)..\..\cmake-overrides\apply-juce-callback-safety.cmd&quot;"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
         <MODULEPATH id="juce_opengl" path="JUCE/modules"/>

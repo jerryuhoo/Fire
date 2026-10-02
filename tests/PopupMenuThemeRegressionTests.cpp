@@ -79,16 +79,18 @@ juce::Image renderIdleComboBox(FireLookAndFeel& lookAndFeel,
     comboBox.setLookAndFeel(&lookAndFeel);
 
     juce::Image image(juce::Image::ARGB, width, height, true);
-    juce::Graphics graphics(image);
-    lookAndFeel.drawComboBox(graphics,
-                             width,
-                             height,
-                             false,
-                             0,
-                             0,
-                             0,
-                             0,
-                             comboBox);
+    {
+        juce::Graphics graphics(image);
+        lookAndFeel.drawComboBox(graphics,
+                                 width,
+                                 height,
+                                 false,
+                                 0,
+                                 0,
+                                 0,
+                                 0,
+                                 comboBox);
+    }
     comboBox.setLookAndFeel(nullptr);
     return image;
 }
@@ -206,41 +208,47 @@ TEST_CASE("Fire context menus inherit their target theme and cursor anchor",
     SECTION("Fire owns the complete rounded menu surface")
     {
         juce::Image background(juce::Image::ARGB, 180, 84, true);
-        juce::Graphics backgroundGraphics(background);
-        lookAndFeel.drawPopupMenuBackground(
-            backgroundGraphics, background.getWidth(), background.getHeight());
+        {
+            juce::Graphics backgroundGraphics(background);
+            lookAndFeel.drawPopupMenuBackground(
+                backgroundGraphics, background.getWidth(), background.getHeight());
+        }
 
         CHECK(background.getPixelAt(0, 0).getAlpha() == 0);
         CHECK(background.getPixelAt(background.getWidth() / 2,
                                     background.getHeight() / 2).getAlpha() > 0);
 
         juce::Image idleItem(juce::Image::ARGB, 180, 34, true);
-        juce::Graphics idleGraphics(idleItem);
-        lookAndFeel.drawPopupMenuItem(idleGraphics,
-                                      idleItem.getBounds(),
-                                      false,
-                                      true,
-                                      false,
-                                      false,
-                                      false,
-                                      "Assign modulation",
-                                      {},
-                                      nullptr,
-                                      nullptr);
+        {
+            juce::Graphics idleGraphics(idleItem);
+            lookAndFeel.drawPopupMenuItem(idleGraphics,
+                                          idleItem.getBounds(),
+                                          false,
+                                          true,
+                                          false,
+                                          false,
+                                          false,
+                                          "Assign modulation",
+                                          {},
+                                          nullptr,
+                                          nullptr);
+        }
 
         juce::Image highlightedItem(juce::Image::ARGB, 180, 34, true);
-        juce::Graphics highlightedGraphics(highlightedItem);
-        lookAndFeel.drawPopupMenuItem(highlightedGraphics,
-                                      highlightedItem.getBounds(),
-                                      false,
-                                      true,
-                                      true,
-                                      false,
-                                      false,
-                                      "Assign modulation",
-                                      {},
-                                      nullptr,
-                                      nullptr);
+        {
+            juce::Graphics highlightedGraphics(highlightedItem);
+            lookAndFeel.drawPopupMenuItem(highlightedGraphics,
+                                          highlightedItem.getBounds(),
+                                          false,
+                                          true,
+                                          true,
+                                          false,
+                                          false,
+                                          "Assign modulation",
+                                          {},
+                                          nullptr,
+                                          nullptr);
+        }
 
         CHECK(imageFingerprint(highlightedItem)
               != imageFingerprint(idleItem));

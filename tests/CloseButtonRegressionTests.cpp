@@ -44,8 +44,10 @@ std::uint64_t renderFingerprint(CloseButton& button)
                       juce::jmax(1, button.getWidth()),
                       juce::jmax(1, button.getHeight()),
                       true);
-    juce::Graphics graphics(image);
-    button.paintEntireComponent(graphics, true);
+    {
+        juce::Graphics graphics(image);
+        button.paintEntireComponent(graphics, true);
+    }
 
     std::uint64_t fingerprint = 1469598103934665603ull;
     for (int y = 0; y < image.getHeight(); ++y)

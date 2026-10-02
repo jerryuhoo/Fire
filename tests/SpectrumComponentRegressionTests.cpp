@@ -122,8 +122,10 @@ std::uint64_t renderedAlphaSum(SpectrumComponent& component,
                       juce::jmax(1, component.getWidth()),
                       juce::jmax(1, component.getHeight()),
                       true);
-    juce::Graphics graphics(image);
-    component.paintEntireComponent(graphics, true);
+    {
+        juce::Graphics graphics(image);
+        component.paintEntireComponent(graphics, true);
+    }
 
     area = area.getIntersection(image.getBounds());
     std::uint64_t total = 0;

@@ -115,10 +115,11 @@ Fire uses **C++23** for both Projucer exports and CMake builds, including tests
 and benchmarks. Use a compiler with C++23 language-mode support. The standard
 is saved in `Fire.jucer`, so regenerating an IDE project retains this setting.
 
-The project pins **JUCE 9.0.2** in its `JUCE` submodule. Initialise submodules
+The project pins **JUCE 9.0.3** in its `JUCE` submodule. Initialise submodules
 before building; CMake and every Projucer exporter use this local copy.
+Use **Projucer 9.0.3** when re-saving `Fire.jucer` and regenerating native IDE projects.
 The build automatically applies the version-pinned callback lifetime guards
-in `cmake-overrides/juce-9.0.2-callback-safety.patch`. These protect controls
+in `cmake-overrides/juce-9.0.3-callback-safety.patch`. These protect controls
 whose host deletes their editor during a gesture or enablement notification.
 The patch leaves the JUCE commit unchanged, is safe to reapply, and stops with
 an error if the dependency revision or edited source does not match.
@@ -374,7 +375,7 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 - Separate Drive compensation from Output in new states while preserving
   legacy Link behaviour when loading older presets and host projects.
 - Harden state restoration, automation transitions, host bypass, oversized
-  audio callbacks and non-finite input handling; update to pinned JUCE 9.0.2.
+  audio callbacks and non-finite input handling; update to pinned JUCE 9.0.3.
 - Keep UI, updater and plug-in metadata on the build's version, and validate
   release tags and macOS bundle signatures before packaging. Stable tags create
   normal GitHub releases; tags containing a prerelease suffix remain prereleases.

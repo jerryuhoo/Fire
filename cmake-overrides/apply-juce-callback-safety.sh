@@ -2,8 +2,8 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 juce_dir="$root/JUCE"
-patch="$root/cmake-overrides/juce-9.0.2-callback-safety.patch"
-expected=72782788ce18c2d4d760b28e0921d6ffc6431102
+patch="$root/cmake-overrides/juce-9.0.3-callback-safety.patch"
+expected=be29c81492b6151c8ea8d14c840e1311963b3a83
 if [ "$(git -C "$juce_dir" rev-parse HEAD)" != "$expected" ]; then
     echo "Fire's JUCE safety patch requires the pinned JUCE revision; initialise submodules or review the patch before upgrading." >&2
     exit 1

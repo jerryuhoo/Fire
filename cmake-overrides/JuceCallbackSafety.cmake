@@ -3,8 +3,8 @@
 function(fire_apply_juce_callback_safety)
     get_filename_component(root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/.." ABSOLUTE)
     set(juce_dir "${root}/JUCE")
-    set(patch "${root}/cmake-overrides/juce-9.0.2-callback-safety.patch")
-    set(expected "72782788ce18c2d4d760b28e0921d6ffc6431102")
+    set(patch "${root}/cmake-overrides/juce-9.0.3-callback-safety.patch")
+    set(expected "be29c81492b6151c8ea8d14c840e1311963b3a83")
     find_package(Git REQUIRED QUIET)
     execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${juce_dir}" rev-parse HEAD
         OUTPUT_VARIABLE revision OUTPUT_STRIP_TRAILING_WHITESPACE

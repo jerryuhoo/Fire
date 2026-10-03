@@ -48,7 +48,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # JUCE is setup as a submodule in the /JUCE folder
 # Locally, you must run `git submodule update --init --recursive` once
-# The recorded submodule revision pins the tested JUCE release (9.0.2).
+# The recorded submodule revision pins the tested JUCE release (9.0.3).
 # On Github Actions, this is done as a part of actions/checkout
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake-overrides/JuceCallbackSafety.cmake")
 add_subdirectory(JUCE)

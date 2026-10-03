@@ -1356,7 +1356,9 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec, bool withInserts
 
     dryBuffer.setSize(numChannels, maximumBlockSize);
     dcFilterDryBuffer.setSize(numChannels, maximumBlockSize);
-    upsampledLfoOutputs.setSize(fire::lfo_bank::capacity, maximumBlockSize * 4);
+    // Preallocate the entire source bank, including Envelope and all Macros,
+    // so binding an auxiliary route cannot grow this buffer on the audio thread.
+    upsampledLfoOutputs.setSize(fire::mod_sources::sourceCount, maximumBlockSize * 4);
     safePeakEnvelopeBuffer.setSize(1, maximumBlockSize);
     safePeakEnvelopeBuffer.clear();
 
@@ -1770,15 +1772,15 @@ void BandProcessor::processDriveShapeStage(juce::AudioBuffer<float>& buffer,
     {
         auto oversampledBlock = oversampling->processSamplesUp(block);
 
-        // --- LFO Upsampling ---
-        upsampledLfoOutputs.setSize(juce::jmin(fire::lfo_bank::capacity, lfoOutputs.getNumChannels()),
+        // --- Modulation source upsampling ---
+        upsampledLfoOutputs.setSize(juce::jmin(fire::mod_sources::sourceCount, lfoOutputs.getNumChannels()),
                                     static_cast<int>(oversampledBlock.getNumSamples()),
                                     false,
                                     false,
                                     true);
         if (upsampledLfoOutputs.getNumSamples() > 0)
         {
-            std::array<bool, fire::lfo_bank::capacity> neededSources {};
+            std::array<bool, fire::mod_sources::sourceCount> neededSources {};
             for (const int source : {params.driveLfoSourceIndex, params.biasLfoSourceIndex,
                                      params.recLfoSourceIndex, params.shapeMixLfoSourceIndex})
                 if (juce::isPositiveAndBelow(source, upsampledLfoOutputs.getNumChannels()))

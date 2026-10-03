@@ -578,6 +578,27 @@ Reverb now has **Classic, Room, Hall, Plate, Spring and Chamber** models. Classi
 
 Shape also offers twelve **Analog Hardware** colours: Warm Triode, Bright Pentode, Class A Console, Tweed Breakup, British Crunch, Modern High Gain, Diode Overdrive, Germanium Fuzz, Silicon Fuzz, MOSFET Drive, Transformer and Tape Saturation. These circuit-inspired colours combine nonlinear stages with input/tone filtering, power-supply sag and magnetic memory. The original twelve digital modes and their host automation ranges remain unchanged. New model selections use independent appended parameters and smooth mode transitions.
 
+The amplifier colours use a normalised RC supply and coupling-capacitor bias
+model. Output-load current depletes the supply; rail voltage changes clipping
+headroom and the operating point, and both recover according to their circuit
+time constants. Transformer uses a Jiles–Atherton magnetic material law coupled
+to the winding voltage/flux equation, including irreversible magnetisation and
+remanence.
+
+Tape Saturation replaces the former feedback colour with a biased magnetic
+recording model, complementary record/playback equalisation, and playback-gap,
+spacing and coating-thickness losses. Its nominal 55 kHz bias runs at an adaptive
+internal clock; HQ uses fewer internal subdivisions at its higher input rate,
+so it does not multiply the RF solver cost by another four. The bias-only steady
+state is prepared and shared outside the audio callback. Tape uses uncoupled
+Jiles–Atherton domains for practical multi-instance processing, while Transformer
+retains mean-field coupling. Tape's material and 15 ips head parameters are
+generic, rather than a measured clone of a named machine. The magnetic modelling
+reference is [Chowdhury's DAFx-19 paper](https://www.dafx.de/paper-archive/2019/DAFx2019_paper_3.pdf);
+Fire uses bounded exponential field integration instead of the paper's time-domain
+Runge–Kutta solver. These upgraded analog colours can sound different from
+earlier unreleased builds.
+
 Analog pages use a hardware faceplate. Tube filaments follow the band or master input level, with Drive increasing their intensity. Silence extinguishes the glow even at maximum Drive; a perceptual level curve keeps quiet signals visible at modest Drive, with a quick attack and a short cooling tail. The tape transport turns while audio arrives and winds down when callbacks stop. The artwork is cached and animation runs only while its panel is visible. Both Band Shape and independently added Master/Band Shape instances offer these colours; each added analog Shape has its own Drive control.
 
 Choose **Menu → Skin → Modern / Vintage**, or use the two appearance buttons

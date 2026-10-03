@@ -44,6 +44,14 @@ TEST_CASE("The Langevin evaluation and derivative remain regular at zero and sat
         CHECK(positive.derivative >= 0); CHECK(positive.value < 1);
         if (x >= .05) CHECK(positive.value == Catch::Approx(1 / std::tanh(x) - 1 / x).margin(1e-7));
     }
+    for (int sample = 50; sample <= 9000; ++sample)
+    {
+        const double x = sample * .001;
+        const auto value = fire::analog::JilesAtherton::langevin(x);
+        const auto coth = 1 / std::tanh(x);
+        REQUIRE(std::abs(value.value - (coth - 1 / x)) < 1e-8);
+        REQUIRE(std::abs(value.derivative - (1 / (x * x) - coth * coth + 1)) < 2e-8);
+    }
 }
 
 TEST_CASE("Transformer winding voltage flux and magnetising current satisfy the circuit equation",
@@ -69,4 +77,18 @@ TEST_CASE("Transformer winding voltage flux and magnetising current satisfy the 
         for (int sample = 0; sample < static_cast<int>(rate); ++sample) transformer.process(0);
         CHECK(std::abs(transformer.process(0)) < .001);
     }
+}
+
+TEST_CASE("Value-only magnetic integration retains the full material trajectory",
+          "[analog-physical][magnetics][numerics][realtime]")
+{
+    fire::analog::JilesAtherton reference, fast;
+    reference.configure({.18, .22, .17, .004}); fast.configure({.18, .22, .17, .004});
+    double largestError = 0;
+    for (int sample = 0; sample < 32000; ++sample)
+    {
+        const auto field = 1.25 * std::sin(sample * .45) + .8 * std::sin(sample * .006);
+        largestError = std::max(largestError, std::abs(reference.process(field) - fast.processMagnetisation(field)));
+    }
+    CHECK(largestError < 1e-8);
 }

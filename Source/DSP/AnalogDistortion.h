@@ -5,6 +5,7 @@
 #include <cmath>
 #include "AnalogPowerSupply.h"
 #include "AnalogMagnetics.h"
+#include "AnalogTape.h"
 
 namespace fire::analog
 {
@@ -16,21 +17,21 @@ inline constexpr std::array<const char*, count> names{
 };
 struct Profile
 {
-    float gain, asymmetry, stages, highPass, tone, midGain, sag, memory, output;
+    float gain, asymmetry, stages, highPass, tone, midGain, sag, output;
 };
 inline constexpr std::array<Profile, count> profiles{{
-    {1.9f, .17f, 1, 25, 14500, .06f, .12f, .01f, .84f},
-    {2.5f, .09f, 1, 50, 17000, .24f, .08f, 0, .79f},
-    {1.3f, .08f, 1, 15, 18500, .04f, .03f, .04f, .94f},
-    {2.8f, .13f, 2, 65, 7500, .18f, .35f, .02f, .87f},
-    {3.5f, .06f, 2, 110, 6700, .42f, .18f, .01f, .83f},
-    {5.0f, .02f, 3, 150, 5600, .31f, .09f, 0, .79f},
-    {2.2f, .04f, 1, 170, 9500, .40f, .02f, 0, .90f},
-    {4.0f, .21f, 2, 35, 5200, -.12f, .24f, .08f, .79f},
-    {5.4f, .02f, 2, 85, 10500, -.22f, .05f, 0, .75f},
-    {2.8f, .14f, 1, 70, 12500, .16f, .05f, .015f, .88f},
-    {1.4f, .05f, 1, 12, 17500, -.05f, .07f, .18f, .91f},
-    {1.8f, .035f, 1, 20, 11000, -.06f, .16f, .12f, .89f}
+    {1.9f, .17f, 1, 25, 14500, .06f, .12f, .84f},
+    {2.5f, .09f, 1, 50, 17000, .24f, .08f, .79f},
+    {1.3f, .08f, 1, 15, 18500, .04f, .03f, .94f},
+    {2.8f, .13f, 2, 65, 7500, .18f, .35f, .87f},
+    {3.5f, .06f, 2, 110, 6700, .42f, .18f, .83f},
+    {5.0f, .02f, 3, 150, 5600, .31f, .09f, .79f},
+    {2.2f, .04f, 1, 170, 9500, .40f, .02f, .90f},
+    {4.0f, .21f, 2, 35, 5200, -.12f, .24f, .79f},
+    {5.4f, .02f, 2, 85, 10500, -.22f, .05f, .75f},
+    {2.8f, .14f, 1, 70, 12500, .16f, .05f, .88f},
+    {1.4f, .05f, 1, 12, 17500, -.05f, 0, .91f},
+    {1.8f, .035f, 1, 15, 17000, -.06f, 0, .89f}
 }};
 inline int resolve(int legacy, int family) noexcept
 { return family >= 1 && family <= count ? legacyCount + family - 1 : juce::jlimit(0, legacyCount - 1, legacy); }
@@ -64,9 +65,9 @@ template <int profile> float curve(float input) noexcept {return transfer(profil
 class Stage
 {
 public:
-    void prepare(double rate) noexcept
-    {sampleRate = std::isfinite(rate) && rate > 0 ? rate : 48000; current = -1; reset();}
-    void reset() noexcept {inputLow = midLow = toneLow = envelope = flux = dcInput = dcOutput = previous = 0; supply.reset(); transformer.reset();}
+    void prepare(double rate)
+    {sampleRate = std::isfinite(rate) && rate > 0 ? rate : 48000; current = -1; tape.prepare(sampleRate); reset();}
+    void reset() noexcept {inputLow = midLow = toneLow = dcInput = dcOutput = previous = 0; supply.reset(); transformer.reset(); tape.reset();}
     void setProfile(int mode, double rate) noexcept
     {
         const auto kind = mode - legacyCount;
@@ -78,14 +79,13 @@ public:
         const auto& p = profiles[static_cast<size_t>(current)];
         const auto pole = [&](double hz) {return static_cast<float>(1 - std::exp(-juce::MathConstants<double>::twoPi * juce::jmin(hz, sampleRate * .45) / sampleRate));};
         inputPole = pole(p.highPass); midPole = pole(1100); tonePole = pole(p.tone);
-        attack = static_cast<float>(1 - std::exp(-1 / (sampleRate * .004)));
-        release = static_cast<float>(1 - std::exp(-1 / (sampleRate * .085)));
-        fluxPole = pole(180); dcPole = static_cast<float>(std::exp(-juce::MathConstants<double>::twoPi * 12 / sampleRate));
+        dcPole = static_cast<float>(std::exp(-juce::MathConstants<double>::twoPi * 12 / sampleRate));
         constexpr std::array<double, count> rechargeSeconds{.055, .045, .012, .12, .075, .035, .012, .09, .025, .025, .01, .01};
         supply.prepare(sampleRate, {1.8 * p.sag, rechargeSeconds[static_cast<size_t>(current)],
                                    current < 6 || current == 7 ? 0.035 : 0.008,
                                    current == 3 ? 0.18 : 0.10});
         transformer.prepare(sampleRate);
+        tape.setProcessingRate(sampleRate);
     }
     float process(float input) noexcept
     {
@@ -96,18 +96,12 @@ public:
         auto x = input - inputLow;
         midLow += midPole * (x - midLow);
         x += p.midGain * (midLow - inputLow);
-        if (current == 11)
-        {
-            // Magnetic models are replaced independently of the supply model.
-            const auto magnitude = std::abs(x);
-            envelope += (magnitude > envelope ? attack : release) * (magnitude - envelope);
-            x = x / (1 + p.sag * envelope) + p.memory * flux;
-        }
         const auto rail = current < 10 ? static_cast<float>(supply.getVoltage()) : 1.0f;
         const auto bias = current < 10 ? static_cast<float>(supply.getBias()) : 0.0f;
         // A bounded midpoint integration softens the newly generated high
         // harmonics without adding host latency. HQ supplies the 4x path.
-        auto y = current == 10 ? static_cast<float>(std::clamp(transformer.process(x * p.gain), -1.25, 1.25) * p.output)
+        auto y = current == 11 ? static_cast<float>(std::clamp(tape.process(x * p.gain), -1.25, 1.25) * p.output)
+                 : current == 10 ? static_cast<float>(std::clamp(transformer.process(x * p.gain), -1.25, 1.25) * p.output)
                               : .25f * transfer(current, previous, rail, bias) + .5f * transfer(current, (previous + x) * .5f, rail, bias) + .25f * transfer(current, x, rail, bias);
         previous = x;
         if (current < 10)
@@ -118,7 +112,6 @@ public:
             const auto gridCurrent = std::max(0.0, static_cast<double>(x) * p.gain - 1.4 * rail);
             supply.advance(loadCurrent, gridCurrent);
         }
-        else if (current == 11) flux += fluxPole * (y - flux);
         toneLow += tonePole * (y - toneLow);
         y = toneLow - dcInput + dcPole * dcOutput;
         dcInput = toneLow; dcOutput = std::isfinite(y) ? y : 0;
@@ -129,9 +122,10 @@ public:
 private:
     int current = -1;
     double sampleRate = 48000;
-    float inputPole = 0, midPole = 0, tonePole = 0, attack = 0, release = 0, fluxPole = 0, dcPole = 0;
-    float inputLow = 0, midLow = 0, toneLow = 0, envelope = 0, flux = 0, dcInput = 0, dcOutput = 0, previous = 0;
+    float inputPole = 0, midPole = 0, tonePole = 0, dcPole = 0;
+    float inputLow = 0, midLow = 0, toneLow = 0, dcInput = 0, dcOutput = 0, previous = 0;
     PowerSupply supply;
     Transformer transformer;
+    Tape tape;
 };
 }

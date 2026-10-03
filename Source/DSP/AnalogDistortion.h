@@ -3,6 +3,7 @@
 #include <juce_core/juce_core.h>
 #include <array>
 #include <cmath>
+#include "AnalogPowerSupply.h"
 
 namespace fire::analog
 {
@@ -35,23 +36,25 @@ inline int resolve(int legacy, int family) noexcept
 
 // Circuit-inspired colour, rather than a claim of a measured device clone.
 // Curves have a zero crossing at silence; asymmetry supplies even harmonics.
-inline float transfer(int profile, float input) noexcept
+inline float transfer(int profile, float input, float rail = 1.0f, float biasShift = 0.0f) noexcept
 {
     if (!juce::isPositiveAndBelow(profile, count) || !std::isfinite(input)) return 0;
     // Runtime libm and compiler-folded bias constants may differ by an ulp.
     // Preserve the curve's exact zero crossing instead of exciting silence.
     if (input == 0.0f) return 0.0f;
     const auto& p = profiles[static_cast<size_t>(profile)];
-    const auto x = juce::jlimit(-32.0f, 32.0f, input) * p.gain;
+    const auto voltage = juce::jlimit(0.25f, 1.0f, std::isfinite(rail) ? rail : 1.0f);
+    const auto operatingBias = p.asymmetry / std::sqrt(voltage) + biasShift;
+    const auto x = juce::jlimit(-32.0f, 32.0f, input) * p.gain / voltage;
     const auto soft = [](float value) {return value / std::sqrt(1.0f + value * value);};
-    float y = soft(x + p.asymmetry) - soft(p.asymmetry);
+    float y = soft(x + operatingBias) - soft(operatingBias);
     if (profile == 6) y = std::asinh(x * 1.7f) / 2.3f;
-    if (profile == 7) y = std::tanh(x + .24f) - std::tanh(.24f);
+    if (profile == 7) y = std::tanh(x + .24f + biasShift) - std::tanh(.24f + biasShift);
     if (profile == 8) y = std::tanh(x * 1.35f) + .11f * std::tanh(x * 4.0f);
     if (profile == 9) y = soft(x * (x >= 0 ? 1.12f : .82f));
     for (int stage = 1; stage < static_cast<int>(p.stages); ++stage)
-        y = std::tanh(y * (profile == 5 ? 2.0f : 1.35f) + p.asymmetry * .25f) - std::tanh(p.asymmetry * .25f);
-    return juce::jlimit(-1.25f, 1.25f, y * p.output);
+        y = std::tanh(y * (profile == 5 ? 2.0f : 1.35f) + operatingBias * .25f) - std::tanh(operatingBias * .25f);
+    return juce::jlimit(-1.25f, 1.25f, y * p.output) * voltage;
 }
 template <int profile> float curve(float input) noexcept {return transfer(profile, input);}
 
@@ -62,7 +65,7 @@ class Stage
 public:
     void prepare(double rate) noexcept
     {sampleRate = std::isfinite(rate) && rate > 0 ? rate : 48000; current = -1; reset();}
-    void reset() noexcept {inputLow = midLow = toneLow = envelope = flux = dcInput = dcOutput = previous = 0;}
+    void reset() noexcept {inputLow = midLow = toneLow = envelope = flux = dcInput = dcOutput = previous = 0; supply.reset();}
     void setProfile(int mode, double rate) noexcept
     {
         const auto kind = mode - legacyCount;
@@ -77,6 +80,10 @@ public:
         attack = static_cast<float>(1 - std::exp(-1 / (sampleRate * .004)));
         release = static_cast<float>(1 - std::exp(-1 / (sampleRate * .085)));
         fluxPole = pole(180); dcPole = static_cast<float>(std::exp(-juce::MathConstants<double>::twoPi * 12 / sampleRate));
+        constexpr std::array<double, count> rechargeSeconds{.055, .045, .012, .12, .075, .035, .012, .09, .025, .025, .01, .01};
+        supply.prepare(sampleRate, {1.8 * p.sag, rechargeSeconds[static_cast<size_t>(current)],
+                                   current < 6 || current == 7 ? 0.035 : 0.008,
+                                   current == 3 ? 0.18 : 0.10});
     }
     float process(float input) noexcept
     {
@@ -87,23 +94,40 @@ public:
         auto x = input - inputLow;
         midLow += midPole * (x - midLow);
         x += p.midGain * (midLow - inputLow);
-        const auto magnitude = std::abs(x);
-        envelope += (magnitude > envelope ? attack : release) * (magnitude - envelope);
-        x = x / (1 + p.sag * envelope) + p.memory * flux;
+        if (current >= 10)
+        {
+            // Magnetic models are replaced independently of the supply model.
+            const auto magnitude = std::abs(x);
+            envelope += (magnitude > envelope ? attack : release) * (magnitude - envelope);
+            x = x / (1 + p.sag * envelope) + p.memory * flux;
+        }
+        const auto rail = current < 10 ? static_cast<float>(supply.getVoltage()) : 1.0f;
+        const auto bias = current < 10 ? static_cast<float>(supply.getBias()) : 0.0f;
         // A bounded midpoint integration softens the newly generated high
         // harmonics without adding host latency. HQ supplies the 4x path.
-        auto y = .25f * transfer(current, previous) + .5f * transfer(current, (previous + x) * .5f) + .25f * transfer(current, x);
+        auto y = .25f * transfer(current, previous, rail, bias) + .5f * transfer(current, (previous + x) * .5f, rail, bias) + .25f * transfer(current, x, rail, bias);
         previous = x;
-        flux += fluxPole * (y - flux);
+        if (current < 10)
+        {
+            // Estimate DC demand from power dissipated in the output load,
+            // including conduction in cascaded stages, rather than input level.
+            const auto loadCurrent = static_cast<double>(y) * y * (1.0 + 0.25 * (p.stages - 1)) / (0.72 * rail);
+            const auto gridCurrent = std::max(0.0, static_cast<double>(x) * p.gain - 1.4 * rail);
+            supply.advance(loadCurrent, gridCurrent);
+        }
+        else flux += fluxPole * (y - flux);
         toneLow += tonePole * (y - toneLow);
         y = toneLow - dcInput + dcPole * dcOutput;
         dcInput = toneLow; dcOutput = std::isfinite(y) ? y : 0;
         return dcOutput;
     }
+    double getSupplyVoltage() const noexcept { return supply.getVoltage(); }
+    double getOperatingBias() const noexcept { return supply.getBias(); }
 private:
     int current = -1;
     double sampleRate = 48000;
     float inputPole = 0, midPole = 0, tonePole = 0, attack = 0, release = 0, fluxPole = 0, dcPole = 0;
     float inputLow = 0, midLow = 0, toneLow = 0, envelope = 0, flux = 0, dcInput = 0, dcOutput = 0, previous = 0;
+    PowerSupply supply;
 };
 }

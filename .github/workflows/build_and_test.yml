@@ -17,6 +17,9 @@ env:
   DISPLAY: :0 # linux pluginval needs this
   CMAKE_BUILD_PARALLEL_LEVEL: 3 # Use up to 3 cpus to build juceaide, etc
   HOMEBREW_NO_INSTALL_CLEANUP: 1
+  PLUGINVAL_VERSION: v1.0.4
+  # Large parameter banks need time for exhaustive state-restoration checks.
+  PLUGINVAL_TIMEOUT_MS: 1800000
   SCCACHE_GHA_ENABLED: true
   SCCACHE_CACHE_MULTIARCH: 1
   # IPP_DIR is still defined, but the installation step is removed as it was likely broken.
@@ -155,14 +158,14 @@ jobs:
       - name: Pluginval
         shell: bash
         run: |
-          curl -LO "https://github.com/Tracktion/pluginval/releases/download/v1.0.3/pluginval_${{ matrix.name }}.zip"
+          curl -LO "https://github.com/Tracktion/pluginval/releases/download/${{ env.PLUGINVAL_VERSION }}/pluginval_${{ matrix.name }}.zip"
           7z x pluginval_${{ matrix.name }}.zip
           if [ "${{ matrix.name }}" = "macOS" ]; then
             echo "Running pluginval on macOS with --skip-gui-tests"
-            ${{ matrix.pluginval-binary }} --strictness-level 10 --skip-gui-tests --verbose --validate "${{ env.VST3_PATH }}"
+            ${{ matrix.pluginval-binary }} --strictness-level 10 --timeout-ms "${{ env.PLUGINVAL_TIMEOUT_MS }}" --skip-gui-tests --verbose --validate "${{ env.VST3_PATH }}"
           else
             echo "Running pluginval normally on ${{ matrix.name }}"
-            ${{ matrix.pluginval-binary }} --strictness-level 10 --verbose --validate "${{ env.VST3_PATH }}"
+            ${{ matrix.pluginval-binary }} --strictness-level 10 --timeout-ms "${{ env.PLUGINVAL_TIMEOUT_MS }}" --verbose --validate "${{ env.VST3_PATH }}"
           fi
 
       - name: Verify macOS bundle signatures

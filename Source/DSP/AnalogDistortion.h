@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include "AnalogPowerSupply.h"
+#include "AnalogMagnetics.h"
 
 namespace fire::analog
 {
@@ -65,7 +66,7 @@ class Stage
 public:
     void prepare(double rate) noexcept
     {sampleRate = std::isfinite(rate) && rate > 0 ? rate : 48000; current = -1; reset();}
-    void reset() noexcept {inputLow = midLow = toneLow = envelope = flux = dcInput = dcOutput = previous = 0; supply.reset();}
+    void reset() noexcept {inputLow = midLow = toneLow = envelope = flux = dcInput = dcOutput = previous = 0; supply.reset(); transformer.reset();}
     void setProfile(int mode, double rate) noexcept
     {
         const auto kind = mode - legacyCount;
@@ -84,6 +85,7 @@ public:
         supply.prepare(sampleRate, {1.8 * p.sag, rechargeSeconds[static_cast<size_t>(current)],
                                    current < 6 || current == 7 ? 0.035 : 0.008,
                                    current == 3 ? 0.18 : 0.10});
+        transformer.prepare(sampleRate);
     }
     float process(float input) noexcept
     {
@@ -94,7 +96,7 @@ public:
         auto x = input - inputLow;
         midLow += midPole * (x - midLow);
         x += p.midGain * (midLow - inputLow);
-        if (current >= 10)
+        if (current == 11)
         {
             // Magnetic models are replaced independently of the supply model.
             const auto magnitude = std::abs(x);
@@ -105,7 +107,8 @@ public:
         const auto bias = current < 10 ? static_cast<float>(supply.getBias()) : 0.0f;
         // A bounded midpoint integration softens the newly generated high
         // harmonics without adding host latency. HQ supplies the 4x path.
-        auto y = .25f * transfer(current, previous, rail, bias) + .5f * transfer(current, (previous + x) * .5f, rail, bias) + .25f * transfer(current, x, rail, bias);
+        auto y = current == 10 ? static_cast<float>(std::clamp(transformer.process(x * p.gain), -1.25, 1.25) * p.output)
+                              : .25f * transfer(current, previous, rail, bias) + .5f * transfer(current, (previous + x) * .5f, rail, bias) + .25f * transfer(current, x, rail, bias);
         previous = x;
         if (current < 10)
         {
@@ -115,7 +118,7 @@ public:
             const auto gridCurrent = std::max(0.0, static_cast<double>(x) * p.gain - 1.4 * rail);
             supply.advance(loadCurrent, gridCurrent);
         }
-        else flux += fluxPole * (y - flux);
+        else if (current == 11) flux += fluxPole * (y - flux);
         toneLow += tonePole * (y - toneLow);
         y = toneLow - dcInput + dcPole * dcOutput;
         dcInput = toneLow; dcOutput = std::isfinite(y) ? y : 0;
@@ -129,5 +132,6 @@ private:
     float inputPole = 0, midPole = 0, tonePole = 0, attack = 0, release = 0, fluxPole = 0, dcPole = 0;
     float inputLow = 0, midLow = 0, toneLow = 0, envelope = 0, flux = 0, dcInput = 0, dcOutput = 0, previous = 0;
     PowerSupply supply;
+    Transformer transformer;
 };
 }

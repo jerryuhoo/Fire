@@ -165,6 +165,7 @@
       </GROUP>
       <GROUP id="{6D93BA34-0044-C87D-1644-2333FABFA73D}" name="DSP">
         <FILE id="analogSupply01" name="AnalogPowerSupply.h" compile="0" resource="0" file="Source/DSP/AnalogPowerSupply.h"/>
+        <FILE id="analogMagnetics01" name="AnalogMagnetics.h" compile="0" resource="0" file="Source/DSP/AnalogMagnetics.h"/>
         <FILE id="eqDsp1" name="EqProcessor.h" compile="0" resource="0" file="Source/DSP/EqProcessor.h"/>
         <FILE id="eqDsp2" name="EqCoefficients.h" compile="0" resource="0" file="Source/DSP/EqCoefficients.h"/>
         <GROUP id="cloudsDspGroup" name="Clouds">

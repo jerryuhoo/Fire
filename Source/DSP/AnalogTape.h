@@ -33,6 +33,7 @@ public:
         signal.configure(material);
         const auto speed = std::clamp(settings.speed, .05, 1.0);
         gapSamples = std::clamp(internalRate * std::clamp(settings.gap, 0.5e-6, 10e-6) / speed, 1.0, 30.0);
+        inverseGapSamples = 1 / gapSamples;
         gapWhole = static_cast<int>(gapSamples);
         gapFraction = gapSamples - gapWhole;
         // Match the -3 dB points of exp(-k d) and (1-exp(-k delta))/(k delta).
@@ -53,6 +54,7 @@ public:
     {
         const auto safe = std::isfinite(rate) && rate > 0 ? rate : baseRate;
         subdivisions = std::clamp(static_cast<int>(std::round(internalRate / safe)), 1, 16);
+        inverseSubdivisions = 1.0 / subdivisions;
     }
 
     void reset() noexcept
@@ -62,6 +64,7 @@ public:
         gapPosition = 0;
         gapBuffer.fill(0);
         excited = false;
+        quietSamples = 0;
         signal.reset();
         if (reference) signal.commit(reference->states.back());
         for (auto& filter : antialias) filter.reset();
@@ -79,9 +82,10 @@ public:
         }
         excited = true;
         double output = 0;
+        const auto inputStep = (input - previousInput) * inverseSubdivisions;
         for (int step = 0; step < subdivisions; ++step)
         {
-            const auto interpolated = previousInput + (input - previousInput) * (step + 1) / subdivisions;
+            const auto interpolated = previousInput + inputStep * (step + 1);
             recordLow += recordPole * (interpolated - recordLow);
             const auto recordVoltage = interpolated + .5 * (interpolated - recordLow);
             const auto& biasOnly = reference->states[static_cast<size_t>(phase)];
@@ -93,7 +97,7 @@ public:
             const int oldest = (gapPosition - gapWhole) & 31;
             gapSum += output - gapBuffer[static_cast<size_t>(oldest)];
             gapBuffer[static_cast<size_t>(gapPosition)] = output;
-            output = (gapSum + gapFraction * gapBuffer[static_cast<size_t>(oldest)]) / gapSamples;
+            output = (gapSum + gapFraction * gapBuffer[static_cast<size_t>(oldest)]) * inverseGapSamples;
             gapPosition = (gapPosition + 1) & 31;
             spacingLow += spacingPole * (output - spacingLow);
             thicknessLow += thicknessPole * (spacingLow - thicknessLow);
@@ -104,12 +108,27 @@ public:
             for (auto& filter : antialias) output = filter.process(output);
         }
         previousInput = input;
+        if (input == 0 && std::abs(output) < 1e-12)
+        {
+            if (++quietSamples >= 64)
+            {
+                // A settled, inaudible tail no longer needs a live RF solve.
+                // Keep the bias phase so the next note starts from precisely
+                // the same steady reference as an idle running machine.
+                const auto biasPhase = phase;
+                reset();
+                phase = biasPhase;
+                signal.commit(reference->states[static_cast<size_t>((phase - 1) & (period - 1))]);
+            }
+        }
+        else quietSamples = 0;
         return output;
     }
 
     double getBiasFrequency() const noexcept { return actualBiasFrequency; }
     double getInternalSampleRate() const noexcept { return internalRate; }
     double getMagnetisation() const noexcept { return signal.getState().magnetisation; }
+    bool isIdle() const noexcept { return ! excited; }
 
 private:
     static constexpr int period = 2048;
@@ -152,18 +171,19 @@ private:
         {
             const auto k = std::tan(pi * std::min(frequency, rate * .45) / rate);
             const auto norm = 1 / (1 + k / q + k * k);
-            b0 = k * k * norm; b1 = 2 * b0; b2 = b0;
+            b0 = k * k * norm;
             a1 = 2 * (k * k - 1) * norm; a2 = (1 - k / q + k * k) * norm;
         }
         void reset() noexcept { z1 = z2 = 0; }
         double process(double input) noexcept
         {
-            const auto output = b0 * input + z1;
-            z1 = b1 * input - a1 * output + z2;
-            z2 = b2 * input - a2 * output;
+            const auto feedforward = b0 * input;
+            const auto output = feedforward + z1;
+            z1 = 2 * feedforward - a1 * output + z2;
+            z2 = feedforward - a2 * output;
             return output;
         }
-        double b0 = 0, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+        double b0 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
     };
 
     double pole(double frequency) const noexcept { return -std::expm1(-2 * pi * std::min(frequency, internalRate * .45) / internalRate); }
@@ -175,7 +195,9 @@ private:
     double previousInput = 0, recordLow = 0, playbackLow = 0, spacingLow = 0, thicknessLow = 0;
     double recordPole = 0, playbackPole = 0, spacingPole = 0, thicknessPole = 0;
     double gapSamples = 1, gapFraction = 0, gapSum = 0;
+    double inverseGapSamples = 1, inverseSubdivisions = 1.0 / 16;
     int phase = 0, subdivisions = 16, gapPosition = 0, gapWhole = 1;
+    int quietSamples = 0;
     bool excited = false;
 };
 }

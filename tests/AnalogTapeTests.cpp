@@ -86,3 +86,33 @@ TEST_CASE("Recording bias linearises quiet tape signals while magnetic overload 
     CHECK(biasedDistortion < unbiasedDistortion);
     CHECK(rms(loud) / rms(quiet) < 50); // Input level increased by 62.5x.
 }
+
+TEST_CASE("A settled tape tail becomes idle and resumes at the continuously running bias phase",
+          "[analog-physical][tape][dsp][silence][realtime]")
+{
+    for (const double processingRate : {48000.0, 192000.0})
+    {
+        CAPTURE(processingRate);
+        fire::analog::Tape played, idle;
+        played.prepare(48000); idle.prepare(48000);
+        played.setProcessingRate(processingRate); idle.setProcessingRate(processingRate);
+        constexpr int noteSamples = 2389, quietSamples = 4921;
+        for (int sample = 0; sample < noteSamples; ++sample)
+        {
+            played.process(.4 * std::sin(2 * pi * 371 * sample / processingRate));
+            CHECK(idle.process(0) == 0);
+        }
+        REQUIRE_FALSE(played.isIdle());
+        for (int sample = 0; sample < quietSamples; ++sample)
+        {
+            played.process(0); idle.process(0);
+        }
+        REQUIRE(played.isIdle());
+        CHECK(played.process(0) == 0); CHECK(idle.process(0) == 0);
+        for (int sample = 0; sample < 1024; ++sample)
+        {
+            const auto input = .1 * std::sin(2 * pi * 1307 * sample / processingRate);
+            CHECK(std::abs(played.process(input) - idle.process(input)) < 1e-12);
+        }
+    }
+}

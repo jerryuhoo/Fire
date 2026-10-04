@@ -92,3 +92,24 @@ TEST_CASE("Value-only magnetic integration retains the full material trajectory"
     }
     CHECK(largestError < 1e-8);
 }
+
+TEST_CASE("Pinned tape domains retain their irreversible state while reversible magnetisation changes",
+          "[analog-physical][magnetics][tape][numerics][realtime]")
+{
+    fire::analog::JilesAtherton core;
+    core.configure({.18, .22, .17, 0});
+    for (int sample = 1; sample <= 1024; ++sample) core.process(1.25 * sample / 1024);
+    const auto irreversible = core.getState().irreversible;
+    const auto previousMagnetisation = core.getState().magnetisation;
+    REQUIRE(irreversible > .6);
+    for (int sample = 1; sample <= 10; ++sample)
+    {
+        const auto field = 1.25 - sample * .001;
+        const auto reversible = fire::analog::JilesAtherton::langevin(field / .18);
+        const auto output = core.process(field);
+        CHECK(core.getState().irreversible == irreversible);
+        CHECK(output == Catch::Approx(.83 * irreversible + .17 * reversible.value).margin(1e-12));
+        CHECK(core.getState().slope == Catch::Approx(.17 * reversible.derivative / .18).margin(1e-12));
+    }
+    CHECK(core.getState().magnetisation < previousMagnetisation);
+}

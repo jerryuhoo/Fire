@@ -124,12 +124,28 @@ private:
     template <bool needDerivative>
     State advance(const State& previous, double field) const noexcept
     {
+        const bool uncoupled = parameters.alpha == 0;
+        Langevin uncoupledEnd{};
+        if (uncoupled)
+        {
+            uncoupledEnd = evaluateLangevin<needDerivative>(field * inverseA);
+            const auto direction = field >= previous.field ? 1.0 : -1.0;
+            // The weighted midpoint lies between the old and new fields. If
+            // even the new endpoint cannot depin the domains, neither can the
+            // midpoint. Retain reversible magnetisation while skipping the
+            // exponential and midpoint calculation for this pinned RF step.
+            if (direction * (uncoupledEnd.value - previous.irreversible) <= 0)
+                return {field, std::clamp((1 - parameters.c) * previous.irreversible
+                                         + parameters.c * uncoupledEnd.value, -1.0, 1.0),
+                        previous.irreversible,
+                        needDerivative ? parameters.c * uncoupledEnd.derivative * inverseA : 0};
+        }
         const auto oldEffective = previous.field + parameters.alpha * previous.magnetisation;
         const auto initialU = std::abs(field - previous.field) * inverseK;
         double initialGain = 0;
         if constexpr (! needDerivative) initialGain = -std::expm1(-initialU);
         double magnetisation = previous.magnetisation, irreversible = previous.irreversible, slope = 0;
-        const int iterations = parameters.alpha == 0 ? 1 : 3;
+        const int iterations = uncoupled ? 1 : 3;
         for (int iteration = 0; iteration < iterations; ++iteration)
         {
             const auto effective = field + parameters.alpha * magnetisation;
@@ -162,7 +178,7 @@ private:
             }
             const auto direction = delta >= 0 ? 1.0 : -1.0;
             const auto mid = evaluateLangevin<needDerivative>((effective - direction * meanDistance) * inverseA);
-            const auto end = evaluateLangevin<needDerivative>(effective * inverseA);
+            const auto end = uncoupled ? uncoupledEnd : evaluateLangevin<needDerivative>(effective * inverseA);
             const auto difference = mid.value - previous.irreversible;
             const bool moving = direction * difference > 0;
             irreversible = moving ? previous.irreversible + gain * difference : previous.irreversible;

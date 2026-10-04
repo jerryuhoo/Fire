@@ -35,14 +35,14 @@ void preview(juce::Component& root, const juce::String& name)
 }
 }
 
-TEST_CASE("Factory catalogue is lightweight and every collection contains twenty sounds", "[preset-browser][factory-presets][catalogue]")
+TEST_CASE("Factory catalogue stays lightweight with twenty base sounds per collection and 36 analog drive scenes", "[preset-browser][factory-presets][catalogue]")
 {
     FireAudioProcessor processor;
     LibraryFolder folder(processor);
     const auto entries = processor.statePresets.getBrowserEntries();
     int factoryCount = 0;
     for (const auto& entry : entries) if (entry.factory) {++factoryCount; CHECK(entry.key.startsWith("@factory/"));}
-    CHECK(factoryCount == 200);
+    CHECK(factoryCount == fire::factory::presetCount);
     CHECK(processor.statePresets.getPresetXml().toString().length() < 160000);
     std::function<void(const juce::XmlElement&)> checkMetadata = [&](const auto& node)
     {
@@ -58,7 +58,7 @@ TEST_CASE("Factory catalogue is lightweight and every collection contains twenty
     juce::ScopedJuceInitialiser_GUI gui;
     fire::ui::PresetBrowserPanel browser(processor.statePresets); browser.setSize(1000, 500); browser.open();
     for (const auto& category : fire::factory::categories)
-    {browser.selectCategory(category); CHECK(browser.getVisiblePresetCount() == 20);}
+    {browser.selectCategory(category); CHECK(browser.getVisiblePresetCount() == (juce::String(category) == "Analog Drive" ? 36 : 20));}
     browser.setSearchText("zz-no-such-sound"); CHECK(browser.getVisiblePresetCount() == 0);
 }
 
@@ -114,15 +114,15 @@ TEST_CASE("Library favourites and hidden factory scenes persist without changing
     juce::MemoryBlock before,after;processor.getStateInformation(before);
     REQUIRE(library.setPresetFavourite(key,true));
     REQUIRE(library.removeBrowserPreset(key));
-    CHECK(library.getBrowserEntries().size()==199);CHECK(library.getNumFactoryPresets()==200);
-    library.scanAllPresets();CHECK(library.getBrowserEntries().size()==199);
+    CHECK(library.getBrowserEntries().size()==fire::factory::presetCount-1);CHECK(library.getNumFactoryPresets()==fire::factory::presetCount);
+    library.scanAllPresets();CHECK(library.getBrowserEntries().size()==fire::factory::presetCount-1);
     FireAudioProcessor another;
     another.statePresets.setPresetDirectoryForTesting(folder.file);another.statePresets.enableFactoryPresets();
     auto entries=another.statePresets.getBrowserEntries(true);
     auto entry=std::find_if(entries.begin(),entries.end(),[&](const auto& e){return e.key==key;});
     REQUIRE(entry!=entries.end());CHECK(entry->removed);CHECK(entry->favourite);
     REQUIRE(another.statePresets.restoreBrowserPreset(key));
-    entries=library.getBrowserEntries();CHECK(entries.size()==200);
+    entries=library.getBrowserEntries();CHECK(entries.size()==fire::factory::presetCount);
     entry=std::find_if(entries.begin(),entries.end(),[&](const auto& e){return e.key==key;});
     REQUIRE(entry!=entries.end());CHECK(entry->favourite);CHECK_FALSE(entry->removed);
     processor.getStateInformation(after);CHECK(before==after);
@@ -138,14 +138,14 @@ TEST_CASE("User presets recycle and restore their exact files while preserving l
     const auto bytes=file.loadFileAsString();
     REQUIRE(library.removeBrowserPreset(key));CHECK_FALSE(file.exists());CHECK(library.getCurrentPresetKey().isEmpty());
     CHECK(processor.treeState.copyState().toXmlString()==parameters);
-    library.scanAllPresets();CHECK(library.getBrowserEntries().size()==200);
+    library.scanAllPresets();CHECK(library.getBrowserEntries().size()==fire::factory::presetCount);
     const auto entries=library.getBrowserEntries(true);
     const auto entry=std::find_if(entries.begin(),entries.end(),[&](const auto& e){return e.key==key;});
     REQUIRE(entry!=entries.end());CHECK(entry->removed);CHECK(entry->favourite);
     REQUIRE(file.replaceWithText("A replacement file"));CHECK_FALSE(library.restoreBrowserPreset(key));
     CHECK(file.loadFileAsString()=="A replacement file");REQUIRE(file.deleteFile());
     REQUIRE(library.restoreBrowserPreset(key));CHECK(file.loadFileAsString()==bytes);
-    CHECK(library.getBrowserEntries().size()==201);CHECK(processor.treeState.copyState().toXmlString()==parameters);
+    CHECK(library.getBrowserEntries().size()==fire::factory::presetCount+1);CHECK(processor.treeState.copyState().toXmlString()==parameters);
     CHECK_FALSE(library.removeBrowserPreset("../escape.fire"));CHECK_FALSE(library.restoreBrowserPreset("../escape.fire"));
     REQUIRE(folder.file.getChildFile(".fire-library.xml").replaceWithText("<FIRE_LIBRARY version=\"99\"/>"));
     CHECK_FALSE(library.setPresetFavourite(key,false));CHECK(file.loadFileAsString()==bytes);
@@ -169,7 +169,7 @@ TEST_CASE("Preset row favourites deletion and restore never audition a different
     const auto entries=processor.statePresets.getBrowserEntries();
     CHECK(std::any_of(entries.begin(),entries.end(),[&](const auto& e){return e.key==key && e.favourite;}));
     browser.setVisible(false);remove=find<PrimaryTextButton>(browser,[](auto& b){return b.getComponentID().startsWith("presetDelete:");});REQUIRE(remove);
-    stale=remove->onClick;stale();CHECK(processor.statePresets.getBrowserEntries().size()==200);
+    stale=remove->onClick;stale();CHECK(processor.statePresets.getBrowserEntries().size()==fire::factory::presetCount);
 }
 
 TEST_CASE("Library search and return button remain separate and collections have distinct dark palettes", "[preset-browser][ui][layout][render]")
@@ -191,4 +191,32 @@ TEST_CASE("Library search and return button remain separate and collections have
     const auto red=browser.createComponentSnapshot(browser.getLocalBounds()).getPixelAt(995,250);preview(browser,"library-vocals-colour");
     browser.selectCategory("Drums");const auto amber=browser.createComponentSnapshot(browser.getLocalBounds()).getPixelAt(995,250);preview(browser,"library-drums-colour");
     CHECK(red!=amber);browser.setSize(2000,1000);preview(browser,"library-drums-large");
+}
+
+TEST_CASE("Analog Drive collection filters auditions and restores its new factory entries",
+          "[factory-presets][analog-presets][preset-browser][ui][library]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor; LibraryFolder folder(processor);
+    fire::ui::PresetBrowserPanel browser(processor.statePresets);
+    browser.setSize(1000, 500); browser.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    browser.setVisible(true); browser.open(); browser.selectCategory("Analog Drive");
+    CHECK(browser.getVisiblePresetCount() == 36);
+    browser.setSearchText("Tape"); CHECK(browser.getVisiblePresetCount() == 3);
+    auto* row = find<juce::Button>(browser, [](auto& b) {
+        return b.getComponentID() == "presetSound:@factory/analog-tape-studio-print";
+    });
+    REQUIRE(row);
+    browser.onPresetSelected = [&](const auto& tag) { REQUIRE(processor.statePresets.loadPreset(tag)); };
+    row->triggerClick(); CHECK(processor.getShapeMode(0, 0) == 23);
+    const auto key = processor.statePresets.getCurrentPresetKey();
+    CHECK(key == "@factory/analog-tape-studio-print");
+    REQUIRE(processor.statePresets.setPresetFavourite(key, true));
+    REQUIRE(processor.statePresets.removeBrowserPreset(key));
+    browser.open(); browser.selectCategory("Analog Drive"); browser.setSearchText("Tape");
+    CHECK(browser.getVisiblePresetCount() == 2);
+    REQUIRE(processor.statePresets.restoreBrowserPreset(key));
+    browser.open(); browser.selectCategory("Analog Drive"); browser.setSearchText("Tape");
+    CHECK(browser.getVisiblePresetCount() == 3);
+    browser.setSearchText({}); preview(browser, "analog-drive-collection");
 }

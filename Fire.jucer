@@ -116,6 +116,7 @@
         <FILE id="editHist01" name="EditHistory.h" compile="0" resource="0" file="Source/Utility/EditHistory.h"/>
         <FILE id="frozenState01" name="FrozenAudioState.h" compile="0" resource="0" file="Source/Utility/FrozenAudioState.h"/>
         <FILE id="factoryPreset01" name="FactoryPresets.h" compile="0" resource="0" file="Source/Utility/FactoryPresets.h"/>
+        <FILE id="analogDriveScene01" name="AnalogDrivePresets.h" compile="0" resource="0" file="Source/Utility/AnalogDrivePresets.h"/>
         <FILE id="modSourceParams01" name="ModulationSources.h" compile="0" resource="0" file="Source/Utility/ModulationSources.h"/>
       </GROUP>
       <GROUP id="{A397A229-19FD-F110-6940-6CC5C037D4D0}" name="GUI">

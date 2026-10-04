@@ -1,5 +1,6 @@
 #pragma once
 #include "../PluginProcessor.h"
+#include "AnalogDrivePresets.h"
 #include <array>
 #include <vector>
 
@@ -55,7 +56,10 @@ inline const std::array<Definition, 12> legacyDefinitions{{
     {"broken-radio", "Creative", "Broken Radio", "Band-limited, low-bit tape character. Master Mix restores clarity when the effect is too strong."}
 }};
 
-inline const std::array<const char*, 10> categories {"Vocals", "Synths", "Drums", "Bass", "Guitar", "Keys", "Spaces", "Lo-Fi", "Rhythm", "Effects"};
+inline constexpr int baseCategoryCount = 10, scenesPerBaseCategory = 20;
+inline constexpr int basePresetCount = baseCategoryCount * scenesPerBaseCategory;
+inline constexpr int presetCount = basePresetCount + static_cast<int>(analog_drive::scenes.size());
+inline const std::array<const char*, 11> categories {"Vocals", "Synths", "Drums", "Bass", "Guitar", "Keys", "Spaces", "Lo-Fi", "Rhythm", "Effects", "Analog Drive"};
 inline const std::vector<Definition> definitions = []
 {
     constexpr const char* names[10][20] {
@@ -98,6 +102,18 @@ inline const std::vector<Definition> definitions = []
             definition.description += " Macros: intensity, width, tone/space and dry blend.";
             definition.categoryIndex = category; definition.variation = variation; result.push_back(std::move(definition));
         }
+    for (size_t index = 0; index < analog_drive::scenes.size(); ++index)
+    {
+        const auto& scene = analog_drive::scenes[index];
+        Definition definition;
+        definition.key = scene.key; definition.category = "Analog Drive";
+        definition.name = scene.name; definition.categoryIndex = baseCategoryCount;
+        definition.variation = static_cast<int>(index); definition.colourModel = scene.model;
+        definition.spaceModel = scene.space.model;
+        definition.description = juce::String(analog::names[static_cast<size_t>(scene.model)])
+            + ". " + scene.description + " Macros: 1 Drive, 2 Tone, 3 Output trim, 4 Dry blend.";
+        result.push_back(std::move(definition));
+    }
     return result;
 }();
 
@@ -174,7 +190,60 @@ inline std::vector<std::unique_ptr<juce::XmlElement>> create(FireAudioProcessor&
         };
         set(OUTPUT_ID, -1);
         using Type = fire::effects::Type;
-        switch (index)
+        const auto* analogScene = definition.categoryIndex == baseCategoryCount
+            ? &analog_drive::scenes[static_cast<size_t>(definition.variation)] : nullptr;
+        const int analogBand = analogScene && analogScene->layout == analog_drive::Layout::upperBand ? 1 : 0;
+        if (analogScene)
+        {
+            const auto& scene = *analogScene;
+            set(HQ_ID, 1); set(OUTPUT_ID, scene.output); set(MIX_ID, 1);
+            set(FILTER_BYPASS_ID, 1); set(LOWCUT_FREQ_ID, scene.tone.lowCut);
+            set(HIGHCUT_FREQ_ID, scene.tone.highCut); set(PEAK_FREQ_ID, scene.tone.frequency);
+            set(PEAK_GAIN_ID, scene.tone.gain);
+            // The clean path has neither a digital Drive nor an extra Shape.
+            // Upper-band scenes preserve the low register; Master scenes use
+            // precisely one colour stage after the band dynamics and EQ.
+            band(DRIVE_BYPASS_ID, 0, 0); band(SHAPE_BYPASS_ID, 0, 0);
+            if (scene.layout == analog_drive::Layout::upperBand)
+            {
+                split(scene.crossover);
+                if (scene.monoLow) {band(WIDTH_BYPASS_ID, 0, 1); band(WIDTH_ID, 0, 0);}
+            }
+            if (scene.layout == analog_drive::Layout::master)
+            {
+                insert(0, 0, Type::shape, {3, 0, 0, 1, 0, scene.blend * 100});
+                set(fire::analog_params::parameterID(0, 0), static_cast<float>(scene.model + 1));
+                set(fire::analog_params::driveID(0, 0), scene.drive);
+            }
+            else
+            {
+                band(DRIVE_BYPASS_ID, analogBand, 1); band(SHAPE_BYPASS_ID, analogBand, 1);
+                band(SAFE_ID, analogBand, 0); band(EXTREME_ID, analogBand, 0);
+                band(LINKED_ID, analogBand, 0); band(DRIVE_ID, analogBand, scene.drive);
+                band(SHAPE_MIX_ID, analogBand, 1); band(DC_FILTER_ID, analogBand, 1);
+                band(MIX_ID, analogBand, scene.blend);
+                set(fire::analog_params::bandID(analogBand), static_cast<float>(scene.model + 1));
+            }
+            if (scene.dynamics.mix > 0)
+                compressor(analogBand, scene.dynamics.threshold, scene.dynamics.ratio,
+                           scene.dynamics.attack, scene.dynamics.release, scene.dynamics.mix);
+            if (scene.space.wet > 0)
+            {
+                insert(0, 1, Type::reverb, {scene.space.size, 40, 8, 70, 90, scene.space.wet});
+                set(fire::reverb_params::parameterID(0, 1), static_cast<float>(scene.space.model));
+            }
+            if (scene.envelope.depth > 0)
+            {
+                set("envAttack", scene.envelope.attack); set("envRelease", scene.envelope.release);
+                set("envSensitivity", scene.envelope.sensitivity);
+                ModulationRouting route; route.sourceLfoIndex = fire::mod_sources::envelope;
+                route.targetParameterID = scene.layout == analog_drive::Layout::master
+                    ? fire::effects::parameterID(0, 0, 5) : ParameterIDAndName::getIDString(MIX_ID, analogBand);
+                route.depth = scene.envelope.depth; route.isBipolar = false;
+                route.writeToXml(*preset->getChildByName("MODULATION_STATE")->createNewChildElement("ROUTING"));
+            }
+        }
+        else switch (index)
         {
             case 0:
                 split(180); band(DRIVE_ID, 0, 12); band(DRIVE_ID, 1, 30);
@@ -338,7 +407,20 @@ inline std::vector<std::unique_ptr<juce::XmlElement>> create(FireAudioProcessor&
                 break;
             }
         }
-        if (processor.treeState.getParameter("macro1") != nullptr)
+        if (analogScene)
+        {
+            const auto addMacro = [&](int macro, const juce::String& target, float depth)
+            {
+                ModulationRouting route; route.sourceLfoIndex = fire::mod_sources::firstMacro + macro;
+                route.targetParameterID = target; route.depth = depth; route.isBipolar = false;
+                route.writeToXml(*preset->getChildByName("MODULATION_STATE")->createNewChildElement("ROUTING"));
+            };
+            const auto drive = analogScene->layout == analog_drive::Layout::master
+                ? fire::analog_params::driveID(0, 0) : ParameterIDAndName::getIDString(DRIVE_ID, analogBand);
+            addMacro(0, drive, .12f); addMacro(1, PEAK_GAIN_ID, .0625f);
+            addMacro(2, OUTPUT_ID, -.05f); addMacro(3, MIX_ID, -.45f);
+        }
+        else if (processor.treeState.getParameter("macro1") != nullptr)
         {
             const auto* bandCount = processor.treeState.getParameter(NUM_BANDS_ID);
             const bool splitBand = bandCount && bandCount->convertFrom0to1(static_cast<float>(preset->getDoubleAttribute(NUM_BANDS_ID))) > 1.0f;

@@ -10,7 +10,7 @@
 
 ## 1. Introduce
 
-[『Fire』](https://www.bluewingsmusic.com/fire.html) is a multiband distortion and modulation effect for AU, VST3 and CLAP hosts. Build independent Band and Master effect chains with analogue distortion colours, dynamics, modulation, delay, reverb and granular processing. Explore 200 factory presets across ten collections in the full-page sound library.
+[『Fire』](https://www.bluewingsmusic.com/fire.html) is a multiband distortion and modulation effect for AU, VST3 and CLAP hosts. Build independent Band and Master effect chains with analogue distortion colours, dynamics, modulation, delay, reverb and granular processing. Explore 236 factory presets across eleven collections in the full-page sound library, including 36 dedicated Analog Drive scenes.
 
 Demo video:
 
@@ -213,14 +213,24 @@ Builds/Fire_artefacts/Release/
   Delete moves user files into Fire's **Recycle Bin** and hides factory
   scenes. Restore returns them to their original collection, without
   switching the current sound or overwriting an existing user file.
-- **Factory scenes**: 200 read-only starting points, with 20 scenes in each
+- **Factory scenes**: 236 read-only starting points, with 20 scenes in each
   of Vocals, Synths, Drums, Bass, Guitar, Keys, Spaces, Lo-Fi, Rhythm and
-  Effects. Scenes combine the analog circuits, spatial reverb models,
+  Effects, plus 36 scenes in **Analog Drive**. Scenes combine the analog circuits, spatial reverb models,
   compression, modulation and other effects, with four assigned macros.
   The catalogue expands each scene's complete state only when selected.
   Existing factory identities survive rescans and project restoration;
   user presets appear in their own collection. Save an edited factory
   scene as a user preset.
+- **Analog Drive collection**: three authored scenes for each of the twelve
+  hardware colours. Vocal preamps, electric-key colour, guitar breakup/fuzz,
+  drum transients and Master bus treatments use different chains and tone/dynamics
+  settings. Split-band bass scenes retain a clean mono foundation. Seven scenes
+  use the input envelope to open the colour blend on stronger notes. Each scene
+  uses one colour stage and starts in HQ. Macros are **1 Drive**, **2 Tone**,
+  **3 Output trim** and **4 Dry blend**; Tone adds up to 3 dB around the scene's
+  chosen presence/body frequency, Output trim reduces level to balance extra Drive,
+  and Dry blend brings back the original signal. Look for **Valve Bloom**,
+  **Tweed Touch**, **Iron Program Bus** and **Tape Studio Print** as starting points.
 - **Save**: Save your preset to user folder.
 - **Menu**: Other settings including init, open preset folder, rescan preset folder, open GitHub page, check for new version.
 

@@ -12,6 +12,7 @@ class PresetBrowserPanel final : public juce::Component
     struct Palette {juce::Colour base, accent;};
     static Palette palette(const juce::String& category)
     {
+        if (category == "Analog Drive") return {juce::Colour(0xff2b1d17), juce::Colour(0xffe4ae7a)};
         if (category == "Vocals") return {juce::Colour(0xff271920), juce::Colour(0xffe5a0ae)};
         if (category == "Synths") return {juce::Colour(0xff201c30), juce::Colour(0xffb6a4e5)};
         if (category == "Drums") return {juce::Colour(0xff2b2419), juce::Colour(0xffe6b16b)};

@@ -55,6 +55,7 @@ public:
 
     void setToggleButtonState(juce::String toggleButton);
     void selectEqNode(int slot);
+    void focusInsertEffect(int slot);
     int getSelectedEqNode() const noexcept { return eqControls.getSelectedNode(); }
     EqControlsPanel& getEqControls() noexcept { return eqControls; }
     void presentMeterValues(const MeterValues& values, std::uint64_t generation);

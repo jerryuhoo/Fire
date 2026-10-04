@@ -220,3 +220,83 @@ TEST_CASE("Analog Drive collection filters auditions and restores its new factor
     CHECK(browser.getVisiblePresetCount() == 3);
     browser.setSearchText({}); preview(browser, "analog-drive-collection");
 }
+
+TEST_CASE("Analog factory audition opens the active colour module after leaving the library",
+          "[preset-browser][analog-presets][ui][preset-focus][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor; processor.hasUpdateCheckBeenPerformed = true;
+    LibraryFolder folder(processor);
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setSize(1000, 500); editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    auto* opener = find<juce::Button>(*editor, [](auto& b) { return b.getComponentID() == "header_preset_browser"; });
+    auto* browser = find<fire::ui::PresetBrowserPanel>(*editor, [](auto&) { return true; });
+    REQUIRE(opener); REQUIRE(browser);
+    const auto entries = processor.statePresets.getBrowserEntries();
+    for (const auto& scene : fire::factory::analog_drive::scenes)
+    {
+        CAPTURE(scene.name);
+        if (scene.layout == fire::factory::analog_drive::Layout::master)
+        {
+            // A removed selection in the old chain must not enqueue a fallback
+            // that later overrides the requested Master colour module.
+            int slot = -1;
+            while (slot < 2) {slot = processor.addInsertEffect(0, fire::effects::Type::reverb); REQUIRE(slot >= 0);}
+            auto* panel = find<GlobalPanel>(*editor, [](auto&) { return true; });
+            REQUIRE(panel); panel->focusInsertEffect(slot);
+        }
+        opener->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        REQUIRE(browser->isShowing());
+        const auto entry = std::find_if(entries.begin(), entries.end(), [&](const auto& item)
+        { return item.key == "@factory/" + juce::String(scene.key); });
+        REQUIRE(entry != entries.end());
+        browser->onPresetSelected(entry->tag);
+        const auto parameters = processor.treeState.copyState().toXmlString();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(40);
+        REQUIRE(browser->isShowing());
+        for (auto* child : editor->getChildren())
+            if (child != browser && dynamic_cast<juce::ResizableCornerComponent*>(child) == nullptr)
+                CHECK_FALSE(child->isShowing());
+        REQUIRE(browser->keyPressed(juce::KeyPress{juce::KeyPress::escapeKey}));
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        const bool master = scene.layout == fire::factory::analog_drive::Layout::master;
+        auto* tab = find<juce::Button>(*editor, [master](auto& b)
+        { return b.getTitle() == (master ? "Master processing workspace" : "Band processing workspace"); });
+        REQUIRE(tab); CHECK(tab->getToggleState());
+        auto* mode = find<juce::ComboBox>(*editor, [&](auto& box)
+        { return box.isShowing() && box.getText() == fire::analog::names[static_cast<size_t>(scene.model)]; });
+        REQUIRE(mode);
+        if (! master)
+        {
+            const int band = scene.layout == fire::factory::analog_drive::Layout::upperBand ? 1 : 0;
+            auto* panel = find<BandPanel>(*editor, [](auto&) { return true; });
+            REQUIRE(panel); CHECK(panel->getFocusBandNum() == band);
+            CHECK(processor.getShapeMode(band + 1, -1) == scene.model + 12);
+        }
+        CHECK(processor.treeState.copyState().toXmlString() == parameters);
+        CHECK(processor.statePresets.getCurrentPresetKey() == entry->key);
+        if (juce::String(scene.key) == "analog-tape-studio-print") preview(*editor, "tape-studio-print-focused");
+    }
+}
+
+TEST_CASE("Reopening an editor on Tape Studio Print displays its Master tape instead of bypassed Band Cubic",
+          "[preset-browser][analog-presets][ui][preset-focus][state][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor; processor.hasUpdateCheckBeenPerformed = true;
+    LibraryFolder folder(processor);
+    const auto entry = fire::factory::create(processor, fire::factory::presetCount - 3);
+    REQUIRE(entry.front()->getStringAttribute("presetKey") == "@factory/analog-tape-studio-print");
+    REQUIRE(state::loadStateFromXml(*entry.front(), processor));
+    processor.statePresets.setCurrentPresetKey("@factory/analog-tape-studio-print");
+    const auto parameters = processor.treeState.copyState().toXmlString();
+    FireAudioProcessorEditor editor(processor);
+    editor.addToDesktop(juce::ComponentPeer::windowIsTemporary); editor.setVisible(true);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(40);
+    auto* mode = find<juce::ComboBox>(editor, [](auto& box)
+    { return box.isShowing() && box.getText() == "Tape Saturation"; });
+    REQUIRE(mode); CHECK(processor.getShapeMode(0, 0) == 23);
+    CHECK(processor.treeState.copyState().toXmlString() == parameters);
+}

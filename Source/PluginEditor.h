@@ -167,6 +167,7 @@ private:
     std::vector<juce::Component::SafePointer<juce::Component>> componentsHiddenForPresets;
     void showPresetBrowser();
     void hidePresetBrowser();
+    bool focusLoadedAnalogPreset();
 
 
     ValuePopup valuePopup;

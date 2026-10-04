@@ -231,6 +231,9 @@ Builds/Fire_artefacts/Release/
   chosen presence/body frequency, Output trim reduces level to balance extra Drive,
   and Dry blend brings back the original signal. Look for **Valve Bloom**,
   **Tweed Touch**, **Iron Program Bus** and **Tape Studio Print** as starting points.
+  Returning from the library selects the scene's active Shape module: Master
+  treatments open in Master Lab, split-band colours focus the upper band, and
+  single-band colours open in Band Lab. The sound's parameters stay unchanged.
 - **Save**: Save your preset to user folder.
 - **Menu**: Other settings including init, open preset folder, rescan preset folder, open GitHub page, check for new version.
 

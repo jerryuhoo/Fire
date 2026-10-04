@@ -9,6 +9,7 @@
  */
 
 #include "PluginEditor.h"
+#include "Utility/AnalogDrivePresets.h"
 #include "Panels/ControlPanel/Graph Components/VUMeter.h"
 #include "PluginProcessor.h"
 #include "Utility/AudioHelpers.h"
@@ -630,6 +631,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
     applySkin(fire::ui::skinFromValue(processor.getAppSettings().getIntValue(fire::ui::skinSetting, 0)));
     processor.getAppSettings().addChangeListener(this);
+    focusLoadedAnalogPreset();
 }
 
 void FireAudioProcessorEditor::applySkin(fire::ui::Skin skin)
@@ -2078,6 +2080,56 @@ void FireAudioProcessorEditor::hidePresetBrowser()
     updateMainPanelVisibility(); if (safe) resized();
 }
 
+bool FireAudioProcessorEditor::focusLoadedAnalogPreset()
+{
+    const auto key = processor.statePresets.getCurrentPresetKey();
+    const auto& scenes = fire::factory::analog_drive::scenes;
+    const auto found = std::find_if(scenes.begin(), scenes.end(), [&key](const auto& scene)
+    { return key == "@factory/" + juce::String(scene.key); });
+    if (found == scenes.end()) return false;
+
+    const bool master = found->layout == fire::factory::analog_drive::Layout::master;
+    const int band = found->layout == fire::factory::analog_drive::Layout::upperBand ? 1 : 0;
+    const int scope = master ? 0 : band + 1;
+    const int slot = master ? 0 : -1;
+    const auto* enabled = processor.treeState.getRawParameterValue(master
+        ? fire::effects::parameterID(0, 0, fire::effects::enabledField)
+        : ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, band));
+    if (! enabled || enabled->load() <= .5f
+        || ! processor.isModulePresent(scope, master ? fire::module_order::firstInsert : 1)
+        || processor.getShapeMode(scope, slot) != fire::analog::legacyCount + found->model)
+        return false; // A retained factory key must not focus a removed/replaced module.
+
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safe(this);
+    windowLeftButton.setToggleState(! master, juce::dontSendNotification);
+    windowRightButton.setToggleState(master, juce::dontSendNotification);
+    windowLfoButton.setToggleState(false, juce::dontSendNotification);
+    const int workspace = master ? 2 : 0;
+    if (presetBrowser && presetBrowser->isVisible())
+    {
+        // Audition keeps the full-page browser open. Remember the destination
+        // without revealing processing controls over the library.
+        activeWorkspace = workspace;
+        workspaceSelection.snapTo(static_cast<float>(workspace));
+        synchroniseHistorySourceForWorkspace(workspace);
+    }
+    else selectWorkspace(workspace, false);
+    if (! safe) return true;
+
+    if (master) globalPanel.focusInsertEffect(0);
+    else
+    {
+        const bool alreadyFocused = multiband.getFocusIndex() == band;
+        multiband.setFocusIndex(band);
+        if (! safe) return true;
+        if (alreadyFocused) updateWhenChangingFocus(band);
+        if (! safe) return true;
+        bandPanel.setSwitch(1, true);
+    }
+    if (safe) modulationSnapshotFramesRemaining = 0;
+    return true;
+}
+
 void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox* combobox)
 {
     if (combobox == stateComponent.getPresetBox())
@@ -2564,9 +2616,14 @@ void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* s
 
         if (resetFocusAfterStateLoad)
         {
-            multiband.setFocusIndex(0);
+            // Rebuild topology before choosing an upper-band destination. A
+            // previous one-band layout would otherwise clamp it back to Band 1.
+            multiband.resortAndRedrawLines();
             if (safeThis == nullptr)
                 return;
+            if (! focusLoadedAnalogPreset() && safeThis != nullptr)
+                multiband.setFocusIndex(0);
+            return;
         }
 
         // Crossover repair can synchronously notify a host which destroys the

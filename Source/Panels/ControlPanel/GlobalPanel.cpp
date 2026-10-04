@@ -1139,6 +1139,21 @@ void GlobalPanel::selectInsertEffect(int slot)
     resized(); invalidateChromeCache();
 }
 
+void GlobalPanel::focusInsertEffect(int slot)
+{
+    if (! juce::isPositiveAndBelow(slot, fire::effects::slotCount)
+        || processor.getInsertEffectType(0, slot) == fire::effects::Type::none)
+        return;
+    const juce::Component::SafePointer<GlobalPanel> safe(this);
+    // State loading can add the requested row while this panel is hidden.
+    // Refresh the rail before selecting it so its controls and scroll target
+    // use the newly loaded slot, rather than the previous chain's geometry.
+    effectNavigation.setSelectedSlot(-1);
+    if (! safe) return;
+    effectNavigation.refresh();
+    if (safe) selectInsertEffect(slot);
+}
+
 void GlobalPanel::refreshInsertLayout()
 {
     if (selectedInsert < 0) return;

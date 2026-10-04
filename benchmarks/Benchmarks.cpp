@@ -11,6 +11,7 @@ struct SpectrumComponentTestAccess
             component.displayData[i] = 3.0f + std::sin(static_cast<float>(i) * 0.11f);
     }
     static void rebuild(SpectrumComponent& component) { component.rebuildPaths(); }
+    static void invalidateRaster(SpectrumComponent& component) { component.spectrumRaster.dirty = true; }
 };
 
 TEST_CASE("CPU audit spectrum geometry", "[cpu-ui]")
@@ -25,12 +26,42 @@ TEST_CASE("CPU audit spectrum geometry", "[cpu-ui]")
     };
 }
 
+TEST_CASE("CPU audit spectrum raster and cached presentation", "[cpu-ui]")
+{
+    SpectrumComponent spectrum {1, false};
+    spectrum.setSize(1000, 300);
+    SpectrumComponentTestAccess::prime(spectrum);
+    SpectrumComponentTestAccess::rebuild(spectrum);
+    for (int scale : {1, 2})
+    {
+        juce::Image target(juce::Image::ARGB, 1000 * scale, 300 * scale, true);
+        const auto paint = [&]
+        {
+            target.clear(target.getBounds());
+            juce::Graphics graphics(target);
+            graphics.addTransform(juce::AffineTransform::scale(static_cast<float>(scale)));
+            spectrum.paint(graphics);
+        };
+        paint();
+        BENCHMARK("Spectrum cached paint / " + std::to_string(scale) + "x") { paint(); };
+        BENCHMARK("Spectrum new-frame raster / " + std::to_string(scale) + "x")
+        {
+            SpectrumComponentTestAccess::invalidateRaster(spectrum);
+            paint();
+        };
+        spectrum.setSpecAlpha(0);
+        BENCHMARK("Spectrum transparent paint / " + std::to_string(scale) + "x") { paint(); };
+        spectrum.setSpecAlpha(.8f);
+    }
+}
+
 // Use repeatable input for each iteration. Feeding processed audio back into
 // the next iteration measures a changing signal (often eventual silence).
 TEST_CASE("CPU audit processing scenarios", "[cpu]")
 {
     for (const int blockSize : { 128, 512 })
-        for (const auto* scenario : { "default", "four bands HQ", "delay", "reverb", "OTT", "modulated delay" })
+        for (const auto* scenario : { "default", "four bands HQ", "delay", "reverb", "OTT", "modulated delay",
+                                     "four bands Transformer", "four bands Transformer HQ", "four bands Tape", "four bands Tape HQ" })
         {
             FireAudioProcessor plugin;
             const auto set = [&] (const juce::String& id, float value)
@@ -40,12 +71,25 @@ TEST_CASE("CPU audit processing scenarios", "[cpu]")
                 parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
             };
             const juce::String name(scenario);
-            if (name == "four bands HQ")
+            if (name.startsWith("four bands"))
             {
                 set(NUM_BANDS_ID, 4);
                 for (int divider = 0; divider < 3; ++divider)
                     set(ParameterIDAndName::getIDString(LINE_STATE_ID, divider), 1);
-                set(HQ_ID, 1);
+                set(HQ_ID, name.endsWith("HQ") ? 1 : 0);
+            }
+            if (name.contains("Transformer") || name.contains("Tape"))
+            {
+                set(FILTER_BYPASS_ID, 0); set(DOWNSAMPLE_BYPASS_ID, 0);
+                for (int band = 0; band < 4; ++band)
+                {
+                    set(ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, band), 1);
+                    set(ParameterIDAndName::getIDString(LINKED_ID, band), 0);
+                    set(ParameterIDAndName::getIDString(SAFE_ID, band), 0);
+                    set(ParameterIDAndName::getIDString(DRIVE_ID, band), 28);
+                    set(ParameterIDAndName::getIDString(OUTPUT_ID, band), -6);
+                    REQUIRE(plugin.setShapeMode(band + 1, -1, name.contains("Tape") ? 23 : 22));
+                }
             }
             if (name.contains("delay") || name == "reverb")
             {

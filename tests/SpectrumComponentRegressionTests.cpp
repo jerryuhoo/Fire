@@ -111,6 +111,10 @@ struct SpectrumComponentTestAccess
 
     static float peakReadoutDb(const SpectrumComponent& component) { return component.maxDecibelValue; }
     static float peakReadoutFrequency(const SpectrumComponent& component) { return component.maxFreq; }
+    static std::uint64_t rasterRenders(const SpectrumComponent& component, bool peak = false)
+    { return peak ? component.peakRaster.renderCount : component.spectrumRaster.renderCount; }
+    static juce::Point<int> rasterSize(const SpectrumComponent& component)
+    { return {component.spectrumRaster.image.getWidth(), component.spectrumRaster.image.getHeight()}; }
 };
 
 namespace
@@ -164,15 +168,101 @@ TEST_CASE("Spectrum preserves isolated FFT peaks at their measured frequency and
             juce::Point<float> highest {-1.0f, 1000.0f};
             juce::Path::Iterator path(SpectrumComponentTestAccess::spectrumPath(spectrum));
             while (path.next())
+            {
                 if ((path.elementType == juce::Path::Iterator::startNewSubPath
                      || path.elementType == juce::Path::Iterator::lineTo) && path.y1 < highest.y)
                     highest = {path.x1, path.y1};
+                if (path.elementType == juce::Path::Iterator::cubicTo && path.y3 < highest.y)
+                    highest = {path.x3, path.y3};
+            }
             CHECK(highest.x == Catch::Approx(expectedX).margin(0.51f));
             CHECK(highest.y == Catch::Approx(expectedY).margin(0.001f));
             SpectrumComponentTestAccess::setMouseOver(spectrum, true);
             CHECK(SpectrumComponentTestAccess::peakReadoutDb(spectrum) == Catch::Approx(peakDb).margin(0.001f));
             CHECK(SpectrumComponentTestAccess::peakReadoutFrequency(spectrum) == Catch::Approx(frequency));
         }
+}
+
+TEST_CASE("Smooth spectrum curves preserve interval bounds and continuous tangents",
+          "[spectrum][spectrum-flow][ui][curve][measurement][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    SpectrumComponent spectrum {1, false};
+    spectrum.setSize(1000, 240);
+    spectrum.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    spectrum.setVisible(true);
+    const juce::ScopeGuard cleanup {[&] { spectrum.removeFromDesktop(); }};
+    SpectrumComponentTestAccess::setInterpolationFactor(spectrum, 1.0f);
+    std::array<float, 1024> frame {};
+    for (size_t bin = 0; bin < frame.size(); ++bin)
+        frame[bin] = 1024 * juce::Decibels::decibelsToGain(
+            -55.0f + 30.0f * std::sin(static_cast<float>(bin) * .173f));
+    spectrum.updateSpectrum(frame.data(), 1024, 48000.0f / 2048);
+    SpectrumComponentTestAccess::tick(spectrum);
+    juce::Point<float> previous;
+    float previousSlope = 0;
+    int curves = 0;
+    juce::Path::Iterator path(SpectrumComponentTestAccess::spectrumPath(spectrum));
+    while (path.next())
+    {
+        if (path.elementType == juce::Path::Iterator::startNewSubPath)
+            previous = {path.x1, path.y1};
+        if (path.elementType != juce::Path::Iterator::cubicTo) continue;
+        REQUIRE(path.x3 > previous.x);
+        REQUIRE(path.x1 > previous.x);
+        REQUIRE(path.x2 < path.x3);
+        const auto startSlope = (path.y1 - previous.y) / (path.x1 - previous.x);
+        if (curves > 0)
+            CHECK(startSlope == Catch::Approx(previousSlope).epsilon(.002).margin(.002));
+        previousSlope = (path.y3 - path.y2) / (path.x3 - path.x2);
+        for (int sample = 0; sample <= 32; ++sample)
+        {
+            const auto t = sample / 32.0f, u = 1 - t;
+            const auto y = u*u*u*previous.y + 3*u*u*t*path.y1 + 3*u*t*t*path.y2 + t*t*t*path.y3;
+            CHECK(y >= std::min(previous.y, path.y3) - .001f);
+            CHECK(y <= std::max(previous.y, path.y3) + .001f);
+        }
+        previous = {path.x3, path.y3};
+        ++curves;
+    }
+    CHECK(curves > 100);
+}
+
+TEST_CASE("Spectrum raster caches skip transparent traces reuse opacity frames and track device scale",
+          "[spectrum][ui][render][cpu][cache][scale][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    SpectrumComponent spectrum {1, false};
+    spectrum.setSize(800, 240);
+    spectrum.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    spectrum.setVisible(true);
+    const juce::ScopeGuard cleanup {[&] { spectrum.removeFromDesktop(); }};
+    SpectrumComponentTestAccess::setInterpolationFactor(spectrum, 1.0f);
+    spectrum.setSpecAlpha(0);
+    std::array<float, 1024> frame {};
+    frame[43] = 512;
+    spectrum.updateSpectrum(frame.data(), 1024, 48000.0f / 2048);
+    SpectrumComponentTestAccess::tick(spectrum);
+    CHECK(renderedAlphaSum(spectrum, spectrum.getLocalBounds()) == 0);
+    CHECK(SpectrumComponentTestAccess::rasterRenders(spectrum) == 0);
+    spectrum.setSpecAlpha(.8f);
+    const auto full = renderedAlphaSum(spectrum, spectrum.getLocalBounds());
+    REQUIRE(full > 0);
+    const auto rendered = SpectrumComponentTestAccess::rasterRenders(spectrum);
+    REQUIRE(rendered == 1);
+    CHECK(renderedAlphaSum(spectrum, spectrum.getLocalBounds()) == full);
+    spectrum.setSpecAlpha(.3f);
+    CHECK(renderedAlphaSum(spectrum, spectrum.getLocalBounds()) < full);
+    CHECK(SpectrumComponentTestAccess::rasterRenders(spectrum) == rendered);
+    for (int repetition = 0; repetition < 2; ++repetition)
+    {
+        juce::Image image(juce::Image::ARGB, 1600, 480, true);
+        juce::Graphics graphics(image);
+        graphics.addTransform(juce::AffineTransform::scale(2.0f));
+        spectrum.paint(graphics);
+        CHECK(SpectrumComponentTestAccess::rasterSize(spectrum) == juce::Point<int>(1600, 480));
+        CHECK(SpectrumComponentTestAccess::rasterRenders(spectrum) == rendered + 1);
+    }
 }
 
 TEST_CASE("Spectrum release follows the input monotonically then stops at silent presentation",

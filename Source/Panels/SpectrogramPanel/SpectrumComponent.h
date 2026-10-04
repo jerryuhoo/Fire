@@ -73,7 +73,8 @@ private:
     void setMouseOverSpectrum(bool shouldBeOver);
     void resetHoverPresentation();
     void rebuildFrequencyLayout();
-    void rebuildPaths();
+    void rebuildPaths(bool rebuildSpectrum = true, bool rebuildPeak = true);
+    void drawSpectrumContent(juce::Graphics& g);
     void updateAnimationTimer();
 
     int mStyle;
@@ -121,6 +122,18 @@ private:
     juce::Path spectrumLinePath;
     juce::Path spectrumFillPath;
     juce::Path peakLinePath;
+
+    struct RasterCache
+    {
+        juce::Image image;
+        float scale = 0.0f;
+        bool dirty = true;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        std::uint64_t renderCount = 0;
+#endif
+    };
+    RasterCache spectrumRaster, peakRaster;
+    void updateRaster(RasterCache& cache, float scale, bool peak);
 
     // GUI-thread only members
     float maxDecibelValue = -100.0f;

@@ -1,0 +1,494 @@
+{
+  "date": "2026-10-04",
+  "version": "2.0.0",
+  "baselineCommit": "9086f1455267cf60cf879166af9a7a8649afd573",
+  "optimizedDspCommits": [
+    "ebbdd5f",
+    "bf0652d"
+  ],
+  "machine": "Apple M1 Pro (10 cores)",
+  "build": "Release, AppleClang, C++23, -O3 -fno-fast-math / LTO",
+  "audioMethod": {
+    "sampleRate": 48000,
+    "channels": 2,
+    "editor": false,
+    "roundsPerScenario": 3,
+    "statistic": "median process CPU time for approximately 1 second audio",
+    "input": "continuous precomputed multitone: .13*sin(137 Hz + channel*.3) + .1*sin(2131 Hz) + .07*sin(8917 Hz)",
+    "physicalDriveDb": 28,
+    "physicalOutputDb": -6,
+    "fourBandMacro4": "0.6, depth 0.1 routed to drive4",
+    "includes": "input buffer copy and processBlock, excluding input synthesis and prepare",
+    "percentDefinition": "CPU seconds / rendered audio seconds * 100; one-core average budget, not a DAW meter"
+  },
+  "before": [
+    {
+      "scenario": "default",
+      "bands": 1,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 96.5786667,
+      "singleCorePercent": 3.6217,
+      "lastBlockPeak": 0.402984381
+    },
+    {
+      "scenario": "four_default",
+      "bands": 4,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 164.776,
+      "singleCorePercent": 6.1791,
+      "lastBlockPeak": 0.443805963
+    },
+    {
+      "scenario": "warm_triode",
+      "bands": 1,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 106.224,
+      "singleCorePercent": 3.9834,
+      "lastBlockPeak": 0.386904418
+    },
+    {
+      "scenario": "transformer",
+      "bands": 1,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 243.285333,
+      "singleCorePercent": 9.1232,
+      "lastBlockPeak": 0.569465756
+    },
+    {
+      "scenario": "tape",
+      "bands": 1,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 418.834667,
+      "singleCorePercent": 15.7063,
+      "lastBlockPeak": 0.413507521
+    },
+    {
+      "scenario": "warm_triode",
+      "bands": 4,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 212.776,
+      "singleCorePercent": 7.9791,
+      "lastBlockPeak": 0.65493077
+    },
+    {
+      "scenario": "transformer",
+      "bands": 4,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 758.853333,
+      "singleCorePercent": 28.457,
+      "lastBlockPeak": 0.659768879
+    },
+    {
+      "scenario": "tape",
+      "bands": 4,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 1495.10667,
+      "singleCorePercent": 56.0665,
+      "lastBlockPeak": 0.50646311
+    },
+    {
+      "scenario": "tape",
+      "bands": 4,
+      "hq": false,
+      "blockSamples": 64,
+      "meanBlockUs": 769.813333,
+      "singleCorePercent": 57.736,
+      "lastBlockPeak": 0.397579491
+    },
+    {
+      "scenario": "tape",
+      "bands": 4,
+      "hq": false,
+      "blockSamples": 512,
+      "meanBlockUs": 5797.76344,
+      "singleCorePercent": 54.3540323,
+      "lastBlockPeak": 0.519176185
+    },
+    {
+      "scenario": "default",
+      "bands": 1,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 109.098667,
+      "singleCorePercent": 4.0912,
+      "lastBlockPeak": 0.409177691
+    },
+    {
+      "scenario": "four_default",
+      "bands": 4,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 219.472,
+      "singleCorePercent": 8.2302,
+      "lastBlockPeak": 0.428242326
+    },
+    {
+      "scenario": "warm_triode",
+      "bands": 1,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 150.474667,
+      "singleCorePercent": 5.6428,
+      "lastBlockPeak": 0.385959864
+    },
+    {
+      "scenario": "transformer",
+      "bands": 1,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 577.112,
+      "singleCorePercent": 21.6417,
+      "lastBlockPeak": 0.58010608
+    },
+    {
+      "scenario": "tape",
+      "bands": 1,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 462.213333,
+      "singleCorePercent": 17.333,
+      "lastBlockPeak": 0.408762902
+    },
+    {
+      "scenario": "warm_triode",
+      "bands": 4,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 391.946667,
+      "singleCorePercent": 14.698,
+      "lastBlockPeak": 0.663764536
+    },
+    {
+      "scenario": "transformer",
+      "bands": 4,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 2129.40267,
+      "singleCorePercent": 79.8526,
+      "lastBlockPeak": 0.648292005
+    },
+    {
+      "scenario": "tape",
+      "bands": 4,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 1635.304,
+      "singleCorePercent": 61.3239,
+      "lastBlockPeak": 0.515801311
+    },
+    {
+      "scenario": "tape",
+      "bands": 4,
+      "hq": true,
+      "blockSamples": 64,
+      "meanBlockUs": 850.097333,
+      "singleCorePercent": 63.7573,
+      "lastBlockPeak": 0.40801847
+    },
+    {
+      "scenario": "tape",
+      "bands": 4,
+      "hq": true,
+      "blockSamples": 512,
+      "meanBlockUs": 6509.83871,
+      "singleCorePercent": 61.0297379,
+      "lastBlockPeak": 0.527943075
+    }
+  ],
+  "after": [
+    {
+      "scenario": "default",
+      "bands": 1,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 96.9866667,
+      "singleCorePercent": 3.637,
+      "lastBlockPeak": 0.402984381
+    },
+    {
+      "scenario": "four_default",
+      "bands": 4,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 164.482667,
+      "singleCorePercent": 6.1681,
+      "lastBlockPeak": 0.443805963
+    },
+    {
+      "scenario": "warm_triode",
+      "bands": 1,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 107.365333,
+      "singleCorePercent": 4.0262,
+      "lastBlockPeak": 0.386904418
+    },
+    {
+      "scenario": "transformer",
+      "bands": 1,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 198.722667,
+      "singleCorePercent": 7.4521,
+      "lastBlockPeak": 0.569465756
+    },
+    {
+      "scenario": "tape",
+      "bands": 1,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 362.109333,
+      "singleCorePercent": 13.5791,
+      "lastBlockPeak": 0.413507521
+    },
+    {
+      "scenario": "warm_triode",
+      "bands": 4,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 216.776,
+      "singleCorePercent": 8.1291,
+      "lastBlockPeak": 0.65493077
+    },
+    {
+      "scenario": "transformer",
+      "bands": 4,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 568.570667,
+      "singleCorePercent": 21.3214,
+      "lastBlockPeak": 0.659768879
+    },
+    {
+      "scenario": "tape",
+      "bands": 4,
+      "hq": false,
+      "blockSamples": 128,
+      "meanBlockUs": 1246.024,
+      "singleCorePercent": 46.7259,
+      "lastBlockPeak": 0.50646311
+    },
+    {
+      "scenario": "tape",
+      "bands": 4,
+      "hq": false,
+      "blockSamples": 64,
+      "meanBlockUs": 647.865333,
+      "singleCorePercent": 48.5899,
+      "lastBlockPeak": 0.397579491
+    },
+    {
+      "scenario": "tape",
+      "bands": 4,
+      "hq": false,
+      "blockSamples": 512,
+      "meanBlockUs": 4864.68817,
+      "singleCorePercent": 45.6064516,
+      "lastBlockPeak": 0.519176185
+    },
+    {
+      "scenario": "default",
+      "bands": 1,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 109.082667,
+      "singleCorePercent": 4.0906,
+      "lastBlockPeak": 0.409177691
+    },
+    {
+      "scenario": "four_default",
+      "bands": 4,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 218.44,
+      "singleCorePercent": 8.1915,
+      "lastBlockPeak": 0.428242326
+    },
+    {
+      "scenario": "warm_triode",
+      "bands": 1,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 149.930667,
+      "singleCorePercent": 5.6224,
+      "lastBlockPeak": 0.385959864
+    },
+    {
+      "scenario": "transformer",
+      "bands": 1,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 410.352,
+      "singleCorePercent": 15.3882,
+      "lastBlockPeak": 0.58010608
+    },
+    {
+      "scenario": "tape",
+      "bands": 1,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 399.808,
+      "singleCorePercent": 14.9928,
+      "lastBlockPeak": 0.408762902
+    },
+    {
+      "scenario": "warm_triode",
+      "bands": 4,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 392.248,
+      "singleCorePercent": 14.7093,
+      "lastBlockPeak": 0.663764536
+    },
+    {
+      "scenario": "transformer",
+      "bands": 4,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 1465.62133,
+      "singleCorePercent": 54.9608,
+      "lastBlockPeak": 0.648292005
+    },
+    {
+      "scenario": "tape",
+      "bands": 4,
+      "hq": true,
+      "blockSamples": 128,
+      "meanBlockUs": 1359.584,
+      "singleCorePercent": 50.9844,
+      "lastBlockPeak": 0.515801311
+    },
+    {
+      "scenario": "tape",
+      "bands": 4,
+      "hq": true,
+      "blockSamples": 64,
+      "meanBlockUs": 708.541333,
+      "singleCorePercent": 53.1406,
+      "lastBlockPeak": 0.40801847
+    },
+    {
+      "scenario": "tape",
+      "bands": 4,
+      "hq": true,
+      "blockSamples": 512,
+      "meanBlockUs": 5329.88172,
+      "singleCorePercent": 49.9676411,
+      "lastBlockPeak": 0.527943075
+    }
+  ],
+  "dspComparison": {
+    "rates": [
+      44100,
+      48000,
+      96000,
+      192000
+    ],
+    "stimulus": "multitone with alternating overload pulses and a silent tail",
+    "maxTransformerError": 8.064e-12,
+    "maxTapeError": 2.476e-14,
+    "rtAllocations": 0,
+    "rtAllocationScope": "Standalone Tape process / setProcessingRate / reset"
+  },
+  "limitations": [
+    "Measurements are local offline probes, not whole-editor or live-host CPU percentages.",
+    "Per-run CPU frequency and scheduling vary; use paired results rather than prior absolute readings.",
+    "Core comparison errors cover the tested stimuli and rates, not every possible signal."
+  ],
+  "uiMethod": {
+    "logicalSize": [
+      1000,
+      230
+    ],
+    "rounds": 3,
+    "paintsPerRound": 30,
+    "statistic": "median process CPU time per paint",
+    "input": "2048-point actual Blackman FFT, 220/440/1800/6200 Hz plus deterministic noise (seed 0x53504543), processed tanh colour",
+    "baseline": "previous native line/gradient primitives, same FFT/pixel knots and mix; no hover peak",
+    "freshFrameIncludes": "curve geometry rebuild, raster rendering and native compositing",
+    "cachedIncludes": "image clear and native compositing",
+    "scope": "offscreen native bitmap comparison; not a live-host CPU meter"
+  },
+  "uiPaint": [
+    {
+      "deviceScale": 1,
+      "wetMix": 0.5,
+      "method": "legacy straight native paths",
+      "medianPaintUs": 7179.33
+    },
+    {
+      "deviceScale": 1,
+      "wetMix": 0.5,
+      "method": "smooth curves, fresh raster layers",
+      "medianPaintUs": 6471.63
+    },
+    {
+      "deviceScale": 1,
+      "wetMix": 0.5,
+      "method": "smooth curves, cached layers",
+      "medianPaintUs": 1547.13
+    },
+    {
+      "deviceScale": 1,
+      "wetMix": 1.0,
+      "method": "legacy straight native paths",
+      "medianPaintUs": 7294.77
+    },
+    {
+      "deviceScale": 1,
+      "wetMix": 1.0,
+      "method": "smooth curves, fresh raster layers",
+      "medianPaintUs": 3639.87
+    },
+    {
+      "deviceScale": 1,
+      "wetMix": 1.0,
+      "method": "smooth curves, cached layers",
+      "medianPaintUs": 74.7667
+    },
+    {
+      "deviceScale": 2,
+      "wetMix": 0.5,
+      "method": "legacy straight native paths",
+      "medianPaintUs": 16654.7
+    },
+    {
+      "deviceScale": 2,
+      "wetMix": 0.5,
+      "method": "smooth curves, fresh raster layers",
+      "medianPaintUs": 14190.7
+    },
+    {
+      "deviceScale": 2,
+      "wetMix": 0.5,
+      "method": "smooth curves, cached layers",
+      "medianPaintUs": 6090.9
+    },
+    {
+      "deviceScale": 2,
+      "wetMix": 1.0,
+      "method": "legacy straight native paths",
+      "medianPaintUs": 16242.9
+    },
+    {
+      "deviceScale": 2,
+      "wetMix": 1.0,
+      "method": "smooth curves, fresh raster layers",
+      "medianPaintUs": 5982.9
+    },
+    {
+      "deviceScale": 2,
+      "wetMix": 1.0,
+      "method": "smooth curves, cached layers",
+      "medianPaintUs": 329.867
+    }
+  ]
+}

@@ -30,6 +30,45 @@ bool hasVisibleEnergy(const std::array<float, 1024>& magnitudes, int numberOfBin
     return std::any_of(magnitudes.begin(), magnitudes.begin() + numberOfBins,
                        [floor](float magnitude) { return magnitude > floor; });
 }
+
+struct SpectrumKnot { float x, y, peakY; };
+
+void buildSmoothPath(juce::Path& path, const std::array<SpectrumKnot, 1024>& knots,
+                     int count, bool peak)
+{
+    if (count == 0) return;
+    const auto y = [peak](const SpectrumKnot& knot) { return peak ? knot.peakY : knot.y; };
+    path.startNewSubPath(knots[0].x, y(knots[0]));
+    if (count < 2) return;
+    // Shape-preserving Hermite tangents: each FFT/pixel peak remains a knot,
+    // extrema have zero slope, and a monotone interval cannot overshoot.
+    // Fritsch-Butland, SIAM J. Sci. Comput. 5(2), 300-304 (1984).
+    std::array<float, 1024> tangents;
+    tangents[0] = (y(knots[1]) - y(knots[0])) / (knots[1].x - knots[0].x);
+    tangents[static_cast<size_t>(count - 1)] =
+        (y(knots[static_cast<size_t>(count - 1)]) - y(knots[static_cast<size_t>(count - 2)]))
+        / (knots[static_cast<size_t>(count - 1)].x - knots[static_cast<size_t>(count - 2)].x);
+    for (int index = 1; index + 1 < count; ++index)
+    {
+        const auto i = static_cast<size_t>(index);
+        const auto leftWidth = knots[i].x - knots[i - 1].x;
+        const auto rightWidth = knots[i + 1].x - knots[i].x;
+        const auto leftSlope = (y(knots[i]) - y(knots[i - 1])) / leftWidth;
+        const auto rightSlope = (y(knots[i + 1]) - y(knots[i])) / rightWidth;
+        const auto leftWeight = 2 * rightWidth + leftWidth;
+        const auto rightWeight = rightWidth + 2 * leftWidth;
+        tangents[i] = leftSlope * rightSlope <= 0 ? 0
+            : (leftWeight + rightWeight) / (leftWeight / leftSlope + rightWeight / rightSlope);
+    }
+    for (int index = 0; index + 1 < count; ++index)
+    {
+        const auto i = static_cast<size_t>(index);
+        const auto third = (knots[i + 1].x - knots[i].x) / 3;
+        path.cubicTo(knots[i].x + third, y(knots[i]) + tangents[i] * third,
+                     knots[i + 1].x - third, y(knots[i + 1]) - tangents[i + 1] * third,
+                     knots[i + 1].x, y(knots[i + 1]));
+    }
+}
 } // namespace
 
 SpectrumComponent::SpectrumComponent()
@@ -189,11 +228,18 @@ void SpectrumComponent::timerCallback()
         && ! hostBypassed && ! renderedDataIsClear)
     {
         for (int i = 0; i < numberOfBins; ++i)
-            maxData[static_cast<size_t>(i)] = juce::jmax(maxData[static_cast<size_t>(i)],
-                                                        displayData[static_cast<size_t>(i)]);
+        {
+            auto& held = maxData[static_cast<size_t>(i)];
+            const auto value = displayData[static_cast<size_t>(i)];
+            if (value > held)
+            {
+                held = value;
+                peakDataChanged = true;
+            }
+        }
 
+        peakDataChanged = peakDataChanged || ! isPeakLineVisible;
         isPeakLineVisible = true;
-        peakDataChanged = true;
     }
     else if (mDrawPeak && ! mouseOver && isPeakLineVisible)
     {
@@ -218,7 +264,7 @@ void SpectrumComponent::timerCallback()
     // change when the samples, held peaks or component dimensions change.
     if (spectrumDataChanged || peakDataChanged || geometryDirty)
     {
-        rebuildPaths();
+        rebuildPaths(spectrumDataChanged || geometryDirty, peakDataChanged || geometryDirty);
         visualStateChanged = true;
     }
 
@@ -250,11 +296,19 @@ void SpectrumComponent::rebuildFrequencyLayout()
     }
 }
 
-void SpectrumComponent::rebuildPaths()
+void SpectrumComponent::rebuildPaths(bool rebuildSpectrum, bool rebuildPeak)
 {
-    spectrumLinePath.clear();
-    spectrumFillPath.clear();
-    peakLinePath.clear();
+    if (rebuildSpectrum)
+    {
+        spectrumLinePath.clear();
+        spectrumFillPath.clear();
+        spectrumRaster.dirty = true;
+    }
+    if (rebuildPeak)
+    {
+        peakLinePath.clear();
+        peakRaster.dirty = true;
+    }
     geometryDirty = false;
 
     const auto bounds = getLocalBounds().toFloat();
@@ -267,14 +321,14 @@ void SpectrumComponent::rebuildPaths()
     if (frequencyLayoutDirty)
         rebuildFrequencyLayout();
 
-    spectrumLinePath.preallocateSpace(juce::jmax(64, getWidth() * 4));
-    peakLinePath.preallocateSpace(juce::jmax(64, getWidth() * 4));
+    spectrumLinePath.preallocateSpace(juce::jmax(64, getWidth() * 7));
+    peakLinePath.preallocateSpace(juce::jmax(64, getWidth() * 7));
 
     int currentBucket = -1;
     float currentBucketY = bounds.getBottom();
     float peakBucketY = bounds.getBottom();
-    bool hasSpectrumPoint = false;
-    bool hasPeakPoint = false;
+    std::array<SpectrumKnot, 1024> knots;
+    int knotCount = 0;
 
     maxDecibelValue = minDisplayDb;
     maxFreq = 0.0f;
@@ -297,28 +351,7 @@ void SpectrumComponent::rebuildPaths()
 
         const float x = juce::jlimit(bounds.getX(), bounds.getRight(),
                                      static_cast<float>(bucket) + 0.5f);
-        if (! renderedDataIsClear && ! hasSpectrumPoint)
-        {
-            spectrumLinePath.startNewSubPath(x, currentBucketY);
-            hasSpectrumPoint = true;
-        }
-        else if (! renderedDataIsClear)
-        {
-            spectrumLinePath.lineTo(x, currentBucketY);
-        }
-
-        if (drawPeak)
-        {
-            if (! hasPeakPoint)
-            {
-                peakLinePath.startNewSubPath(x, peakBucketY);
-                hasPeakPoint = true;
-            }
-            else
-            {
-                peakLinePath.lineTo(x, peakBucketY);
-            }
-        }
+        knots[static_cast<size_t>(knotCount++)] = {x, currentBucketY, peakBucketY};
     };
 
     for (int position = 0; position < visibleFrequencyBins; ++position)
@@ -326,8 +359,8 @@ void SpectrumComponent::rebuildPaths()
         const auto& binPosition = frequencyLayout[static_cast<size_t>(position)];
         const int i = binPosition.bin;
         const int bucket = binPosition.bucket;
-        // Temporal interpolation already supplies continuity. Averaging
-        // neighbouring bins here would lower an isolated peak by 6 dB.
+        // Keep the measured magnitude. Curve interpolation rounds the shape
+        // between knots without averaging away an isolated FFT peak.
         const float currentDb = magnitudeToDb(displayData[static_cast<size_t>(i)], numberOfBins);
         const float currentY = dbToY(currentDb);
         const float peakDb = drawPeak ? magnitudeToDb(maxData[static_cast<size_t>(i)], numberOfBins)
@@ -359,13 +392,95 @@ void SpectrumComponent::rebuildPaths()
 
     flushBucket(currentBucket);
 
-    if (hasSpectrumPoint)
+    if (rebuildSpectrum && ! renderedDataIsClear && knotCount > 0)
     {
+        buildSmoothPath(spectrumLinePath, knots, knotCount, false);
         spectrumFillPath = spectrumLinePath;
         spectrumFillPath.lineTo(bounds.getRight(), bounds.getBottom());
         spectrumFillPath.lineTo(bounds.getX(), bounds.getBottom());
         spectrumFillPath.closeSubPath();
     }
+    if (rebuildPeak && drawPeak) buildSmoothPath(peakLinePath, knots, knotCount, true);
+}
+
+void SpectrumComponent::drawSpectrumContent(juce::Graphics& g)
+{
+    const auto bounds = getLocalBounds().toFloat();
+    if (mStyle == 1)
+    {
+        juce::ColourGradient fill(fire::ui::colours::flame.withAlpha(0.10f),
+                                  bounds.getX(), bounds.getY(),
+                                  fire::ui::colours::ember.withAlpha(0.0f),
+                                  bounds.getX(), bounds.getBottom(), false);
+        fill.addColour(0.42, fire::ui::colours::ember.withAlpha(0.045f));
+        g.setGradientFill(fill);
+        g.fillPath(spectrumFillPath);
+
+        g.setColour(fire::ui::colours::ember.withAlpha(0.08f));
+        g.strokePath(spectrumLinePath,
+                     juce::PathStrokeType(2.8f, juce::PathStrokeType::curved,
+                                          juce::PathStrokeType::rounded));
+
+        juce::ColourGradient heat(fire::ui::colours::whiteHot.withAlpha(0.94f),
+                                  bounds.getX(), bounds.getY(),
+                                  fire::ui::colours::ember.withAlpha(0.84f),
+                                  bounds.getX(), bounds.getBottom(), false);
+        heat.addColour(0.55, fire::ui::colours::flame.withAlpha(0.94f));
+        g.setGradientFill(heat);
+        g.strokePath(spectrumLinePath,
+                     juce::PathStrokeType(1.35f, juce::PathStrokeType::curved,
+                                          juce::PathStrokeType::rounded));
+    }
+    else
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.018f));
+        g.fillPath(spectrumFillPath);
+        g.setColour(juce::Colours::white.withAlpha(0.42f));
+        g.strokePath(spectrumLinePath,
+                     juce::PathStrokeType(1.0f, juce::PathStrokeType::curved,
+                                          juce::PathStrokeType::rounded));
+    }
+}
+
+void SpectrumComponent::updateRaster(RasterCache& cache, float scale, bool peak)
+{
+    const auto width = juce::jmax(1, juce::roundToInt(std::ceil(getWidth() * scale)));
+    const auto height = juce::jmax(1, juce::roundToInt(std::ceil(getHeight() * scale)));
+    if (cache.image.getWidth() != width || cache.image.getHeight() != height || cache.scale != scale)
+    {
+        // Constant-colour traces need only coverage, avoiding RGB image
+        // conversion/compositing work for the dry trace and held peaks.
+        if (peak || mStyle != 1)
+            cache.image = juce::Image(juce::Image::SingleChannel, width, height, true, juce::SoftwareImageType{});
+        else
+        {
+#if JUCE_MAC
+        // Native backing retains the CGImage between opacity-only paints;
+        // drawing a SoftwareImage directly would copy its pixels each time.
+        cache.image = juce::Image(juce::Image::ARGB, width, height, true);
+#else
+        cache.image = juce::Image(juce::Image::ARGB, width, height, true, juce::SoftwareImageType{});
+#endif
+        }
+        cache.scale = scale;
+        cache.dirty = true;
+    }
+    if (! cache.dirty) return;
+    cache.image.clear(cache.image.getBounds());
+    juce::LowLevelGraphicsSoftwareRenderer renderer(cache.image);
+    juce::Graphics rasterGraphics(renderer);
+    rasterGraphics.addTransform(juce::AffineTransform::scale(scale));
+    if (peak)
+    {
+        rasterGraphics.setColour(juce::Colours::white.withAlpha(0.56f));
+        rasterGraphics.strokePath(peakLinePath, juce::PathStrokeType(1.0f,
+            juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+    else drawSpectrumContent(rasterGraphics);
+    cache.dirty = false;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    ++cache.renderCount;
+#endif
 }
 
 void SpectrumComponent::paint(juce::Graphics& g)
@@ -377,61 +492,31 @@ void SpectrumComponent::paint(juce::Graphics& g)
         return;
 
     const juce::Graphics::ScopedSaveState state(g);
-    const auto presentedSpectrumAlpha = [this, opacity](float alpha)
+    const auto scale = juce::jlimit(0.5f, 4.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+    if (specAlpha > 0.001f && ! spectrumLinePath.isEmpty())
     {
-        return specAlpha * alpha * opacity;
-    };
-
-    if (mStyle == 1)
-    {
-        juce::ColourGradient fill(fire::ui::colours::flame.withAlpha(
-                                      presentedSpectrumAlpha(0.10f)),
-                                  bounds.getX(), bounds.getY(),
-                                  fire::ui::colours::ember.withAlpha(0.0f),
-                                  bounds.getX(), bounds.getBottom(), false);
-        fill.addColour(0.42, fire::ui::colours::ember.withAlpha(
-                                 presentedSpectrumAlpha(0.045f)));
-        g.setGradientFill(fill);
-        g.fillPath(spectrumFillPath);
-
-        g.setColour(fire::ui::colours::ember.withAlpha(
-            presentedSpectrumAlpha(0.08f)));
-        g.strokePath(spectrumLinePath,
-                     juce::PathStrokeType(2.8f, juce::PathStrokeType::curved,
-                                          juce::PathStrokeType::rounded));
-
-        juce::ColourGradient heat(fire::ui::colours::whiteHot.withAlpha(
-                                      presentedSpectrumAlpha(0.94f)),
-                                  bounds.getX(), bounds.getY(),
-                                  fire::ui::colours::ember.withAlpha(
-                                      presentedSpectrumAlpha(0.84f)),
-                                  bounds.getX(), bounds.getBottom(), false);
-        heat.addColour(0.55, fire::ui::colours::flame.withAlpha(
-                                 presentedSpectrumAlpha(0.94f)));
-        g.setGradientFill(heat);
-        g.strokePath(spectrumLinePath,
-                     juce::PathStrokeType(1.35f, juce::PathStrokeType::curved,
-                                          juce::PathStrokeType::rounded));
-    }
-    else
-    {
-        g.setColour(fire::ui::colours::textSecondary.withAlpha(
-            presentedSpectrumAlpha(0.018f)));
-        g.fillPath(spectrumFillPath);
-        g.setColour(fire::ui::colours::textSecondary.withAlpha(
-            presentedSpectrumAlpha(0.42f)));
-        g.strokePath(spectrumLinePath,
-                     juce::PathStrokeType(1.0f, juce::PathStrokeType::curved,
-                                          juce::PathStrokeType::rounded));
+        // Rasterising dense native cubic strokes can be much more expensive
+        // than software rendering on macOS. Cache software layers at device
+        // resolution; opacity-only frames then composite the same pixels.
+        updateRaster(spectrumRaster, scale, false);
+        if (mStyle == 1)
+        {
+            g.setOpacity(specAlpha * opacity);
+            g.drawImage(spectrumRaster.image, bounds);
+        }
+        else
+        {
+            g.setColour(fire::ui::colours::textSecondary.withAlpha(specAlpha * opacity));
+            g.drawImage(spectrumRaster.image, bounds, juce::RectanglePlacement::stretchToFit, true);
+        }
     }
 
     if (mDrawPeak && isPeakLineVisible && hover > 0.001f
         && ! peakLinePath.isEmpty())
     {
-        g.setColour(fire::ui::colours::whiteHot.withAlpha(0.56f * hover * opacity));
-        g.strokePath(peakLinePath,
-                     juce::PathStrokeType(1.0f, juce::PathStrokeType::curved,
-                                          juce::PathStrokeType::rounded));
+        updateRaster(peakRaster, scale, true);
+        g.setColour(fire::ui::colours::whiteHot.withAlpha(hover * opacity));
+        g.drawImage(peakRaster.image, bounds, juce::RectanglePlacement::stretchToFit, true);
     }
 
     if (mDrawPeak && hover > 0.001f
@@ -551,6 +636,7 @@ void SpectrumComponent::resetRenderedData()
     spectrumLinePath.clear();
     spectrumFillPath.clear();
     peakLinePath.clear();
+    spectrumRaster.dirty = peakRaster.dirty = true;
     geometryDirty = false;
     renderedDataIsClear = true;
 }

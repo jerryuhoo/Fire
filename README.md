@@ -599,6 +599,11 @@ Fire uses bounded exponential field integration instead of the paper's time-doma
 Runge–Kutta solver. These upgraded analog colours can sound different from
 earlier unreleased builds.
 
+Magnetic value/slope coefficients and material scale factors are cached, and the
+Transformer winding solver reuses its converged candidate. Tape skips pinned
+domain solves and parks a settled silent RF path while continuing its bias phase.
+These optimisations keep the physical models, RF clock and head-loss filters.
+
 Analog pages use a hardware faceplate. Tube filaments follow the band or master input level, with Drive increasing their intensity. Silence extinguishes the glow even at maximum Drive; a perceptual level curve keeps quiet signals visible at modest Drive, with a quick attack and a short cooling tail. The tape transport turns while audio arrives and winds down when callbacks stop. The artwork is cached and animation runs only while its panel is visible. Both Band Shape and independently added Master/Band Shape instances offer these colours; each added analog Shape has its own Drive control.
 
 Choose **Menu → Skin → Modern / Vintage**, or use the two appearance buttons
@@ -742,6 +747,10 @@ channels share a bounded display gain, so quiet signals stay quiet and the
 stereo balance remains visible. Silent sections return to faint reference lines.
 
 The spectrum uses a fine bright edge with a subtle fill and a slower release.
+Shape-preserving curves round the trace between measured frequency points without
+inventing peaks or changing FFT resolution. Device-resolution raster layers are
+reused for opacity transitions; transparent traces skip drawing, and held peaks
+update independently from the live trace.
 Peak-preserving pixel reduction keeps narrow peaks aligned with their dB
 readouts. Traces settle below the display floor, and bypass clears held peaks as
 well as live data. Graph cards use a soft hover edge and an expand/restore icon.

@@ -44,9 +44,9 @@ TEST_CASE("The Langevin evaluation and derivative remain regular at zero and sat
         CHECK(positive.derivative >= 0); CHECK(positive.value < 1);
         if (x >= .05) CHECK(positive.value == Catch::Approx(1 / std::tanh(x) - 1 / x).margin(1e-7));
     }
-    for (int sample = 50; sample <= 9000; ++sample)
+    for (int sample = 500; sample <= 90000; ++sample)
     {
-        const double x = sample * .001;
+        const double x = sample * .0001;
         const auto value = fire::analog::JilesAtherton::langevin(x);
         const auto coth = 1 / std::tanh(x);
         REQUIRE(std::abs(value.value - (coth - 1 / x)) < 1e-8);

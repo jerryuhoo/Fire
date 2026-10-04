@@ -35,62 +35,18 @@ public:
         }
         if (magnitude > 9)
             return {std::copysign(1.0, x) - 1.0 / x, needDerivative ? 1.0 / (x * x) : 0};
-        // Thirteen terms of the Langevin continued fraction, reduced to a
-        // positive-coefficient rational polynomial. It avoids both a costly
-        // tanh and cancellation in coth(x)-1/x; value and slope are evaluated
-        // together. Maximum value error on [-9,9] is below 1e-8.
-        constexpr std::array p{.33333333333333331, .027160493827160494, .00063492063492063492,
-                               5.7255322955806051e-6, 2.0654878411185444e-8, 2.5086896855690823e-11, 4.6847613175893221e-15};
-        constexpr std::array q{1.0, .14814814814814814, .0054320987654320986,
-                               7.3613986657464919e-5, 4.0896659254147175e-7, 8.6967909099728185e-10, 4.9189993834687888e-13};
-        if constexpr (! needDerivative)
-        {
-            // Constant-initialised Hermite table: no lazy allocation or lock on
-            // the audio thread. Unlike linear lookup, cubic interpolation keeps
-            // the same accuracy as the winding solver's rational evaluation.
-            static constexpr auto table = [p, q]
-            {
-                std::array<Langevin, 513> values{};
-                for (size_t sample = 0; sample < values.size(); ++sample)
-                {
-                    const auto field = static_cast<double>(sample) * 9 / 512;
-                    const auto squared = field * field;
-                    double n = p.back(), d = q.back(), dn = 0, dd = 0;
-                    for (int index = 5; index >= 0; --index)
-                    {
-                        dn = dn * squared + n; dd = dd * squared + d;
-                        n = n * squared + p[static_cast<size_t>(index)];
-                        d = d * squared + q[static_cast<size_t>(index)];
-                    }
-                    const auto ratio = n / d;
-                    values[sample] = {field * ratio, ratio + 2 * squared * (dn - ratio * dd) / d};
-                }
-                return values;
-            }();
-            const auto position = magnitude * (512.0 / 9);
-            const auto index = std::min(511, static_cast<int>(position));
-            const auto t = position - index;
-            const auto& left = table[static_cast<size_t>(index)];
-            const auto& right = table[static_cast<size_t>(index + 1)];
-            const auto d0 = left.derivative * (9.0 / 512), d1 = right.derivative * (9.0 / 512);
-            const auto difference = right.value - left.value;
-            const auto value = left.value + t * (d0 + t * (3 * difference - 2 * d0 - d1 + t * (-2 * difference + d0 + d1)));
-            return {std::copysign(value, x), 0};
-        }
-        const auto square = x * x;
-        double numerator = p.back(), denominator = q.back(), dNumerator = 0, dDenominator = 0;
-        for (int index = 5; index >= 0; --index)
-        {
-            if constexpr (needDerivative)
-            {
-                dNumerator = dNumerator * square + numerator;
-                dDenominator = dDenominator * square + denominator;
-            }
-            numerator = numerator * square + p[static_cast<size_t>(index)];
-            denominator = denominator * square + q[static_cast<size_t>(index)];
-        }
-        const auto ratio = numerator / denominator;
-        return {x * ratio, needDerivative ? ratio + 2 * square * (dNumerator - ratio * dDenominator) / denominator : 0};
+        // The winding Jacobian uses the derivative of the same interpolant as
+        // M, keeping Newton's voltage/flux solve coherent. The immutable table
+        // is shared by the value-only and derivative paths, with no RT setup.
+        const auto& table = langevinTable();
+        constexpr double spacing = 9.0 / 512;
+        const auto position = magnitude * (512.0 / 9);
+        const auto index = std::min(511, static_cast<int>(position));
+        const auto t = position - index;
+        const auto& cell = table[static_cast<size_t>(index)];
+        const auto value = cell.value + t * (cell.first + t * (cell.second + t * cell.third));
+        const auto derivative = needDerivative ? (cell.first + t * (2 * cell.second + 3 * t * cell.third)) / spacing : 0;
+        return {std::copysign(value, x), derivative};
     }
 
     void configure(Material material) noexcept
@@ -99,6 +55,8 @@ public:
         parameters.k = std::clamp(material.k, .01, 2.0);
         parameters.c = std::clamp(material.c, 0.0, 1.0);
         parameters.alpha = std::clamp(material.alpha, 0.0, .05 * std::min(parameters.a, parameters.k));
+        inverseA = 1 / parameters.a;
+        inverseK = 1 / parameters.k;
     }
     void reset() noexcept { state = {}; }
     const State& getState() const noexcept { return state; }
@@ -120,11 +78,54 @@ public:
     double processMagnetisation(double field) noexcept { state = predictImpl<false>(field); return state.magnetisation; }
 
 private:
+    struct LangevinCell { double value, first, second, third; };
+
+    static const std::array<LangevinCell, 512>& langevinTable() noexcept
+    {
+        // Thirteen-term Langevin continued fraction, evaluated at compile time
+        // as positive-coefficient rational polynomials. Hermite interpolation
+        // preserves its value and slope accuracy without per-sample division
+        // through the full polynomial or cancellation in coth(x)-1/x.
+        static constexpr auto table = []
+        {
+            constexpr std::array p{.33333333333333331, .027160493827160494, .00063492063492063492,
+                                   5.7255322955806051e-6, 2.0654878411185444e-8, 2.5086896855690823e-11, 4.6847613175893221e-15};
+            constexpr std::array q{1.0, .14814814814814814, .0054320987654320986,
+                                   7.3613986657464919e-5, 4.0896659254147175e-7, 8.6967909099728185e-10, 4.9189993834687888e-13};
+            std::array<Langevin, 513> values{};
+            for (size_t sample = 0; sample < values.size(); ++sample)
+            {
+                const auto field = static_cast<double>(sample) * 9 / 512;
+                const auto squared = field * field;
+                double n = p.back(), d = q.back(), dn = 0, dd = 0;
+                for (int index = 5; index >= 0; --index)
+                {
+                    dn = dn * squared + n; dd = dd * squared + d;
+                    n = n * squared + p[static_cast<size_t>(index)];
+                    d = d * squared + q[static_cast<size_t>(index)];
+                }
+                const auto ratio = n / d;
+                values[sample] = {field * ratio, ratio + 2 * squared * (dn - ratio * dd) / d};
+            }
+            std::array<LangevinCell, 512> cells{};
+            for (size_t index = 0; index < cells.size(); ++index)
+            {
+                const auto d0 = values[index].derivative * (9.0 / 512);
+                const auto d1 = values[index + 1].derivative * (9.0 / 512);
+                const auto difference = values[index + 1].value - values[index].value;
+                cells[index] = {values[index].value, d0, 3 * difference - 2 * d0 - d1,
+                                -2 * difference + d0 + d1};
+            }
+            return cells;
+        }();
+        return table;
+    }
+
     template <bool needDerivative>
     State advance(const State& previous, double field) const noexcept
     {
         const auto oldEffective = previous.field + parameters.alpha * previous.magnetisation;
-        const auto initialU = std::abs(field - previous.field) / parameters.k;
+        const auto initialU = std::abs(field - previous.field) * inverseK;
         double initialGain = 0;
         if constexpr (! needDerivative) initialGain = -std::expm1(-initialU);
         double magnetisation = previous.magnetisation, irreversible = previous.irreversible, slope = 0;
@@ -134,7 +135,7 @@ private:
             const auto effective = field + parameters.alpha * magnetisation;
             const auto delta = effective - oldEffective;
             const auto distance = std::abs(delta);
-            const auto u = distance / parameters.k;
+            const auto u = distance * inverseK;
             double gain;
             if constexpr (needDerivative) gain = -std::expm1(-u);
             else
@@ -160,17 +161,17 @@ private:
                 meanDerivative = .5 + u / 6 - u * u * u / 180;
             }
             const auto direction = delta >= 0 ? 1.0 : -1.0;
-            const auto mid = evaluateLangevin<needDerivative>((effective - direction * meanDistance) / parameters.a);
-            const auto end = evaluateLangevin<needDerivative>(effective / parameters.a);
+            const auto mid = evaluateLangevin<needDerivative>((effective - direction * meanDistance) * inverseA);
+            const auto end = evaluateLangevin<needDerivative>(effective * inverseA);
             const auto difference = mid.value - previous.irreversible;
             const bool moving = direction * difference > 0;
             irreversible = moving ? previous.irreversible + gain * difference : previous.irreversible;
             magnetisation = (1 - parameters.c) * irreversible + parameters.c * end.value;
             if constexpr (needDerivative)
             {
-                const auto irreversibleSlope = moving ? gain * mid.derivative / parameters.a * meanDerivative
-                                                          + direction * decay / parameters.k * difference : 0.0;
-                const auto effectiveSlope = (1 - parameters.c) * irreversibleSlope + parameters.c * end.derivative / parameters.a;
+                const auto irreversibleSlope = moving ? gain * mid.derivative * inverseA * meanDerivative
+                                                          + direction * decay * inverseK * difference : 0.0;
+                const auto effectiveSlope = (1 - parameters.c) * irreversibleSlope + parameters.c * end.derivative * inverseA;
                 slope = effectiveSlope / std::max(.5, 1 - parameters.alpha * effectiveSlope);
             }
         }
@@ -179,6 +180,7 @@ private:
     }
 
     Material parameters;
+    double inverseA = 1 / .3, inverseK = 5;
     State state;
 };
 
@@ -206,12 +208,18 @@ public:
         auto field = std::clamp(old.field + step * (input - windingResistance * old.field)
                                               / (linearFlux + std::max(.02, old.slope) + step * windingResistance * .5),
                                 -64.0, 64.0);
-        auto candidate = core.predict(field);
+        JilesAtherton::State candidate;
         for (int iteration = 0; iteration < 6; ++iteration)
         {
             candidate = core.predict(field);
             residual = linearFlux * field + candidate.magnetisation + step * windingResistance * field * .5 - rhs;
-            if (std::abs(residual) < 1e-11) break;
+            if (std::abs(residual) < 1e-11)
+            {
+                // predict() does not mutate the core. Reuse the converged
+                // candidate instead of evaluating the identical field again.
+                core.commit(candidate);
+                return input - windingResistance * (field + old.field) * .5;
+            }
             const auto derivative = linearFlux + candidate.slope + step * windingResistance * .5;
             field = std::clamp(field - std::clamp(residual / derivative, -2.0, 2.0), -64.0, 64.0);
         }

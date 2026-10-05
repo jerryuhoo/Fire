@@ -51,7 +51,7 @@ void EnableButton::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat().reduced(0.75f);
     const bool active = getToggleState();
-    const auto accent = getColour();
+    const auto accent = fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).textPrimary : getColour();
     const auto hover = juce::jlimit(0.0f, 1.0f, hoverAnimation.current);
     const auto press = juce::jlimit(0.0f, 1.0f, pressAnimation.current);
     const auto focus = juce::jlimit(0.0f, 1.0f, focusAnimation.current);
@@ -63,16 +63,17 @@ void EnableButton::paint(juce::Graphics& g)
                                bounds.getCentreX(), bounds.getY(),
                                fire::ui::colours::surface0, bounds.getCentreX(), bounds.getBottom(), false);
     g.setGradientFill(metal);
+    if (fire::ui::isLineSkin(*this)) g.setColour(fire::ui::paletteFor(*this).surface1);
     g.fillEllipse(bounds);
 
-    g.setColour((active ? accent : fire::ui::colours::hairline)
+    g.setColour((active ? accent : fire::ui::paletteFor(*this).hairline)
                     .withAlpha((active ? 0.84f : 0.58f + hover * 0.20f)
                                * (0.48f + enabled * 0.52f)));
     g.drawEllipse(bounds, 1.0f);
 
     if (focus > 0.001f)
     {
-        g.setColour(fire::ui::colours::gold.withAlpha(0.52f * focus * enabled));
+        g.setColour((fire::ui::isLineSkin(*this)?fire::ui::paletteFor(*this).accent:fire::ui::colours::gold).withAlpha(0.52f * focus * enabled));
         g.drawEllipse(bounds.expanded(1.25f), 1.0f);
     }
 

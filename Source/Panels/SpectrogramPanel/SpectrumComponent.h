@@ -133,6 +133,8 @@ private:
 #endif
     };
     RasterCache spectrumRaster, peakRaster;
+    void lookAndFeelChanged() override
+    {spectrumRaster.dirty = peakRaster.dirty = true; repaint();}
     void updateRaster(RasterCache& cache, float scale, bool peak);
 
     // GUI-thread only members

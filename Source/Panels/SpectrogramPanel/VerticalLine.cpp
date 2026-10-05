@@ -121,6 +121,7 @@ VerticalLine::~VerticalLine()
 void VerticalLine::paint(juce::Graphics& g)
 {
     const auto bounds = getLocalBounds().toFloat();
+    const auto accent=fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).textPrimary : fire::ui::colours::flame;
     const auto hover = juce::jlimit(0.0f, 1.0f, hoverAnimation.current);
     const auto press = juce::jlimit(0.0f, 1.0f, pressAnimation.current);
     const auto focus = shouldShowKeyboardFocus() ? 1.0f : 0.0f;
@@ -135,7 +136,7 @@ void VerticalLine::paint(juce::Graphics& g)
     if (emphasis > 0.001f)
     {
         const auto glowWidth = (5.0f + press * 3.0f) / physicalScale;
-        g.setColour(fire::ui::colours::flame.withAlpha(0.10f * emphasis));
+        g.setColour(accent.withAlpha(0.10f * emphasis));
         g.fillRoundedRectangle(centreX - glowWidth * 0.5f,
                                bounds.getY(),
                                glowWidth,
@@ -143,7 +144,7 @@ void VerticalLine::paint(juce::Graphics& g)
                                glowWidth * 0.5f);
     }
 
-    g.setColour(fire::ui::colours::flame.withAlpha(0.46f + 0.50f * emphasis));
+    g.setColour(accent.withAlpha(0.46f + 0.50f * emphasis));
     g.fillRect(centreX - lineWidth * 0.5f,
                bounds.getY(),
                lineWidth,
@@ -157,12 +158,12 @@ void VerticalLine::paint(juce::Graphics& g)
     if (emphasis > 0.001f)
     {
         const auto halo = handle.expanded((1.5f + press) / physicalScale);
-        g.setColour(fire::ui::colours::flame.withAlpha(0.12f * emphasis));
+        g.setColour(accent.withAlpha(0.12f * emphasis));
         g.fillEllipse(halo);
     }
-    g.setColour(fire::ui::colours::surface1.withAlpha(0.96f));
+    g.setColour(fire::ui::paletteFor(*this).surface1.withAlpha(0.96f));
     g.fillEllipse(handle);
-    g.setColour(fire::ui::colours::flame.withAlpha(0.72f + 0.28f * emphasis));
+    g.setColour(accent.withAlpha(0.72f + 0.28f * emphasis));
     g.drawEllipse(handle.reduced(0.5f / physicalScale), lineWidth);
 
     if (focus > 0.0f)

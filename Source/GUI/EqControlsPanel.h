@@ -356,7 +356,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         g.setColour(fire::ui::paletteFor(*this).textSecondary);
-        g.setFont(fire::ui::labelFont(11 * scale));
+        g.setFont(fire::ui::isLineSkin(*this) ? fire::ui::portfolioMonoFont(10*scale) : fire::ui::labelFont(11*scale));
         auto title = selected >= 0 ? header.withWidth(juce::roundToInt(70 * scale))
                                   : header.withTrimmedRight(juce::roundToInt(76 * scale));
         if (selected >= 0)
@@ -418,7 +418,9 @@ private:
         {
             const float size = juce::jmin(getWidth(), getHeight()) * (0.29f + 0.48f * expansion.current);
             auto dot = getLocalBounds().toFloat().withSizeKeepingCentre(size, size);
-            const auto colour = getToggleState() ? fire::ui::colours::filter : fire::ui::paletteFor(*this).textMuted;
+            const auto colour = getToggleState()
+                ? (fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).textPrimary : fire::ui::colours::filter)
+                : fire::ui::paletteFor(*this).textMuted;
             g.setColour(colour.withAlpha(getToggleState() ? 0.20f : (isMouseOver() ? 0.7f : 0.32f)));
             g.fillEllipse(dot);
             if (getToggleState() || hasKeyboardFocus(false))

@@ -2642,6 +2642,7 @@ namespace state
         nextButton.setTitle("Next preset");
         styleHeaderButton(savePresetButton, fire::ui::colours::positive);
         savePresetButton.setComponentID("header_action");
+        savePresetButton.getProperties().set("firePrimaryAction",true);
         savePresetButton.setTitle("Save preset");
         savePresetButton.setTooltip("Save preset");
         savePresetButton.setColour(juce::TextButton::textColourOffId,
@@ -3732,8 +3733,8 @@ namespace state
         presetMenu.addItem(6, "Settings", true);
         juce::PopupMenu skins;
         const auto currentSkin = fire::ui::skinFor(*this);
-        skins.addItem(9, "Modern", true, currentSkin == fire::ui::Skin::modern);
-        skins.addItem(10, "Vintage", true, currentSkin == fire::ui::Skin::vintage);
+        for (const auto skin : fire::ui::skins)
+            skins.addItem(9 + static_cast<int>(skin), fire::ui::skinName(skin), true, currentSkin == skin);
         presetMenu.addSubMenu("Skin", skins);
 
         const auto menuScale = getPresetMenuScale();
@@ -3790,11 +3791,11 @@ namespace state
 
     void StateComponent::handlePresetMenuResult(int result)
     {
-        if (result == 9 || result == 10)
+        if (result >= 9 && result < 9 + static_cast<int>(fire::ui::skins.size()))
         {
             const juce::Component::SafePointer<StateComponent> safe(this);
             auto& properties = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor()).getAppSettings();
-            properties.setValue(fire::ui::skinSetting, result == 10 ? 1 : 0);
+            properties.setValue(fire::ui::skinSetting, result - 9);
             if (safe) properties.saveIfNeeded();
             return;
         }

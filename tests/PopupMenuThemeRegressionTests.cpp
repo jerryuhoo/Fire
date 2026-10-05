@@ -193,6 +193,43 @@ TEST_CASE("Vintage dropdowns use the same recessed display as the preset selecto
     }
 }
 
+TEST_CASE("Line skins show the selected tab and preserve icon-only controls",
+          "[skin][line-skin][ui][icons][selection][pixels][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel look;
+    for (const auto skin : {fire::ui::Skin::paper,fire::ui::Skin::ink})
+    {
+        look.setSkin(skin);
+        juce::TextButton button;
+        button.setSize(36,36);
+        button.getProperties().set("fireAnimatedSelection",true);
+        button.setLookAndFeel(&look);
+        const auto render=[&]
+        {
+            juce::Image result(juce::Image::ARGB,36,36,true);
+            juce::Graphics g(result);
+            look.drawButtonBackground(g,button,juce::Colours::transparentBlack,false,false);
+            return result;
+        };
+        button.setComponentID("workspace_tab");
+        const auto inactive=render();
+        button.setToggleState(true,juce::dontSendNotification);
+        const auto active=render();
+        CHECK(imageFingerprint(inactive)!=imageFingerprint(active));
+        button.setToggleState(false,juce::dontSendNotification);
+        button.setComponentID("ordinary");
+        const auto blank=render();
+        for(const auto* id : {"zoom","slider_up_arrow","slider_down_arrow","left_arrow","right_arrow","low_cut","high_cut","band_pass"})
+        {
+            CAPTURE(id,static_cast<int>(skin));
+            button.setComponentID(id);
+            CHECK(imageFingerprint(render())!=imageFingerprint(blank));
+        }
+        button.setLookAndFeel(nullptr);
+    }
+}
+
 TEST_CASE("Fire context menus inherit their target theme and cursor anchor",
           "[ui][popup-menu][theme][anchor]")
 {

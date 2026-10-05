@@ -640,7 +640,7 @@ void FireAudioProcessorEditor::applySkin(fire::ui::Skin skin)
     if (previous == skin && getProperties().contains(fire::ui::skinProperty)) return;
     const juce::Component::SafePointer<FireAudioProcessorEditor> safe(this);
     fire::ui::setSkin(*this, skin);
-    if (skin == fire::ui::Skin::vintage)
+    if (skin != fire::ui::Skin::modern)
         workspaceSelection.snapTo(static_cast<float>(activeWorkspace));
     fireLookAndFeel.setSkin(skin);
     fire::ui::remapSkinColours(*this, previous, skin);
@@ -1217,7 +1217,7 @@ void FireAudioProcessorEditor::rebuildBackgroundCache()
                 fire::ui::drawWalnutRail(cacheGraphics, beam, scale);
             }
         }
-        if (!fire::ui::isVintage(*this)) fire::ui::drawTechGrid(
+        if (fire::ui::skinFor(*this) == fire::ui::Skin::modern) fire::ui::drawTechGrid(
             cacheGraphics,
             getLocalBounds().toFloat(),
             juce::jmax(20.0f, 28.0f * fireLookAndFeel.scale),
@@ -1236,6 +1236,11 @@ void FireAudioProcessorEditor::rebuildBackgroundCache()
             ? juce::Colour(0xffd9d5c8) : fire::ui::paletteFor(*this).surface1);
         cacheGraphics.setGradientFill(headerFill);
         cacheGraphics.fillRect(header);
+        if (fire::ui::isLineSkin(*this))
+        {
+            cacheGraphics.setColour(fire::ui::paletteFor(*this).canvas);
+            cacheGraphics.fillRect(header);
+        }
         if (fire::ui::isVintage(*this))
         {
             const auto scale = fireLookAndFeel.scale;
@@ -1363,12 +1368,12 @@ void FireAudioProcessorEditor::advanceAnimations(float deltaSeconds)
             ember.x -= 1.0f;
     }
 
-    if (fire::ui::isVintage(*this) && !workspaceSelection.isSettled())
+    if (!fire::ui::usesNavigationMotion(*this) && !workspaceSelection.isSettled())
     {
         workspaceSelection.snapTo(static_cast<float>(activeWorkspace));
         repaint(navigationArea);
     }
-    else if (!fire::ui::isVintage(*this) && workspaceSelection.advance(deltaSeconds))
+    else if (fire::ui::usesNavigationMotion(*this) && workspaceSelection.advance(deltaSeconds))
         repaint(navigationArea);
 
     if (hostBypassIndicatorOpacity.advance(deltaSeconds, 0.10f))
@@ -1457,7 +1462,7 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
     const auto particleArea = headerArea.toFloat();
     for (const auto& ember : headerEmbers)
     {
-        if (headerEnergy == 0.0f) break;
+        if (headerEnergy == 0.0f || fire::ui::isLineSkin(*this)) break;
         const auto pulse = std::sin(ember.phase + fireLogoMotion.phase());
         const auto alpha = 0.055f * headerEnergy * (0.45f + 0.55f * pulse * pulse);
         const juce::Point<float> point {
@@ -1476,24 +1481,50 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
     seam.addColour(0.55, fire::ui::colours::flame.withAlpha(0.14f * headerEnergy));
     seam.addColour(1.0, fire::ui::colours::ember.withAlpha(0.0f));
     g.setGradientFill(seam);
-    g.fillRect(0.0f, seamY, static_cast<float>(headerArea.getWidth()), 1.0f);
+    if (!fire::ui::isLineSkin(*this))
+        g.fillRect(0.0f, seamY, static_cast<float>(headerArea.getWidth()), 1.0f);
 
     auto brand = logoArea.toFloat().reduced(2.0f, 3.0f);
-    auto glyph = brand.removeFromLeft(brand.getHeight()).reduced(3.0f * fireLookAndFeel.scale);
-    fire::ui::drawFireGlyph(g, glyph, headerEnergy, fireLogoMotion.phase(), fireLogoMotion.attack());
-    brand.removeFromLeft(5.0f * fireLookAndFeel.scale);
-    auto title = brand.removeFromTop(brand.getHeight() * 0.62f);
-    g.setFont(fire::ui::displayFont(18.0f * fireLookAndFeel.scale));
-    g.setColour((fire::ui::isVintage(*this)?juce::Colour(0xfff0e2bd):fire::ui::paletteFor(*this).textPrimary));
-    g.drawText("FIRE", title, juce::Justification::centredLeft);
-    g.setFont(fire::ui::labelFont(9.0f * fireLookAndFeel.scale));
-    g.setColour((fire::ui::isVintage(*this)?juce::Colour(0xfff0e2bd):fire::ui::paletteFor(*this).textMuted));
-    g.drawText("MULTIBAND REACTOR", brand, juce::Justification::centredLeft);
+    if (fire::ui::isLineSkin(*this))
+    {
+        auto title=brand.removeFromTop(brand.getHeight()*.67f);
+        const auto font=fire::ui::portfolioFont(25*fireLookAndFeel.scale,true);
+        const auto width=juce::GlyphArrangement::getStringWidth(font,"Fire");
+        g.setFont(font);
+        g.setColour(fire::ui::paletteFor(*this).textPrimary);
+        const auto baseline=juce::roundToInt(title.getCentreY()+font.getAscent()*.40f);
+        g.drawSingleLineText("Fire",juce::roundToInt(title.getX()),baseline);
+        g.setColour(fire::ui::lineBrandAccent(fire::ui::skinFor(*this)));
+        g.drawSingleLineText(".",juce::roundToInt(title.getX()+width),baseline);
+        g.setFont(fire::ui::portfolioMonoFont(7.8f*fireLookAndFeel.scale));
+        g.setColour(fire::ui::paletteFor(*this).textMuted);
+        g.drawText("MULTIBAND REACTOR",brand,juce::Justification::centredLeft);
+    }
+    else
+    {
+        auto glyph = brand.removeFromLeft(brand.getHeight()).reduced(3.0f * fireLookAndFeel.scale);
+        fire::ui::drawFireGlyph(g,glyph,headerEnergy,fireLogoMotion.phase(),fireLogoMotion.attack());
+        brand.removeFromLeft(5.0f * fireLookAndFeel.scale);
+        auto title = brand.removeFromTop(brand.getHeight() * 0.62f);
+        g.setFont(fire::ui::displayFont(18.0f * fireLookAndFeel.scale));
+        g.setColour((fire::ui::isVintage(*this)?juce::Colour(0xfff0e2bd):fire::ui::paletteFor(*this).textPrimary));
+        g.drawText("FIRE", title, juce::Justification::centredLeft);
+        g.setFont(fire::ui::labelFont(9.0f * fireLookAndFeel.scale));
+        g.setColour((fire::ui::isVintage(*this)?juce::Colour(0xfff0e2bd):fire::ui::paletteFor(*this).textMuted));
+        g.drawText("MULTIBAND REACTOR", brand, juce::Justification::centredLeft);
+    }
 
     auto signature = wingsArea.toFloat().reduced(4.0f, 5.0f);
     auto wings = signature.removeFromLeft(30.0f * fireLookAndFeel.scale);
-    fire::ui::brand::drawWingsMark(g, wings.withSizeKeepingCentre(28.0f * fireLookAndFeel.scale,
-                                                               28.0f * fireLookAndFeel.scale));
+    const auto wingsBounds = wings.withSizeKeepingCentre(28.0f * fireLookAndFeel.scale,28.0f * fireLookAndFeel.scale);
+    if (fire::ui::isLineSkin(*this))
+    {
+        const auto& mark = fire::ui::brand::wingsPath();
+        g.setColour(fire::ui::paletteFor(*this).textPrimary);
+        g.strokePath(mark,juce::PathStrokeType(juce::jmax(.7f,.8f*fireLookAndFeel.scale),
+            juce::PathStrokeType::curved,juce::PathStrokeType::rounded),mark.getTransformToScaleToFit(wingsBounds,true));
+    }
+    else fire::ui::brand::drawWingsMark(g,wingsBounds);
     signature.removeFromLeft(4.0f * fireLookAndFeel.scale);
     g.setFont(fire::ui::labelFont(8.0f * fireLookAndFeel.scale));
     g.setColour((fire::ui::isVintage(*this)?juce::Colour(0xfff0e2bd):fire::ui::paletteFor(*this).textSecondary));
@@ -1508,7 +1539,7 @@ void FireAudioProcessorEditor::drawWorkspaceSelection(juce::Graphics& g)
 {
     // Vintage keys carry their own selected lamp; no sliding plate is drawn
     // underneath them. Modern keeps its moving selection indicator.
-    if (fire::ui::isVintage(*this) || navigationArea.isEmpty() || zoomButton.getToggleState())
+    if (!fire::ui::usesNavigationMotion(*this) || navigationArea.isEmpty() || zoomButton.getToggleState())
         return;
 
     const std::array<juce::Rectangle<float>, 3> tabBounds {
@@ -1899,7 +1930,7 @@ void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animate
     // Graph visibility callbacks can synchronously repaint, so changing the
     // source afterwards exposes one frame from the previous workspace.
     synchroniseHistorySourceForWorkspace(activeWorkspace);
-    if (!fire::ui::isVintage(*this) && animateSelection && isShowing() && ! navigationArea.isEmpty())
+    if (fire::ui::usesNavigationMotion(*this) && animateSelection && isShowing() && ! navigationArea.isEmpty())
         workspaceSelection.setTarget(static_cast<float>(activeWorkspace));
     else
         workspaceSelection.snapTo(static_cast<float>(activeWorkspace));

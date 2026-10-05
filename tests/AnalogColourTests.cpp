@@ -15,6 +15,7 @@ template <typename T, typename Predicate> T* find(juce::Component& root, Predica
     for (auto* child : root.getChildren()) if (auto* value = find<T>(*child, predicate)) return value;
     return nullptr;
 }
+
 void advanceHardwareFor(fire::ui::HardwareColourPanel& panel, int model, float drive,
                         float peak, float seconds, int framesPerSecond = 60)
 {
@@ -410,4 +411,33 @@ TEST_CASE("Tape reels turn continuously across full rotations and transport chan
     }
     for (int turns : fullRotations) CHECK(turns > 10);
     CHECK(distance[1] / distance[0] == Catch::Approx(1.075).margin(1.0e-4));
+}
+
+
+TEST_CASE("Line hardware skins preserve responsive filaments and continuous tape transport",
+          "[skin][line-skin][analog-colour][ui][hardware][render]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    fire::ui::HardwareColourPanel panel;
+    panel.setSize(340,260); panel.setVisible(true);
+    for (const auto skin : {fire::ui::Skin::paper,fire::ui::Skin::ink})
+    {
+        fire::ui::setSkin(panel,skin);
+        advanceHardwareFor(panel,0,35,0,2);
+        const auto silent=panel.createComponentSnapshot(panel.getLocalBounds());
+        CHECK(panel.getFilamentBrightness()==0);
+        advanceHardwareFor(panel,0,35,.15f,1);
+        CHECK(panel.getFilamentBrightness()>.20f);
+        const auto active=panel.createComponentSnapshot(panel.getLocalBounds());
+        int changed=0;
+        for(int y=0;y<active.getHeight();++y)
+            for(int x=0;x<active.getWidth();++x)
+                changed+=silent.getPixelAt(x,y)!=active.getPixelAt(x,y);
+        CHECK(changed>100);
+        preview(panel,juce::String(fire::ui::skinName(skin)).toLowerCase()+"-tube");
+        const auto phase=panel.getTransportPhase(1);
+        advanceHardwareFor(panel,11,30,.2f,.5f);
+        CHECK(std::remainder(panel.getTransportPhase(1)-phase,juce::MathConstants<float>::twoPi)>0);
+        preview(panel,juce::String(fire::ui::skinName(skin)).toLowerCase()+"-tape");
+    }
 }

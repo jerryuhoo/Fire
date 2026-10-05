@@ -246,7 +246,7 @@ public:
         refresh();
         if (! safe) return;
         updateSelection(false);
-        if (isVintage(*this))
+        if (!usesNavigationMotion(*this))
         {
             // Skin changes also settle an in-flight selection whose row was
             // removed; drag auto-scroll below remains fully operational.
@@ -411,6 +411,7 @@ private:
         explicit Content(EffectRackNavigation& p) : owner(p) {}
         void paint(juce::Graphics& g) override
         {
+            if (isLineSkin(owner)) return;
             if (! owner.selectionInitialised || ! owner.selectedButton()) return;
             const auto margin = juce::jmax(1.0f, 2.0f * owner.scale);
             auto bounds = juce::Rectangle<float>(margin, owner.selectionY.current, getWidth() - margin * 2,
@@ -642,7 +643,7 @@ private:
         auto* selected = selectedButton();
         if (! selected) return;
         const auto y = static_cast<float>(selected->getY());
-        if (! selectionInitialised || ! isShowing() || isVintage(*this))
+        if (! selectionInitialised || ! isShowing() || !usesNavigationMotion(*this))
         {
             const auto previousY = selectionY.current;
             selectionY.snapTo(y);
@@ -682,7 +683,7 @@ private:
     }
     void lookAndFeelChanged() override
     {
-        if (! isVintage(*this)) return;
+        if (usesNavigationMotion(*this)) return;
         updateSelection(false);
         selectionY.snapTo(selectionY.target);
         content.repaint();

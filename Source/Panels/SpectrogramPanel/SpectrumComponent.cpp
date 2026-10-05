@@ -406,6 +406,15 @@ void SpectrumComponent::rebuildPaths(bool rebuildSpectrum, bool rebuildPeak)
 void SpectrumComponent::drawSpectrumContent(juce::Graphics& g)
 {
     const auto bounds = getLocalBounds().toFloat();
+    if (fire::ui::isLineSkin(*this) && mStyle == 1)
+    {
+        g.setColour(fire::ui::paletteFor(*this).textPrimary.withAlpha(.035f));
+        g.fillPath(spectrumFillPath);
+        g.setColour(fire::ui::paletteFor(*this).textPrimary.withAlpha(.88f));
+        g.strokePath(spectrumLinePath,juce::PathStrokeType(1.1f,
+            juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+        return;
+    }
     if (mStyle == 1)
     {
         juce::ColourGradient fill(fire::ui::colours::flame.withAlpha(0.10f),
@@ -506,7 +515,7 @@ void SpectrumComponent::paint(juce::Graphics& g)
         }
         else
         {
-            g.setColour(fire::ui::colours::textSecondary.withAlpha(specAlpha * opacity));
+            g.setColour(fire::ui::paletteFor(*this).textSecondary.withAlpha(specAlpha * opacity));
             g.drawImage(spectrumRaster.image, bounds, juce::RectanglePlacement::stretchToFit, true);
         }
     }
@@ -515,7 +524,8 @@ void SpectrumComponent::paint(juce::Graphics& g)
         && ! peakLinePath.isEmpty())
     {
         updateRaster(peakRaster, scale, true);
-        g.setColour(fire::ui::colours::whiteHot.withAlpha(hover * opacity));
+        g.setColour((fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).textBright
+                     : fire::ui::colours::whiteHot).withAlpha(hover * opacity));
         g.drawImage(peakRaster.image, bounds, juce::RectanglePlacement::stretchToFit, true);
     }
 
@@ -542,14 +552,16 @@ void SpectrumComponent::paint(juce::Graphics& g)
         g.reduceClipRegion(popup.getSmallestIntegerContainer().expanded(1));
         g.beginTransparencyLayer(hover * opacity);
 
-        fire::ui::drawGlassPill(g, popup, fire::ui::colours::ember, true, false, false);
+        if (fire::ui::isLineSkin(*this))
+            fire::ui::drawPanel(g,popup,fire::ui::paletteFor(*this).accent,true,fire::ui::skinFor(*this));
+        else fire::ui::drawGlassPill(g, popup, fire::ui::colours::ember, true, false, false);
         g.setFont(fire::ui::displayFont(11.0f));
-        g.setColour(fire::ui::colours::whiteHot);
+        g.setColour(fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).textBright : fire::ui::colours::whiteHot);
         g.drawText(juce::String(maxDecibelValue, 1) + " dB",
                    popup.removeFromTop(popupHeight * 0.52f).reduced(8.0f, 0.0f),
                    juce::Justification::centredLeft);
         g.setFont(fire::ui::bodyFont(10.0f));
-        g.setColour(fire::ui::colours::textSecondary);
+        g.setColour(fire::ui::paletteFor(*this).textSecondary);
         const auto frequencyText = maxFreq >= 1000.0f
                                      ? juce::String(maxFreq / 1000.0f, 2) + " kHz"
                                      : juce::String(juce::roundToInt(maxFreq)) + " Hz";

@@ -6,7 +6,15 @@
 
 ![Fire 2.0 Modern skin with Tape Saturation, reel-to-reel hardware and three-band processing](Fire2.png)
 
-**Modern · Studio Tape** — Graphite and aluminium styling with signal-driven tape reels. Both skins share the same DSP and can be selected from **Menu → Skin** or **Settings**.
+**Modern · Studio Tape** — Graphite and aluminium styling with signal-driven tape reels. Four skins share the same DSP and can be selected from **Menu → Skin** or **Settings**.
+
+**Paper / Ink** — Two minimal line-art skins inspired by the Blue Wings portfolio:
+warm paper with dark ink, or the Fire website's blue-black page with warm white
+text and peach accents. Both use the website's colours and typography. Flat controls, fine outlines,
+monospaced values and schematic tube/tape displays keep the interface quiet.
+Modulation-source colours remain identifiable, tube filaments still respond to
+audio, and tape reels retain their continuous transport. The selected appearance
+persists locally and does not alter presets, processing or undo history.
 
 ## 1. Introduce
 
@@ -619,18 +627,19 @@ These optimisations keep the physical models, RF clock and head-loss filters.
 
 Analog pages use a hardware faceplate. Tube filaments follow the band or master input level, with Drive increasing their intensity. Silence extinguishes the glow even at maximum Drive; a perceptual level curve keeps quiet signals visible at modest Drive, with a quick attack and a short cooling tail. The tape transport turns while audio arrives and winds down when callbacks stop. The artwork is cached and animation runs only while its panel is visible. Both Band Shape and independently added Master/Band Shape instances offer these colours; each added analog Shape has its own Drive control.
 
-Choose **Menu → Skin → Modern / Vintage**, or use the two appearance buttons
+Choose **Menu → Skin → Modern / Vintage / Paper / Ink**, or use the four appearance buttons
 in **Settings**. Modern uses graphite and aluminium; Vintage combines a bevelled walnut cabinet rail
 and recessed charcoal control fascia with solid walnut side cheeks and a front rail,
 warm grey metal operating panels, physical keycaps, dark ribbed bakelite knobs
 and cream scales. The choice is saved as a local
 appearance preference. Existing open instances keep their selected skin;
 new instances use the saved preference. Switching skins preserves the current
-sound, preset and undo history. Vintage workspace, module and LFO selections
+sound, preset and undo history. Vintage, Paper and Ink workspace, module and LFO selections
 change immediately; Modern retains its sliding selection indicators.
 The tape display includes reel hubs, guide
 rollers and a head shield; the colour display has graduated, uncalibrated
-intensity scales and a moving needle. Both skins keep the independent,
+intensity scales and a moving needle. Paper and Ink use responsive schematic
+line drawings for tubes, tape reels and circuits. All four skins keep the independent,
 continuous reel animation and signal-driven tube illumination.
 
 Use **CHAIN → +** in either **Master Lab** or **Band Lab** to select a DSP module. Both workspaces share Drive, Shape, Compressor, OTT, Stereo, EQ, Lo-Fi, Chorus, Flanger, Phaser, Delay, Reverb, Granular and Chord Resonator. Every row, including the initial modules, can be bypassed, moved or removed with its **−** button. Removed modules can be added again, and each chain supports up to eight additional independent instances. Master Analysis is a removable display page. The module rail keeps five fixed-height rows visible and scrolls as more effects are added. The selected module scrolls into view automatically.

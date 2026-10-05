@@ -23,6 +23,15 @@ void drawMinimalSurface(juce::Graphics& g, const juce::Component& owner, juce::R
         return;
 
     bounds = bounds.reduced(0.5f);
+    if (fire::ui::isLineSkin(owner))
+    {
+        const auto& palette = fire::ui::paletteFor(owner);
+        g.setColour(palette.canvas);
+        g.fillRect(bounds);
+        g.setColour(palette.hairline);
+        g.drawLine(bounds.getX(),bounds.getY(),bounds.getRight(),bounds.getY(),.85f);
+        return;
+    }
     juce::ColourGradient fill(fire::ui::paletteFor(owner).surface1.withAlpha(fire::ui::isVintage(owner) ? 1.0f : 0.72f),
                               bounds.getX(), bounds.getY(),
                               fire::ui::paletteFor(owner).surface0.withAlpha(fire::ui::isVintage(owner) ? 1.0f : 0.88f),
@@ -41,7 +50,8 @@ void drawMinimalTitle(juce::Graphics& g, const juce::Component& owner,
                       juce::Rectangle<float> bounds,
                       const juce::String& text)
 {
-    g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, bounds.getHeight() * 0.46f)));
+    const auto height=juce::jlimit(10.0f,20.0f,bounds.getHeight()*.46f);
+    g.setFont(fire::ui::isLineSkin(owner) ? fire::ui::portfolioMonoFont(height) : fire::ui::labelFont(height));
     g.setColour(fire::ui::paletteFor(owner).textSecondary.withAlpha(0.82f));
     g.drawText(text.toUpperCase(), bounds, juce::Justification::centredLeft);
 }
@@ -611,7 +621,7 @@ void GlobalPanel::setRoundButton(juce::TextButton& button, juce::String, juce::S
 
 void GlobalPanel::lookAndFeelChanged()
 {
-    if (fire::ui::isVintage(*this))
+    if (!fire::ui::usesNavigationMotion(*this))
         selectionY.snapTo(selectionY.target);
     // A skin change can arrive at the same size and display scale. Never
     // reuse the previous skin's rasterised panel chrome in that case.
@@ -784,7 +794,7 @@ void GlobalPanel::animationTick(float deltaSeconds)
     }
 
     bool changed = false;
-    if (fire::ui::isVintage(*this))
+    if (!fire::ui::usesNavigationMotion(*this))
     {
         changed = !juce::approximatelyEqual(selectionY.current, selectionY.target);
         selectionY.snapTo(selectionY.target);
@@ -831,7 +841,7 @@ void GlobalPanel::updateSelectionTarget(bool snap)
 
     const auto selectionInset = juce::jmax(0.5f, 1.0f * scale);
     const auto targetY = static_cast<float>(selectedSwitch->getY()) + selectionInset;
-    if (snap || fire::ui::isVintage(*this) || ! selectionAnimationInitialised || ! isShowing())
+    if (snap || !fire::ui::usesNavigationMotion(*this) || ! selectionAnimationInitialised || ! isShowing())
     {
         selectionY.snapTo(targetY);
         selectionAnimationInitialised = true;

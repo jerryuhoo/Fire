@@ -24,6 +24,15 @@ void drawMinimalSurface(juce::Graphics& g, const juce::Component& owner, juce::R
         return;
 
     bounds = bounds.reduced(0.5f);
+    if (fire::ui::isLineSkin(owner))
+    {
+        const auto& palette = fire::ui::paletteFor(owner);
+        g.setColour(palette.canvas);
+        g.fillRect(bounds);
+        g.setColour(palette.hairline);
+        g.drawLine(bounds.getX(),bounds.getY(),bounds.getRight(),bounds.getY(),.85f);
+        return;
+    }
     juce::ColourGradient fill(fire::ui::paletteFor(owner).surface1.withAlpha(fire::ui::isVintage(owner) ? 1.0f : 0.72f),
                               bounds.getX(), bounds.getY(),
                               fire::ui::paletteFor(owner).surface0.withAlpha(fire::ui::isVintage(owner) ? 1.0f : 0.88f),
@@ -42,7 +51,8 @@ void drawMinimalTitle(juce::Graphics& g, const juce::Component& owner,
                       juce::Rectangle<float> bounds,
                       const juce::String& text)
 {
-    g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, bounds.getHeight() * 0.46f)));
+    const auto height=juce::jlimit(10.0f,20.0f,bounds.getHeight()*.46f);
+    g.setFont(fire::ui::isLineSkin(owner) ? fire::ui::portfolioMonoFont(height) : fire::ui::labelFont(height));
     g.setColour(fire::ui::paletteFor(owner).textSecondary.withAlpha(0.82f));
     g.drawText(text.toUpperCase(), bounds, juce::Justification::centredLeft);
 }
@@ -499,7 +509,7 @@ void BandPanel::setupComponentGroups()
 
 void BandPanel::lookAndFeelChanged()
 {
-    if (fire::ui::isVintage(*this))
+    if (!fire::ui::usesNavigationMotion(*this))
         moduleSelectionPosition.snapTo(moduleSelectionPosition.target);
     // A skin change can arrive at the same size and display scale. Never
     // reuse the previous skin's rasterised panel chrome in that case.
@@ -1140,7 +1150,7 @@ void BandPanel::setAnimatedModuleTarget(int moduleIndex)
 {
     moduleIndex = juce::jlimit(0, 4, moduleIndex);
     const auto targetPosition = static_cast<float>(moduleIndex);
-    if (fire::ui::isVintage(*this))
+    if (!fire::ui::usesNavigationMotion(*this))
     {
         moduleSelectionPosition.snapTo(targetPosition);
         repaint();
@@ -1290,7 +1300,7 @@ void BandPanel::animationTick(float deltaSeconds)
         return;
     }
 
-    if (fire::ui::isVintage(*this))
+    if (!fire::ui::usesNavigationMotion(*this))
     {
         const auto oldBounds = getModuleSelectionBounds(moduleSelectionPosition.current);
         const bool moved = !juce::approximatelyEqual(moduleSelectionPosition.current,

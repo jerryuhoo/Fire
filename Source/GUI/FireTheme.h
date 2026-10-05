@@ -395,6 +395,28 @@ inline juce::Font bodyFont(float height = 13.0f)
     return juce::Font { juce::FontOptions().withHeight(height) };
 }
 
+inline juce::Font portfolioFont(float height, bool medium=false)
+{
+   #if JUCE_MAC
+    const auto name="Helvetica Neue";
+   #else
+    const auto name="Arial";
+   #endif
+    return juce::Font{juce::FontOptions().withName(name).withStyle(medium ? "Medium" : "Regular").withHeight(height)};
+}
+
+inline juce::Font portfolioMonoFont(float height)
+{
+   #if JUCE_MAC
+    const auto name="SFMono-Regular";
+   #elif JUCE_WINDOWS
+    const auto name="Consolas";
+   #else
+    const auto name="Liberation Mono";
+   #endif
+    return juce::Font{juce::FontOptions().withName(name).withHeight(height)};
+}
+
 inline juce::Font labelFont(float height = 11.0f)
 {
     return juce::Font { juce::FontOptions().withHeight(height).withStyle("Bold") };
@@ -428,9 +450,26 @@ inline float pixelAligned(float value, float physicalScale = 1.0f)
     return (std::floor(value * physicalScale) + 0.5f) / physicalScale;
 }
 
+inline void drawPortfolioDots(juce::Graphics& g, juce::Rectangle<float> bounds, Skin skin, float scale=1.0f)
+{
+    if (bounds.isEmpty()) return;
+    const auto step=22*juce::jmax(.5f,scale);
+    const auto diameter=1.5f*juce::jmax(.5f,scale);
+    g.setColour(skin==Skin::paper ? juce::Colour(0x80b6b8ad) : juce::Colour(0x8046505b));
+    for(float y=bounds.getY()+step*.5f;y<bounds.getBottom();y+=step)
+        for(float x=bounds.getX()+step*.5f;x<bounds.getRight();x+=step)
+            g.fillEllipse(x,y,diameter,diameter);
+}
+
 inline void drawCanvas(juce::Graphics& g, juce::Rectangle<float> bounds, Skin skin = Skin::modern)
 {
     const auto& palette = skinPalette(skin);
+    if (isLineSkin(skin))
+    {
+        g.setColour(palette.canvas);
+        g.fillRect(bounds);
+        return;
+    }
     if (skin == Skin::vintage)
     {
         // A quiet painted-metal desk; the editor owns the separate walnut
@@ -494,6 +533,14 @@ inline void drawPanel(juce::Graphics& g, juce::Rectangle<float> bounds,
     if (bounds.isEmpty()) return;
     const auto& palette = skinPalette(skin);
     const auto area = bounds.reduced(.5f);
+    if (isLineSkin(skin))
+    {
+        g.setColour(palette.surface1);
+        g.fillRoundedRectangle(area, 3.0f);
+        g.setColour(palette.hairline);
+        g.drawRoundedRectangle(area, 3.0f, 0.85f);
+        return;
+    }
     juce::ColourGradient metal(palette.surface1.brighter(0.045f), area.getTopLeft(),
                                palette.surface0, area.getBottomLeft(), false);
     metal.addColour(0.42, palette.surface1);

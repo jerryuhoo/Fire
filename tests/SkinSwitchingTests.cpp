@@ -172,18 +172,19 @@ TEST_CASE("Skin switching redraws every workspace and returns to Modern without 
     const auto presetBefore = soundXml(processor);
     const auto presetIdentity = processor.statePresets.getCurrentPresetKey();
 
+    for (const auto skin : {Skin::vintage,Skin::paper,Skin::ink})
     for (const auto* workspace : {"BAND LAB", "MASTER LAB", "MOD FORGE"})
     {
-        CAPTURE(workspace);
+        CAPTURE(workspace,static_cast<int>(skin));
         selectWorkspace(editor, workspace);
         const auto bounds = editor.getBounds();
         const auto label = juce::String(workspace).toLowerCase().replaceCharacter(' ', '-');
         editor.setSkinPreference(Skin::modern);
         const auto modern = skinSnapshot(editor, "modern-" + label);
-        editor.setSkinPreference(Skin::vintage);
+        editor.setSkinPreference(skin);
         CHECK(editor.getBounds() == bounds);
-        CHECK(editor.getSkinPreference() == Skin::vintage);
-        const auto vintage = skinSnapshot(editor, "vintage-" + label);
+        CHECK(editor.getSkinPreference() == skin);
+        const auto vintage = skinSnapshot(editor,juce::String(fire::ui::skinName(skin)).toLowerCase()+"-"+label);
         CHECK(changedPixelFraction(modern, vintage) > 0.10);
         editor.setSkinPreference(Skin::modern);
         const auto restored = skinSnapshot(editor);
@@ -386,10 +387,10 @@ TEST_CASE("EQ and Drive layouts stay separated in both skins and all supported s
                     CHECK_FALSE(child->getBounds().intersects(other->getBounds()));
         }
     };
-    for (const auto skin : {Skin::modern, Skin::vintage})
+    for (const auto skin : fire::ui::skins)
     {
         editor.setSkinPreference(skin);
-        const auto prefix = skin == Skin::vintage ? "vintage-" : "modern-";
+        const auto prefix = juce::String(fire::ui::skinName(skin)).toLowerCase()+"-";
         for (const int width : {1000, 1400, 2000})
         {
             CAPTURE(static_cast<int>(skin), width);
@@ -424,4 +425,88 @@ TEST_CASE("EQ and Drive layouts stay separated in both skins and all supported s
     // Layout and skin changes must not migrate the legacy sound implicitly.
     CHECK(processor.treeState.getRawParameterValue(fire::drive_comp::parameterID(0))->load() == 0.0f);
     CHECK(processor.treeState.getRawParameterValue("linked1")->load() == 1.0f);
+}
+
+TEST_CASE("Paper and Ink preferences persist with readable settings and library surfaces",
+          "[skin][line-skin][ui][preferences][layout][render][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    SkinTestFiles files;
+    FireAudioProcessor processor;
+    files.prepare(processor,"line");
+    FireAudioProcessorEditor editor(processor);
+    prepareEditor(editor);
+    const auto before = soundXml(processor);
+    for (const auto skin : {Skin::paper,Skin::ink})
+    {
+        CAPTURE(static_cast<int>(skin));
+        editor.setSkinPreference(skin);
+        CHECK(processor.getAppSettings().getIntValue(fire::ui::skinSetting,-1)==static_cast<int>(skin));
+        FireAudioProcessorEditor reopened(processor);
+        prepareEditor(reopened);
+        CHECK(reopened.getSkinPreference()==skin);
+        SettingsComponent settings(processor.getAppSettings());
+        settings.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        settings.setVisible(true);
+        for (const auto size : {juce::Point<int>{300,250},juce::Point<int>{400,300}})
+        {
+            settings.setSize(size.x,size.y);
+            for (const auto* id : {"skinModern","skinVintage","skinPaper","skinInk"})
+            {
+                const auto& button=skinButton(settings,id);
+                CHECK(settings.getLocalBounds().contains(button.getBounds()));
+                CHECK(button.getWidth()>=50);
+                CHECK(button.getHeight()>=28);
+            }
+        }
+        skinSnapshot(settings,juce::String(fire::ui::skinName(skin)).toLowerCase()+"-settings");
+        skinButton(reopened,"header_preset_browser").triggerClick();
+        auto* library=findSkinControl<fire::ui::PresetBrowserPanel>(reopened,[](auto&) {return true;});
+        REQUIRE(library!=nullptr); REQUIRE(library->isVisible());
+        library->selectCategory("Analog Drive");
+        CHECK(library->getVisiblePresetCount()==36);
+        auto* search=findSkinControl<juce::TextEditor>(*library,[](auto&) {return true;});
+        REQUIRE(search!=nullptr);
+        const auto background=search->findColour(juce::TextEditor::backgroundColourId);
+        const auto foreground=search->findColour(juce::TextEditor::textColourId);
+        CHECK(std::abs(background.getPerceivedBrightness()-foreground.getPerceivedBrightness())>.50f);
+        skinSnapshot(reopened,juce::String(fire::ui::skinName(skin)).toLowerCase()+"-preset-library");
+        skinButton(reopened,"preset_browser_close").triggerClick();
+        CHECK(soundXml(processor)==before);
+    }
+    CHECK(fire::ui::skinFromValue(0)==Skin::modern);
+    CHECK(fire::ui::skinFromValue(1)==Skin::vintage);
+    CHECK(fire::ui::skinFromValue(2)==Skin::paper);
+    CHECK(fire::ui::skinFromValue(3)==Skin::ink);
+    CHECK(fire::ui::skinFromValue(44)==Skin::modern);
+}
+
+TEST_CASE("Shared website CSS colours retain their neutral roles through every skin",
+          "[skin][line-skin][ui][theme][round-trip][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto& dark=fire::ui::skinPalette(Skin::ink);
+    CHECK(dark.canvas==juce::Colour(0xff11161d));
+    CHECK(dark.textPrimary==juce::Colour(0xffeeece4));
+    CHECK(dark.textMuted==juce::Colour(0xffa7b0bd));
+    CHECK(dark.hairline==juce::Colour(0xff343e4c));
+    CHECK(dark.accent==juce::Colour(0xffefac88));
+    const auto& source=fire::ui::skinPalette(Skin::modern);
+    const std::array colours {source.canvas,source.surface0,source.surface1,source.surface2,
+        source.raised,source.hairline,source.textPrimary,source.textSecondary,source.textMuted,source.textBright};
+    juce::Component root;
+    std::array<juce::Component,10> controls;
+    for (size_t index=0;index<controls.size();++index)
+    {
+        root.addAndMakeVisible(controls[index]);
+        controls[index].setColour(juce::Label::textColourId,colours[index].withAlpha(.73f));
+    }
+    auto previous=Skin::modern;
+    for (const auto skin : {Skin::paper,Skin::ink,Skin::vintage,Skin::modern})
+    {
+        fire::ui::remapSkinColours(root,previous,skin);
+        previous=skin;
+    }
+    for(size_t index=0;index<controls.size();++index)
+        CHECK(controls[index].findColour(juce::Label::textColourId)==colours[index].withAlpha(.73f));
 }

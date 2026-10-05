@@ -106,7 +106,7 @@ void DraggableButton::paint(juce::Graphics& g)
     const auto hover = juce::jlimit(0.0f, 1.0f, hoverAnimation.current);
     const auto press = juce::jlimit(0.0f, 1.0f, pressAnimation.current);
     const auto focus = juce::jlimit(0.0f, 1.0f, focusAnimation.current);
-    const auto accent = getColour();
+    const auto accent = fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).textPrimary : getColour();
 
     bounds = bounds.reduced(press * 0.45f);
 
@@ -122,6 +122,7 @@ void DraggableButton::paint(juce::Graphics& g)
                                bounds.getCentreX(), bounds.getY(),
                                fire::ui::colours::surface0, bounds.getCentreX(), bounds.getBottom(), false);
     g.setGradientFill(metal);
+    if (fire::ui::isLineSkin(*this)) g.setColour(fire::ui::paletteFor(*this).surface1);
     g.fillEllipse(bounds.reduced(bounds.getWidth() * 0.16f));
 
     g.setColour(accent.withAlpha(mState ? 0.76f + hover * 0.19f
@@ -138,7 +139,8 @@ void DraggableButton::paint(juce::Graphics& g)
             g.setColour(accent.withAlpha(0.65f));
             g.drawEllipse(bounds.reduced(1.5f), 1.2f);
         }
-        g.setColour(! bypassed && mState ? fire::ui::colours::whiteHot : fire::ui::colours::textMuted);
+        g.setColour(fire::ui::isLineSkin(*this) ? (!bypassed && mState ? fire::ui::paletteFor(*this).textPrimary : fire::ui::paletteFor(*this).textMuted)
+                    : !bypassed && mState ? fire::ui::colours::whiteHot : fire::ui::colours::textMuted);
         g.setFont(fire::ui::labelFont(bounds.getWidth() * 0.43f));
         g.drawText(juce::String(ordinal), bounds, juce::Justification::centred);
     }
@@ -146,13 +148,14 @@ void DraggableButton::paint(juce::Graphics& g)
     {
         const auto coreInset = 0.38f - hover * 0.04f + press * 0.015f;
         const auto core = bounds.reduced(bounds.getWidth() * coreInset);
-        g.setColour(mState ? fire::ui::colours::whiteHot : fire::ui::colours::disabled);
+        g.setColour(fire::ui::isLineSkin(*this) ? (mState ? fire::ui::paletteFor(*this).textPrimary : fire::ui::paletteFor(*this).textMuted)
+                    : mState ? fire::ui::colours::whiteHot : fire::ui::colours::disabled);
         g.fillEllipse(core);
     }
 
     if (focus > 0.001f)
     {
-        g.setColour(fire::ui::colours::ember.withAlpha(0.92f * focus));
+        g.setColour((fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).accent : fire::ui::colours::ember).withAlpha(0.92f * focus));
         g.drawEllipse(bounds.reduced(1.0f), 1.5f);
     }
 }

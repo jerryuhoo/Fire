@@ -288,38 +288,50 @@ void FilterControl::paint(juce::Graphics& g)
 
     if (! responseFillCurve.isEmpty())
     {
-        const auto accent = isFilterEnabled ? fire::ui::colours::filter
-                                            : fire::ui::paletteFor(*this).textMuted;
-        juce::ColourGradient fill(accent.withAlpha(isFilterEnabled ? 0.14f : 0.055f),
-                                  bounds.getCentreX(), bounds.getCentreY(),
-                                  accent.withAlpha(0.0f), bounds.getCentreX(), bounds.getBottom(), false);
-        g.setGradientFill(fill);
-        g.fillPath(responseFillCurve);
-
-        if (isFilterEnabled)
+        if (fire::ui::isLineSkin(*this))
         {
-            g.setColour(fire::ui::colours::filter.withAlpha(0.10f));
-            g.strokePath(responseCurve,
-                         juce::PathStrokeType(5.0f,
-                                               juce::PathStrokeType::curved,
-                                               juce::PathStrokeType::rounded));
-
-            juce::ColourGradient energy(fire::ui::colours::whiteHot.withAlpha(0.92f),
-                                        bounds.getX(), bounds.getCentreY(),
-                                        fire::ui::colours::filter.withAlpha(0.92f),
-                                        bounds.getRight(), bounds.getCentreY(), false);
-            energy.addColour(0.52, fire::ui::colours::flame.withAlpha(0.96f));
-            g.setGradientFill(energy);
+            const auto& palette = fire::ui::paletteFor(*this);
+            g.setColour(palette.textPrimary.withAlpha(isFilterEnabled ? .04f : .02f));
+            g.fillPath(responseFillCurve);
+            g.setColour((isFilterEnabled ? palette.textPrimary : palette.textMuted).withAlpha(.86f));
+            g.strokePath(responseCurve,juce::PathStrokeType(1.1f,
+                juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
         }
         else
         {
-            g.setColour(fire::ui::colours::disabled.withAlpha(0.72f));
-        }
+            const auto accent = isFilterEnabled ? fire::ui::colours::filter
+                                                : fire::ui::paletteFor(*this).textMuted;
+            juce::ColourGradient fill(accent.withAlpha(isFilterEnabled ? 0.14f : 0.055f),
+                                      bounds.getCentreX(), bounds.getCentreY(),
+                                      accent.withAlpha(0.0f), bounds.getCentreX(), bounds.getBottom(), false);
+            g.setGradientFill(fill);
+            g.fillPath(responseFillCurve);
 
-        g.strokePath(responseCurve,
-                     juce::PathStrokeType(1.5f,
-                                           juce::PathStrokeType::curved,
-                                           juce::PathStrokeType::rounded));
+            if (isFilterEnabled)
+            {
+                g.setColour(fire::ui::colours::filter.withAlpha(0.10f));
+                g.strokePath(responseCurve,
+                             juce::PathStrokeType(5.0f,
+                                                   juce::PathStrokeType::curved,
+                                                   juce::PathStrokeType::rounded));
+
+                juce::ColourGradient energy(fire::ui::colours::whiteHot.withAlpha(0.92f),
+                                            bounds.getX(), bounds.getCentreY(),
+                                            fire::ui::colours::filter.withAlpha(0.92f),
+                                            bounds.getRight(), bounds.getCentreY(), false);
+                energy.addColour(0.52, fire::ui::colours::flame.withAlpha(0.96f));
+                g.setGradientFill(energy);
+            }
+            else
+            {
+                g.setColour(fire::ui::colours::disabled.withAlpha(0.72f));
+            }
+
+            g.strokePath(responseCurve,
+                         juce::PathStrokeType(1.5f,
+                                               juce::PathStrokeType::curved,
+                                               juce::PathStrokeType::rounded));
+        }
     }
 
     if (isFilterEnabled && isAnimationActive && ! lfoResponseCurve.isEmpty())
@@ -332,6 +344,8 @@ void FilterControl::paint(juce::Graphics& g)
                                         fire::ui::colours::ember.withAlpha(0.72f),
                                         bounds.getRight(), bounds.getCentreY(), false);
         g.setGradientFill(modulation);
+        if (fire::ui::isLineSkin(*this))
+            g.setColour(fire::ui::lineInk(fire::ui::colours::modulation,fire::ui::skinFor(*this)).withAlpha(.86f));
         g.strokePath(lfoResponseCurve, juce::PathStrokeType(1.0f));
     }
 
@@ -356,7 +370,9 @@ void FilterControl::paint(juce::Graphics& g)
                                          bounds.getBottom() - tooltipHeight - 4.0f,
                                          tooltip.getY()));
 
-        fire::ui::drawGlassPill(g, tooltip, fire::ui::colours::flame, true, false, false);
+        if (fire::ui::isLineSkin(*this))
+            fire::ui::drawPanel(g,tooltip,fire::ui::paletteFor(*this).accent,true,fire::ui::skinFor(*this));
+        else fire::ui::drawGlassPill(g, tooltip, fire::ui::colours::flame, true, false, false);
 
         auto textArea = tooltip.reduced(9.0f, 4.0f);
         const auto frequencyText = dragFrequency >= 1000.0
@@ -364,7 +380,7 @@ void FilterControl::paint(juce::Graphics& g)
                                      : juce::String(dragFrequency, 1) + " Hz";
 
         g.setFont(fire::ui::displayFont(11.0f));
-        g.setColour(fire::ui::colours::whiteHot);
+        g.setColour(fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).textBright : fire::ui::colours::whiteHot);
         g.drawText(frequencyText, textArea.removeFromTop(textArea.getHeight() * 0.54f),
                    juce::Justification::centredLeft);
         g.setFont(fire::ui::bodyFont(10.0f));

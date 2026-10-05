@@ -45,6 +45,23 @@ void Oscilloscope::paint(juce::Graphics& g)
                                  const juce::Path& envelope, const juce::ColourGradient& gradient,
                                  juce::Colour colour, juce::Colour highlight, const juce::String& label)
     {
+        if (fire::ui::isLineSkin(*this))
+        {
+            const auto& palette = fire::ui::paletteFor(*this);
+            g.setColour(palette.hairline.withAlpha(.55f));
+            g.drawLine(plot.getX(),channelCentres[channel],plot.getRight(),channelCentres[channel],.7f*scale);
+            const auto labelWidth = plot.getX()-getGraphPlotBounds().getX()-3*scale;
+            g.setColour(palette.textMuted);
+            g.setFont(fire::ui::valueFont(8*scale));
+            g.drawText(label,juce::Rectangle<float>(getGraphPlotBounds().getX(),channelCentres[channel]-6*scale,
+                juce::jmax(0.0f,labelWidth),12*scale),juce::Justification::centred);
+            if (trace.isEmpty()) return;
+            g.setColour(palette.textPrimary.withAlpha(.04f*channelLight[channel]));
+            g.fillPath(envelope);
+            g.setColour(palette.textPrimary.withAlpha(.90f*channelLight[channel]));
+            g.strokePath(trace,juce::PathStrokeType(stroke,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+            return;
+        }
         // A quiet reference remains readable without turning silence into a
         // bright signal. The two lanes retain a shared amplitude scale.
         g.setColour(fire::ui::colours::hairline.withAlpha(0.38f));

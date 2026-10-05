@@ -29,6 +29,11 @@ class PresetBrowserPanel final : public juce::Component
     static Palette categoryPalette(const juce::Component& owner, const juce::String& category)
     {
         const auto tones = palette(category);
+        if (isLineSkin(owner))
+        {
+            const auto& page = paletteFor(owner);
+            return {page.surface1,page.accent};
+        }
         if (!isVintage(owner)) return tones;
         return {skinPalette(Skin::vintage).surface0.interpolatedWith(tones.base,.42f),
                 tones.accent.interpolatedWith(skinPalette(Skin::vintage).textPrimary,.12f)};
@@ -45,12 +50,16 @@ class PresetBrowserPanel final : public juce::Component
             auto area = getLocalBounds().toFloat().reduced(.5f);
             const bool back = icon == Icon::back;
             const bool hover = isMouseOver() || hasKeyboardFocus(false);
-            g.setColour(back ? (isVintage(*this)?paletteFor(*this).surface2:juce::Colour(0xff26251f)).interpolatedWith(accent, hover ? .14f : .04f)
+            g.setColour(isLineSkin(*this) ? (hover ? paletteFor(*this).raised : paletteFor(*this).canvas)
+                :back ? (isVintage(*this)?paletteFor(*this).surface2:juce::Colour(0xff26251f)).interpolatedWith(accent, hover ? .14f : .04f)
                              : accent.withAlpha(hover ? .13f : getToggleState() ? .08f : 0.0f));
             g.fillRoundedRectangle(area, 8 * scale);
             g.setColour(accent.withAlpha(back ? (hover ? .55f : .28f) : hover ? .38f : .0f));
-            g.drawRoundedRectangle(area, 8 * scale, 1);
-            const auto ink = getToggleState() || hover || back ? accent : paletteFor(*this).textSecondary.withAlpha(.75f);
+            if (isLineSkin(*this) && back)
+            {g.setColour(paletteFor(*this).hairline);g.drawLine(area.getX(),area.getBottom(),area.getRight(),area.getBottom(),1);}
+            else g.drawRoundedRectangle(area, 8 * scale, 1);
+            const auto ink = isLineSkin(*this) && back ? paletteFor(*this).textPrimary
+                          : getToggleState() || hover || back ? accent : paletteFor(*this).textSecondary.withAlpha(.75f);
             g.setColour(ink);
             auto centre = area.getCentre();
             if (back) centre.x = area.getX() + 20 * scale;
@@ -77,7 +86,7 @@ class PresetBrowserPanel final : public juce::Component
             }
             if (back)
             {
-                g.setFont(labelFont(12 * scale));
+            g.setFont(isLineSkin(*this) ? portfolioFont(12*scale) : labelFont(12*scale));
                 g.drawText(getButtonText(), area.withTrimmedLeft(37 * scale).withTrimmedRight(12 * scale), juce::Justification::centredLeft);
             }
         }
@@ -108,14 +117,17 @@ class PresetBrowserPanel final : public juce::Component
         void paint(juce::Graphics& g) override
         {
             const auto colour = categoryPalette(*this,name); auto area = getLocalBounds().toFloat().reduced(.5f);
-            g.setColour(colour.base.withAlpha(getToggleState() ? 1.0f : isMouseOver() ? .65f : .30f));
-            g.fillRoundedRectangle(area, 7 * scale);
+            g.setColour(isLineSkin(*this) ? (getToggleState() ? colour.accent : isMouseOver() ? lineProjectTint(skinFor(*this)) : paletteFor(*this).canvas)
+                                          : colour.base.withAlpha(getToggleState() ? 1.0f : isMouseOver() ? .65f : .30f));
+            g.fillRoundedRectangle(area,isLineSkin(*this) ? juce::jmin(area.getHeight()*.5f,20*scale) : 7*scale);
             if (getToggleState()) {g.setColour(colour.accent.withAlpha(.5f)); g.fillRoundedRectangle(area.getX(),area.getY()+5*scale,2*scale,area.getHeight()-10*scale,scale);}
             auto label = area.reduced(13*scale, 0);
             auto counter = label.removeFromRight(33*scale);
-            g.setColour(getToggleState() ? colour.accent : paletteFor(*this).textSecondary); g.setFont(labelFont(11*scale));
+            g.setColour(getToggleState() ? (isLineSkin(*this) ? lineOnAccent(skinFor(*this)) : colour.accent) : paletteFor(*this).textSecondary);
+            g.setFont(isLineSkin(*this) ? portfolioFont(11*scale) : labelFont(11*scale));
             g.drawText(name, label, juce::Justification::centredLeft);
-            g.setColour(paletteFor(*this).textMuted); g.setFont(valueFont(10*scale));
+            g.setColour(isLineSkin(*this) && getToggleState() ? lineOnAccent(skinFor(*this)) : paletteFor(*this).textMuted);
+            g.setFont(isLineSkin(*this) ? portfolioMonoFont(10*scale) : valueFont(10*scale));
             g.drawText(juce::String(count), counter, juce::Justification::centredRight);
         }
     };
@@ -147,15 +159,18 @@ class PresetBrowserPanel final : public juce::Component
         {
             const auto colour = categoryPalette(*this,entry.factory ? entry.category : "User");
             auto area = getLocalBounds().toFloat().reduced(.5f);
-            g.setColour((isVintage(*this)?colour.base.interpolatedWith(paletteFor(*this).surface1,.4f):colour.base).interpolatedWith(colour.accent, selected ? .11f : isMouseOver(true) ? .045f : 0.0f));
+            g.setColour(isLineSkin(*this) ? (selected ? lineProjectTint(skinFor(*this)) : isMouseOver(true) ? paletteFor(*this).raised : paletteFor(*this).surface1)
+                :(isVintage(*this)?colour.base.interpolatedWith(paletteFor(*this).surface1,.4f):colour.base).interpolatedWith(colour.accent, selected ? .11f : isMouseOver(true) ? .045f : 0.0f));
             g.fillRoundedRectangle(area, 8*scale);
             g.setColour(colour.accent.withAlpha(selected ? .5f : .13f)); g.drawRoundedRectangle(area,8*scale,1);
             if (selected) {g.setColour(colour.accent); g.fillRoundedRectangle(0,area.getY()+6*scale,3*scale,area.getHeight()-12*scale,scale);}
             auto label = area.reduced(17*scale, 7*scale).withTrimmedRight(71*scale);
             auto badge = label.removeFromRight(78*scale); label.removeFromRight(10*scale);
-            g.setColour(selected ? colour.accent.brighter(.12f) : paletteFor(*this).textPrimary); g.setFont(bodyFont(14*scale));
+            g.setColour(selected && !isLineSkin(*this) ? colour.accent.brighter(.12f) : paletteFor(*this).textPrimary);
+            g.setFont(isLineSkin(*this) ? portfolioFont(14*scale) : bodyFont(14*scale));
             g.drawText(entry.name,label.removeFromTop(21*scale),juce::Justification::centredLeft,true);
-            g.setColour(paletteFor(*this).textSecondary.withAlpha(.72f)); g.setFont(bodyFont(9.5f*scale));
+            g.setColour(paletteFor(*this).textSecondary.withAlpha(isLineSkin(*this) ? 1.0f : .72f));
+            g.setFont(isLineSkin(*this) ? portfolioFont(9.5f*scale) : bodyFont(9.5f*scale));
             g.drawText(entry.removed ? (entry.factory ? "Hidden factory sound" : "Archived user sound") : entry.description.isEmpty() ? "User sound" : entry.description,
                 label,juce::Justification::centredLeft,true);
             g.setColour(colour.accent.withAlpha(.75f)); g.setFont(labelFont(9*scale));
@@ -203,16 +218,18 @@ public:
     void lookAndFeelChanged() override
     {
         const auto& tones = paletteFor(*this);
-        search.setColour(juce::TextEditor::backgroundColourId,isVintage(*this)?tones.surface0:juce::Colour(0xff141a22));
+        search.setColour(juce::TextEditor::backgroundColourId,(isVintage(*this)||isLineSkin(*this))?tones.surface0:juce::Colour(0xff141a22));
         search.setColour(juce::TextEditor::textColourId,tones.textPrimary);
         search.applyColourToAllText(tones.textPrimary);
         search.setColour(juce::TextEditor::outlineColourId,tones.textMuted.withAlpha(.24f));
+        search.setColour(juce::TextEditor::focusedOutlineColourId,isLineSkin(*this)?tones.accent:colours::gold.withAlpha(.6f));
         search.setTextToShowWhenEmpty("Search sounds, colour or space...",tones.textMuted);
         search.setOpaque(false);
         for (auto& row : rows)
         {
-            row->favourite.accent = isVintage(*this) ? tones.accent : colours::gold;
+            row->favourite.accent = isLineSkin(*this) ? tones.textPrimary : isVintage(*this) ? tones.accent : colours::gold;
             row->remove.accent = row->entry.removed ? categoryPalette(*this,row->entry.category).accent
+                : isLineSkin(*this) ? lineInk(colours::danger,skinFor(*this))
                 : isVintage(*this) ? juce::Colour(0xffd5a08c) : juce::Colour(0xffd59191);
         }
         refreshCategorySelection(); repaint();
@@ -250,13 +267,16 @@ public:
     void paint(juce::Graphics& g) override
     {
         const auto theme=categoryPalette(*this,category);
-        g.fillAll(isVintage(*this)?paletteFor(*this).surface0.interpolatedWith(theme.base,.22f)
+        g.fillAll(isLineSkin(*this)?paletteFor(*this).canvas
+                 :isVintage(*this)?paletteFor(*this).surface0.interpolatedWith(theme.base,.22f)
                                  :juce::Colour(0xff0d1118).interpolatedWith(theme.base,.4f));
-        g.setGradientFill(juce::ColourGradient(theme.accent.withAlpha(.055f),0,0,juce::Colours::transparentBlack,static_cast<float>(getWidth()),static_cast<float>(getHeight()),false)); g.fillAll();
-        auto title=headerTitle; g.setColour(theme.accent); g.setFont(labelFont(11*scale));
+        if (!isLineSkin(*this))
+        {g.setGradientFill(juce::ColourGradient(theme.accent.withAlpha(.055f),0,0,juce::Colours::transparentBlack,static_cast<float>(getWidth()),static_cast<float>(getHeight()),false)); g.fillAll();}
+        auto title=headerTitle; g.setColour(theme.accent);
+        g.setFont(isLineSkin(*this) ? portfolioMonoFont(10*scale) : labelFont(11*scale));
         g.drawText("FIRE  /  SOUND LIBRARY",title.removeFromTop(20*scale),juce::Justification::centredLeft);
-        g.setColour(paletteFor(*this).textPrimary); g.setFont(bodyFont(25*scale)); g.drawText("Find your next colour.",title,juce::Justification::centredLeft);
-        g.setColour(paletteFor(*this).textMuted); g.setFont(labelFont(10*scale)); g.drawText("COLLECTIONS",categoryTitle,juce::Justification::centredLeft);
+        g.setColour(paletteFor(*this).textPrimary); g.setFont(isLineSkin(*this) ? portfolioFont(25*scale) : bodyFont(25*scale)); g.drawText("Find your next colour.",title,juce::Justification::centredLeft);
+        g.setColour(paletteFor(*this).textMuted); g.setFont(isLineSkin(*this) ? portfolioMonoFont(9*scale) : labelFont(10*scale)); g.drawText("COLLECTIONS",categoryTitle,juce::Justification::centredLeft);
         g.drawText(category.toUpperCase()+"  /  "+juce::String(rows.size())+(rows.size()==1?" SOUND":" SOUNDS"),listTitle,juce::Justification::centredLeft);
         g.setColour(theme.accent.withAlpha(.18f)); g.drawLine(footer.getX(),footer.getY(),footer.getRight(),footer.getY(),1);
         const ::state::StatePresets::BrowserEntry* selected=nullptr;
@@ -331,11 +351,12 @@ private:
             auto row=std::make_unique<Row>();row->entry=entry;row->selected=entry.key==selectedKey;
             row->setTitle(entry.removed?"Archived preset "+entry.name:"Load preset "+entry.name);row->setTooltip(entry.description);row->setComponentID("presetSound:"+entry.key);
             row->favourite.setToggleState(entry.favourite,juce::dontSendNotification);row->favourite.setEnabled(!entry.removed);
-            row->favourite.accent = isVintage(*this) ? paletteFor(*this).accent : colours::gold;
+            row->favourite.accent = isLineSkin(*this) ? paletteFor(*this).textPrimary : isVintage(*this) ? paletteFor(*this).accent : colours::gold;
             row->favourite.setTitle((entry.favourite?"Unfavourite ":"Favourite ")+entry.name);row->favourite.setComponentID("presetFavourite:"+entry.key);
             row->favourite.setTooltip(entry.favourite?"Remove from favourites":"Add to favourites");
             row->remove.icon=entry.removed?Icon::restore:Icon::remove;row->remove.accent=entry.removed?categoryPalette(*this,entry.category).accent:
-                isVintage(*this)?juce::Colour(0xffd5a08c):juce::Colour(0xffd59191);
+                isLineSkin(*this)?lineInk(colours::danger,skinFor(*this))
+                :isVintage(*this)?juce::Colour(0xffd5a08c):juce::Colour(0xffd59191);
             row->remove.setTitle((entry.removed?"Restore ":"Delete ")+entry.name);row->remove.setComponentID((entry.removed?"presetRestore:":"presetDelete:")+entry.key);
             row->remove.setTooltip(entry.removed?"Restore to the original collection":entry.factory?"Hide this factory sound. Restore it from Recycle Bin.":"Move this user preset into Recycle Bin. Restore it at any time.");
             const auto live=[safe,epoch] {return safe && safe->generation==epoch && safe->isShowing() && safe->isEnabled();};

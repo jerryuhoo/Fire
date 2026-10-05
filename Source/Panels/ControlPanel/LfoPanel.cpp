@@ -641,7 +641,7 @@ void LfoEditor::paint(juce::Graphics& g)
 
         float currentPointRadius = getPointVisualRadius();
         juce::Colour currentPointColour = isSelected
-                                              ? fire::ui::colours::whiteHot
+                                              ? (fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).textBright : fire::ui::colours::whiteHot)
                                               : accent;
 
         // Apply hover effect (enlarge and make transparent) to both selected and unselected points.
@@ -678,7 +678,7 @@ void LfoEditor::paint(juce::Graphics& g)
 
         g.setColour(accent.withAlpha(0.14f));
         g.fillRoundedRectangle(rectToDraw.toFloat(), 2.0f);
-        g.setColour(fire::ui::colours::whiteHot.withAlpha(0.85f));
+        g.setColour((fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).textBright : fire::ui::colours::whiteHot).withAlpha(0.85f));
         g.drawRoundedRectangle(rectToDraw.toFloat(), 2.0f, 1.0f);
     }
 
@@ -746,7 +746,7 @@ void LfoEditor::rebuildGridCache(float physicalScale)
     juce::Graphics cacheGraphics(gridCache);
     cacheGraphics.addTransform(juce::AffineTransform::scale(cachedGridScale));
     if (fire::ui::isVintage(*this)) cacheGraphics.fillAll(fire::ui::paletteFor(*this).canvas);
-    else fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat());
+    else fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat(),fire::ui::skinFor(*this));
     fire::ui::drawTechGrid(cacheGraphics, getLocalBounds().toFloat(),
                            juce::jmax(12.0f, 20.0f), 0.075f, fire::ui::skinFor(*this));
 
@@ -787,9 +787,9 @@ uint64_t LfoEditor::getWavePathSignature() const noexcept
 juce::Colour LfoEditor::getCurrentLfoAccent() const noexcept
 {
     if (! fire::ui::isValidLfoBankIndex(activeDataContext.lfoIndex))
-        return fire::ui::colours::modulation;
+        return fire::ui::lineInk(fire::ui::colours::modulation,fire::ui::skinFor(*this));
 
-    return fire::ui::lfoBankColour(activeDataContext.lfoIndex);
+    return fire::ui::lineInk(fire::ui::lfoBankColour(activeDataContext.lfoIndex),fire::ui::skinFor(*this));
 }
 
 void LfoEditor::rebuildWavePath()
@@ -894,13 +894,14 @@ void LfoEditor::drawFlow(juce::Graphics& g, juce::Colour accent) const
         if (! window.intersects(getLocalBounds().toFloat())) continue;
         const juce::Graphics::ScopedSaveState saved(g);
         g.reduceClipRegion(window.expanded(1.0f, 0.0f).getSmallestIntegerContainer());
-        const auto light = accent.interpolatedWith(fire::ui::colours::whiteHot, 0.86f);
+        const auto bright = fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).textBright : fire::ui::colours::whiteHot;
+        const auto light = accent.interpolatedWith(bright, 0.86f);
         juce::ColourGradient gradient(accent.withAlpha(0.0f), x - trail, 0.0f,
                                       accent.withAlpha(0.0f), x + lead, 0.0f, false);
         gradient.addColour(0.18, accent.withAlpha(0.07f * playheadOpacity));
         gradient.addColour(0.48, accent.withAlpha(0.40f * playheadOpacity));
         gradient.addColour(0.70, light.withAlpha(0.78f * playheadOpacity));
-        gradient.addColour(1.0 / 1.20, fire::ui::colours::whiteHot.withAlpha(0.98f * playheadOpacity));
+        gradient.addColour(1.0 / 1.20, bright.withAlpha(0.98f * playheadOpacity));
         gradient.addColour(0.94, light.withAlpha(0.36f * playheadOpacity));
         g.setGradientFill(gradient);
         g.drawImage(flowMask, getLocalBounds().toFloat(), juce::RectanglePlacement::stretchToFit, true);
@@ -3134,7 +3135,7 @@ void LfoPanel::removeBankLfo(int index)
 
 void LfoPanel::lookAndFeelChanged()
 {
-    if (fire::ui::isVintage(*this))
+    if (!fire::ui::usesNavigationMotion(*this))
     {
         lfoSelectionPosition.snapTo(lfoSelectionPosition.target);
         bankContent.repaint();
@@ -3456,7 +3457,7 @@ void LfoPanel::animationTick(float deltaSeconds)
     }
 
     const auto previousSelectionPosition = lfoSelectionPosition.current;
-    if (fire::ui::isVintage(*this))
+    if (!fire::ui::usesNavigationMotion(*this))
         lfoSelectionPosition.snapTo(lfoSelectionPosition.target);
     else
         lfoSelectionPosition.advance(deltaSeconds);
@@ -3714,7 +3715,7 @@ void LfoPanel::setLfo(int newIndex)
     resetFlowPresentation();
     const auto row = std::find(visibleLfoSlots.begin(), visibleLfoSlots.end(), currentLfoIndex);
     const auto selectionPosition = static_cast<float>(std::distance(visibleLfoSlots.begin(), row));
-    if (fire::ui::isVintage(*this))
+    if (!fire::ui::usesNavigationMotion(*this))
         lfoSelectionPosition.snapTo(selectionPosition);
     else
         lfoSelectionPosition.setTarget(selectionPosition);

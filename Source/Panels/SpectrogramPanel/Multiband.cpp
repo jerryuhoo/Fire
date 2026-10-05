@@ -1463,24 +1463,25 @@ void Multiband::paintBandOverlay(juce::Graphics& g,
                                   area.getX(), area.getY() + area.getHeight() * 0.20f,
                                   false);
         g.setGradientFill(grad);
+        if (fire::ui::isLineSkin(*this)) g.setColour(fire::ui::paletteFor(*this).textPrimary.withAlpha(.025f));
         g.fillRect(area);
     }
 
     if (hover > 0.001f && ! selected)
     {
-        g.setColour(fire::ui::colours::textPrimary.withAlpha(0.032f * hover));
+        g.setColour(fire::ui::paletteFor(*this).textPrimary.withAlpha(0.032f * hover));
         g.fillRect(area);
     }
 
     if (shouldSetBlackMask(index))
     {
-        g.setColour(fire::ui::colours::canvas.withAlpha(0.64f));
+        g.setColour(fire::ui::paletteFor(*this).canvas.withAlpha(0.64f));
         g.fillRect(area);
     }
 
     if (! bandUIs[static_cast<size_t>(index)].enableButton->getToggleState())
     {
-        g.setColour(fire::ui::colours::canvas.withAlpha(0.36f));
+        g.setColour(fire::ui::paletteFor(*this).canvas.withAlpha(0.36f));
         g.fillRect(area);
     }
 
@@ -1505,6 +1506,7 @@ void Multiband::paintBandOverlay(juce::Graphics& g,
                                            rail.getRight(), rail.getY(), false);
         railGradient.addColour(0.5, fire::ui::colours::flame.withAlpha(0.98f));
         g.setGradientFill(railGradient);
+        if (fire::ui::isLineSkin(*this)) g.setColour(fire::ui::paletteFor(*this).textPrimary.withAlpha(.75f));
         g.fillRect(rail);
     }
 }
@@ -2000,7 +2002,7 @@ void Multiband::paintRetiringDividerVisuals(juce::Graphics& g) const
         const auto centreX = fire::ui::pixelAligned(
             visual.xPercent * bounds.getWidth(), physicalScale);
         const auto lineWidth = (0.80f + 0.20f * opacity) / physicalScale;
-        g.setColour(fire::ui::colours::flame.withAlpha(0.46f * opacity));
+        g.setColour((fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).textPrimary : fire::ui::colours::flame).withAlpha(0.46f * opacity));
         g.fillRect(centreX - lineWidth * 0.5f,
                    bounds.getY(),
                    lineWidth,
@@ -2012,9 +2014,9 @@ void Multiband::paintRetiringDividerVisuals(juce::Graphics& g) const
             bounds.getY() + 3.0f,
             handleRadius * 2.0f,
             handleRadius * 2.0f);
-        g.setColour(fire::ui::colours::surface1.withAlpha(0.96f * opacity));
+        g.setColour(fire::ui::paletteFor(*this).surface1.withAlpha(0.96f * opacity));
         g.fillEllipse(handle);
-        g.setColour(fire::ui::colours::flame.withAlpha(0.72f * opacity));
+        g.setColour((fire::ui::isLineSkin(*this) ? fire::ui::paletteFor(*this).textPrimary : fire::ui::colours::flame).withAlpha(0.72f * opacity));
         g.drawEllipse(handle.reduced(0.5f / physicalScale), lineWidth);
     }
 }

@@ -36,6 +36,14 @@ void DistortionGraph::paint(juce::Graphics& g)
     const juce::Graphics::ScopedSaveState state(g);
     g.reduceClipRegion(getGraphPlotBounds().getSmallestIntegerContainer());
 
+    if (fire::ui::isLineSkin(*this))
+    {
+        g.setColour(fire::ui::paletteFor(*this).textPrimary);
+        g.strokePath(distortionCurve,juce::PathStrokeType(1.2f*getScale(),
+            juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+        return;
+    }
+
     g.setColour(getGraphAccent().withAlpha(0.16f));
     g.strokePath(distortionCurve,
                  juce::PathStrokeType(6.0f,

@@ -153,18 +153,19 @@ public:
         currentSkin = skin;
         using namespace fire::ui;
         const auto vintage = skin == Skin::vintage;
+        const auto paletteSkin = skin != Skin::modern;
         const auto& palette = skinPalette(skin);
-        const auto primaryAccent = vintage ? palette.accent : colours::ember;
-        const auto secondaryAccent = vintage ? palette.accent : colours::flame;
+        const auto primaryAccent = paletteSkin ? palette.accent : colours::ember;
+        const auto secondaryAccent = paletteSkin ? palette.accent : colours::flame;
 
         setColour(juce::TextButton::buttonColourId,
-                  vintage ? palette.surface2 : modernButtonBackground);
+                  paletteSkin ? palette.surface2 : modernButtonBackground);
         setColour(juce::TextButton::buttonOnColourId,
-                  vintage ? palette.raised : modernButtonOnBackground);
+                  paletteSkin ? palette.raised : modernButtonOnBackground);
         setColour(juce::TextButton::textColourOffId,
-                  vintage ? palette.textSecondary : modernButtonText);
+                  paletteSkin ? palette.textSecondary : modernButtonText);
         setColour(juce::TextButton::textColourOnId,
-                  vintage ? palette.textPrimary : modernButtonOnText);
+                  paletteSkin ? palette.textPrimary : modernButtonOnText);
 
         setColour(juce::Slider::textBoxTextColourId, themeColour(colours::textPrimary));
         setColour(juce::Slider::textBoxBackgroundColourId, themeColour(colours::surface0).withAlpha(0.94f));
@@ -225,19 +226,24 @@ public:
 
     juce::Font getTextButtonFont(juce::TextButton&, int buttonHeight) override
     {
+        if (fire::ui::isLineSkin(currentSkin))
+            return fire::ui::portfolioFont(juce::jlimit(9.0f,14.0f*scale,static_cast<float>(buttonHeight)*.36f),true);
         return fire::ui::labelFont(juce::jlimit(9.0f, 15.0f * scale,
                                                static_cast<float>(buttonHeight) * 0.38f));
     }
 
     juce::Font getComboBoxFont(juce::ComboBox& box) override
     {
+        if (fire::ui::isLineSkin(currentSkin))
+            return fire::ui::portfolioFont(juce::jlimit(10.0f,14.0f*scale,static_cast<float>(box.getHeight())*.42f));
         if (box.getComponentID() == "header_preset")
             return fire::ui::bodyFont(13.0f * scale);
         return fire::ui::bodyFont(juce::jlimit(10.0f, 14.0f * scale,
                                               static_cast<float>(box.getHeight()) * 0.42f));
     }
 
-    juce::Font getPopupMenuFont() override { return fire::ui::bodyFont(13.0f * scale); }
+    juce::Font getPopupMenuFont() override
+    { return fire::ui::isLineSkin(currentSkin) ? fire::ui::portfolioFont(13*scale) : fire::ui::bodyFont(13*scale); }
 
     int getPopupMenuBorderSize() override
     {
@@ -340,6 +346,12 @@ public:
 
     juce::Font getLabelFont(juce::Label& label) override
     {
+        if (fire::ui::isLineSkin(currentSkin))
+        {
+            if (dynamic_cast<juce::Slider*>(label.getParentComponent())!=nullptr && label.getComponentID()!="parameter_title")
+                return fire::ui::portfolioMonoFont(12*scale);
+            return fire::ui::portfolioFont(label.getFont().getHeight()>0 ? label.getFont().getHeight() : 13*scale);
+        }
         if (dynamic_cast<juce::Slider*>(label.getParentComponent()) != nullptr
             && label.getComponentID() != "parameter_title")
             return fire::ui::valueFont(12.0f * scale);
@@ -371,7 +383,10 @@ public:
                         .interpolatedWith(themeColour(colours::raised), juce::jmax(focus * 0.85f, hover * 0.38f));
         base = base.darker(press * 0.10f).interpolatedWith(themeColour(colours::surface0), disabled * 0.48f);
         const bool darkHeader = currentSkin == Skin::vintage && isVintageHeaderControl(box);
-        if (currentSkin == Skin::vintage)
+        if (isLineSkin(currentSkin))
+            drawLineSurface(g, bounds, hover, press, focus,
+                            1.0f - disabled * 0.55f, false, true);
+        else if (currentSkin == Skin::vintage)
             // Selectors are display wells, like the preset bar. Raised faces
             // belong to the keys that change state, not to displayed values.
             drawVintageHeaderKey(g, bounds, scale, hover, press, focus,
@@ -406,7 +421,8 @@ public:
         arrow.startNewSubPath(centre.x - halfWidth, centre.y - halfWidth * 0.35f);
         arrow.lineTo(centre.x, centre.y + halfWidth * 0.55f);
         arrow.lineTo(centre.x + halfWidth, centre.y - halfWidth * 0.35f);
-        g.setColour((darkHeader ? vintageHeaderLegend(true) : vintageInk(box.findColour(juce::ComboBox::arrowColourId)))
+        g.setColour((isLineSkin(currentSkin) ? skinPalette(currentSkin).textPrimary
+                      : darkHeader ? vintageHeaderLegend(true) : vintageInk(box.findColour(juce::ComboBox::arrowColourId)))
                         .withMultipliedAlpha(0.9f - 0.6f * disabled));
         g.strokePath(arrow, juce::PathStrokeType(1.5f * scale,
                                                 juce::PathStrokeType::curved,
@@ -421,7 +437,7 @@ public:
                                               static_cast<float>(height) - 1.0f);
         g.setColour(themeColour(colours::surface1));
         g.fillRoundedRectangle(bounds, Metrics::radius);
-        if (currentSkin == Skin::vintage)
+        if (currentSkin == Skin::vintage || isLineSkin(currentSkin))
         {
             g.setColour(skinPalette(currentSkin).hairline);
             g.drawRoundedRectangle(bounds, Metrics::radius, 1.0f);
@@ -453,7 +469,7 @@ public:
         {
             drawThemedPill(g, row.toFloat(), currentSkin == Skin::vintage
                 ? skinPalette(currentSkin).accent : colours::ember, true, true, false);
-            g.setColour(currentSkin == Skin::vintage ? skinPalette(currentSkin).textPrimary : colours::whiteHot);
+            g.setColour(currentSkin != Skin::modern ? skinPalette(currentSkin).textPrimary : colours::whiteHot);
         }
         else
         {
@@ -689,6 +705,30 @@ public:
         if (accent.isTransparent() || accent == juce::Colours::black)
             accent = colours::flame;
 
+        if (isLineSkin(currentSkin))
+        {
+            const auto& palette = skinPalette(currentSkin);
+            const bool display = id == "header_preset_browser" || id == "header_preset";
+            const bool primary=static_cast<bool>(button.getProperties().getWithDefault("firePrimaryAction",false));
+            const bool navigation=id=="workspace_tab" || static_cast<bool>(button.getProperties().getWithDefault("fireModuleRail",false))
+                || button.getRadioGroupId()!=0;
+            drawLineSurface(g, bounds, hoverAmount, pressAmount, focusAmount,
+                            1.0f - disabledAmount * 0.60f,
+                            button.getToggleState() || primary, display,navigation);
+            const auto ink=(button.getToggleState() || primary ? lineOnAccent(currentSkin) : palette.textPrimary)
+                .withAlpha(1.0f-disabledAmount*.60f);
+            if (id == "header_previous" || id == "header_next")
+                drawArrowIcon(g, bounds, id, ink);
+            else if (id == "header_menu")
+                drawMenuIcon(g, bounds, ink);
+            else if (id == "zoom")
+                drawZoomIcon(g,bounds,ink);
+            else if (id == "slider_up_arrow" || id == "slider_down_arrow" || id == "left_arrow" || id == "right_arrow")
+                drawArrowIcon(g,bounds,id,ink);
+            else if (id == "low_cut" || id == "high_cut" || id == "band_pass")
+                drawFilterIcon(g,bounds.reduced(5*scale),id,ink);
+            return;
+        }
         if (currentSkin == Skin::vintage && isVintageHeaderControl(button))
         {
             drawVintageHeaderKey(g, bounds, scale, hoverAmount, pressAmount, focusAmount,
@@ -863,6 +903,9 @@ public:
             colour = darkHeader ? vintageHeaderLegend(button.getToggleState() || status == 2 || status == 3)
                 : vintageInk(themeColour(colour)).interpolatedWith(themeColour(colours::textPrimary), animation.hover * 0.25f);
             colour = colour.withMultipliedAlpha(1.0f - animation.disabled * 0.68f);
+            if (isLineSkin(currentSkin))
+                colour=(button.getToggleState() ? lineOnAccent(currentSkin) : skinPalette(currentSkin).textPrimary)
+                    .withAlpha(1.0f-animation.disabled*.68f);
             auto area = button.getLocalBounds().toFloat().reduced(8 * scale, 3 * scale);
             auto iconBounds = labelled ? area.removeFromLeft(20 * scale) : area;
             const auto side = juce::jmin(19 * scale, iconBounds.getHeight());
@@ -911,6 +954,10 @@ public:
             colour = vintageInk(themeColour(colour)).brighter(0.14f * animation.hover)
                            .darker(0.08f * animation.press)
                            .interpolatedWith(themeColour(colours::textMuted).withAlpha(0.45f), animation.disabled);
+
+        if (isLineSkin(currentSkin))
+            colour = (button.getToggleState() || static_cast<bool>(button.getProperties().getWithDefault("firePrimaryAction",false)) ? lineOnAccent(currentSkin)
+                          : skinPalette(currentSkin).textPrimary).withAlpha(1.0f - animation.disabled * 0.60f);
 
         g.setColour(colour);
         g.setFont(getTextButtonFont(button, button.getHeight()));
@@ -980,8 +1027,10 @@ public:
             g.setGradientFill(finish);
             g.fillEllipse(cap);
         }
-        auto colour = vintageInk(ticked ? component.findColour(juce::ToggleButton::tickColourId)
-                                        : themeColour(colours::textMuted));
+        auto colour = isLineSkin(currentSkin)
+            ? (ticked ? skinPalette(currentSkin).textPrimary : skinPalette(currentSkin).textMuted)
+            : vintageInk(ticked ? component.findColour(juce::ToggleButton::tickColourId)
+                               : themeColour(colours::textMuted));
         if (highlighted && isEnabled)
             colour = colour.brighter(0.18f);
         if (down && isEnabled)
@@ -1099,12 +1148,14 @@ private:
             mapped = palette.textPrimary;
         else if (opaque == colours::textSecondary) mapped = palette.textSecondary;
         else if (opaque == colours::textMuted) mapped = palette.textMuted;
-        else if (opaque == colours::whiteHot) mapped = juce::Colour(0xffffedc8);
+        else if (opaque == colours::whiteHot) mapped = palette.textBright;
         return mapped.withAlpha(colour.getFloatAlpha());
     }
 
     juce::Colour vintageInk(juce::Colour colour, float minimumBrightness = 0.64f) const noexcept
     {
+        if (fire::ui::isLineSkin(currentSkin))
+            return fire::ui::lineInk(colour, currentSkin);
         if (currentSkin == fire::ui::Skin::modern || colour.isTransparent())
             return colour;
         // Screen-printed legends must stay legible on the warm metal body.
@@ -1117,6 +1168,31 @@ private:
         const auto amount = juce::jlimit(0.0f, 1.0f, (floor - brightness)
             / juce::jmax(0.01f, cream.getPerceivedBrightness() - brightness));
         return colour.interpolatedWith(cream.withAlpha(colour.getFloatAlpha()), amount);
+    }
+
+    void drawLineSurface(juce::Graphics& g,
+                         juce::Rectangle<float> bounds,
+                         float hover, float press, float focus, float opacity,
+                         bool selected, bool display = false, bool navigation=false) const
+    {
+        const auto& palette = fire::ui::skinPalette(currentSkin);
+        const auto radius = navigation ? juce::jmin(20*scale,bounds.getHeight()*.5f)
+                                      : juce::jmin(2.5f*scale,bounds.getHeight()*.14f);
+        auto face = display ? palette.surface0 : navigation ? palette.canvas : palette.surface1;
+        face = selected && !display ? palette.accent : face.interpolatedWith(palette.raised,
+            juce::jlimit(0.0f,1.0f,hover*.55f+press*.65f));
+        g.setColour(face.withAlpha(opacity));
+        g.fillRoundedRectangle(bounds, radius);
+        const auto edgeAlpha=navigation && !selected ? juce::jmax(hover,focus)*opacity : opacity;
+        g.setColour((selected && !display ? palette.accent : palette.hairline.interpolatedWith(palette.accent,focus*.75f)).withAlpha(edgeAlpha));
+        g.drawRoundedRectangle(bounds, radius, juce::jmax(0.75f, 0.85f * scale));
+        if (selected && !navigation && !display)
+        {
+            g.setColour(fire::ui::lineOnAccent(currentSkin).withAlpha(opacity));
+            const auto mark = bounds.withSizeKeepingCentre(11 * scale, 1.3f * scale)
+                .withBottomY(bounds.getBottom() - 3 * scale);
+            g.fillRect(mark);
+        }
     }
 
     void drawVintageSurface(juce::Graphics& g,
@@ -1204,6 +1280,12 @@ private:
                        bool highlighted,
                        bool down) const
     {
+        if (fire::ui::isLineSkin(currentSkin))
+        {
+            drawLineSurface(g, bounds, highlighted ? 1.0f : 0.0f,
+                down ? 1.0f : 0.0f, 0.0f, 1.0f, selected);
+            return;
+        }
         if (currentSkin == fire::ui::Skin::modern)
         {
             fire::ui::drawGlassPill(g, bounds, accent, selected, highlighted, down);
@@ -1498,6 +1580,55 @@ private:
         const auto radius = juce::jmax(2.0f, juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f);
         bounds = juce::Rectangle<float>(radius * 2.0f, radius * 2.0f).withCentre(bounds.getCentre());
         const auto centre = bounds.getCentre();
+        if (isLineSkin(currentSkin))
+        {
+            const auto& palette = skinPalette(currentSkin);
+            const auto opacity = 1.0f - disabledAmount * 0.65f;
+            const auto trackRadius = juce::jmax(2.0f, radius - 2.0f * scale);
+            const auto arcState = calculateDialArcState(sliderPos, reductionPercent, isDrive);
+            const auto angle = startAngle + arcState.requestedProportion * (endAngle - startAngle);
+            const auto stroke = juce::jmax(1.0f, (isDrive ? 1.8f : 1.35f) * scale);
+            juce::Path track;
+            track.addCentredArc(centre.x, centre.y, trackRadius, trackRadius,
+                0.0f, startAngle, endAngle, true);
+            g.setColour(palette.hairline.withAlpha(opacity));
+            g.strokePath(track, juce::PathStrokeType(stroke));
+            if (arcState.requestedProportion > 0.0001f)
+            {
+                juce::Path value;
+                value.addCentredArc(centre.x, centre.y, trackRadius, trackRadius, 0.0f,
+                    startAngle, startAngle + arcState.effectiveProportion * (endAngle - startAngle), true);
+                g.setColour(palette.textPrimary.withAlpha(opacity));
+                g.strokePath(value, juce::PathStrokeType(stroke, juce::PathStrokeType::curved,
+                                                       juce::PathStrokeType::rounded));
+                if (isDrive && arcState.hasReduction())
+                {
+                    juce::Path reduction;
+                    reduction.addCentredArc(centre.x, centre.y, trackRadius, trackRadius, 0.0f,
+                        startAngle + arcState.effectiveProportion * (endAngle - startAngle), angle, true);
+                    g.setColour(palette.textPrimary.withAlpha(0.27f * opacity));
+                    g.strokePath(reduction, juce::PathStrokeType(stroke));
+                }
+            }
+            const auto disc = bounds.reduced(radius * dialDiscInsetProportion);
+            g.setColour(palette.surface1.withAlpha(opacity));
+            g.fillEllipse(disc);
+            g.setColour(palette.hairline.withAlpha(opacity));
+            g.drawEllipse(disc, juce::jmax(0.7f, 0.8f * scale));
+            juce::Path needle;
+            needle.startNewSubPath(0, -disc.getHeight() * 0.07f);
+            needle.lineTo(0, -disc.getHeight() * 0.35f);
+            g.setColour(palette.textBright.withAlpha(opacity));
+            g.strokePath(needle, juce::PathStrokeType(juce::jmax(1.0f, 1.25f * scale),
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded),
+                juce::AffineTransform::rotation(angle).translated(centre.x, centre.y));
+            if (focusAmount > 0.01f || hoverAmount > 0.01f)
+            {
+                g.setColour(palette.accent.withAlpha(juce::jmax(focusAmount, hoverAmount) * 0.48f * opacity));
+                g.drawEllipse(disc.expanded(2.0f * scale), juce::jmax(0.8f, scale));
+            }
+            return;
+        }
         const auto stroke = dialArcStroke(radius, scale, isDrive);
         const auto trackRadius = juce::jmax(
             2.0f,
@@ -1617,7 +1748,7 @@ private:
         const auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
         const auto centre = bounds.getCentre();
         const auto hasValidSource = isValidModulationSourceNumber(slider.lfoSource);
-        const auto bankAccent = modulationSourceColourForSource(slider.lfoSource);
+        const auto bankAccent = lineInk(modulationSourceColourForSource(slider.lfoSource), currentSkin);
         const auto modulationAccent = slider.isBypassed
                                           ? bankAccent.interpolatedWith(
                                                 colours::disabled, 0.68f)

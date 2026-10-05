@@ -91,6 +91,7 @@ public:
     float getTransportPhase(int reel = 0) const noexcept {return reel == 0 ? phase : rightPhase;}
     void paint(juce::Graphics& g) override
     {
+        if (isLineSkin(*this)) {paintLineHardware(g); return;}
         const bool vintage = isVintage(*this);
         const auto area = getLocalBounds().toFloat().reduced(4);
         const auto scale = juce::jlimit(.45f, 2.5f, juce::jmin(area.getWidth() / 300.0f, area.getHeight() / 225.0f));
@@ -157,6 +158,156 @@ public:
         else paintCircuit(g, body);
     }
 private:
+    void paintLineHardware(juce::Graphics& g)
+    {
+        const auto& palette = paletteFor(*this);
+        auto area = getLocalBounds().toFloat().reduced(4);
+        if (area.isEmpty()) return;
+        const auto unit = juce::jlimit(.45f,2.5f,juce::jmin(area.getWidth()/300.0f,area.getHeight()/225.0f));
+        const auto stroke = juce::jmax(.75f,1.1f*unit);
+        const auto skin=skinFor(*this);
+        const auto displayScale=g.getInternalContext().getPhysicalPixelScaleFactor();
+        if (lineBackground.isNull() || lineBackgroundSize!=getLocalBounds() || lineBackgroundSkin!=skin
+            || !juce::approximatelyEqual(lineBackgroundScale,displayScale))
+        {
+            lineBackgroundSize=getLocalBounds(); lineBackgroundSkin=skin; lineBackgroundScale=displayScale;
+            lineBackground=juce::Image(juce::Image::ARGB,juce::jmax(1,juce::roundToInt(getWidth()*displayScale)),
+                juce::jmax(1,juce::roundToInt(getHeight()*displayScale)),true);
+            juce::Graphics backdrop(lineBackground);
+            backdrop.addTransform(juce::AffineTransform::scale(displayScale));
+            backdrop.fillAll(palette.canvas);
+            drawPortfolioDots(backdrop,area,skin,unit);
+        }
+        g.drawImage(lineBackground,getLocalBounds().toFloat());
+        auto body = area.reduced(14*unit,9*unit);
+        auto title = body.removeFromTop(23*unit);
+        g.setColour(palette.accent);
+        g.setFont(portfolioMonoFont(juce::jmax(9.0f,10*unit)));
+        g.drawText(analog::names[static_cast<size_t>(juce::jmax(0,currentModel))],title,juce::Justification::centred);
+        auto caption = body.removeFromBottom(17*unit);
+        g.setColour(palette.textMuted);
+        g.setFont(portfolioMonoFont(juce::jmax(7.5f,8*unit)));
+        g.drawText(currentModel==11 ? (transport>.1f ? "TAPE / RUNNING" : "TAPE / IDLE")
+                                   : "ANALOG / SIGNAL DRIVEN",caption,juce::Justification::centred);
+        g.setColour(palette.hairline);
+        g.drawLine(area.getX()+12*unit,caption.getY()-4*unit,area.getRight()-12*unit,caption.getY()-4*unit,stroke*.65f);
+        const auto brightness = getFilamentBrightness();
+        if (currentModel==11)
+        {
+            const auto size = juce::jmin(body.getWidth()*.40f,body.getHeight()*.73f);
+            const auto left = body.getCentre()+juce::Point<float>{-size*.57f,-body.getHeight()*.12f};
+            const auto right = body.getCentre()+juce::Point<float>{size*.57f,-body.getHeight()*.12f};
+            for (int reel=0;reel<2;++reel)
+            {
+                const auto centre = reel==0 ? left : right;
+                auto disc = juce::Rectangle<float>(size,size).withCentre(centre);
+                g.setColour(palette.accent.withAlpha(.86f));
+                g.drawEllipse(disc,stroke);
+                g.setColour(palette.hairline);
+                g.drawEllipse(disc.reduced(size*.065f),stroke*.70f);
+                juce::Graphics::ScopedSaveState save(g);
+                g.addTransform(juce::AffineTransform::rotation(getTransportPhase(reel),centre.x,centre.y));
+                g.setColour(palette.accent.withAlpha(.70f));
+                for (int spoke=0;spoke<3;++spoke)
+                {
+                    const auto angle = juce::MathConstants<float>::twoPi*static_cast<float>(spoke)/3;
+                    juce::Path aperture;
+                    aperture.startNewSubPath(0,-size*.13f);
+                    aperture.cubicTo(size*.10f,-size*.13f,size*.19f,-size*.27f,size*.21f,-size*.35f);
+                    aperture.cubicTo(size*.11f,-size*.42f,-size*.11f,-size*.42f,-size*.21f,-size*.35f);
+                    aperture.cubicTo(-size*.19f,-size*.27f,-size*.10f,-size*.13f,0,-size*.13f);
+                    aperture.closeSubPath();
+                    g.strokePath(aperture,juce::PathStrokeType(stroke*.80f),
+                        juce::AffineTransform::rotation(angle).translated(centre.x,centre.y));
+                }
+                g.drawEllipse(disc.withSizeKeepingCentre(size*.09f,size*.09f),stroke);
+            }
+            const auto deckY = body.getY()+body.getHeight()*.81f;
+            const auto guideL = juce::Point<float>{left.x-size*.18f,deckY};
+            const auto guideR = juce::Point<float>{right.x+size*.18f,deckY};
+            juce::Path ribbon;
+            ribbon.startNewSubPath(left.x-size*.34f,left.y+size*.27f);
+            ribbon.lineTo(guideL.x,guideL.y);
+            ribbon.lineTo(guideR.x,guideR.y);
+            ribbon.lineTo(right.x+size*.34f,right.y+size*.27f);
+            g.setColour(palette.accent.withAlpha(.70f));
+            g.strokePath(ribbon,juce::PathStrokeType(stroke,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+            for (const auto guide : {guideL,guideR})
+                g.drawEllipse(juce::Rectangle<float>(size*.07f,size*.07f).withCentre(guide),stroke*.8f);
+            const auto head = juce::Rectangle<float>(size*.30f,size*.19f).withCentre({body.getCentreX(),deckY});
+            g.setColour(palette.canvas); g.fillRoundedRectangle(head,2*unit);
+            g.setColour(palette.accent); g.drawRoundedRectangle(head,2*unit,stroke);
+            return;
+        }
+        if (currentModel<=5)
+        {
+            const auto height = body.getHeight()*.87f;
+            const auto tube = body.withSizeKeepingCentre(height*.53f,height);
+            g.setColour(palette.accent.withAlpha(.75f));
+            g.drawRoundedRectangle(tube,tube.getWidth()*.42f,stroke);
+            const auto socket = tube.withSizeKeepingCentre(tube.getWidth()*.95f,height*.11f)
+                .withBottomY(tube.getBottom()+height*.035f);
+            g.setColour(palette.canvas);g.fillRoundedRectangle(socket,2*unit);
+            g.setColour(palette.accent);g.drawRoundedRectangle(socket,2*unit,stroke);
+            for (int pin=0;pin<5;++pin)
+            {
+                const auto x = socket.getX()+socket.getWidth()*(.2f+static_cast<float>(pin)*.15f);
+                g.drawLine(x,socket.getBottom(),x,socket.getBottom()+height*.05f,stroke*.75f);
+            }
+            auto plate = tube.reduced(tube.getWidth()*.23f,height*.25f);
+            g.setColour(palette.textSecondary.withAlpha(.65f));
+            g.drawRect(plate.withHeight(height*.20f),stroke*.8f);
+            for (int grid=0;grid<3;++grid)
+            {
+                const auto y = plate.getY()+height*(.27f+static_cast<float>(grid)*.065f);
+                g.drawLine(plate.getX()-3*unit,y,plate.getRight()+3*unit,y,stroke*.6f);
+            }
+            juce::Path heater;
+            const auto y = tube.getY()+height*.69f;
+            heater.startNewSubPath(plate.getX(),y);
+            for (int wire=1;wire<=8;++wire)
+                heater.lineTo(plate.getX()+plate.getWidth()*static_cast<float>(wire)/8,
+                    y+(wire%2==0 ? 0.0f : height*.07f));
+            g.setColour(palette.accent.withAlpha(brightness));
+            g.strokePath(heater,juce::PathStrokeType(juce::jmax(1.0f,2*unit),
+                juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+            g.setColour(palette.accent.withAlpha(brightness*.05f));
+            g.fillEllipse(plate.withHeight(height*.19f).withY(y-height*.06f).expanded(5*unit));
+            return;
+        }
+        const auto circuit = body.withSizeKeepingCentre(juce::jmin(body.getWidth()*.76f,body.getHeight()*1.25f),body.getHeight()*.72f);
+        g.setColour(palette.textSecondary);
+        g.drawRoundedRectangle(circuit,3*unit,stroke);
+        const auto mid = circuit.getCentre();
+        const auto span = circuit.getWidth()*.35f;
+        g.drawLine(circuit.getX()-8*unit,mid.y,mid.x-span*.32f,mid.y,stroke);
+        g.drawLine(mid.x+span*.32f,mid.y,circuit.getRight()+8*unit,mid.y,stroke);
+        juce::Path diode;
+        g.setColour(palette.accent.withAlpha(.62f+brightness*.38f));
+        if (currentModel==10)
+        {
+            for (int winding=0;winding<4;++winding)
+            {
+                const auto y=mid.y-span*.22f+static_cast<float>(winding)*span*.11f;
+                for (const auto x : {mid.x-span*.20f,mid.x+span*.20f})
+                    g.drawEllipse(juce::Rectangle<float>(span*.22f,span*.18f).withCentre({x,y}),stroke*.80f);
+            }
+            for (const auto x : {mid.x-unit*2,mid.x+unit*2})
+                g.drawLine(x,mid.y-span*.35f,x,mid.y+span*.30f,stroke);
+        }
+        else
+        {
+            diode.addTriangle({mid.x-span*.28f,mid.y-span*.23f},
+                              {mid.x-span*.28f,mid.y+span*.23f},{mid.x+span*.28f,mid.y});
+            g.strokePath(diode,juce::PathStrokeType(stroke));
+            g.drawLine(mid.x+span*.28f,mid.y-span*.23f,mid.x+span*.28f,mid.y+span*.23f,stroke);
+        }
+        const auto meter = circuit.withTrimmedTop(circuit.getHeight()*.77f).reduced(10*unit,0);
+        g.setColour(palette.hairline);g.drawLine(meter.getX(),meter.getCentreY(),meter.getRight(),meter.getCentreY(),stroke);
+        g.setColour(palette.accent);
+        g.drawLine(meter.getX(),meter.getCentreY(),meter.getX()+meter.getWidth()*brightness,meter.getCentreY(),stroke*1.4f);
+    }
+
     void visibilityChanged() override
     {
         if (!isShowing())
@@ -166,6 +317,10 @@ private:
             receivedFreshAudio = false;
         }
     }
+    juce::Image lineBackground;
+    juce::Rectangle<int> lineBackgroundSize;
+    Skin lineBackgroundSkin=Skin::modern;
+    float lineBackgroundScale=0.0f;
     struct Artwork
     {
         juce::Image off = juce::ImageFileFormat::loadFrom(BinaryData::analog_tube_off_png, BinaryData::analog_tube_off_pngSize);

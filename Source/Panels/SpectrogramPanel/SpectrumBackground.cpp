@@ -92,7 +92,7 @@ void SpectrumBackground::createBackgroundImage()
 
     const auto area = bounds.toFloat();
     if (fire::ui::isVintage(*this)) g.fillAll(fire::ui::paletteFor(*this).canvas);
-    else fire::ui::drawCanvas(g, area);
+    else fire::ui::drawCanvas(g, area, fire::ui::skinFor(*this));
 
     // A very restrained technical grid gives the analyser depth without
     // competing with the moving spectrum.
@@ -104,7 +104,7 @@ void SpectrumBackground::createBackgroundImage()
                                      fire::ui::paletteFor(*this).surface0.withAlpha(0.16f),
                                      area.getX(), area.getY() + headerHeight, false);
     g.setGradientFill(headerShade);
-    g.fillRect(area.withHeight(headerHeight));
+    if (!fire::ui::isLineSkin(*this)) g.fillRect(area.withHeight(headerHeight));
 
     g.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(0.26f));
     for (int division = 1; division < 5; ++division)

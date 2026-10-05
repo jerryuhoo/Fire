@@ -65,6 +65,30 @@ void CloseButton::paintButton(juce::Graphics& g, bool, bool)
     const auto physicalScale = juce::jmax(
         1.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
 
+    if (fire::ui::isLineSkin(*this))
+    {
+        const auto skin=fire::ui::skinFor(*this);
+        const auto& palette=fire::ui::paletteFor(*this);
+        const auto selected=fire::ui::isInSelectedModuleRow(*this);
+        const auto ink=selected ? fire::ui::lineOnAccent(skin) : palette.textSecondary;
+        const auto emphasis=juce::jmax(hover,focus);
+        if (emphasis>.01f)
+        {
+            g.setColour(ink.withAlpha(.055f*emphasis*visibility));g.fillEllipse(surface);
+        }
+        const auto centre=surface.getCentre();
+        const auto half=surface.getWidth()*.25f;
+        juce::Path minus;minus.startNewSubPath(centre.x-half,centre.y);minus.lineTo(centre.x+half,centre.y);
+        g.setColour(ink.interpolatedWith(selected ? ink : palette.accent,hover*.8f).withAlpha(visibility*.90f));
+        g.strokePath(minus,juce::PathStrokeType(juce::jmax(1.0f,surface.getWidth()*.065f),
+            juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+        if (focus>.01f)
+        {
+            g.setColour(ink.withAlpha(focus*.55f*visibility));g.drawEllipse(surface,1/physicalScale);
+        }
+        return;
+    }
+
     // The old control was a conspicuous outlined circle. This compact raised
     // tile keeps the destructive affordance clear without competing with the
     // spectrum and crossover rails.

@@ -14,6 +14,12 @@
 
 struct FireBrandingIntegrationTestAccess final
 {
+    static void useOriginalSkin(FireAudioProcessorEditor& editor)
+    {
+        // These motion/colour checks cover the original golden vector marks.
+        // They must not depend on a user's locally saved Paper/Ink preference.
+        editor.applySkin(fire::ui::Skin::modern);
+    }
     static void tick(FireAudioProcessorEditor& editor)
     {
         // Exercise the real meter-consumption and repaint paths without
@@ -121,6 +127,7 @@ public:
         processor.setRateAndBufferSizeDetails(sampleRate, blockSize);
         processor.prepareToPlay(sampleRate, blockSize);
         editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        FireBrandingIntegrationTestAccess::useOriginalSkin(*editor);
         editor->stopTimer();
         editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
         editor->setVisible(true);

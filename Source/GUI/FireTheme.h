@@ -461,6 +461,29 @@ inline void drawPortfolioDots(juce::Graphics& g, juce::Rectangle<float> bounds, 
             g.fillEllipse(x,y,diameter,diameter);
 }
 
+inline void drawLineLamp(juce::Graphics& g, juce::Rectangle<float> bounds, Skin skin,
+                         bool on, bool enabled, float emphasis=0, bool selectedRow=false, float scale=1)
+{
+    const auto& palette=skinPalette(skin);
+    const auto radius=juce::jmax(1.8f*scale,juce::jmin(bounds.getWidth(),bounds.getHeight())*.19f);
+    const auto lamp=juce::Rectangle<float>(radius*2,radius*2).withCentre(bounds.getCentre());
+    const auto opacity=enabled ? 1.0f : .32f;
+    const auto edge=selectedRow ? lineOnAccent(skin) : palette.textMuted;
+    const auto light=selectedRow ? (skin==Skin::ink ? palette.textPrimary : lineOnAccent(skin)) : palette.accent;
+    if (on)
+    {
+        g.setColour(light.withAlpha(.07f*opacity));g.fillEllipse(lamp.expanded(2*scale));
+        g.setColour(light.withAlpha(.96f*opacity));g.fillEllipse(lamp);
+    }
+    g.setColour((on && !selectedRow ? light : edge).withAlpha((on ? .80f : .56f)*opacity));
+    g.drawEllipse(lamp,juce::jmax(.75f,.8f*scale));
+    if (emphasis>.01f)
+    {
+        g.setColour((selectedRow ? edge : palette.accent).withAlpha(emphasis*.42f*opacity));
+        g.drawEllipse(lamp.expanded(2*scale),juce::jmax(.7f,.8f*scale));
+    }
+}
+
 inline void drawCanvas(juce::Graphics& g, juce::Rectangle<float> bounds, Skin skin = Skin::modern)
 {
     const auto& palette = skinPalette(skin);

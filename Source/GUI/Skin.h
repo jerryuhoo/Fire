@@ -25,6 +25,16 @@ inline Skin skinFor(const juce::Component& component)
 inline bool isVintage(const juce::Component& component) { return skinFor(component) == Skin::vintage; }
 inline bool isLineSkin(const juce::Component& component) { return isLineSkin(skinFor(component)); }
 inline bool usesNavigationMotion(const juce::Component& component) { return skinFor(component) == Skin::modern; }
+inline bool isInSelectedModuleRow(const juce::Component& component)
+{
+    const auto* parent=component.getParentComponent();
+    if (parent==nullptr) return false;
+    for (const auto* sibling : parent->getChildren())
+        if (const auto* button=dynamic_cast<const juce::Button*>(sibling); button!=nullptr && button!=&component
+            && button->getToggleState() && static_cast<bool>(button->getProperties().getWithDefault("fireModuleRail",false))
+            && button->getBounds().contains(component.getBounds().getCentre())) return true;
+    return false;
+}
 inline void setSkin(juce::Component& component, Skin skin)
 { component.getProperties().set(skinProperty, static_cast<int>(skin)); component.repaint(); }
 

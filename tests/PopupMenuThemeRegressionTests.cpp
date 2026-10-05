@@ -230,6 +230,30 @@ TEST_CASE("Line skins show the selected tab and preserve icon-only controls",
     }
 }
 
+TEST_CASE("Line power switches use filled lamps with distinct off states",
+          "[skin][line-skin][ui][power][pixels][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel look;
+    juce::ToggleButton control;control.setSize(24,24);
+    for(const auto skin : {fire::ui::Skin::paper,fire::ui::Skin::ink})
+    {
+        look.setSkin(skin);
+        const auto render=[&](bool on)
+        {
+            juce::Image image(juce::Image::ARGB,24,24,true);
+            juce::Graphics g(image);
+            look.drawTickBox(g,control,0,0,24,24,on,true,false,false);
+            return image;
+        };
+        const auto on=render(true),off=render(false);
+        CHECK(on.getPixelAt(12,12).getAlpha()>200);
+        CHECK(off.getPixelAt(12,12).getAlpha()==0);
+        CHECK(on.getPixelAt(3,3).getAlpha()==0);
+        CHECK(imageFingerprint(on)!=imageFingerprint(off));
+    }
+}
+
 TEST_CASE("Fire context menus inherit their target theme and cursor anchor",
           "[ui][popup-menu][theme][anchor]")
 {

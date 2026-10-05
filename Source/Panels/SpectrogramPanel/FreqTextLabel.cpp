@@ -21,6 +21,7 @@ FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
 
     // Add and configure the child juce::Label component.
     addAndMakeVisible(freqLabel);
+    freqLabel.setComponentID("crossoverFrequencyValue");
     freqLabel.setEditable(true);
     freqLabel.setMouseCursor(juce::MouseCursor::IBeamCursor);
     freqLabel.setMinimumHorizontalScale(0.78f);
@@ -59,6 +60,14 @@ FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
                               fire::ui::colours::ember.withAlpha(0.38f));
             editor->setColour(juce::TextEditor::highlightedTextColourId,
                               fire::ui::colours::whiteHot);
+            if (fire::ui::isLineSkin(*this))
+            {
+                const auto& palette=fire::ui::paletteFor(*this);
+                editor->setColour(juce::TextEditor::textColourId,palette.textPrimary);
+                editor->setColour(juce::TextEditor::highlightColourId,palette.accent.withAlpha(.23f));
+                editor->setColour(juce::TextEditor::highlightedTextColourId,palette.textPrimary);
+                editor->setFont(fire::ui::portfolioMonoFont(freqLabel.getFont().getHeight()));
+            }
             editor->selectAll();
         }
     };
@@ -115,6 +124,17 @@ void FreqTextLabel::paint(juce::Graphics& g)
     const auto radius = juce::jmin(pill.getHeight() * 0.5f,
                                    fire::ui::Metrics::radiusSmall + 1.0f);
 
+    if (fire::ui::isLineSkin(*this))
+    {
+        const auto& palette=fire::ui::paletteFor(*this);
+        g.beginTransparencyLayer(reveal);
+        g.setColour(palette.surface1);g.fillRoundedRectangle(pill,3*mScale);
+        g.setColour(palette.hairline.interpolatedWith(palette.accent,hover*.55f));
+        g.drawRoundedRectangle(pill.reduced(.5f),3*mScale,juce::jmax(.8f,mScale*.75f));
+        g.endTransparencyLayer();
+        return;
+    }
+
     g.setColour(juce::Colours::black.withAlpha(0.24f));
     g.fillRoundedRectangle(pill.translated(0.0f, 1.0f), radius);
 
@@ -150,6 +170,20 @@ void FreqTextLabel::resized()
     // It's also a good place to update anything that depends on size, like font height.
     freqLabel.setFont(fire::ui::labelFont(
         juce::jlimit(9.0f, 13.5f, 10.75f * mScale)));
+}
+
+void FreqTextLabel::lookAndFeelChanged()
+{
+    const auto& palette=fire::ui::paletteFor(*this);
+    freqLabel.setColour(juce::Label::textColourId,palette.textPrimary);
+    freqLabel.setColour(juce::Label::textWhenEditingColourId,palette.textPrimary);
+    if (auto* editor=freqLabel.getCurrentTextEditor(); editor!=nullptr && fire::ui::isLineSkin(*this))
+    {
+        editor->setColour(juce::TextEditor::textColourId,palette.textPrimary);
+        editor->setColour(juce::TextEditor::highlightedTextColourId,palette.textPrimary);
+        editor->setColour(juce::TextEditor::highlightColourId,palette.accent.withAlpha(.23f));
+    }
+    repaint();
 }
 
 void FreqTextLabel::visibilityChanged()

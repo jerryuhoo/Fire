@@ -58,6 +58,11 @@ void EnableButton::paint(juce::Graphics& g)
     const auto enabled = juce::jlimit(0.0f, 1.0f, enabledAnimation.current);
 
     bounds = bounds.reduced(press * 0.55f);
+    if (fire::ui::isLineSkin(*this))
+    {
+        fire::ui::drawLineLamp(g,bounds,fire::ui::skinFor(*this),active,isEnabled(),juce::jmax(hover,focus),false);
+        return;
+    }
 
     juce::ColourGradient metal(fire::ui::colours::raised.brighter(0.03f + hover * 0.07f),
                                bounds.getCentreX(), bounds.getY(),

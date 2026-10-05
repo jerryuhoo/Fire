@@ -348,6 +348,8 @@ public:
     {
         if (fire::ui::isLineSkin(currentSkin))
         {
+            if (label.getComponentID()=="crossoverFrequencyValue")
+                return fire::ui::portfolioMonoFont(label.getFont().getHeight());
             if (dynamic_cast<juce::Slider*>(label.getParentComponent())!=nullptr && label.getComponentID()!="parameter_title")
                 return fire::ui::portfolioMonoFont(12*scale);
             return fire::ui::portfolioFont(label.getFont().getHeight()>0 ? label.getFont().getHeight() : 13*scale);
@@ -998,6 +1000,12 @@ public:
                      bool down) override
     {
         using namespace fire::ui;
+        if (isLineSkin(currentSkin))
+        {
+            drawLineLamp(g,juce::Rectangle<float>(x,y,w,h),currentSkin,ticked,isEnabled,
+                highlighted ? 1.0f : 0.0f,isInSelectedModuleRow(component),scale);
+            return;
+        }
         if (component.getComponentID() == "flat_toggle")
         {
             auto bounds = component.getLocalBounds().toFloat().reduced(1.0f);

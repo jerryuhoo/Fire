@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include <cstdlib>
 
 struct PrimaryEditableLabelTestAccess
 {
@@ -719,4 +720,41 @@ TEST_CASE("Frequency text gestures begin only for a valid commit and survive del
     CHECK(gestureBegins == 1);
     CHECK(gestureEnds == 1);
     CHECK(editCalls == 0);
+}
+
+TEST_CASE("Line frequency readouts stay legible during hover and text editing",
+          "[skin][line-skin][frequency-label][ui][contrast][editing][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel look;
+    FrequencyLabelFixture fixture;
+    fixture.frequencyLabel.setFreq(325);
+    fixture.frequencyLabel.setFade(true,true);
+    for(int frame=0;frame<80;++frame) fixture.frequencyLabel.advanceAnimation(1.0f/60.0f);
+    auto* label=fixture.getEditableLabel();
+    REQUIRE(label!=nullptr);
+    for (const auto skin : {fire::ui::Skin::paper,fire::ui::Skin::ink})
+    {
+        fire::ui::setSkin(fixture.desktopHost,skin);
+        look.setSkin(skin); fixture.desktopHost.setLookAndFeel(&look);
+        fixture.desktopHost.sendLookAndFeelChange();
+        const auto& palette=fire::ui::skinPalette(skin);
+        CHECK(label->findColour(juce::Label::textColourId)==palette.textPrimary);
+        CHECK(std::abs(palette.surface1.getPerceivedBrightness()-palette.textPrimary.getPerceivedBrightness())>.50f);
+        auto image=fixture.frequencyLabel.createComponentSnapshot(fixture.frequencyLabel.getLocalBounds());
+        const auto interior=image.getPixelAt(8,5);
+        CHECK(std::abs(interior.getPerceivedBrightness()-palette.surface1.getPerceivedBrightness())<.05f);
+        if (const auto* path=std::getenv("FIRE_SKIN_PREVIEW_DIR"))
+        {
+            auto stream=juce::File(path).getChildFile(juce::String(fire::ui::skinName(skin)).toLowerCase()+"-frequency-readout.png").createOutputStream();
+            REQUIRE(stream!=nullptr);stream->setPosition(0);stream->truncate();
+            CHECK(juce::PNGImageFormat{}.writeImageToStream(image,*stream));
+        }
+        label->showEditor();
+        auto* editor=label->getCurrentTextEditor();REQUIRE(editor!=nullptr);
+        CHECK(editor->findColour(juce::TextEditor::textColourId)==palette.textPrimary);
+        label->hideEditor(true);
+        CHECK(fixture.frequencyLabel.getFreq()==325);
+    }
+    fixture.desktopHost.setLookAndFeel(nullptr);
 }

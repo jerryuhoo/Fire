@@ -542,3 +542,23 @@ TEST_CASE("Band deletion recovers when its primary release is lost",
 
     CHECK(clickCount == 0);
 }
+
+TEST_CASE("Line deletion glyphs stay lightweight while retaining a full click target",
+          "[skin][line-skin][close-button][ui][render][accessibility][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    CloseButton button;
+    button.setSize(24,24);button.setPresented(true,false);
+    for(const auto skin : {fire::ui::Skin::paper,fire::ui::Skin::ink})
+    {
+        fire::ui::setSkin(button,skin);
+        const auto image=button.createComponentSnapshot(button.getLocalBounds());
+        int painted=0;
+        for(int y=0;y<image.getHeight();++y)
+            for(int x=0;x<image.getWidth();++x)
+                painted+=image.getPixelAt(x,y).getAlpha()>0;
+        CHECK(painted>5);CHECK(painted<image.getWidth()*image.getHeight()/5);
+        CHECK(image.getPixelAt(6,6).getAlpha()==0);
+        CHECK(button.hitTest(0,0));CHECK(button.hitTest(23,23));
+    }
+}

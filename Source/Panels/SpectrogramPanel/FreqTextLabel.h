@@ -30,6 +30,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void visibilityChanged() override;
+    void lookAndFeelChanged() override;
     void setFreq (int freq);
     int getFreq() const noexcept;
     void setScale (float scale);

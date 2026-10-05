@@ -1,3 +1,4 @@
+#include "helpers/ProcessingLatency.h"
 #include "../Source/PluginProcessor.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -475,7 +476,7 @@ void checkSlopeTransition(CutStage stage,
                            + transitionSamples
                            + transitionGuardSamples
                            + finalComparisonSamples
-                           + 32;
+                           + 256;
     const std::vector<SlopeEvent> events {
         { warmupSamples, targetSlope }
     };
@@ -503,7 +504,7 @@ void checkSlopeTransition(CutStage stage,
     // The global filter is after the HQ oversampler, so an HQ slope event is
     // audible immediately. Base mode receives the fixed host-PDC pad after
     // the filter and therefore exposes the same event D samples later.
-    const int eventOutputOffset = useHq ? 0 : subject.reportedLatency;
+    const int eventOutputOffset = fire::tests::legacyControlOutputDelay(useHq, subject.reportedLatency);
     const int firstAudibleSample = warmupSamples + eventOutputOffset;
     const float initialError = maximumDifference(
         subject,
@@ -584,7 +585,7 @@ void checkRapidReverse(CutStage stage,
                            + transitionSamples
                            + transitionGuardSamples
                            + finalComparisonSamples
-                           + 32;
+                           + 256;
     const std::vector<int> pattern { preparedBlockSize };
     const std::vector<SlopeEvent> redirectedEvents {
         { warmupSamples, temporarySlope },
@@ -623,7 +624,7 @@ void checkRapidReverse(CutStage stage,
     REQUIRE(continuing.finite);
     REQUIRE(continuing.latencyInvariant);
 
-    const int eventOutputOffset = useHq ? 0 : subject.reportedLatency;
+    const int eventOutputOffset = fire::tests::legacyControlOutputDelay(useHq, subject.reportedLatency);
     const int firstAudibleReverse = reverseSample + eventOutputOffset;
     const auto first = strongestEndpointPoint(subject,
                                               continuing,
@@ -670,7 +671,7 @@ void checkHostPartition(CutStage stage,
                            + transitionSamples
                            + transitionGuardSamples
                            + finalComparisonSamples
-                           + 32;
+                           + 256;
     const std::vector<SlopeEvent> events {
         { warmupSamples, targetSlope }
     };
@@ -702,7 +703,7 @@ void checkHostPartition(CutStage stage,
                                                    irregular,
                                                    0,
                                                    totalSamples);
-    const int eventOutputOffset = useHq ? 0 : fixed.reportedLatency;
+    const int eventOutputOffset = fire::tests::legacyControlOutputDelay(useHq, fixed.reportedLatency);
     const int finalStateStart = warmupSamples
                               + eventOutputOffset
                               + transitionSamples
@@ -734,7 +735,7 @@ void checkQueuedThirdSlope(CutStage stage, bool useHq)
                            + 2 * transitionSamples
                            + transitionGuardSamples
                            + finalComparisonSamples
-                           + 64;
+                           + 256;
     const std::vector<SlopeEvent> queuedEvents {
         { warmupSamples, firstTarget },
         { queuedSample, queuedTarget },
@@ -783,7 +784,7 @@ void checkQueuedThirdSlope(CutStage stage, bool useHq)
     REQUIRE(staleQueuedReference.finite);
     REQUIRE(staleQueuedReference.latencyInvariant);
 
-    const int eventOutputOffset = useHq ? 0 : fixed.reportedLatency;
+    const int eventOutputOffset = fire::tests::legacyControlOutputDelay(useHq, fixed.reportedLatency);
     const float queuedContinuityError = maximumDifference(
         fixed,
         continuingFirstTarget,
@@ -851,7 +852,7 @@ void checkSlopeChangeWhileStageBypassed(CutStage stage, bool useHq)
                            + transitionSamples
                            + transitionGuardSamples
                            + finalComparisonSamples
-                           + 32;
+                           + 256;
     const std::vector<StageBypassEvent> bypassEvents {
         { fadeOutSample, true },
         { reenableSample, false }
@@ -880,7 +881,7 @@ void checkSlopeChangeWhileStageBypassed(CutStage stage, bool useHq)
                                       bypassEvents);
     requireFiniteAndBounded(subject, warmTarget, staleOldSlope);
 
-    const int eventOutputOffset = useHq ? 0 : subject.reportedLatency;
+    const int eventOutputOffset = fire::tests::legacyControlOutputDelay(useHq, subject.reportedLatency);
     const int reenableAudibleSample = reenableSample + eventOutputOffset;
     const int comparisonSamples = transitionSamples
                                 + transitionGuardSamples

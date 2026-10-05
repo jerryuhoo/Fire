@@ -1,3 +1,4 @@
+#include "helpers/ProcessingLatency.h"
 #include "../Source/PluginProcessor.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -379,7 +380,9 @@ StageBypassMetrics runStageBypassProbe(FilterStage stage)
     metrics.settledDryError = maximumAbsoluteDifference(drySettled[0],
                                                          drySettled[2]);
 
-    processAll(bypassIntervalSamples - 193);
+    // The longer observation drain must not move the re-enable event to
+    // a different input phase; preserve the original bypass interval.
+    processAll(bypassIntervalSamples - 193 - fire::tests::legacyInsertOutputReserve());
     const auto beforeEnable = processAll(31);
     setPlainParameter(subject, bypassParameterFor(stage), 0.0f);
     const auto enableFirstBlock = processAll(preparedBlockSize);
@@ -550,7 +553,7 @@ TEST_CASE("All enabled global-filter stages retain the canonical chain response"
 
     juce::dsp::DelayLine<
         float,
-        juce::dsp::DelayLineInterpolationTypes::None> canonicalLatency(64);
+        juce::dsp::DelayLineInterpolationTypes::None> canonicalLatency(juce::jmax(64, subject.getLatencySamples() + 2));
     canonicalLatency.prepare({ sampleRate,
                                static_cast<juce::uint32>(preparedBlockSize),
                                2 });

@@ -324,7 +324,8 @@ TEST_CASE("Width graph consumes hidden history before its first visible repaint"
     REQUIRE(widthGraph.isShowing());
 
     WidthGraphHistorySourceTestAccess::rebuildCache(widthGraph);
-    processHistoryBlock(processor, 0.2f);
+    for (int rendered = 0; rendered <= processor.getLatencySamples(); rendered += blockSize)
+        processHistoryBlock(processor, 0.2f);
 
     FireAudioProcessor::HistorySnapshot visibleSnapshot;
     REQUIRE(processor.copyHistorySnapshot(visibleSnapshot));

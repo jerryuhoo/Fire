@@ -1,3 +1,4 @@
+#include "helpers/ProcessingLatency.h"
 #include <PluginProcessor.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -174,7 +175,7 @@ TransitionRender renderGlobalTransition(RecipeChange change,
     configureGlobalProcessor(alwaysNew, preparedBlockSize, useHq, newRecipe);
 
     TransitionRender result;
-    result.audibleEventOffset = useHq ? 0 : subject.getLatencySamples();
+    result.audibleEventOffset = fire::tests::legacyControlOutputDelay(useHq, subject.getLatencySamples());
     REQUIRE(result.audibleEventOffset >= 0);
     REQUIRE(alwaysOld.getLatencySamples() == subject.getLatencySamples());
     REQUIRE(alwaysNew.getLatencySamples() == subject.getLatencySamples());
@@ -385,7 +386,7 @@ GlobalBaseAutomationRender renderGlobalRoutedBaseAutomation(
     const auto* subjectOutputValue = subject.treeState.getRawParameterValue(
         OUTPUT_ID);
     REQUIRE(subjectOutputValue != nullptr);
-    const int audibleControlDelay = useHq ? 0 : subject.getLatencySamples();
+    const int audibleControlDelay = fire::tests::legacyControlOutputDelay(useHq, subject.getLatencySamples());
 
     juce::MidiBuffer midi;
     for (int processed = 0; processed < warmupSamples; processed += 512)

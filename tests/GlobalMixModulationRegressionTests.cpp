@@ -1,3 +1,4 @@
+#include "helpers/ProcessingLatency.h"
 #include <PluginProcessor.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -211,7 +212,7 @@ RenderResult renderStable(bool useHq,
                        useHq,
                        GlobalMixState::alwaysWet);
 
-    const int controlDelay = useHq ? 0 : subject.getLatencySamples();
+    const int controlDelay = fire::tests::legacyControlOutputDelay(useHq, subject.getLatencySamples());
     REQUIRE(alwaysDry.getLatencySamples() == subject.getLatencySamples());
     REQUIRE(alwaysWet.getLatencySamples() == subject.getLatencySamples());
 
@@ -327,7 +328,7 @@ void checkSourceBridge(bool useHq)
     }
 
     subject.assignLfoToTarget(1, MIX_ID);
-    const int audibleOffset = useHq ? 0 : subject.getLatencySamples();
+    const int audibleOffset = fire::tests::legacyControlOutputDelay(useHq, subject.getLatencySamples());
     const int eventSamples = audibleOffset + routeRampSamples + 1;
     juce::AudioBuffer<float> subjectAudio(2, eventSamples);
     for (int channel = 0; channel < 2; ++channel)

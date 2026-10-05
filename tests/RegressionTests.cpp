@@ -1,3 +1,4 @@
+#include "helpers/ProcessingLatency.h"
 // RegressionTests.cpp
 #include "../Source/PluginProcessor.h"
 #include <catch2/catch_test_macros.hpp>
@@ -253,13 +254,12 @@ namespace TestHelpers
             REQUIRE(compensationLatency > 0);
 
             // --- 2. Process audio in blocks ---
-            // Base presets need D tail samples because the new integer pad is
-            // part of this fix. HQ audio itself is unchanged, so preserve the
-            // historical golden harness (including its D zero tail) rather
-            // than rewriting otherwise-identical HQ fixtures.
+            // Drain the unused insertion reserve in both quality modes. Keep
+            // the historical HQ fractional-delay zero tail, rather than
+            // truncating an extra 80 samples or rewriting the sound fixtures.
             const int sourceSamples = inputBuffer.getNumSamples();
             const int renderedSamples = sourceSamples
-                                      + (useHq ? 0 : latencySamples);
+                                      + (useHq ? fire::tests::legacyInsertOutputReserve() : latencySamples);
             juce::AudioBuffer<float> rawOutputBuffer(inputBuffer.getNumChannels(),
                                                      renderedSamples);
             rawOutputBuffer.clear();

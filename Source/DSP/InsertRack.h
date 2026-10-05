@@ -61,6 +61,8 @@ public:
         initialised = false;
     }
     int getReservedLatency() const noexcept {return slotLatency * slotCount;}
+    int getProcessingBudget() const noexcept {return latencyActive ? getReservedLatency() : 0;}
+    void setLatencyActive(bool active) noexcept {latencyActive = active;}
     bool prepareSlotForType(int slot, Type type) noexcept
     {return effects && juce::isPositiveAndBelow(slot, slotCount) ? (*effects)[static_cast<size_t>(slot)].prepareForType(type) : type == Type::none;}
     void prepareRequestedFamilies() noexcept
@@ -90,11 +92,11 @@ public:
         transition.setTargetValue(order == requested ? 1.0f : 0.0f);
         const bool blending = transition.isSmoothing() || transition.getCurrentValue() < 1.0f;
         const auto channels = juce::jmin(size_t(2), block.getNumChannels());
-        if (blending || supportsIndependentHq)
+        if (blending || (supportsIndependentHq && latencyActive))
             for (size_t channel = 0; channel < channels; ++channel)
                 juce::FloatVectorOperations::copy(dry.getWritePointer(static_cast<int>(channel)),
                     block.getChannelPointer(channel), static_cast<int>(block.getNumSamples()));
-        if (supportsIndependentHq)
+        if (supportsIndependentHq && latencyActive)
         {
             auto alignedDry = juce::dsp::AudioBlock<float>(dry).getSubsetChannelBlock(0, channels).getSubBlock(0, block.getNumSamples());
             orderDryDelay.process(juce::dsp::ProcessContextReplacing<float>(alignedDry));
@@ -116,11 +118,11 @@ public:
     {
         if (! effects || ! juce::isPositiveAndBelow(slot, slotCount)) return;
         auto p = parameters[static_cast<size_t>(slot)].effect;
-        p.highQuality = supportsIndependentHq && highQuality;
-        p.fixedShapeLatency = supportsIndependentHq;
+        p.highQuality = supportsIndependentHq && latencyActive && highQuality;
+        p.fixedShapeLatency = supportsIndependentHq && latencyActive;
         auto input = juce::dsp::AudioBlock<float>(slotInput);
         auto dryView = juce::dsp::AudioBlock<float>(slotDry);
-        if (supportsIndependentHq)
+        if (supportsIndependentHq && latencyActive)
         {
             input = input.getSubsetChannelBlock(0, block.getNumChannels()).getSubBlock(0, block.getNumSamples());
             dryView = dryView.getSubsetChannelBlock(0, block.getNumChannels()).getSubBlock(0, block.getNumSamples());
@@ -156,7 +158,7 @@ public:
         (*effects)[static_cast<size_t>(slot)].process(block, p, sampleOffset,
                                                   &parameters[static_cast<size_t>(slot)].sources,
                                                   &parameters[static_cast<size_t>(slot)].cloudsSources);
-        if (supportsIndependentHq)
+        if (supportsIndependentHq && latencyActive)
         {
             if ((*effects)[static_cast<size_t>(slot)].getProcessingLatency() != 0)
                 slotOutputDelay[static_cast<size_t>(slot)].process(juce::dsp::ProcessContextNonReplacing<float>(input, dryView));
@@ -172,6 +174,7 @@ private:
     int slotLatency = 0;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> orderDryDelay;
     bool supportsIndependentHq = false;
+    bool latencyActive = true;
     juce::SmoothedValue<float> transition;
     bool initialised = false;
 };

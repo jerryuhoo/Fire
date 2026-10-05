@@ -1,3 +1,4 @@
+#include "helpers/ProcessingLatency.h"
 #include <PluginProcessor.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -352,7 +353,7 @@ void checkTopologyChange(int targetBandCount, bool useHq)
 
     // HQ's natural band latency is upstream of the topology sum, while Base
     // receives the fixed integer PDC pad after the complete processing path.
-    const int eventOutputOffset = useHq ? 0 : subject.reportedLatency;
+    const int eventOutputOffset = fire::tests::legacyTransitionEnvelopeDelay(useHq, subject.reportedLatency);
     const int firstAudibleSample = warmupSamples + eventOutputOffset;
     const float initialError = maximumDifference(subject,
                                                  fromReference,
@@ -463,8 +464,7 @@ TEST_CASE("A topology transition completes inside one 8192-sample callback",
                     totalSamples,
                     numChannels,
                     oversizedCallbackSamples);
-                const int outputOffset = useHq ? 0
-                                               : subject.reportedLatency;
+                const int outputOffset = fire::tests::legacyTransitionEnvelopeDelay(useHq, subject.reportedLatency);
                 const int firstAudibleSample = warmupSamples + outputOffset;
                 const int warmWindowStart = firstAudibleSample
                                           + topologyRampSamples;
@@ -871,8 +871,7 @@ TEST_CASE("Rapid topology automation keeps the latest complete target",
                     finalReferenceEvents,
                     blocks,
                     totalSamples);
-                const int outputOffset = useHq ? 0
-                                               : subject.reportedLatency;
+                const int outputOffset = fire::tests::legacyTransitionEnvelopeDelay(useHq, subject.reportedLatency);
                 const int firstAudibleSample = warmupSamples + outputOffset;
                 const int finalWindowStart = secondEventSample
                                            + outputOffset

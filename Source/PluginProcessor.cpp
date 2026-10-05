@@ -1698,7 +1698,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
     // Band Enable bypasses the complete processed band, including the user's
     // own Band Mix. Align the shared dry path to the oversampled wet path once
     // so both coefficient stages retain the established Thiran phase response.
-    sharedBandDryDelay.setDelay(static_cast<float>(inserts.getReservedLatency())
+    sharedBandDryDelay.setDelay(static_cast<float>(inserts.getProcessingBudget())
                                + (useHQ ? oversampling->getLatencyInSamples() : 0.0f));
     auto bandEnableDryBlock = juce::dsp::AudioBlock<float>(dryBuffer);
     sharedBandDryDelay.process(
@@ -3854,6 +3854,9 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     const auto insertGraphLatency = static_cast<float>(2 * fire::effects::slotCount
         * fire::effects::independentShapeLatency(spec.numChannels));
     const auto graphHqLatency = hqLatency + insertGraphLatency;
+    preparedInsertReserve = juce::roundToInt(insertGraphLatency);
+    unusedInsertReserveDelay.prepare(spec);
+    unusedInsertReserveDelay.setDelay(insertGraphLatency);
     loudnessMatch.prepare(safeSampleRate);
     loudnessReference.setSize(outputChannels, maximumBlockSize);
     loudnessReferenceDelay.setMaximumDelayInSamples(juce::jmax(1, static_cast<int>(std::ceil(graphHqLatency)) + 2));
@@ -4987,7 +4990,7 @@ void FireAudioProcessor::updateBandSoloGainEnvelope(
 
     bandSoloGainEnvelope.setSize(4, numSamples, false, false, true);
     delayedBandSoloGainEnvelope.setSize(4, numSamples, false, false, true);
-    const float wetPathLatency = static_cast<float>(masterInserts.getReservedLatency())
+    const float wetPathLatency = static_cast<float>(masterInserts.getProcessingBudget())
         + (useHQ ? preparedHqLatency.load(std::memory_order_acquire) : 0.0f);
     for (size_t band = 0; band < bandSoloGainSmoothers.size(); ++band)
     {
@@ -5071,6 +5074,7 @@ bool FireAudioProcessor::tryCaptureMultibandTopologySnapshot(
     auto& candidateCallbackParameters = audioCallbackWorkspace->candidateParameters;
     prepareAudioCallbackParameterSnapshot(sequenceBefore,
                                           candidateCallbackParameters);
+    candidate.independentShapeBudget = hasIndependentShape(candidate, candidateCallbackParameters);
 
     // APVTS publishes its raw parameter atomics with release/seq_cst stores.
     // If any relaxed payload read above observed a value staged after a writer
@@ -5176,6 +5180,9 @@ void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
         activeAudioCallbackParameterSnapshotInitialised = true;
     }
 
+    activeMultibandTopologySnapshot.independentShapeBudget = hasIndependentShape(
+        activeMultibandTopologySnapshot, activeAudioCallbackParameterSnapshot);
+    applyInsertLatencyBudget();
     numBands = activeMultibandTopologySnapshot.numBands;
     activeCrossovers = numBands - 1;
     snapCrossoverSmoothers(
@@ -5259,6 +5266,7 @@ void FireAudioProcessor::performReset()
     lofiMixer.reset();
     masterInserts.reset(true);
     masterOrderDryDelay.reset();
+    unusedInsertReserveDelay.reset();
     masterOrderTransition.reset();
     masterTape.reset();
     for (size_t i = 0; i < tapeSmoothers.size(); ++i)
@@ -8445,6 +8453,7 @@ void FireAudioProcessor::processMultiBandRange(
 void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate, bool highQuality)
 {
     masterOrderDry.makeCopyOf(buffer, true);
+    masterOrderDryDelay.setDelay(static_cast<float>(masterInserts.getProcessingBudget()));
     auto alignedOrderDry = juce::dsp::AudioBlock<float>(masterOrderDry);
     masterOrderDryDelay.process(juce::dsp::ProcessContextReplacing<float>(alignedOrderDry));
     const auto& order = masterOrderTransition.begin(activeAudioCallbackParameterSnapshot.moduleOrder);
@@ -8918,7 +8927,26 @@ bool FireAudioProcessor::sameTopologyIdentity(
     const MultibandTopologySnapshot& second) noexcept
 {
     return first.numBands == second.numBands
-        && first.dspResetSequence == second.dspResetSequence;
+        && first.dspResetSequence == second.dspResetSequence
+        && first.independentShapeBudget == second.independentShapeBudget;
+}
+
+bool FireAudioProcessor::hasIndependentShape(const MultibandTopologySnapshot& topology,
+    const AudioCallbackParameterSnapshot& parameters) const noexcept
+{
+    for (const auto& slot : parameters.inserts) if (slot.effect.type == fire::effects::Type::shape) return true;
+    for (int band = 0; band < topology.numBands; ++band)
+        for (const auto& slot : topology.callbackContext.bandParameters[static_cast<size_t>(band)].inserts)
+            if (slot.effect.type == fire::effects::Type::shape) return true;
+    return false;
+}
+
+void FireAudioProcessor::applyInsertLatencyBudget() noexcept
+{
+    const bool active = activeMultibandTopologySnapshot.independentShapeBudget;
+    masterInserts.setLatencyActive(active);
+    for (auto& band : bands) band->inserts.setLatencyActive(active);
+    unusedInsertReserveDelay.setDelay(active ? 0.0f : static_cast<float>(preparedInsertReserve));
 }
 
 bool FireAudioProcessor::hasPendingTopologyChange() const noexcept
@@ -9047,12 +9075,21 @@ bool FireAudioProcessor::commitPendingTopologySnapshot() noexcept
     if (! hasPendingTopologyChange())
         return false;
 
+    const bool insertBudgetChanged = activeMultibandTopologySnapshot.independentShapeBudget
+        != pendingMultibandTopologySnapshot.independentShapeBudget;
     activeMultibandTopologySnapshot = pendingMultibandTopologySnapshot;
+    applyInsertLatencyBudget();
     numBands = activeMultibandTopologySnapshot.numBands;
     activeCrossovers = numBands - 1;
 
     resetMultibandProcessingState(
         &activeMultibandTopologySnapshot.callbackContext);
+    if (insertBudgetChanged)
+    {
+        masterInserts.reset(true);
+        masterOrderDryDelay.reset();
+        unusedInsertReserveDelay.reset();
+    }
     snapCrossoverSmoothers(
         activeMultibandTopologySnapshot.crossoverFrequencies);
     snapBandSoloGains(
@@ -9230,6 +9267,8 @@ void FireAudioProcessor::processActiveHqRange(
                    delayMatchedDryBufferForRange,
                    lfoOutputs,
                    useHQ);
+    auto reserveBlock = juce::dsp::AudioBlock<float>(buffer);
+    unusedInsertReserveDelay.process(juce::dsp::ProcessContextReplacing<float>(reserveBlock));
 
     if (! useHQ && applyFinalNonHqDelay)
         applyNonHqOutputDelay(buffer);
@@ -9574,11 +9613,12 @@ void FireAudioProcessor::applyGlobalMix(
     if (useHQ)
     {
         dryWetMixerGlobal.setWetLatency(
-            totalLatency.load(std::memory_order_acquire));
+            preparedHqLatency.load(std::memory_order_acquire)
+            + static_cast<float>(2 * masterInserts.getProcessingBudget()));
     }
     else
     {
-        dryWetMixerGlobal.setWetLatency(static_cast<float>(2 * masterInserts.getReservedLatency()));
+        dryWetMixerGlobal.setWetLatency(static_cast<float>(2 * masterInserts.getProcessingBudget()));
     }
 
     const auto& mixSnapshot =

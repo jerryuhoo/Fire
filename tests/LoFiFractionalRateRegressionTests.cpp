@@ -1,3 +1,4 @@
+#include "helpers/ProcessingLatency.h"
 #include <PluginProcessor.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -213,7 +214,7 @@ Timeline offlineHold(const Timeline& upstreamReference,
 {
     REQUIRE_FALSE(upstreamReference.empty());
     const int numSamples = static_cast<int>(upstreamReference.front().size());
-    const int baseOutputDelay = useHq ? 0 : reportedLatency;
+    const int baseOutputDelay = fire::tests::legacyControlOutputDelay(useHq, reportedLatency);
     REQUIRE(baseOutputDelay >= 0);
     REQUIRE(baseOutputDelay < numSamples);
 

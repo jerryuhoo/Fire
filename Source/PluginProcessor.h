@@ -818,6 +818,7 @@ private:
         std::array<float, 3> crossoverFrequencies { 200.0f, 1000.0f, 5000.0f };
         std::uint32_t publicationSequence = 0;
         std::uint32_t dspResetSequence = 0;
+        bool independentShapeBudget = false;
         int numBands = 1;
     };
 
@@ -1015,6 +1016,10 @@ private:
     std::vector<std::unique_ptr<BandProcessor>> bands;
     std::atomic<float> totalLatency { 0.0f };
     std::atomic<float> preparedHqLatency { 0.0f };
+    int preparedInsertReserve = 0;
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> unusedInsertReserveDelay{256};
+    bool hasIndependentShape(const MultibandTopologySnapshot&, const AudioCallbackParameterSnapshot&) const noexcept;
+    void applyInsertLatencyBudget() noexcept;
 
     enum class HqTransitionPhase;
     enum class TopologyTransitionPhase;

@@ -1,3 +1,4 @@
+#include "helpers/ProcessingLatency.h"
 #include <PluginProcessor.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -145,7 +146,7 @@ RenderResult render(bool useHq,
                        preparedBlockSize,
                        useHq,
                        MixState::alwaysWet);
-    const int controlDelay = useHq ? 0 : subject.getLatencySamples();
+    const int controlDelay = fire::tests::legacyControlOutputDelay(useHq, subject.getLatencySamples());
 
     RenderResult result;
     for (auto& channel : result.output)
@@ -303,7 +304,7 @@ TEST_CASE("LoFi Mix bridges an active LFO source change in ten milliseconds",
         }
 
         subject.assignLfoToTarget(1, DOWNSAMPLE_MIX_ID);
-        const int audibleOffset = useHq ? 0 : subject.getLatencySamples();
+        const int audibleOffset = fire::tests::legacyControlOutputDelay(useHq, subject.getLatencySamples());
         const int eventSamples = audibleOffset + bridgeSamples + 1;
         juce::AudioBuffer<float> subjectAudio(2, eventSamples);
         for (int channel = 0; channel < 2; ++channel)

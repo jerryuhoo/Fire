@@ -9,7 +9,7 @@
 namespace
 {
 constexpr double sampleRate = 48000.0;
-constexpr int blockSize = 64;
+constexpr int blockSize = 128;
 constexpr int warmupBlocks = 128;
 constexpr int settlingBlocks = 128;
 constexpr int modulationWarmupSamples = 4096;

@@ -1,0 +1,118 @@
+{
+  "date": "2026-10-05",
+  "platform": "Apple M1 Pro, arm64, Release -O3 -fno-fast-math / LTO",
+  "audio_conditions": "stereo, no editor, 64-sample blocks, fixed multitone, median of three one-second rounds, 256 warmup blocks; unused independent Shape reserve at output for legacy-only recipes",
+  "before_96000_four_transformer_hq_budget_percent": [
+    105.061,
+    105.0883
+  ],
+  "cpu": [
+    {
+      "mode": -1.0,
+      "HQ": 0.0,
+      "rate": 48000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 5.2885,
+      "p99CallbackBudgetPercent": 8.543775,
+      "maxCallbackUs": 175.541,
+      "deadlineUs": 1333.33333333
+    },
+    {
+      "mode": 22.0,
+      "HQ": 1.0,
+      "rate": 48000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 31.5403,
+      "p99CallbackBudgetPercent": 40.80315,
+      "maxCallbackUs": 1096.166,
+      "deadlineUs": 1333.33333333
+    },
+    {
+      "mode": 23.0,
+      "HQ": 1.0,
+      "rate": 48000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 54.6701,
+      "p99CallbackBudgetPercent": 63.756225,
+      "maxCallbackUs": 933.0,
+      "deadlineUs": 1333.33333333
+    },
+    {
+      "mode": -1.0,
+      "HQ": 0.0,
+      "rate": 96000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 10.5876,
+      "p99CallbackBudgetPercent": 16.31865,
+      "maxCallbackUs": 183.417,
+      "deadlineUs": 666.666666667
+    },
+    {
+      "mode": 22.0,
+      "HQ": 1.0,
+      "rate": 96000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 60.4808,
+      "p99CallbackBudgetPercent": 75.84375,
+      "maxCallbackUs": 591.5,
+      "deadlineUs": 666.666666667
+    },
+    {
+      "mode": 23.0,
+      "HQ": 1.0,
+      "rate": 96000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 64.6423,
+      "p99CallbackBudgetPercent": 80.9688,
+      "maxCallbackUs": 887.292,
+      "deadlineUs": 666.666666667
+    }
+  ],
+  "memory_conditions": "incremental physical footprint of three default stereo one-band instances, no editor, 48kHz128 samples",
+  "before_instance_increment_MiB": [
+    141.391601562,
+    136.453918457,
+    139.500610352
+  ],
+  "memory": [
+    {
+      "instance": 1.0,
+      "constructedDeltaMB": 25.7662963867,
+      "prepareDeltaMB": 9.92193603516,
+      "totalDeltaMB": 35.6882324219
+    },
+    {
+      "instance": 2.0,
+      "constructedDeltaMB": 24.5469970703,
+      "prepareDeltaMB": 9.609375,
+      "totalDeltaMB": 34.1563720703
+    },
+    {
+      "instance": 3.0,
+      "constructedDeltaMB": 21.078125,
+      "prepareDeltaMB": 9.78131103516,
+      "totalDeltaMB": 30.8594360352
+    }
+  ],
+  "validation": {
+    "ctest_total": 1073,
+    "ctest_passed": 1073,
+    "pluginval": {
+      "version": "1.0.4",
+      "strictness": 10,
+      "skip_gui": true,
+      "parameter_count": 4634,
+      "result": "SUCCESS"
+    },
+    "xcode_shared_code": "BUILD SUCCEEDED",
+    "signature_formats": [
+      "AU",
+      "VST3",
+      "CLAP"
+    ],
+    "native_state_roundtrip": [
+      "AU",
+      "CLAP"
+    ]
+  }
+}

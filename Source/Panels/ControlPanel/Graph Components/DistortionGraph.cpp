@@ -33,6 +33,16 @@ void DistortionGraph::paint(juce::Graphics& g)
 {
     GraphTemplate::paint(g);
 
+    // Native snapshots may paint without a peer, so isShowing() does not
+    // guarantee that the deferred curve/gradient have been prepared. Direct2D
+    // cannot create a brush from the default gradient's empty colour stops.
+    if (getGraphPlotBounds().isEmpty())
+        return;
+    if (curveDirty)
+        updateDistortionCurve();
+    if (curveDirty || distortionCurve.isEmpty())
+        return;
+
     const juce::Graphics::ScopedSaveState state(g);
     g.reduceClipRegion(getGraphPlotBounds().getSmallestIntegerContainer());
 

@@ -49,6 +49,11 @@ struct DistortionGraphSourceEpochTestAccess
     {
         return graph.distortionCurve.getBounds();
     }
+
+    static int gradientStops(const DistortionGraph& graph)
+    {
+        return graph.curveGradient.getNumColours();
+    }
 };
 
 namespace
@@ -211,6 +216,35 @@ TEST_CASE("Distortion graph rebuilds a curve resized behind a hidden ancestor",
     CHECK_FALSE(DistortionGraphSourceEpochTestAccess::curveIsDirty(graph));
     CHECK(DistortionGraphSourceEpochTestAccess::curveBounds(graph).getWidth()
           > initialCurveBounds.getWidth());
+}
+
+TEST_CASE("Offscreen transfer snapshots prepare a valid curve and gradient before painting",
+          "[ui][graph][render][offscreen][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    juce::Component host;
+    DistortionGraph graph(processor);
+    host.addAndMakeVisible(graph);
+    host.setSize(640, 360);
+    host.setVisible(true);
+    REQUIRE(host.getPeer() == nullptr);
+
+    for (const auto skin : fire::ui::skins)
+    {
+        CAPTURE(static_cast<int>(skin));
+        fire::ui::setSkin(host, skin);
+        graph.setSize(240 + static_cast<int>(skin) * 20, 140);
+        graph.setState(0, 0.0f, 1.0f, 0.0f, 2.0f, 1.0f);
+        REQUIRE_FALSE(graph.isShowing());
+        REQUIRE(DistortionGraphSourceEpochTestAccess::curveIsDirty(graph));
+
+        const auto image = graph.createComponentSnapshot(graph.getLocalBounds());
+        REQUIRE_FALSE(image.isNull());
+        CHECK_FALSE(DistortionGraphSourceEpochTestAccess::curveIsDirty(graph));
+        CHECK_FALSE(DistortionGraphSourceEpochTestAccess::curveBounds(graph).isEmpty());
+        CHECK(DistortionGraphSourceEpochTestAccess::gradientStops(graph) >= 2);
+    }
 }
 
 TEST_CASE("Drive edits cannot alternate the transfer graph between base and LFO values",

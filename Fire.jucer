@@ -212,6 +212,7 @@
         <FILE id="analogFx1" name="AnalogDistortion.h" compile="0" resource="0" file="Source/DSP/AnalogDistortion.h"/>
         <FILE id="analogFx2" name="AnalogShapeParameters.h" compile="0" resource="0" file="Source/Utility/AnalogShapeParameters.h"/>
         <FILE id="coreFx1" name="CoreEffect.h" compile="0" resource="0" file="Source/DSP/CoreEffect.h"/>
+        <FILE id="shapeLat1" name="ShapeLatency.h" compile="0" resource="0" file="Source/DSP/ShapeLatency.h"/>
         <FILE id="coreFx2" name="CoreEffect.cpp" compile="1" resource="0" file="Source/DSP/CoreEffect.cpp"/>
         <FILE id="coreFx3" name="CoreModuleParameters.h" compile="0" resource="0" file="Source/Utility/CoreModuleParameters.h"/>
         <FILE id="chordResDsp" name="ChordResonator.h" compile="0" resource="0" file="Source/DSP/ChordResonator.h"/>

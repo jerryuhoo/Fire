@@ -8,23 +8,38 @@ struct CoreEffect::Impl
     BandProcessor band;
     eq::Processor equalizer;
     juce::AudioBuffer<float> noLfo;
+    juce::AudioBuffer<float> zeroModulation;
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> baseShapeDelay{64};
+    int shapeLatency = 0;
+    bool qualityPrimed = false, lastHighQuality = false;
 };
 CoreEffect::CoreEffect() : impl(std::make_unique<Impl>()) {}
 CoreEffect::~CoreEffect() = default;
 void CoreEffect::prepare(const juce::dsp::ProcessSpec& spec)
 {
     impl->band.prepare(spec, false);
+    impl->band.oversampling->setUsingIntegerLatency(true);
+    impl->shapeLatency = juce::roundToInt(impl->band.oversampling->getLatencyInSamples());
+    impl->zeroModulation.setSize(1, juce::jmax(1, static_cast<int>(spec.maximumBlockSize)));
+    impl->zeroModulation.clear();
+    impl->baseShapeDelay.prepare(spec);
+    impl->baseShapeDelay.setDelay(static_cast<float>(impl->shapeLatency));
+    impl->qualityPrimed = false;
     impl->equalizer.prepare(spec.sampleRate);
 }
+int CoreEffect::getShapeLatency() const noexcept { return impl->shapeLatency; }
 void CoreEffect::reset() noexcept
 {
     impl->band.reset();
     impl->equalizer.reset();
+    impl->baseShapeDelay.reset();
+    impl->qualityPrimed = false;
 }
 void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
     const std::array<ModulatedValueProvider, 6>& values, bool normalised, int offset,
     const std::array<int, 6>* sources, const std::array<EqNode, eq::maxNodes>& eqNodes, int shapeModel,
-    const ModulatedValueProvider& analogDrive, int analogDriveSource) noexcept
+    const ModulatedValueProvider& analogDrive, int analogDriveSource,
+    bool highQuality, bool fixedShapeLatency) noexcept
 {
     if (block.getNumChannels() == 0 || block.getNumSamples() == 0) return;
     if (type == Type::eq)
@@ -55,6 +70,7 @@ void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
         return;
     }
     BandProcessingParameters p;
+    p.isHQ = type == Type::shape && highQuality;
     const auto provider = [&](size_t index, float multiplier = 1.0f)
     {
         auto result = values[index];
@@ -115,9 +131,44 @@ void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
     juce::AudioBuffer<float> buffer(channels, static_cast<int>(juce::jmin(size_t{2}, block.getNumChannels())), static_cast<int>(block.getNumSamples()));
     if (type == Type::drive || type == Type::shape)
     {
-        impl->band.processDriveShapeStage(buffer, p, impl->noLfo, 0, buffer.getMagnitude(0, buffer.getNumSamples()), false,
+        // Providers already point at this chunk's base-rate instants. Borrow
+        // them as a complete source bank so the shared distortion engine also
+        // upsamples Envelope and Macros, without allocation or a second copy.
+        std::array<float*, fire::mod_sources::sourceCount> pointers;
+        pointers.fill(impl->zeroModulation.getWritePointer(0));
+        std::array<ModulatedValueProvider*, 3> providers{&p.driveVal, &p.biasVal, &p.recVal};
+        std::array<int*, 3> indices{&p.driveLfoSourceIndex, &p.biasLfoSourceIndex, &p.recLfoSourceIndex};
+        std::array<bool, fire::mod_sources::sourceCount> occupied{};
+        for (size_t i = 0; i < providers.size(); ++i)
+            if (providers[i]->lfoSignal && juce::isPositiveAndBelow(*indices[i], fire::mod_sources::sourceCount))
+                occupied[static_cast<size_t>(*indices[i])] = true;
+        for (size_t i = 0; i < providers.size(); ++i)
+        {
+            if (!providers[i]->lfoSignal) {*indices[i] = -1; continue;}
+            if (!juce::isPositiveAndBelow(*indices[i], fire::mod_sources::sourceCount))
+            {
+                const auto unused = std::find(occupied.begin(), occupied.end(), false);
+                *indices[i] = static_cast<int>(std::distance(occupied.begin(), unused));
+                occupied[static_cast<size_t>(*indices[i])] = true;
+            }
+            pointers[static_cast<size_t>(*indices[i])] = const_cast<float*>(providers[i]->lfoSignal);
+        }
+        const juce::AudioBuffer<float> sourcesView(pointers.data(), fire::mod_sources::sourceCount, buffer.getNumSamples());
+        if (type == Type::shape)
+        {
+            if (impl->qualityPrimed && impl->lastHighQuality != highQuality)
+            {
+                impl->band.resetQualityTransitionState();
+                impl->baseShapeDelay.reset();
+            }
+            impl->qualityPrimed = true;
+            impl->lastHighQuality = highQuality;
+        }
+        impl->band.processDriveShapeStage(buffer, p, sourcesView, 0, buffer.getMagnitude(0, buffer.getNumSamples()), false,
                                          type == Type::drive || (type == Type::shape && shapeModel > 0), type == Type::shape);
         if (type == Type::shape) impl->band.processDcFilter(buffer, p.isDcFilterEnabled);
+        if (type == Type::shape && fixedShapeLatency && !highQuality)
+            impl->baseShapeDelay.process(juce::dsp::ProcessContextReplacing<float>(block));
     }
     else if (type == Type::compressor) impl->band.processCompressorStage(buffer, p);
     else if (type == Type::stereo) impl->band.processStereoStage(buffer, p);

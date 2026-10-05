@@ -127,6 +127,14 @@ float naturalHqLatency(int numChannels, int maximumBlockSize)
     return oversampling.getLatencyInSamples();
 }
 
+float reservedInsertLatency(int numChannels, int maximumBlockSize)
+{
+    juce::dsp::Oversampling<float> shape(static_cast<size_t>(numChannels), 2,
+        juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false, true);
+    shape.initProcessing(static_cast<size_t>(maximumBlockSize));
+    return 2 * static_cast<float>(fire::effects::slotCount) * shape.getLatencyInSamples();
+}
+
 void processDirtyHistory(FireAudioProcessor& processor,
                          ProcessingPath path,
                          int numChannels,
@@ -230,7 +238,8 @@ RenderResult renderDelayReference(int numChannels,
                                   const std::vector<int>& blockPattern,
                                   int totalSamples = renderedSamples)
 {
-    juce::dsp::DelayLine<float, InterpolationType> delayLine(64);
+    juce::dsp::DelayLine<float, InterpolationType> delayLine(
+        juce::jmax(64, juce::roundToInt(std::ceil(delaySamples)) + 2));
     delayLine.prepare({ sampleRate,
                         static_cast<juce::uint32>(preparedBlockSize),
                         static_cast<juce::uint32>(numChannels) });
@@ -292,7 +301,7 @@ void checkCanonicalPhysicalDelay(bool useHq,
 {
     const std::vector<int> blocks { preparedBlockSize };
     const float naturalLatency = naturalHqLatency(numChannels,
-                                                  preparedBlockSize);
+                                                  preparedBlockSize) + reservedInsertLatency(numChannels, preparedBlockSize);
     const int fixedLatency = juce::roundToInt(naturalLatency);
     const auto normal = renderProcessor(useHq,
                                         globalMix,
@@ -419,7 +428,8 @@ RenderResult renderImpulseDelayReference(int numChannels,
                                          float delaySamples,
                                          int numSamples)
 {
-    juce::dsp::DelayLine<float, InterpolationType> delayLine(64);
+    juce::dsp::DelayLine<float, InterpolationType> delayLine(
+        juce::jmax(64, juce::roundToInt(std::ceil(delaySamples)) + 2));
     delayLine.prepare({ sampleRate,
                         static_cast<juce::uint32>(numSamples),
                         static_cast<juce::uint32>(numChannels) });
@@ -493,7 +503,7 @@ void checkCallbackModeSnapshots(int numChannels, ProcessingPath path)
 {
     constexpr int callbackSamples = 128;
     const float naturalLatency = naturalHqLatency(numChannels,
-                                                  callbackSamples);
+                                                  callbackSamples) + reservedInsertLatency(numChannels, callbackSamples);
     const int fixedLatency = juce::roundToInt(naturalLatency);
     const auto baseReference = renderImpulseDelayReference<
         juce::dsp::DelayLineInterpolationTypes::None>(

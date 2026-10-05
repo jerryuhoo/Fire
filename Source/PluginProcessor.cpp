@@ -1315,14 +1315,14 @@ static bool pushToFifo(juce::AbstractFifo& fifo,
 //==============================================================================
 
 // This is where we tell JUCE what to do when prepareToPlay is called for a single band.
-void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec, bool withInserts)
+void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec, bool withInserts, bool independentHq)
 {
     analogShapeBaseRate = spec.sampleRate;
     for (auto& bank : analogShapeBanks) for (auto& stage : bank) stage.prepare(spec.sampleRate);
     // Prepare all the DSP modules with the sample rate and block size.
     compressor.prepare(spec);
     ott.prepare(spec);
-    if (withInserts) inserts.prepare(spec);
+    if (withInserts) inserts.prepare(spec, independentHq);
     orderTransition.prepare(spec.sampleRate);
     mOttInputLevelDb.store(-120.0f, std::memory_order_relaxed);
     mOttGainChangeDb.store(0.0f, std::memory_order_relaxed);
@@ -1698,8 +1698,8 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
     // Band Enable bypasses the complete processed band, including the user's
     // own Band Mix. Align the shared dry path to the oversampled wet path once
     // so both coefficient stages retain the established Thiran phase response.
-    sharedBandDryDelay.setDelay(useHQ ? oversampling->getLatencyInSamples()
-                                      : 0.0f);
+    sharedBandDryDelay.setDelay(static_cast<float>(inserts.getReservedLatency())
+                               + (useHQ ? oversampling->getLatencyInSamples() : 0.0f));
     auto bandEnableDryBlock = juce::dsp::AudioBlock<float>(dryBuffer);
     sharedBandDryDelay.process(
         juce::dsp::ProcessContextReplacing<float>(bandEnableDryBlock));
@@ -1731,7 +1731,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
             mOttDynamicsActivityDb.store(params.isBandEnabled ? ott.getDynamicsActivityDb() : 0.0f, std::memory_order_relaxed);
         }
         else if (node >= fire::module_order::firstInsert)
-            inserts.processSlot(block, node - fire::module_order::firstInsert, params.inserts, lfoOutputs, lfoSampleOffset);
+            inserts.processSlot(block, node - fire::module_order::firstInsert, params.inserts, lfoOutputs, lfoSampleOffset, useHQ);
     }
     orderTransition.apply(block, dryBuffer);
 
@@ -3827,7 +3827,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         if (auto* band = bands[i].get())
         {
             const auto& parameters = bandParameterCache[static_cast<size_t>(i)];
-            band->prepare(spec);
+            band->prepare(spec, true, true);
             band->recSmoother.setCurrentAndTargetValue(loadCachedParameter(parameters.rec));
             band->biasSmoother.setCurrentAndTargetValue(loadCachedParameter(parameters.bias));
 
@@ -3847,15 +3847,18 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     if (! std::isfinite(hqLatency) || hqLatency < 0.0f)
         hqLatency = 0.0f;
     preparedHqLatency.store(hqLatency, std::memory_order_release);
+    const auto insertGraphLatency = static_cast<float>(2 * fire::effects::slotCount
+        * fire::effects::independentShapeLatency(spec.numChannels));
+    const auto graphHqLatency = hqLatency + insertGraphLatency;
     loudnessMatch.prepare(safeSampleRate);
     loudnessReference.setSize(outputChannels, maximumBlockSize);
-    loudnessReferenceDelay.setMaximumDelayInSamples(juce::jmax(1, static_cast<int>(std::ceil(hqLatency)) + 2));
+    loudnessReferenceDelay.setMaximumDelayInSamples(juce::jmax(1, static_cast<int>(std::ceil(graphHqLatency)) + 2));
     loudnessReferenceDelay.prepare(spec);
     loudnessReferenceWasActive = false;
     // Host PDC cannot safely follow an automatable quality switch. Report the
     // prepared HQ latency for both modes; base processing is delayed by the
     // same integer number of samples at the end of the callback.
-    totalLatency.store(hqLatency, std::memory_order_release);
+    totalLatency.store(graphHqLatency, std::memory_order_release);
     nonHqOutputDelay.prepare(spec);
     nonHqOutputDelay.setDelay(static_cast<float>(juce::roundToInt(hqLatency)));
     hqTransitionRampSamples = juce::jmax(
@@ -3865,7 +3868,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     hqTransitionRampRemaining = 0;
     hqTransitionWarmupSamples = juce::jmax(
         juce::roundToInt(static_cast<float>(safeSampleRate) * 0.001f),
-        juce::roundToInt(std::ceil(hqLatency))
+        juce::roundToInt(std::ceil(graphHqLatency))
             + juce::roundToInt(hqLatency)
             + 2);
     topologyTransitionRampSamples = juce::jmax(
@@ -3873,7 +3876,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     topologyTransitionWarmupSamples = juce::jmax(
         48,
         juce::roundToInt(static_cast<float>(safeSampleRate) * 0.001f),
-        juce::roundToInt(std::ceil(hqLatency))
+        juce::roundToInt(std::ceil(graphHqLatency))
             + juce::roundToInt(hqLatency)
             + 2);
 
@@ -3955,7 +3958,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         1
     };
     const int maximumSoloEnvelopeDelay = juce::jmax(1, juce::roundToInt(
-        std::ceil(preparedHqLatency.load(std::memory_order_acquire))) + 2);
+        std::ceil(hqLatency + insertGraphLatency * .5f)) + 2);
     bandSoloGainDelayLinesPrepared = false;
     for (auto& delayLine : bandSoloGainDelayLines)
     {
@@ -4086,9 +4089,11 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     bypassDelayMixer.prepare(globalMixerSpec);
 
     lofiMixer.prepare(globalMixerSpec);
-    masterInserts.prepare(spec);
+    masterInserts.prepare(spec, true);
     masterOrderTransition.prepare(safeSampleRate);
     masterOrderDry.setSize(static_cast<int>(spec.numChannels), static_cast<int>(spec.maximumBlockSize));
+    masterOrderDryDelay.prepare(spec);
+    masterOrderDryDelay.setDelay(static_cast<float>(masterInserts.getReservedLatency()));
     masterTape.prepare(safeSampleRate);
     for (size_t i = 0; i < tapeSmoothers.size(); ++i)
     {
@@ -4960,9 +4965,8 @@ void FireAudioProcessor::updateBandSoloGainEnvelope(
 
     bandSoloGainEnvelope.setSize(4, numSamples, false, false, true);
     delayedBandSoloGainEnvelope.setSize(4, numSamples, false, false, true);
-    const float wetPathLatency = useHQ
-                                     ? preparedHqLatency.load(std::memory_order_acquire)
-                                     : 0.0f;
+    const float wetPathLatency = static_cast<float>(masterInserts.getReservedLatency())
+        + (useHQ ? preparedHqLatency.load(std::memory_order_acquire) : 0.0f);
     for (size_t band = 0; band < bandSoloGainSmoothers.size(); ++band)
     {
         const bool isActiveBand = static_cast<int>(band) < numBands;
@@ -5232,6 +5236,7 @@ void FireAudioProcessor::performReset()
     nonHqOutputDelay.reset();
     lofiMixer.reset();
     masterInserts.reset();
+    masterOrderDryDelay.reset();
     masterOrderTransition.reset();
     masterTape.reset();
     for (size_t i = 0; i < tapeSmoothers.size(); ++i)
@@ -5570,8 +5575,8 @@ void FireAudioProcessor::processWetBlock(
         if (! loudnessReferenceWasActive)
             loudnessReferenceDelay.reset();
         loudnessReferenceDelay.setDelay(activeHqMode
-            ? preparedHqLatency.load(std::memory_order_relaxed)
-            : static_cast<float>(juce::roundToInt(preparedHqLatency.load(std::memory_order_relaxed))));
+            ? totalLatency.load(std::memory_order_relaxed)
+            : static_cast<float>(juce::roundToInt(totalLatency.load(std::memory_order_relaxed))));
         loudnessReference.makeCopyOf(buffer, true);
         juce::dsp::AudioBlock<float> referenceBlock(loudnessReference);
         juce::dsp::ProcessContextReplacing<float> referenceContext(referenceBlock);
@@ -8414,9 +8419,11 @@ void FireAudioProcessor::processMultiBandRange(
     sumBands(wetBuffer, bandBuffers, false, true);
 }
 
-void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate)
+void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate, bool highQuality)
 {
     masterOrderDry.makeCopyOf(buffer, true);
+    auto alignedOrderDry = juce::dsp::AudioBlock<float>(masterOrderDry);
+    masterOrderDryDelay.process(juce::dsp::ProcessContextReplacing<float>(alignedOrderDry));
     const auto& order = masterOrderTransition.begin(activeAudioCallbackParameterSnapshot.moduleOrder);
     auto block = juce::dsp::AudioBlock<float>(buffer);
     for (int node : order)
@@ -8424,7 +8431,7 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
         if (node == 0) applyMasterFilter(buffer, lfoOutputs, sampleRate);
         else if (node == 1) applyDownsamplingEffect(buffer, lfoOutputs);
         else if (node >= fire::module_order::firstInsert)
-            masterInserts.processSlot(block, node - fire::module_order::firstInsert, activeAudioCallbackParameterSnapshot.inserts, lfoOutputs);
+            masterInserts.processSlot(block, node - fire::module_order::firstInsert, activeAudioCallbackParameterSnapshot.inserts, lfoOutputs, 0, highQuality);
         // Analysis is a view-only row; its position has no audio operation.
     }
     masterOrderTransition.apply(block, masterOrderDry);
@@ -8828,11 +8835,8 @@ void FireAudioProcessor::primeLatencyMatchedBypass(
         return;
 
     mWetBuffer.makeCopyOf(inputBuffer, true);
-    const float bypassLatency = useHQ
-                                    ? preparedHqLatency.load(std::memory_order_acquire)
-                                    : static_cast<float>(juce::roundToInt(
-                                          preparedHqLatency.load(
-                                              std::memory_order_acquire)));
+    const float bypassLatency = useHQ ? totalLatency.load(std::memory_order_acquire)
+        : static_cast<float>(juce::roundToInt(totalLatency.load(std::memory_order_acquire)));
     bypassDelayMixer.setWetLatency(bypassLatency);
     bypassDelayMixer.setWetMixProportion(0.0f);
     bypassDelayMixer.pushDrySamples(juce::dsp::AudioBlock<float>(inputBuffer));
@@ -8846,11 +8850,8 @@ void FireAudioProcessor::processLatencyMatchedBypass(
     if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
         return;
 
-    const float bypassLatency = useHQ
-                                    ? preparedHqLatency.load(std::memory_order_acquire)
-                                    : static_cast<float>(juce::roundToInt(
-                                          preparedHqLatency.load(
-                                              std::memory_order_acquire)));
+    const float bypassLatency = useHQ ? totalLatency.load(std::memory_order_acquire)
+        : static_cast<float>(juce::roundToInt(totalLatency.load(std::memory_order_acquire)));
     bypassDelayMixer.setWetLatency(bypassLatency);
     bypassDelayMixer.setWetMixProportion(0.0f);
     auto block = juce::dsp::AudioBlock<float>(buffer);
@@ -9201,7 +9202,7 @@ void FireAudioProcessor::processActiveHqRange(
                           callbackContext,
                           useHQ,
                           updateReductionMeter);
-    applyGlobalEffects(buffer, lfoOutputs, sampleRate);
+    applyGlobalEffects(buffer, lfoOutputs, sampleRate, useHQ);
     applyGlobalMix(buffer,
                    delayMatchedDryBufferForRange,
                    lfoOutputs,
@@ -9550,11 +9551,11 @@ void FireAudioProcessor::applyGlobalMix(
     if (useHQ)
     {
         dryWetMixerGlobal.setWetLatency(
-            preparedHqLatency.load(std::memory_order_acquire));
+            totalLatency.load(std::memory_order_acquire));
     }
     else
     {
-        dryWetMixerGlobal.setWetLatency(0);
+        dryWetMixerGlobal.setWetLatency(static_cast<float>(2 * masterInserts.getReservedLatency()));
     }
 
     const auto& mixSnapshot =

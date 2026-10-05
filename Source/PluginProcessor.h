@@ -321,7 +321,7 @@ struct BandProcessor
     std::atomic<float> mOttGainChangeDb { 0.0f };
     std::atomic<float> mOttDynamicsActivityDb { 0.0f };
 
-    void prepare(const juce::dsp::ProcessSpec& spec, bool withInserts = true);
+    void prepare(const juce::dsp::ProcessSpec& spec, bool withInserts = true, bool independentHq = false);
     void reset();
     void resetQualityTransitionState() noexcept;
     void process(juce::AudioBuffer<float>& buffer,
@@ -631,7 +631,7 @@ public:
         const HqCallbackContext& callbackContext,
         bool useHQ,
         bool updateReductionMeter);
-    void applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
+    void applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate, bool highQuality = false);
     void applyGlobalMix(juce::AudioBuffer<float>& buffer,
                         juce::AudioBuffer<float>& delayMatchedDryBufferForRange,
                         const juce::AudioBuffer<float>& lfoOutputs,
@@ -916,6 +916,7 @@ private:
     std::array<std::array<std::array<CachedParameter, fire::core_modules::slotFieldCount>, fire::effects::slotCount>, fire::effects::scopeCount> coreModuleParameters;
     fire::module_order::Transition masterOrderTransition;
     juce::AudioBuffer<float> masterOrderDry;
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> masterOrderDryDelay{256};
     fire::dsp::LoudnessMatchState loudnessMatch;
     juce::AudioBuffer<float> loudnessReference;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran> loudnessReferenceDelay;

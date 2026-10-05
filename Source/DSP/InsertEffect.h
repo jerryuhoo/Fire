@@ -263,6 +263,8 @@ public:
         std::uint32_t publicationSequence = 0;
         bool enabled = true;
         bool normalised = false;
+        bool highQuality = false, fixedShapeLatency = false;
+        const juce::AudioBuffer<float>* alignedShapeDry = nullptr;
         float bpm = 120;
         std::array<ModulatedValueProvider, controlCount> values;
         std::array<CoreEffect::EqNode, eq::maxNodes> eq;
@@ -293,6 +295,9 @@ public:
         if (! core) core = std::make_unique<CoreEffect>();
         core->prepare(spec);
         coreWet.setSize(2, juce::jmax(1, static_cast<int>(spec.maximumBlockSize)));
+        shapeDry.setSize(2, juce::jmax(1, static_cast<int>(spec.maximumBlockSize)));
+        shapeDryDelay.prepare(spec);
+        shapeDryDelay.setDelay(static_cast<float>(core->getShapeLatency()));
         gate.reset(sampleRate, 0.02);
         for (auto& smoother : bases) smoother.reset(sampleRate, 0.02);
         for (auto& route : routes) route.blend.reset(sampleRate, 0.01);
@@ -315,11 +320,14 @@ public:
     FrozenRecordingPtr copyFrozenRecording() const { return cloudsEngine.copyFrozenRecording(); }
     void stageFrozenRecording(const FrozenRecordingPtr& recording, std::uint32_t publication)
     { cloudsEngine.stageFrozenRecording(recording, publication); }
+    int getProcessingLatency() const noexcept
+    {return currentType == Type::shape && fixedShapeLatencyActive && core ? core->getShapeLatency() : 0;}
     void process(juce::dsp::AudioBlock<float> block, const Parameters& parameters, int offset = 0,
                  const std::array<int, controlCount>* sourceIndices = nullptr,
                  const std::array<int, 3>* cloudsSourceIndices = nullptr) noexcept
     {
         if (block.getNumChannels() == 0 || block.getNumSamples() == 0) return;
+        fixedShapeLatencyActive = parameters.fixedShapeLatency || parameters.highQuality;
         auto requested = parameters.type;
         if (requested < Type::none || requested >= Type::count) requested = Type::none;
         const auto matches = [&] { return requested == currentType && (currentType != Type::reverb
@@ -455,11 +463,23 @@ private:
             coreLastParameters = requested;
             for (auto& value : coreLastParameters.values) value.lfoSignal = nullptr;
             coreLastParameters.analogDrive.lfoSignal = nullptr;
+            coreLastParameters.alignedShapeDry = nullptr;
             for (auto& node : coreLastParameters.eq) for (auto& value : node.controls) value.signal = nullptr;
+        }
+        const bool alignShape = currentType == Type::shape && fixedShapeLatencyActive;
+        auto alignedDry = juce::dsp::AudioBlock<float>(shapeDry)
+            .getSubsetChannelBlock(0, juce::jmin(size_t{2}, block.getNumChannels())).getSubBlock(0, block.getNumSamples());
+        if (alignShape)
+        {
+            if (requested.alignedShapeDry)
+                alignedDry.copyFrom(juce::dsp::AudioBlock<const float>(*requested.alignedShapeDry)
+                    .getSubsetChannelBlock(0, alignedDry.getNumChannels()).getSubBlock(0, block.getNumSamples()));
+            else shapeDryDelay.process(juce::dsp::ProcessContextNonReplacing<float>(block, alignedDry));
         }
         if (juce::exactlyEqual(gate.getCurrentValue(), 0.0f) && ! gate.isSmoothing())
         {
             if (! dormant) {core->reset(); dormant = true;}
+            if (alignShape) block.copyFrom(alignedDry);
             return;
         }
         dormant = false;
@@ -467,7 +487,9 @@ private:
             .getSubBlock(0, block.getNumSamples());
         wet.copyFrom(block);
         const auto& p = matches ? requested : coreLastParameters;
-        core->process(wet, currentType, p.values, currentNormalised, matches ? offset : 0, sources, p.eq, p.shapeModel, p.analogDrive, p.analogDriveSource);
+        core->process(wet, currentType, p.values, currentNormalised, matches ? offset : 0, sources,
+                      p.eq, p.shapeModel, p.analogDrive, p.analogDriveSource,
+                      requested.highQuality, fixedShapeLatencyActive);
         for (size_t sample = 0; sample < block.getNumSamples(); ++sample)
         {
             const auto base = bases[5].getNextValue();
@@ -482,7 +504,8 @@ private:
             {
                 auto& original = block.getChannelPointer(channel)[sample];
                 const auto result = wet.getChannelPointer(channel)[sample];
-                original = juce::jmap(amount, original, std::isfinite(result) ? result : 0.0f);
+                const auto drySample = alignShape ? alignedDry.getChannelPointer(channel)[sample] : original;
+                original = juce::jmap(amount, drySample, std::isfinite(result) ? result : 0.0f);
             }
         }
     }
@@ -551,6 +574,7 @@ private:
         cloudsEngine.reset(preserveFrozen);
         chordEngine.reset();
         if (core) core->reset();
+        shapeDryDelay.reset();
         feedback.fill(0); highPassInput.fill(0); highPassOutput.fill(0);
         held.fill(0); holdRemaining = 0; holdResidual = 0; jitterSeed = 0x61c88647u;
         phase = 0;
@@ -830,6 +854,9 @@ private:
     Type currentType = Type::none;
     std::unique_ptr<CoreEffect> core;
     juce::AudioBuffer<float> coreWet;
+    juce::AudioBuffer<float> shapeDry;
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> shapeDryDelay{64};
+    bool fixedShapeLatencyActive = false;
     Parameters coreLastParameters;
     std::uint32_t jitterSeed = 0x61c88647u;
     bool dormant = true, currentNormalised = false, preserveFrozenOnActivation = false;

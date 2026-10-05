@@ -30,11 +30,13 @@ public:
     ~CoreEffect();
     void prepare(const juce::dsp::ProcessSpec&);
     void reset() noexcept;
+    int getShapeLatency() const noexcept;
     void process(juce::dsp::AudioBlock<float>, Type,
                  const std::array<ModulatedValueProvider, 6>&, bool normalised,
                  int offset, const std::array<int, 6>*,
                  const std::array<EqNode, eq::maxNodes>&, int shapeModel = 0,
-                 const ModulatedValueProvider& analogDrive = {}, int analogDriveSource = -1) noexcept;
+                 const ModulatedValueProvider& analogDrive = {}, int analogDriveSource = -1,
+                 bool highQuality = false, bool fixedShapeLatency = false) noexcept;
 private:
     struct Impl;
     std::unique_ptr<Impl> impl;

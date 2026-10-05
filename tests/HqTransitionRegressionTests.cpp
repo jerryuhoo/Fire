@@ -842,7 +842,7 @@ void checkMutedWarmRetarget(bool startHq)
 {
     constexpr int retargetSample = warmupSamples + fadeSamples + 24;
     const int totalSamples = retargetSample
-                           + oneMillisecondSamples
+                           + std::max(oneMillisecondSamples, 512)
                            + fadeSamples
                            + preparedBlockSize
                            + transitionGuardSamples
@@ -913,7 +913,7 @@ void checkFadeInReversal(bool startHq)
                                 + 96;
     const int totalSamples = reverseSample
                            + fadeSamples
-                           + oneMillisecondSamples
+                           + std::max(oneMillisecondSamples, 512)
                            + fadeSamples
                            + preparedBlockSize
                            + transitionGuardSamples
@@ -1647,8 +1647,10 @@ void checkTinyCallbackResetStorm(bool startHq)
     const bool finalHq = ! startHq;
     REQUIRE(events.back().enabled == finalHq);
 
+    // Leave enough rendered data for the fixed insert-slot PDC reserve.
+    // The checks below still locate recovery using the reported latency.
     const int totalSamples = stormEnd
-                           + oneMillisecondSamples
+                           + std::max(oneMillisecondSamples, 512)
                            + fadeSamples
                            + transitionGuardSamples
                            + finalStateSamples;

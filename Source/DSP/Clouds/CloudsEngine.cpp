@@ -346,8 +346,10 @@ struct CloudsEngine::Impl
         inputConverter.reset();
         outputConverter.reset();
         core.reset(preserveFrozen);
-        appliedRestore = 0;
-        exchange.applied.store(0, std::memory_order_release);
+        // A restore is a one-shot publication, not a reset preset. Replaying
+        // an already consumed mailbox would overwrite a later live capture.
+        // prepare() and authoritative state loads stage a fresh version when
+        // their recording needs to be installed again.
         if (!preserveFrozen) exchange.captured.publish(nullptr, 0);
         fill = 0;
         outputRead = outputWrite = outputCount = 0;

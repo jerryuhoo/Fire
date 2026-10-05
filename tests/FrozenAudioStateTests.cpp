@@ -184,6 +184,109 @@ TEST_CASE("Projects presets AB and undo retain distinct frozen materials", "[fro
     CHECK_FALSE(savedMaterial(processor));
 }
 
+TEST_CASE("A fresh Clouds capture survives preserving resets without replaying an old restore",
+          "[frozen-audio][clouds][recapture][reset][regression]")
+{
+    for (bool initialMaterial : {false, true})
+    {
+        CAPTURE(initialMaterial);
+        CloudsEngine engine;
+        auto initial = initialMaterial ? material(110) : FrozenRecordingPtr{};
+        engine.stageFrozenRecording(initial);
+        engine.prepare(48000);
+        CloudsParameters parameters;
+        parameters.freeze = initialMaterial;
+        for (int sample = 0; sample < 1024; ++sample)
+        {float left = 0, right = 0; engine.process(left, right, parameters);}
+        parameters.freeze = false;
+        for (int sample = 0; sample < 72000; ++sample)
+        {
+            float left = .3f * static_cast<float>(std::sin(6.283185307179586 * 660 * sample / 48000));
+            float right = left; engine.process(left, right, parameters);
+        }
+        parameters.freeze = true;
+        for (int sample = 0; sample < 1024; ++sample)
+        {float left = 0, right = 0; engine.process(left, right, parameters);}
+        const auto captured = engine.copyFrozenRecording();
+        REQUIRE(captured != nullptr);
+        if (initial) CHECK(captured->samples != initial->samples);
+        engine.reset(true);
+        REQUIRE(engine.copyFrozenRecording() != nullptr);
+        CHECK(engine.copyFrozenRecording()->samples == captured->samples);
+        for (int sample = 0; sample < 4096; ++sample)
+        {float left = 0, right = 0; engine.process(left, right, parameters);}
+        REQUIRE(engine.copyFrozenRecording() != nullptr);
+        CHECK(engine.copyFrozenRecording()->samples == captured->samples);
+        engine.prepare(96000);
+        for (int sample = 0; sample < 1024; ++sample)
+        {float left = 0, right = 0; engine.process(left, right, parameters);}
+        REQUIRE(engine.copyFrozenRecording() != nullptr);
+        CHECK(engine.copyFrozenRecording()->samples == captured->samples);
+        engine.reset(false);
+        CHECK_FALSE(engine.copyFrozenRecording());
+        for (int sample = 0; sample < 1024; ++sample)
+        {float left = 0, right = 0; engine.process(left, right, parameters);}
+        CHECK_FALSE(engine.copyFrozenRecording());
+        engine.stageFrozenRecording(material(330));
+        for (int sample = 0; sample < 1024; ++sample)
+        {float left = 0, right = 0; engine.process(left, right, parameters);}
+        REQUIRE(engine.copyFrozenRecording() != nullptr);
+        CHECK(engine.copyFrozenRecording()->samples == material(330)->samples);
+    }
+}
+
+TEST_CASE("Recaptured granular material survives module bypass and repeated processor resets",
+          "[frozen-audio][clouds][processor][recapture][bypass][reset][regression]")
+{
+    for (int scope : {0, 1})
+    {
+        CAPTURE(scope);
+        auto processor = std::make_unique<FireAudioProcessor>();
+        granular(*processor, scope);
+        const auto first = material(110);
+        processor->restoreFrozenAudio(scene(first, scope));
+        processor->setRateAndBufferSizeDetails(48000, 128);
+        processor->prepareToPlay(48000, 128);
+        juce::AudioBuffer<float> block(2, 128);
+        juce::MidiBuffer midi;
+        int frame = 0;
+        const auto render = [&](int count, bool input)
+        {
+            for (int iteration = 0; iteration < count; ++iteration)
+            {
+                for (int channel = 0; channel < 2; ++channel)
+                    for (int sample = 0; sample < 128; ++sample)
+                        block.setSample(channel, sample, input ? .3f * static_cast<float>(
+                            std::sin(6.283185307179586 * 660 * (frame + sample) / 48000)) : 0);
+                processor->processBlock(block, midi);
+                frame += 128;
+            }
+        };
+        render(16, false);
+        plain(*processor, fire::clouds_params::parameterID(scope, 0, fire::clouds_params::freezeField), 0);
+        render(600, true);
+        plain(*processor, fire::clouds_params::parameterID(scope, 0, fire::clouds_params::freezeField), 1);
+        render(16, false);
+        const auto captured = savedMaterial(*processor, scope);
+        REQUIRE(captured != nullptr);
+        CHECK(captured->samples != first->samples);
+        plain(*processor, parameterID(scope, 0, enabledField), 0);
+        render(32, false);
+        REQUIRE(savedMaterial(*processor, scope) != nullptr);
+        CHECK(savedMaterial(*processor, scope)->samples == captured->samples);
+        plain(*processor, parameterID(scope, 0, enabledField), 1);
+        render(64, false);
+        REQUIRE(savedMaterial(*processor, scope) != nullptr);
+        CHECK(savedMaterial(*processor, scope)->samples == captured->samples);
+        processor->reset();
+        render(16, false);
+        processor->reset();
+        render(16, false);
+        REQUIRE(savedMaterial(*processor, scope) != nullptr);
+        CHECK(savedMaterial(*processor, scope)->samples == captured->samples);
+    }
+}
+
 TEST_CASE("Invalid frozen state cannot partly load and legacy states discard stale material", "[frozen-audio][state][legacy]")
 {
     FireAudioProcessor processor;

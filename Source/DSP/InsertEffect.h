@@ -306,6 +306,7 @@ public:
     }
     void reset() noexcept
     {
+        preserveFrozenOnActivation = preserveFrozenOnActivation || currentType == Type::granular;
         resetMemory();
         currentType = Type::none;
         gate.setCurrentAndTargetValue(0);
@@ -578,7 +579,11 @@ private:
     }
     void activate(Type type, const Parameters& parameters) noexcept
     {
-        resetMemory(false); currentType = type; currentNormalised = parameters.normalised;
+        // A rack/lifecycle reset primes controls again, but must not turn the
+        // same granular instance's retained recording into an empty capture.
+        resetMemory(preserveFrozenOnActivation && type == Type::granular);
+        preserveFrozenOnActivation = false;
+        currentType = type; currentNormalised = parameters.normalised;
         currentReverbModel = juce::jlimit(0, fire::space::count - 1, parameters.reverbModel);
         cloudsState.freeze = parameters.clouds.freeze;
         for (size_t i = 0; i < controlCount; ++i)
@@ -827,7 +832,7 @@ private:
     juce::AudioBuffer<float> coreWet;
     Parameters coreLastParameters;
     std::uint32_t jitterSeed = 0x61c88647u;
-    bool dormant = true, currentNormalised = false;
+    bool dormant = true, currentNormalised = false, preserveFrozenOnActivation = false;
     CloudsEngine cloudsEngine;
     fire::chord_resonator::Engine chordEngine;
     CloudsParameters cloudsState;

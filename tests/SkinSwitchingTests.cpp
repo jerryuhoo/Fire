@@ -81,6 +81,11 @@ void selectWorkspace(FireAudioProcessorEditor& editor, const juce::String& text)
         { return button.getComponentID() == "workspace_tab" && button.getButtonText() == text; });
     REQUIRE(control != nullptr);
     control->triggerClick();
+    // triggerClick posts a command message. Settle it before taking native
+    // snapshots so a platform message pump cannot change the component tree
+    // halfway through rendering a view that has not been selected yet.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    REQUIRE(control->getToggleState());
 }
 
 juce::Image skinSnapshot(juce::Component& component, const juce::String& name = {})
@@ -373,6 +378,11 @@ TEST_CASE("EQ and Drive layouts stay separated in both skins and all supported s
             [&](auto& b) { return b.getButtonText() == text; });
         REQUIRE(button != nullptr);
         button->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        auto* selected = findSkinControl<juce::Button>(panel,
+            [&](auto& b) { return b.getButtonText() == text; });
+        REQUIRE(selected != nullptr);
+        REQUIRE(selected->getToggleState());
     };
     const auto checkEq = [&](EqControlsPanel& panel)
     {
@@ -396,6 +406,7 @@ TEST_CASE("EQ and Drive layouts stay separated in both skins and all supported s
             CAPTURE(static_cast<int>(skin), width);
             editor.setSize(width, width / 2);
             selectWorkspace(editor, "BAND LAB");
+            INFO("Rendering Band Drive");
             selectModule(*band, "Drive");
             band->animationTick(1.0f / 60.0f);
             auto& link = skinButton(*band, "linked1");
@@ -406,8 +417,10 @@ TEST_CASE("EQ and Drive layouts stay separated in both skins and all supported s
             CHECK_FALSE(band->getDriveKnob()->getBounds().intersects(upgrade.getBounds()));
             skinSnapshot(editor, juce::String(prefix) + "legacy-drive-" + juce::String(width));
 
+            INFO("Rendering Band Shape");
             selectModule(*band, "Shape");
             skinSnapshot(editor, juce::String(prefix) + "shape-selector-" + juce::String(width));
+            INFO("Rendering Band EQ");
             selectModule(*band, "EQ");
             auto* insertedEq = findSkinControl<EqControlsPanel>(*band,
                 [](auto& panel) { return panel.isVisible(); });
@@ -415,6 +428,7 @@ TEST_CASE("EQ and Drive layouts stay separated in both skins and all supported s
             checkEq(*insertedEq);
             skinSnapshot(editor, juce::String(prefix) + "band-eq-" + juce::String(width));
 
+            INFO("Rendering Master EQ");
             selectWorkspace(editor, "MASTER LAB");
             selectModule(*master, "EQ");
             master->selectEqNode(1);

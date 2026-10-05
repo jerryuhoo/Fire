@@ -135,7 +135,11 @@ jobs:
 
       - name: Test & Benchmarks
         working-directory: ${{ env.BUILD_DIR }}
-        run: ctest --verbose --output-on-failure
+        run: |
+          # Exercise native GUI rendering first for quick feedback on layout regressions.
+          layout_test='^EQ and Drive layouts stay separated in both skins and all supported scales$'
+          ctest --verbose --output-on-failure -R "$layout_test"
+          ctest --verbose --output-on-failure -E "$layout_test"
 
       - name: Read in .env from CMake # see GitHubENV.cmake
         shell: bash

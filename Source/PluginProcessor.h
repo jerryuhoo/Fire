@@ -321,7 +321,7 @@ struct BandProcessor
     std::atomic<float> mOttGainChangeDb { 0.0f };
     std::atomic<float> mOttDynamicsActivityDb { 0.0f };
 
-    void prepare(const juce::dsp::ProcessSpec& spec, bool withInserts = true, bool independentHq = false);
+    void prepare(const juce::dsp::ProcessSpec& spec, bool withInserts = true, bool independentHq = false, bool eagerInserts = true);
     void reset();
     void resetQualityTransitionState() noexcept;
     void process(juce::AudioBuffer<float>& buffer,
@@ -908,6 +908,8 @@ private:
     std::array<std::array<CachedParameter, fire::resonator_params::slotCount>, fire::resonator_params::scopeCount> resonatorParameters;
     std::array<std::array<std::array<CachedParameter, fire::clouds_params::fieldCount>, fire::clouds_params::slotCount>, fire::clouds_params::scopeCount> cloudsParameters;
     fire::effects::InsertRack masterInserts;
+    std::unique_ptr<fire::effects::RackPreparationWorker> insertPreparationWorker;
+    void synchroniseInsertPreparation() noexcept;
     std::array<std::array<CachedParameter, fire::module_order::capacity>, fire::effects::scopeCount> moduleOrderParameters;
     std::array<std::array<CachedParameter, 5>, fire::effects::scopeCount> modulePresenceParameters;
     std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> shapeModelParameters;

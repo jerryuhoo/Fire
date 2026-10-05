@@ -1315,14 +1315,14 @@ static bool pushToFifo(juce::AbstractFifo& fifo,
 //==============================================================================
 
 // This is where we tell JUCE what to do when prepareToPlay is called for a single band.
-void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec, bool withInserts, bool independentHq)
+void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec, bool withInserts, bool independentHq, bool eagerInserts)
 {
     analogShapeBaseRate = spec.sampleRate;
     for (auto& bank : analogShapeBanks) for (auto& stage : bank) stage.prepare(spec.sampleRate);
     // Prepare all the DSP modules with the sample rate and block size.
     compressor.prepare(spec);
     ott.prepare(spec);
-    if (withInserts) inserts.prepare(spec, independentHq);
+    if (withInserts) inserts.prepare(spec, independentHq, eagerInserts);
     orderTransition.prepare(spec.sampleRate);
     mOttInputLevelDb.store(-120.0f, std::memory_order_relaxed);
     mOttGainChangeDb.store(0.0f, std::memory_order_relaxed);
@@ -3127,6 +3127,7 @@ FireAudioProcessor::FireAudioProcessor()
 FireAudioProcessor::~FireAudioProcessor()
 {
     stopTimer();
+    insertPreparationWorker.reset();
     lfoManager->onStateEdited = {};
     editHistory.reset();
 }
@@ -3809,6 +3810,9 @@ void FireAudioProcessor::changeProgramName(int index, const juce::String& newNam
 //==============================================================================
 void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
+    // Lifecycle preparation is quiescent with respect to audio. Join the
+    // worker before changing any engine's rate or allocation capacity.
+    insertPreparationWorker.reset();
     const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
                                       ? sampleRate
                                       : 48000.0;
@@ -3827,7 +3831,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         if (auto* band = bands[i].get())
         {
             const auto& parameters = bandParameterCache[static_cast<size_t>(i)];
-            band->prepare(spec, true, true);
+            band->prepare(spec, true, true, false);
             band->recSmoother.setCurrentAndTargetValue(loadCachedParameter(parameters.rec));
             band->biasSmoother.setCurrentAndTargetValue(loadCachedParameter(parameters.bias));
 
@@ -4089,7 +4093,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     bypassDelayMixer.prepare(globalMixerSpec);
 
     lofiMixer.prepare(globalMixerSpec);
-    masterInserts.prepare(spec, true);
+    masterInserts.prepare(spec, true, false);
     masterOrderTransition.prepare(safeSampleRate);
     masterOrderDry.setSize(static_cast<int>(spec.numChannels), static_cast<int>(spec.maximumBlockSize));
     masterOrderDryDelay.prepare(spec);
@@ -4100,8 +4104,22 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         tapeSmoothers[i].reset(safeSampleRate, 0.025);
         tapeSmoothers[i].setCurrentAndTargetValue(loadCachedParameter(tapeParameters[i]));
     }
+    synchroniseInsertPreparation();
+    std::array<fire::effects::InsertRack*, fire::effects::scopeCount> preparationTargets{&masterInserts};
+    for (size_t i = 0; i < bands.size(); ++i) preparationTargets[i + 1] = &bands[i]->inserts;
+    insertPreparationWorker = std::make_unique<fire::effects::RackPreparationWorker>(preparationTargets);
     publishLatencyToHost();
     reset();
+}
+
+void FireAudioProcessor::synchroniseInsertPreparation() noexcept
+{
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+    {
+        auto& rack = scope == 0 ? masterInserts : bands[static_cast<size_t>(scope - 1)]->inserts;
+        for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+            rack.prepareSlotForType(slot, getInsertEffectType(scope, slot));
+    }
 }
 
 void FireAudioProcessor::reset()
@@ -4819,6 +4837,10 @@ void FireAudioProcessor::finishMainStateEdit(bool resetDsp) noexcept
         --multibandTopologyEditDepth;
         if (multibandTopologyEditDepth == 0)
         {
+            // Main-state edits are non-audio writers. Prepare newly selected
+            // families before publishing their coherent parameter recipe.
+            // Generic host type automation is handled by the worker instead.
+            synchroniseInsertPreparation();
             if (mainStateEditRequiresDspReset)
                 multibandDspResetSequence.fetch_add(1u, std::memory_order_relaxed);
             const auto previous = multibandTopologyResetGeneration.fetch_add(
@@ -5254,6 +5276,7 @@ void FireAudioProcessor::performReset()
 
 void FireAudioProcessor::releaseResources()
 {
+    insertPreparationWorker.reset();
     needsReset.store(false, std::memory_order_release);
     performReset();
 }

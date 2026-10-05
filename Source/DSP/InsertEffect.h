@@ -9,6 +9,8 @@
 #include <array>
 #include <limits>
 #include <vector>
+#include <atomic>
+#include <mutex>
 
 namespace fire::effects
 {
@@ -283,21 +285,14 @@ public:
         }
     };
 
-    void prepare(const juce::dsp::ProcessSpec& spec)
+    void prepare(const juce::dsp::ProcessSpec& spec, bool eager = true)
     {
+        const std::lock_guard<std::mutex> lock(preparationLock);
+        const auto previousFamilies = preparedFamilies.exchange(0, std::memory_order_acq_rel);
+        preparedSpec = spec;
+        preparationInitialised = true;
         sampleRate = std::isfinite(spec.sampleRate) && spec.sampleRate > 0 ? spec.sampleRate : 48000.0;
-        history.prepare(sampleRate, 2.3);
-        tape.prepare(sampleRate);
-        reverb.setSampleRate(sampleRate);
-        spatialReverb.prepare(sampleRate);
-        cloudsEngine.prepare(sampleRate);
-        chordEngine.prepare(sampleRate);
-        if (! core) core = std::make_unique<CoreEffect>();
-        core->prepare(spec);
-        coreWet.setSize(2, juce::jmax(1, static_cast<int>(spec.maximumBlockSize)));
-        shapeDry.setSize(2, juce::jmax(1, static_cast<int>(spec.maximumBlockSize)));
-        shapeDryDelay.prepare(spec);
-        shapeDryDelay.setDelay(static_cast<float>(core->getShapeLatency()));
+        prepareFamiliesUnlocked(eager ? allFamilies : previousFamilies);
         gate.reset(sampleRate, 0.02);
         for (auto& smoother : bases) smoother.reset(sampleRate, 0.02);
         for (auto& route : routes) route.blend.reset(sampleRate, 0.01);
@@ -317,9 +312,23 @@ public:
         gate.setCurrentAndTargetValue(0);
         dormant = true;
     }
-    FrozenRecordingPtr copyFrozenRecording() const { return cloudsEngine.copyFrozenRecording(); }
+    // These methods are lifecycle/state/worker APIs. Audio only requests a
+    // missing family with a lock-free mask and retains the dry path until ready.
+    bool prepareForType(Type type) noexcept {return prepareFamilies(familyFor(type));}
+    void prepareRequestedFamilies() noexcept
+    {
+        const auto requested = requestedFamilies.exchange(0, std::memory_order_acq_rel);
+        if (requested) prepareFamilies(requested);
+    }
+    bool isPreparedForType(Type type) const noexcept
+    {
+        const auto family = familyFor(type);
+        return (preparedFamilies.load(std::memory_order_acquire) & family) == family;
+    }
+    FrozenRecordingPtr copyFrozenRecording() const
+    {const std::lock_guard<std::mutex> lock(preparationLock); return cloudsEngine.copyFrozenRecording();}
     void stageFrozenRecording(const FrozenRecordingPtr& recording, std::uint32_t publication)
-    { cloudsEngine.stageFrozenRecording(recording, publication); }
+    {const std::lock_guard<std::mutex> lock(preparationLock); cloudsEngine.stageFrozenRecording(recording, publication);}
     int getProcessingLatency() const noexcept
     {return currentType == Type::shape && fixedShapeLatencyActive && core ? core->getShapeLatency() : 0;}
     void process(juce::dsp::AudioBlock<float> block, const Parameters& parameters, int offset = 0,
@@ -330,6 +339,11 @@ public:
         fixedShapeLatencyActive = parameters.fixedShapeLatency || parameters.highQuality;
         auto requested = parameters.type;
         if (requested < Type::none || requested >= Type::count) requested = Type::none;
+        if (!isPreparedForType(requested))
+        {
+            requestedFamilies.fetch_or(familyFor(requested), std::memory_order_release);
+            requested = Type::none;
+        }
         const auto matches = [&] { return requested == currentType && (currentType != Type::reverb
             || currentReverbModel == juce::jlimit(0, fire::space::count - 1, parameters.reverbModel)); };
         if (requested == Type::none && currentType == Type::none) return;
@@ -446,6 +460,54 @@ public:
         }
     }
 private:
+    enum : std::uint32_t {historyFamily = 1, tapeFamily = 2, reverbFamily = 4,
+        cloudsFamily = 8, chordFamily = 16, coreFamily = 32, allFamilies = 63};
+    static std::uint32_t familyFor(Type type) noexcept
+    {
+        if (isCore(type)) return coreFamily;
+        if (type == Type::chorus || type == Type::delay || type == Type::flanger) return historyFamily;
+        if (type == Type::lofi) return tapeFamily;
+        if (type == Type::reverb) return historyFamily | reverbFamily;
+        if (type == Type::granular) return cloudsFamily;
+        if (type == Type::chordResonator) return chordFamily;
+        return 0;
+    }
+    bool prepareFamilies(std::uint32_t requested) noexcept
+    {
+        if ((preparedFamilies.load(std::memory_order_acquire) & requested) == requested) return true;
+        try
+        {
+            const std::lock_guard<std::mutex> lock(preparationLock);
+            if (preparationInitialised) prepareFamiliesUnlocked(requested);
+        }
+        catch (...) {} // Retry off audio; no partially prepared family is published.
+        const auto missing = requested & ~preparedFamilies.load(std::memory_order_acquire);
+        if (missing) requestedFamilies.fetch_or(missing, std::memory_order_release);
+        return missing == 0;
+    }
+    void prepareFamiliesUnlocked(std::uint32_t requested)
+    {
+        const auto missing = requested & ~preparedFamilies.load(std::memory_order_relaxed);
+        for (const auto family : {historyFamily, tapeFamily, reverbFamily, cloudsFamily, chordFamily, coreFamily})
+        {
+            if (!(missing & family)) continue;
+            if (family == historyFamily) history.prepare(sampleRate, 2.3);
+            else if (family == tapeFamily) tape.prepare(sampleRate);
+            else if (family == reverbFamily) {reverb.setSampleRate(sampleRate); spatialReverb.prepare(sampleRate);}
+            else if (family == cloudsFamily) cloudsEngine.prepare(sampleRate);
+            else if (family == chordFamily) chordEngine.prepare(sampleRate);
+            else if (family == coreFamily)
+            {
+                if (!core) core = std::make_unique<CoreEffect>();
+                core->prepare(preparedSpec);
+                const auto capacity = juce::jmax(1, static_cast<int>(preparedSpec.maximumBlockSize));
+                coreWet.setSize(2, capacity); shapeDry.setSize(2, capacity);
+                shapeDryDelay.prepare(preparedSpec);
+                shapeDryDelay.setDelay(static_cast<float>(core->getShapeLatency()));
+            }
+            preparedFamilies.fetch_or(family, std::memory_order_release);
+        }
+    }
     void processCore(juce::dsp::AudioBlock<float> block, const Parameters& requested,
                      int offset, const std::array<int, controlCount>* sources, bool matches) noexcept
     {
@@ -570,11 +632,13 @@ private:
     }
     void resetMemory(bool preserveFrozen = true) noexcept
     {
-        history.reset(); tape.reset(); reverb.reset(); spatialReverb.reset();
-        cloudsEngine.reset(preserveFrozen);
-        chordEngine.reset();
-        if (core) core->reset();
-        shapeDryDelay.reset();
+        const auto ready = preparedFamilies.load(std::memory_order_acquire);
+        if (ready & historyFamily) history.reset();
+        if (ready & tapeFamily) tape.reset();
+        if (ready & reverbFamily) {reverb.reset(); spatialReverb.reset();}
+        if (ready & cloudsFamily) cloudsEngine.reset(preserveFrozen);
+        if (ready & chordFamily) chordEngine.reset();
+        if (ready & coreFamily) {core->reset(); shapeDryDelay.reset();}
         feedback.fill(0); highPassInput.fill(0); highPassOutput.fill(0);
         held.fill(0); holdRemaining = 0; holdResidual = 0; jitterSeed = 0x61c88647u;
         phase = 0;
@@ -851,6 +915,10 @@ private:
         }
     }
     double sampleRate = 48000, phase = 0;
+    mutable std::mutex preparationLock;
+    std::atomic<std::uint32_t> preparedFamilies{0}, requestedFamilies{0};
+    juce::dsp::ProcessSpec preparedSpec{48000, 1, 2};
+    bool preparationInitialised = false;
     Type currentType = Type::none;
     std::unique_ptr<CoreEffect> core;
     juce::AudioBuffer<float> coreWet;

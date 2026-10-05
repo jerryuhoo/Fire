@@ -1,0 +1,98 @@
+{
+  "date": "2026-10-05",
+  "platform": "Apple M1 Pro, arm64, Release -O3 -fno-fast-math / LTO",
+  "audio_conditions": "stereo, no editor, 64-sample blocks, fixed multitone, three one-second rounds; includes independent Shape HQ fixed-latency reserve",
+  "memory_conditions": "incremental task phys_footprint of three default one-band stereo instances, no editor, 48kHz128 samples, not peak RSS",
+  "before_instance_increment_MiB": [
+    141.391601562,
+    136.453918457,
+    139.500610352
+  ],
+  "after_instance_increment": [
+    {
+      "instance": 1.0,
+      "constructedDeltaMB": 25.0941162109,
+      "prepareDeltaMB": 9.84381103516,
+      "totalDeltaMB": 34.9379272461
+    },
+    {
+      "instance": 2.0,
+      "constructedDeltaMB": 22.4063720703,
+      "prepareDeltaMB": 9.67193603516,
+      "totalDeltaMB": 32.0783081055
+    },
+    {
+      "instance": 3.0,
+      "constructedDeltaMB": 21.8125610352,
+      "prepareDeltaMB": 9.56262207031,
+      "totalDeltaMB": 31.3751831055
+    }
+  ],
+  "cpu": [
+    {
+      "mode": -1.0,
+      "HQ": 0.0,
+      "rate": 48000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 7.0871,
+      "p99CallbackBudgetPercent": 8.8125,
+      "maxCallbackUs": 203.5,
+      "deadlineUs": 1333.33333333
+    },
+    {
+      "mode": 22.0,
+      "HQ": 1.0,
+      "rate": 48000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 35.4592,
+      "p99CallbackBudgetPercent": 42.290625,
+      "maxCallbackUs": 682.833,
+      "deadlineUs": 1333.33333333
+    },
+    {
+      "mode": 23.0,
+      "HQ": 1.0,
+      "rate": 48000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 58.7459,
+      "p99CallbackBudgetPercent": 63.70005,
+      "maxCallbackUs": 915.333,
+      "deadlineUs": 1333.33333333
+    },
+    {
+      "mode": -1.0,
+      "HQ": 0.0,
+      "rate": 96000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 13.849,
+      "p99CallbackBudgetPercent": 16.0188,
+      "maxCallbackUs": 169.791,
+      "deadlineUs": 666.666666667
+    },
+    {
+      "mode": 22.0,
+      "HQ": 1.0,
+      "rate": 96000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 67.9085,
+      "p99CallbackBudgetPercent": 75.7062,
+      "maxCallbackUs": 583.375,
+      "deadlineUs": 666.666666667
+    },
+    {
+      "mode": 23.0,
+      "HQ": 1.0,
+      "rate": 96000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 72.4339,
+      "p99CallbackBudgetPercent": 79.01865,
+      "maxCallbackUs": 673.5,
+      "deadlineUs": 666.666666667
+    }
+  ],
+  "focused_validation": {
+    "cases": 34,
+    "assertions": 419473,
+    "result": "passed"
+  }
+}

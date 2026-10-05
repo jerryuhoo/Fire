@@ -27,10 +27,10 @@ public:
         if (! effects) effects = std::make_unique<std::array<InsertEffect, slotCount>>();
         (*effects)[static_cast<size_t>(slot)].stageFrozenRecording(recording, publication);
     }
-    void prepare(const juce::dsp::ProcessSpec& spec, bool independentHq = false)
+    void prepare(const juce::dsp::ProcessSpec& spec, bool independentHq = false, bool eager = true)
     {
         if (! effects) effects = std::make_unique<std::array<InsertEffect, slotCount>>();
-        for (auto& effect : *effects) effect.prepare(spec);
+        for (auto& effect : *effects) effect.prepare(spec, eager);
         dry.setSize(2, juce::jmax(1, static_cast<int>(spec.maximumBlockSize)));
         supportsIndependentHq = independentHq;
         slotLatency = independentHq ? independentShapeLatency(spec.numChannels) : 0;
@@ -61,6 +61,12 @@ public:
         initialised = false;
     }
     int getReservedLatency() const noexcept {return slotLatency * slotCount;}
+    bool prepareSlotForType(int slot, Type type) noexcept
+    {return effects && juce::isPositiveAndBelow(slot, slotCount) ? (*effects)[static_cast<size_t>(slot)].prepareForType(type) : type == Type::none;}
+    void prepareRequestedFamilies() noexcept
+    {if (effects) for (auto& effect : *effects) effect.prepareRequestedFamilies();}
+    bool isSlotPreparedForType(int slot, Type type) const noexcept
+    {return effects && juce::isPositiveAndBelow(slot, slotCount) && (*effects)[static_cast<size_t>(slot)].isPreparedForType(type);}
     void process(juce::dsp::AudioBlock<float> block, const RackParameters& parameters,
                  const juce::AudioBuffer<float>& lfo, int sampleOffset = 0, bool highQuality = false) noexcept
     {
@@ -168,5 +174,26 @@ private:
     bool supportsIndependentHq = false;
     juce::SmoothedValue<float> transition;
     bool initialised = false;
+};
+
+// One preparation worker per plug-in, rather than one thread per rack/slot.
+// The audio thread never signals a condition variable, allocates or acquires
+// the preparation lock. State/UI edits can prepare synchronously off audio.
+class RackPreparationWorker final : private juce::Thread
+{
+public:
+    explicit RackPreparationWorker(std::array<InsertRack*, scopeCount> targets)
+        : juce::Thread("Fire effect preparation"), racks(targets) {startThread();}
+    ~RackPreparationWorker() override {signalThreadShouldExit(); notify(); stopThread(-1);}
+private:
+    void run() override
+    {
+        while (!threadShouldExit())
+        {
+            for (auto* rack : racks) if (rack) rack->prepareRequestedFamilies();
+            wait(10);
+        }
+    }
+    std::array<InsertRack*, scopeCount> racks;
 };
 }

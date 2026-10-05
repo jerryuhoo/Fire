@@ -600,27 +600,38 @@ void BandPanel::resized()
     if (oscSwitch.getToggleState())
     {
         const bool modern = usesModernDriveCompensation();
-        // Reuse the card's title strip rather than shrinking the hero dial.
-        // Its original dimensions are retained; only its vertical position
-        // changes to make room for the paired gain control below it.
-        const int driveSize = juce::jmax(1, std::min({ scaledKnobSize * 2,
-                                                      knobsColumnArea.getWidth(), knobsColumnArea.getHeight() }));
+        // Compensation has its own footer. The legacy migration action must
+        // never share the dial's title or sit over another control.
         auto driveArea = knobsAreaRect.reduced(cardPadding);
-        const auto compRowHeight = juce::jmin(titleHeight, driveArea.getHeight());
-        const auto compGap = juce::jmax(2, juce::roundToInt(4.0f * uiScale));
-        auto compArea = driveArea.removeFromBottom(compRowHeight);
+        auto compArea = driveArea.removeFromBottom(juce::jmin(
+            juce::roundToInt(50.0f * uiScale), driveArea.getHeight() / 3));
+        driveArea.removeFromBottom(juce::jmin(controlGap, driveArea.getHeight()));
+        const int driveSize = juce::jmax(1, std::min({ scaledKnobSize * 2,
+            driveArea.getWidth(), driveArea.getHeight() }));
         modulatableSliderComponents.at(DRIVE_NAME)->setBounds(
             driveArea.withSizeKeepingCentre(driveSize, driveSize));
-        const auto rowWidth = juce::jmin(compArea.getWidth(), juce::roundToInt((modern ? 206.0f : 224.0f) * uiScale));
-        auto compRow = compArea.withSizeKeepingCentre(rowWidth, compRowHeight);
-        linkedButton.setBounds(compRow.removeFromLeft(juce::jmin(compRow.getWidth(), juce::roundToInt((modern ? 96.0f : 98.0f) * uiScale))));
-        compRow.removeFromLeft(juce::jmin(compGap, compRow.getWidth()));
-        driveCompReadout.setBounds(compRow);
+        const auto statusHeight = juce::jmin(juce::roundToInt(16.0f * uiScale),
+                                             compArea.getHeight() / 3);
+        driveCompReadout.setBounds(compArea.removeFromTop(statusHeight));
+        driveCompReadout.setJustificationType(juce::Justification::centred);
         driveCompReadout.setFont(fire::ui::valueFont((modern ? 12.0f : 10.5f) * uiScale));
-        auto upgradeArea = knobsAreaRect.reduced(cardPadding, 0).removeFromTop(titleHeight);
-        upgradeDriveCompButton.setBounds(upgradeArea.removeFromRight(
-            juce::jmin(upgradeArea.getWidth(), juce::roundToInt(132.0f * uiScale))));
-        upgradeDriveCompButton.toFront(false);
+        compArea.removeFromTop(juce::jmin(juce::roundToInt(6.0f * uiScale), compArea.getHeight()));
+        const auto rowWidth = juce::jmin(compArea.getWidth(),
+            juce::roundToInt((modern ? 104.0f : 238.0f) * uiScale));
+        auto compRow = compArea.withSizeKeepingCentre(rowWidth, compArea.getHeight());
+        if (modern)
+        {
+            linkedButton.setBounds(compRow);
+            upgradeDriveCompButton.setBounds({});
+        }
+        else
+        {
+            const int compGap = juce::jmin(juce::roundToInt(8.0f * uiScale), compRow.getWidth());
+            linkedButton.setBounds(compRow.removeFromLeft(juce::jmin(
+                juce::roundToInt(98.0f * uiScale), (compRow.getWidth() - compGap) / 2)));
+            compRow.removeFromLeft(compGap);
+            upgradeDriveCompButton.setBounds(compRow);
+        }
     }
     else if (shapeSwitch.getToggleState())
     {

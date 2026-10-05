@@ -300,36 +300,52 @@ public:
     {
         auto area = getLocalBounds().reduced(juce::roundToInt(8 * scale), 0);
         header = area.removeFromTop(juce::roundToInt(32 * scale));
-        auto actions = header;
-        const int buttonWidth = juce::roundToInt(30 * scale);
-        removeButton.setBounds(actions.removeFromRight(buttonWidth));
-        actions.removeFromRight(juce::roundToInt(4 * scale));
-        addButton.setBounds(actions.removeFromRight(buttonWidth));
-        actions.removeFromRight(juce::roundToInt(8 * scale));
-        powerButton.setBounds(actions.removeFromRight(buttonWidth));
         auto footer = area.removeFromBottom(juce::roundToInt(38 * scale));
+        emptyBounds = area;
+
+        const int gap = juce::roundToInt(10 * scale);
+        const int columnGap = juce::roundToInt(16 * scale);
+        const int utilityWidth = juce::jmin(juce::roundToInt(145 * scale), area.getWidth() / 3);
+        const int width = fire::ui::ordinaryKnobWidth(scale, {
+            knobWidth > 0 ? knobWidth : fire::ui::ordinaryKnobWidth(scale),
+            (area.getWidth() - utilityWidth - columnGap - 2 * gap) / 3,
+            area.getHeight() - juce::roundToInt(fire::ui::Metrics::knobValueHeight * scale)});
+        const int height = fire::ui::ordinaryKnobHeight(width, scale);
+        const int groupWidth = width * 3 + gap * 2 + columnGap + utilityWidth;
+
+        // Keep the point actions, dials and selectors on one shared grid.
+        // Centre the complete group so selectors never drift to the far edge.
+        header = header.withSizeKeepingCentre(groupWidth, header.getHeight());
+        auto actions = header.withHeight(juce::roundToInt(28 * scale))
+            .withCentre(header.getCentre());
+        const int buttonWidth = juce::roundToInt(28 * scale);
+        removeButton.setBounds(actions.removeFromRight(buttonWidth));
+        actions.removeFromRight(juce::roundToInt(6 * scale));
+        addButton.setBounds(actions.removeFromRight(buttonWidth));
+        actions.removeFromLeft(juce::roundToInt(78 * scale));
+        powerButton.setBounds(actions.removeFromLeft(buttonWidth));
+
         int count = 0;
         for (bool enabled : present) if (enabled) ++count;
         const auto pitch = juce::jmin(juce::roundToInt(29 * scale), footer.getWidth() / juce::jmax(1, count));
         auto strip = footer.withSizeKeepingCentre(count * pitch, footer.getHeight());
         for (int i = 0; i < capacity; ++i)
             if (present[static_cast<size_t>(i)]) navigation[static_cast<size_t>(i)].setBounds(strip.removeFromLeft(pitch));
-        emptyBounds = area;
-        const int utilityWidth = juce::jmin(juce::roundToInt(145 * scale), area.getWidth() / 3);
-        auto utility = area.removeFromRight(utilityWidth).withSizeKeepingCentre(utilityWidth, juce::roundToInt(112 * scale));
+
+        auto row = area.withSizeKeepingCentre(groupWidth,
+            juce::jmax(height, juce::roundToInt(112 * scale)));
+        auto utility = row.removeFromRight(utilityWidth);
+        utilityDivider = juce::Rectangle<float>(
+            static_cast<float>(utility.getX() - columnGap / 2),
+            static_cast<float>(row.getY()), juce::jmax(0.7f, scale),
+            static_cast<float>(row.getHeight()));
         typeLabel = utility.removeFromTop(juce::roundToInt(20 * scale));
         typeMenu.setBounds(utility.removeFromTop(juce::roundToInt(30 * scale)));
         utility.removeFromTop(juce::roundToInt(9 * scale));
         slopeLabel = utility.removeFromTop(juce::roundToInt(20 * scale));
         slopeMenu.setBounds(utility.removeFromTop(juce::roundToInt(30 * scale)));
-        area.removeFromRight(juce::roundToInt(15 * scale));
-        const int gap = juce::roundToInt(10 * scale);
-        const int width = fire::ui::ordinaryKnobWidth(scale, {
-            knobWidth > 0 ? knobWidth : fire::ui::ordinaryKnobWidth(scale),
-            (area.getWidth() - 2 * gap) / 3,
-            area.getHeight() - juce::roundToInt(fire::ui::Metrics::knobValueHeight * scale)});
-        const int height = fire::ui::ordinaryKnobHeight(width, scale);
-        auto row = area.withSizeKeepingCentre(width * 3 + gap * 2, height);
+        row.removeFromRight(columnGap);
+        row.setHeight(height);
         for (int control = 0; control < 3; ++control)
         {
             const auto bounds = row.removeFromLeft(width);
@@ -341,9 +357,13 @@ public:
     {
         g.setColour(fire::ui::paletteFor(*this).textSecondary);
         g.setFont(fire::ui::labelFont(11 * scale));
-        auto title = header.withTrimmedRight(juce::roundToInt(115 * scale));
+        auto title = selected >= 0 ? header.withWidth(juce::roundToInt(70 * scale))
+                                  : header.withTrimmedRight(juce::roundToInt(76 * scale));
         if (selected >= 0)
         {
+            g.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(0.24f));
+            g.fillRect(utilityDivider);
+            g.setColour(fire::ui::paletteFor(*this).textSecondary);
             const auto ordinal = navigation[static_cast<size_t>(selected)].ordinal;
             g.drawText("POINT " + juce::String(ordinal).paddedLeft('0', 2), title, juce::Justification::centredLeft);
             g.drawText("FILTER TYPE", typeLabel, juce::Justification::centredLeft);
@@ -469,4 +489,5 @@ private:
     std::atomic<std::uint64_t> presenceEpoch {0};
     std::uint64_t presentedPresenceEpoch = 0;
     juce::Rectangle<int> header, typeLabel, slopeLabel, emptyBounds;
+    juce::Rectangle<float> utilityDivider;
 };

@@ -172,6 +172,27 @@ TEST_CASE("Fire ComboBox animation cache discards expired idle controls",
     CHECK(lookAndFeel.getTrackedComboBoxAnimationCountForTesting() == 1);
 }
 
+TEST_CASE("Vintage dropdowns use the same recessed display as the preset selector",
+          "[ui][combo-box][theme][skin][pixels][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel look;
+    look.setSkin(fire::ui::Skin::vintage);
+    const auto& palette = fire::ui::skinPalette(fire::ui::Skin::vintage);
+    const auto preset = renderIdleComboBox(look, palette.surface0, "header_preset");
+    for (const auto* id : {"band_graph_view", "mode1", "eqNode2Type", "eqNode2Slope"})
+    {
+        CAPTURE(id);
+        const auto dropdown = renderIdleComboBox(look, palette.surface1, id);
+        for (const int y : {3, 16, 29})
+            CHECK(dropdown.getPixelAt(54, y) == preset.getPixelAt(54, y));
+        CHECK(dropdown.getPixelAt(54, 16).getPerceivedBrightness()
+              < palette.surface0.getPerceivedBrightness());
+        CHECK(dropdown.getPixelAt(54, 3).getPerceivedBrightness()
+              < dropdown.getPixelAt(54, 29).getPerceivedBrightness());
+    }
+}
+
 TEST_CASE("Fire context menus inherit their target theme and cursor anchor",
           "[ui][popup-menu][theme][anchor]")
 {

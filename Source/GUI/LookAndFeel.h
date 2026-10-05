@@ -371,17 +371,32 @@ public:
                         .interpolatedWith(themeColour(colours::raised), juce::jmax(focus * 0.85f, hover * 0.38f));
         base = base.darker(press * 0.10f).interpolatedWith(themeColour(colours::surface0), disabled * 0.48f);
         const bool darkHeader = currentSkin == Skin::vintage && isVintageHeaderControl(box);
-        if (darkHeader)
+        if (currentSkin == Skin::vintage)
+            // Selectors are display wells, like the preset bar. Raised faces
+            // belong to the keys that change state, not to displayed values.
             drawVintageHeaderKey(g, bounds, scale, hover, press, focus,
                                  1.0f - disabled * 0.55f, false, true);
-        else if (currentSkin == Skin::vintage)
-            drawVintageSurface(g, bounds, Metrics::radiusSmall * scale,
-                               base, box.findColour(juce::ComboBox::focusedOutlineColourId),
-                               press, focus, 1.0f - disabled * 0.65f);
         else
         {
+            const auto radius = Metrics::radiusSmall * scale;
+            const auto opacity = 1.0f - disabled * 0.55f;
             g.setColour(base);
-            g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
+            g.fillRoundedRectangle(bounds, radius);
+            g.setColour(juce::Colours::black.withAlpha(0.42f * opacity));
+            g.drawRoundedRectangle(bounds, radius, 0.8f * scale);
+            const auto inner = bounds.reduced(1.1f * scale);
+            g.setColour(juce::Colours::black.withAlpha(0.36f * opacity));
+            g.drawLine(inner.getX() + radius, inner.getY(),
+                       inner.getRight() - radius, inner.getY(), 1.0f * scale);
+            g.setColour(themeColour(colours::hairline).withAlpha(0.45f * opacity));
+            g.drawLine(inner.getX() + radius, inner.getBottom(),
+                       inner.getRight() - radius, inner.getBottom(), 0.7f * scale);
+            if (focus > 0.01f)
+            {
+                g.setColour(box.findColour(juce::ComboBox::focusedOutlineColourId)
+                                .withAlpha(focus * 0.62f * opacity));
+                g.drawRoundedRectangle(bounds, radius, 0.85f * scale);
+            }
         }
 
         auto arrowArea = bounds.removeFromRight(juce::jmax(18.0f * scale, bounds.getHeight() * 0.82f));

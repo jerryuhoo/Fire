@@ -318,7 +318,7 @@ TEST_CASE("Gain Comp readout uses real modulated audio then explicitly estimates
     processor.releaseResources();
 }
 
-TEST_CASE("Drive compensation layouts preserve the original hero size and centre the Safe Extreme pair",
+TEST_CASE("Drive compensation footer separates legacy actions from the dial and centres Safe Extreme",
           "[drive-comp-ui][ui][layout][snapshot]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
@@ -339,12 +339,9 @@ TEST_CASE("Drive compensation layouts preserve the original hero size and centre
             tick(panel);
             const auto scale = static_cast<float>(width) / 1000.0f;
             const auto card = DriveCompensationUiTestAccess::driveCard(panel);
-            auto oldContent = card.reduced(juce::roundToInt(8.0f * scale));
-            oldContent.removeFromTop(juce::roundToInt(22.0f * scale));
-            const auto originalSize = std::min({juce::roundToInt(KNOB_SIZE * scale) * 2, oldContent.getWidth(), oldContent.getHeight()});
             auto* hero = panel.getDriveKnob();
-            CHECK(hero->getWidth() == originalSize);
-            CHECK(hero->getHeight() == originalSize);
+            CHECK(hero->getWidth() == hero->getHeight());
+            CHECK(hero->getWidth() > fire::ui::ordinaryKnobWidth(scale));
             auto& comp = byID<juce::Button>(panel, "linked1");
             auto& readout = byID<juce::Label>(panel, "driveCompensationReadout");
             auto& upgrade = byID<juce::Button>(panel, "driveCompUpgrade");
@@ -355,7 +352,18 @@ TEST_CASE("Drive compensation layouts preserve the original hero size and centre
             CHECK_FALSE(hero->getBounds().intersects(readout.getBounds()));
             CHECK_FALSE(comp.getBounds().intersects(readout.getBounds()));
             CHECK(upgrade.isShowing() == ! modern);
-            if (! modern) CHECK(card.contains(upgrade.getBounds()));
+            CHECK(readout.getY() >= hero->getBottom());
+            CHECK(comp.getY() >= readout.getBottom());
+            if (! modern)
+            {
+                CHECK(card.contains(upgrade.getBounds()));
+                CHECK_FALSE(hero->getBounds().intersects(upgrade.getBounds()));
+                CHECK_FALSE(readout.getBounds().intersects(upgrade.getBounds()));
+                CHECK_FALSE(comp.getBounds().intersects(upgrade.getBounds()));
+                CHECK(comp.getY() == upgrade.getY());
+                CHECK(comp.getHeight() == upgrade.getHeight());
+                CHECK(upgrade.getX() - comp.getRight() >= juce::roundToInt(8 * scale));
+            }
             auto& safe = named(panel, "Safe");
             auto& extreme = named(panel, "Extreme");
             const auto outputCard = DriveCompensationUiTestAccess::outputCard(panel);

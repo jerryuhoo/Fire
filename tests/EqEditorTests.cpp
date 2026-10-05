@@ -130,6 +130,32 @@ TEST_CASE("EQ panel and twelve-point navigation fit all editor scales",
                 CAPTURE(width, child->getTitle(), child->getBounds().toString());
                 CHECK(panel->getEqControls().getLocalBounds().contains(child->getBounds()));
             }
+        std::array<juce::Rectangle<int>, 3> knobBounds;
+        for (int control = 0; control < 3; ++control)
+        {
+            const auto field = control == 0 ? fire::eq::Field::frequency
+                : control == 1 ? fire::eq::Field::gain : fire::eq::Field::q;
+            auto* knob = findEqControl<ModulatableSlider>(panel->getEqControls(),
+                [&](auto& c) { return c.parameterID == fire::eq::parameterID(5, field); });
+            REQUIRE(knob != nullptr);
+            knobBounds[static_cast<size_t>(control)] = knob->getBounds();
+        }
+        auto* type = findEqControl<juce::ComboBox>(panel->getEqControls(),
+            [](auto& c) { return c.getTitle() == "EQ point filter type"; });
+        auto* slope = findEqControl<juce::ComboBox>(panel->getEqControls(),
+            [](auto& c) { return c.getTitle() == "EQ point slope"; });
+        REQUIRE(type != nullptr); REQUIRE(slope != nullptr);
+        CHECK(type->getX() == slope->getX());
+        CHECK(type->getWidth() == slope->getWidth());
+        CHECK_FALSE(type->getBounds().intersects(slope->getBounds()));
+        for (const auto bounds : knobBounds)
+        {
+            CHECK(bounds.getY() == knobBounds.front().getY());
+            CHECK(bounds.getWidth() == knobBounds.front().getWidth());
+            CHECK(bounds.getRight() < type->getX());
+            CHECK_FALSE(bounds.intersects(type->getBounds()));
+            CHECK_FALSE(bounds.intersects(slope->getBounds()));
+        }
         saveEqView(editor, "eq-twelve-points-" + juce::String(width));
     }
 }

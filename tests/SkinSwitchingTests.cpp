@@ -2,6 +2,7 @@
 #include <GUI/SettingsComponent.h>
 #include <GUI/PresetBrowserPanel.h>
 #include <GUI/Skin.h>
+#include <Utility/DriveCompensationParameters.h>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
@@ -339,4 +340,88 @@ TEST_CASE("Saving an appearance choice may synchronously close its settings page
     vintage->triggerClick();
     CHECK(settings == nullptr);
     CHECK(properties.getIntValue(fire::ui::skinSetting, -1) == static_cast<int>(Skin::vintage));
+}
+
+TEST_CASE("EQ and Drive layouts stay separated in both skins and all supported scales",
+          "[skin][ui][layout][control-polish][regression][render]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    SkinTestFiles files;
+    FireAudioProcessor processor;
+    files.prepare(processor, "controls");
+    const auto setParameter = [&](const juce::String& id, float value)
+    {
+        auto* parameter = processor.treeState.getParameter(id);
+        REQUIRE(parameter != nullptr);
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+    };
+    setParameter(fire::drive_comp::parameterID(0), 0.0f);
+    setParameter("linked1", 1.0f);
+    setParameter(fire::eq::parameterID(1, fire::eq::Field::frequency), 833.0f);
+    setParameter(fire::eq::parameterID(1, fire::eq::Field::gain), -5.2f);
+    setParameter(fire::eq::parameterID(1, fire::eq::Field::q), 1.8f);
+    REQUIRE(processor.addInsertEffect(1, fire::effects::Type::eq) == 0);
+    FireAudioProcessorEditor editor(processor);
+    prepareEditor(editor);
+    auto* band = findSkinControl<BandPanel>(editor, [](auto&) { return true; });
+    auto* master = findSkinControl<GlobalPanel>(editor, [](auto&) { return true; });
+    REQUIRE(band != nullptr); REQUIRE(master != nullptr);
+    const auto selectModule = [&](juce::Component& panel, const juce::String& text)
+    {
+        auto* button = findSkinControl<juce::Button>(panel,
+            [&](auto& b) { return b.getButtonText() == text; });
+        REQUIRE(button != nullptr);
+        button->triggerClick();
+    };
+    const auto checkEq = [&](EqControlsPanel& panel)
+    {
+        panel.refresh();
+        for (auto* child : panel.getChildren())
+        {
+            if (! child->isVisible()) continue;
+            CAPTURE(child->getTitle(), child->getBounds().toString());
+            CHECK(panel.getLocalBounds().contains(child->getBounds()));
+            for (auto* other : panel.getChildren())
+                if (other != child && other->isVisible())
+                    CHECK_FALSE(child->getBounds().intersects(other->getBounds()));
+        }
+    };
+    for (const auto skin : {Skin::modern, Skin::vintage})
+    {
+        editor.setSkinPreference(skin);
+        const auto prefix = skin == Skin::vintage ? "vintage-" : "modern-";
+        for (const int width : {1000, 1400, 2000})
+        {
+            CAPTURE(static_cast<int>(skin), width);
+            editor.setSize(width, width / 2);
+            selectWorkspace(editor, "BAND LAB");
+            selectModule(*band, "Drive");
+            band->animationTick(1.0f / 60.0f);
+            auto& link = skinButton(*band, "linked1");
+            auto& upgrade = skinButton(*band, "driveCompUpgrade");
+            REQUIRE(upgrade.isVisible());
+            CHECK(link.getY() == upgrade.getY());
+            CHECK_FALSE(link.getBounds().intersects(upgrade.getBounds()));
+            CHECK_FALSE(band->getDriveKnob()->getBounds().intersects(upgrade.getBounds()));
+            skinSnapshot(editor, juce::String(prefix) + "legacy-drive-" + juce::String(width));
+
+            selectModule(*band, "Shape");
+            skinSnapshot(editor, juce::String(prefix) + "shape-selector-" + juce::String(width));
+            selectModule(*band, "EQ");
+            auto* insertedEq = findSkinControl<EqControlsPanel>(*band,
+                [](auto& panel) { return panel.isVisible(); });
+            REQUIRE(insertedEq != nullptr);
+            checkEq(*insertedEq);
+            skinSnapshot(editor, juce::String(prefix) + "band-eq-" + juce::String(width));
+
+            selectWorkspace(editor, "MASTER LAB");
+            selectModule(*master, "EQ");
+            master->selectEqNode(1);
+            checkEq(master->getEqControls());
+            skinSnapshot(editor, juce::String(prefix) + "master-eq-" + juce::String(width));
+        }
+    }
+    // Layout and skin changes must not migrate the legacy sound implicitly.
+    CHECK(processor.treeState.getRawParameterValue(fire::drive_comp::parameterID(0))->load() == 0.0f);
+    CHECK(processor.treeState.getRawParameterValue("linked1")->load() == 1.0f);
 }

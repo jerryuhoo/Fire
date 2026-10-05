@@ -370,7 +370,10 @@ private:
     {
         if (! isShowing())
         {
-            stopTimer();
+            // Native focus-loss may arrive after peer removal but before the
+            // recovery tick. Keep that tick alive until it balances the drag.
+            if (! hasActivePointerGesture())
+                stopTimer();
             focusModality.resetSession();
             hoverAnimation.snapTo(0.0f);
             pressAnimation.snapTo(0.0f);

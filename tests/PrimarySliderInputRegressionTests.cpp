@@ -46,6 +46,11 @@ struct PrimarySliderTestAccess
     {
         return slider.focusModality.isKeyboardVisible();
     }
+
+    static bool isRecoveryTimerRunning(const PrimarySlider& slider) noexcept
+    {
+        return slider.isTimerRunning();
+    }
 };
 
 namespace
@@ -707,7 +712,16 @@ TEST_CASE("PrimarySlider closes a gesture when its desktop peer is detached",
     desktopHost.removeFromDesktop();
 
     CHECK_FALSE(slider.isShowing());
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(35);
+    // A late native focus notification must not stop peer-loss recovery before
+    // its timer can balance the drag. Exercise that ordering explicitly.
+    slider.focusLost(juce::Component::FocusChangeType::focusChangedDirectly);
+    if (slider.hasActivePointerGesture())
+        CHECK(PrimarySliderTestAccess::isRecoveryTimerRunning(slider));
+    const auto recoveryStarted = juce::Time::getMillisecondCounter();
+    while (slider.hasActivePointerGesture()
+           && juce::Time::getMillisecondCounter() - recoveryStarted < 1000)
+        if (! juce::MessageManager::getInstance()->runDispatchLoopUntil(5))
+            break;
     CHECK_FALSE(slider.hasActivePointerGesture());
     CHECK(capture.dragEnds == 1);
     const auto detachedValue = slider.getValue();

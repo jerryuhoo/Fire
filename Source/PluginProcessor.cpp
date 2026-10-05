@@ -1430,7 +1430,7 @@ void BandProcessor::reset()
     dcFilterMixPrimed = false;
     compressor.reset();
     ott.reset();
-    inserts.reset();
+    inserts.reset(true);
     orderTransition.reset();
     mOttInputLevelDb.store(-120.0f, std::memory_order_relaxed);
     mOttGainChangeDb.store(0.0f, std::memory_order_relaxed);
@@ -5257,7 +5257,7 @@ void FireAudioProcessor::performReset()
     bypassDelayMixer.reset();
     nonHqOutputDelay.reset();
     lofiMixer.reset();
-    masterInserts.reset();
+    masterInserts.reset(true);
     masterOrderDryDelay.reset();
     masterOrderTransition.reset();
     masterTape.reset();

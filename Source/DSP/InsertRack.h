@@ -51,9 +51,9 @@ public:
         transition.reset(spec.sampleRate, 0.015);
         reset();
     }
-    void reset() noexcept
+    void reset(bool preserveFrozen = false) noexcept
     {
-        if (effects) for (auto& effect : *effects) effect.reset();
+        if (effects) for (auto& effect : *effects) effect.reset(preserveFrozen);
         for (auto* bank : {&slotRawDelay, &slotOutputDelay}) for (auto& delay : *bank) delay.reset();
         orderDryDelay.reset();
         for (size_t i = 0; i < order.size(); ++i) order[i] = static_cast<int>(i);

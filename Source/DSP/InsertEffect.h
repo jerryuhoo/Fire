@@ -304,10 +304,10 @@ public:
         phaserCoefficientPeriod = juce::jmax(1, juce::roundToInt(sampleRate / 6000.0));
         reset();
     }
-    void reset() noexcept
+    void reset(bool preserveFrozen = false) noexcept
     {
-        preserveFrozenOnActivation = preserveFrozenOnActivation || currentType == Type::granular;
-        resetMemory();
+        preserveFrozenOnActivation = preserveFrozen && (preserveFrozenOnActivation || currentType == Type::granular);
+        resetMemory(preserveFrozen);
         currentType = Type::none;
         gate.setCurrentAndTargetValue(0);
         dormant = true;

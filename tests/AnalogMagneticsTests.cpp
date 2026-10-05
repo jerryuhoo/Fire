@@ -113,3 +113,30 @@ TEST_CASE("Pinned tape domains retain their irreversible state while reversible 
     }
     CHECK(core.getState().magnetisation < previousMagnetisation);
 }
+
+TEST_CASE("Coupled magnetic steps satisfy the implicit material law through small reversals and overload",
+          "[analog-physical][magnetics][transformer][numerics][realtime]")
+{
+    for (const auto material : {fire::analog::JilesAtherton::Material{.22, .10, .14, .002},
+                               fire::analog::JilesAtherton::Material{.3, .2, .17, .004}})
+    {
+        CAPTURE(material.alpha);
+        fire::analog::JilesAtherton core;
+        core.configure(material);
+        double largestError = 0;
+        for (int sample = 0; sample < 64000; ++sample)
+        {
+            const auto field = sample == 16000 ? 8.0 : sample == 32000 ? -8.0
+                : .8 * std::sin(sample * .0007) + .02 * std::sin(sample * .021);
+            const auto output = core.process(field);
+            const auto state = core.getState();
+            const auto anhysteretic = fire::analog::JilesAtherton::langevin(
+                (field + material.alpha * output) / material.a).value;
+            largestError = std::max(largestError, std::abs(output
+                - ((1 - material.c) * state.irreversible + material.c * anhysteretic)));
+            REQUIRE(std::isfinite(output));
+            REQUIRE(std::abs(output) <= 1);
+        }
+        CHECK(largestError < 2e-8);
+    }
+}

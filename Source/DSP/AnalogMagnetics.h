@@ -145,7 +145,11 @@ private:
         double initialGain = 0;
         if constexpr (! needDerivative) initialGain = -std::expm1(-initialU);
         double magnetisation = previous.magnetisation, irreversible = previous.irreversible, slope = 0;
-        const int iterations = uncoupled ? 1 : 3;
+        // Solve M = phi(H + alpha M) with a Newton-assisted mean-field
+        // correction instead of three fixed-point evaluations. The material
+        // law and winding clock stay unchanged; the second evaluation refines
+        // the corrected operating point whenever its displacement is large.
+        const int iterations = uncoupled ? 1 : 2;
         for (int iteration = 0; iteration < iterations; ++iteration)
         {
             const auto effective = field + parameters.alpha * magnetisation;
@@ -177,18 +181,36 @@ private:
                 meanDerivative = .5 + u / 6 - u * u * u / 180;
             }
             const auto direction = delta >= 0 ? 1.0 : -1.0;
-            const auto mid = evaluateLangevin<needDerivative>((effective - direction * meanDistance) * inverseA);
-            const auto end = uncoupled ? uncoupledEnd : evaluateLangevin<needDerivative>(effective * inverseA);
+            const bool needSlope = needDerivative || (!uncoupled && iteration == 0);
+            const auto mid = needSlope ? evaluateLangevin<true>((effective - direction * meanDistance) * inverseA)
+                                      : evaluateLangevin<false>((effective - direction * meanDistance) * inverseA);
+            const auto end = uncoupled ? uncoupledEnd : needSlope ? evaluateLangevin<true>(effective * inverseA)
+                                                               : evaluateLangevin<false>(effective * inverseA);
             const auto difference = mid.value - previous.irreversible;
             const bool moving = direction * difference > 0;
             irreversible = moving ? previous.irreversible + gain * difference : previous.irreversible;
             magnetisation = (1 - parameters.c) * irreversible + parameters.c * end.value;
-            if constexpr (needDerivative)
+            if (needSlope)
             {
                 const auto irreversibleSlope = moving ? gain * mid.derivative * inverseA * meanDerivative
                                                           + direction * decay * inverseK * difference : 0.0;
                 const auto effectiveSlope = (1 - parameters.c) * irreversibleSlope + parameters.c * end.derivative * inverseA;
                 slope = effectiveSlope / std::max(.5, 1 - parameters.alpha * effectiveSlope);
+                if (!uncoupled && iteration == 0)
+                {
+                    magnetisation += parameters.alpha * slope * (magnetisation - previous.magnetisation);
+                    const auto correction = parameters.alpha * (magnetisation - previous.magnetisation);
+                    const auto slopeOfDifference = mid.derivative * inverseA * meanDerivative;
+                    // Below one millionth of a normalised field unit, retain
+                    // the first-order correction of both M and Mirr. Stay away
+                    // from reversals/pinning boundaries where the active branch
+                    // can change. Larger moves use the full second evaluation.
+                    if (std::abs(correction) < 1e-6 && std::abs(delta) > 2 * std::abs(correction)
+                        && std::abs(difference) > 2 * std::abs(slopeOfDifference * correction))
+                        return {field, std::clamp(magnetisation, -1.0, 1.0),
+                                std::clamp(irreversible + irreversibleSlope * correction, -1.0, 1.0),
+                                needDerivative ? slope : 0};
+                }
             }
         }
         return {field, std::clamp(magnetisation, -1.0, 1.0),

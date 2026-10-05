@@ -1,0 +1,123 @@
+{
+  "date": "2026-10-05",
+  "platform": "Apple M1 Pro, arm64, Release -O3 -fno-fast-math / LTO",
+  "audio_conditions": "stereo, no editor, 64-sample blocks, fixed multitone, 256 warmup blocks, median of three one-second rounds; compute budget is not a DAW CPU meter",
+  "before_96000_transformer_hq_percent": [
+    105.061,
+    105.0883
+  ],
+  "after": [
+    {
+      "mode": -1.0,
+      "HQ": 0.0,
+      "rate": 48000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 5.2059,
+      "p99CallbackBudgetPercent": 6.6219,
+      "maxCallbackUs": 174.708,
+      "deadlineUs": 1333.33333333
+    },
+    {
+      "mode": 22.0,
+      "HQ": 1.0,
+      "rate": 48000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 30.8096,
+      "p99CallbackBudgetPercent": 34.209375,
+      "maxCallbackUs": 519.875,
+      "deadlineUs": 1333.33333333
+    },
+    {
+      "mode": 23.0,
+      "HQ": 1.0,
+      "rate": 48000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 54.0613,
+      "p99CallbackBudgetPercent": 58.24995,
+      "maxCallbackUs": 7853.833,
+      "deadlineUs": 1333.33333333
+    },
+    {
+      "mode": -1.0,
+      "HQ": 0.0,
+      "rate": 96000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 9.9713,
+      "p99CallbackBudgetPercent": 12.075,
+      "maxCallbackUs": 151.125,
+      "deadlineUs": 666.666666667
+    },
+    {
+      "mode": 22.0,
+      "HQ": 1.0,
+      "rate": 96000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 57.2574,
+      "p99CallbackBudgetPercent": 62.25615,
+      "maxCallbackUs": 534.083,
+      "deadlineUs": 666.666666667
+    },
+    {
+      "mode": 23.0,
+      "HQ": 1.0,
+      "rate": 96000.0,
+      "block": 64.0,
+      "avgBudgetPercent": 61.5983,
+      "p99CallbackBudgetPercent": 66.2937,
+      "maxCallbackUs": 583.25,
+      "deadlineUs": 666.666666667
+    }
+  ],
+  "standalone_material_and_winding_comparison": [
+    {
+      "rate": 44100.0,
+      "maxOutputError": 3.06948133577e-10,
+      "maxMagError": 3.55081075654e-10,
+      "residual": 9.98101601368e-12,
+      "beforeMs": 15.1875,
+      "afterMs": 9.4441,
+      "reduction": 37.82
+    },
+    {
+      "rate": 48000.0,
+      "maxOutputError": 3.07781189424e-10,
+      "maxMagError": 3.47059048167e-10,
+      "residual": 9.98573099209e-12,
+      "beforeMs": 14.9478,
+      "afterMs": 10.1346,
+      "reduction": 32.2
+    },
+    {
+      "rate": 96000.0,
+      "maxOutputError": 3.04908320814e-10,
+      "maxMagError": 3.73563582845e-10,
+      "residual": 9.93616300349e-12,
+      "beforeMs": 28.505,
+      "afterMs": 17.3059,
+      "reduction": 39.29
+    },
+    {
+      "rate": 192000.0,
+      "maxOutputError": 3.33148092446e-10,
+      "maxMagError": 3.57224666514e-10,
+      "residual": 9.9482158622e-12,
+      "beforeMs": 55.849,
+      "afterMs": 27.2247,
+      "reduction": 51.25
+    },
+    {
+      "rate": 384000.0,
+      "maxOutputError": 3.15908049719e-10,
+      "maxMagError": 3.16735776495e-10,
+      "residual": 9.98506832772e-12,
+      "beforeMs": 109.6653,
+      "afterMs": 52.2896,
+      "reduction": 52.32
+    }
+  ],
+  "regression_tests": {
+    "test_cases": 18,
+    "assertions": 660147,
+    "result": "passed"
+  }
+}

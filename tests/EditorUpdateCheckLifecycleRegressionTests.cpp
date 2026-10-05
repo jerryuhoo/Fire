@@ -264,6 +264,15 @@ TEST_CASE("Editor update alert is scoped to its visible editor session",
             launchedUrls.add(url);
         });
 
+    const auto waitForAlerts = [&](size_t count)
+    {
+        // Native paints and timers may occupy the first dispatch slice on a
+        // busy CI worker. Wait for the actual async result, with a deadline.
+        const auto started = juce::Time::getMillisecondCounter();
+        while (alertCompletions.size() < count
+               && juce::Time::getMillisecondCounter() - started < 1000u)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    };
     const auto oldSession =
         EditorUpdateCheckLifecycleTestAccess::captureSession(*editor);
     REQUIRE(EditorUpdateCheckLifecycleTestAccess::publish(
@@ -283,7 +292,7 @@ TEST_CASE("Editor update alert is scoped to its visible editor session",
     REQUIRE(currentSession != oldSession);
     REQUIRE(EditorUpdateCheckLifecycleTestAccess::publish(
         *editor, "v99.2.0", currentSession));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    waitForAlerts(1);
     REQUIRE(alertCompletions.size() == 1);
     REQUIRE(alertOptions.size() == 1);
     CHECK(alertOptions.front().getAssociatedComponent() == editor.get());
@@ -317,7 +326,7 @@ TEST_CASE("Editor update alert is scoped to its visible editor session",
     REQUIRE(replacementSession != currentSession);
     REQUIRE(EditorUpdateCheckLifecycleTestAccess::publish(
         *editor, "v99.3.0", replacementSession));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    waitForAlerts(2);
     REQUIRE(alertCompletions.size() == 2);
     REQUIRE(EditorUpdateCheckLifecycleTestAccess::isAlertActive(*editor));
 
@@ -346,7 +355,7 @@ TEST_CASE("Editor update alert is scoped to its visible editor session",
     // SafePointer-bound completion cannot access the deleted editor or launch.
     REQUIRE(EditorUpdateCheckLifecycleTestAccess::publish(
         *editor, "v99.4.0", replacementSession));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    waitForAlerts(3);
     REQUIRE(alertCompletions.size() == 3);
     auto completionAfterDestruction = alertCompletions[2];
     editor.reset();

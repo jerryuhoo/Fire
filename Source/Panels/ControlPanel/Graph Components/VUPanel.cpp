@@ -40,6 +40,9 @@ VUPanel::~VUPanel()
 void VUPanel::paint(juce::Graphics& g)
 {
     GraphTemplate::paint(g);
+    const auto skin = fire::ui::skinFor(*this);
+    const auto lineSkin = fire::ui::isLineSkin(skin);
+    const auto& palette = fire::ui::skinPalette(skin);
 
     const auto displayScale = juce::jmax(
         0.25f,
@@ -55,7 +58,8 @@ void VUPanel::paint(juce::Graphics& g)
         || scaleLayer.getWidth() != expectedWidth
         || scaleLayer.getHeight() != expectedHeight
         || scaleLayerBounds != logicalBounds
-        || ! juce::approximatelyEqual(scaleLayerScale, displayScale))
+        || ! juce::approximatelyEqual(scaleLayerScale, displayScale)
+        || cachedScaleSkin != skin)
     {
         rebuildScaleLayer(displayScale);
     }
@@ -67,37 +71,40 @@ void VUPanel::paint(juce::Graphics& g)
     {
         const auto normalized = juce::jlimit(0.0f, 1.0f, (realtimeThresholdDb + 96.0f) / 96.0f);
         const auto thresholdY = scaleBounds.getBottom() - scaleBounds.getHeight() * normalized;
-        g.setColour(fire::ui::colours::warning.withAlpha(0.20f));
-        g.drawLine(scaleBounds.getX(), thresholdY, scaleBounds.getRight(), thresholdY, 4.0f);
-        g.setColour(fire::ui::colours::warning.withAlpha(0.94f));
+        if (! lineSkin)
+        {
+            g.setColour(fire::ui::colours::warning.withAlpha(0.20f));
+            g.drawLine(scaleBounds.getX(), thresholdY, scaleBounds.getRight(), thresholdY, 4.0f);
+        }
+        g.setColour(lineSkin ? palette.accent.withAlpha(0.78f) : fire::ui::colours::warning.withAlpha(0.94f));
         g.drawLine(scaleBounds.getX(), thresholdY, scaleBounds.getRight(), thresholdY, 1.0f);
     }
 
-    const auto drawReadout = [&g, this](juce::Rectangle<float> area,
+    const auto drawReadout = [&g, lineSkin, &palette, this](juce::Rectangle<float> area,
                                          const juce::String& caption,
                                          const juce::String& peak,
                                          const juce::String& rms,
                                          juce::Colour accent)
     {
-        g.setColour(fire::ui::colours::textMuted);
+        g.setColour(lineSkin ? palette.textMuted : fire::ui::colours::textMuted);
         g.setFont(captionFont);
         g.drawText(caption, area.removeFromTop(captionFont.getHeight() + 2.0f),
                    juce::Justification::centred);
 
-        g.setColour(accent);
+        g.setColour(lineSkin && peak == "-96.0" ? palette.textSecondary : accent);
         g.setFont(peakReadoutFont);
         g.drawText(peak, area.removeFromTop(area.getHeight() * 0.58f),
                    juce::Justification::centred);
 
-        g.setColour(fire::ui::colours::textSecondary);
+        g.setColour(lineSkin ? palette.textMuted : fire::ui::colours::textSecondary);
         g.setFont(rmsReadoutFont);
         g.drawText(rms, area, juce::Justification::centredTop);
     };
 
     drawReadout(leftReadoutBounds, "IN", inputPeakText, inputRmsText,
-                fire::ui::colours::flame);
+                lineSkin ? palette.accent : fire::ui::colours::flame);
     drawReadout(rightReadoutBounds, "OUT", outputPeakText, outputRmsText,
-                fire::ui::colours::positive);
+                lineSkin ? palette.textPrimary : fire::ui::colours::positive);
 }
 
 void VUPanel::resized()
@@ -131,10 +138,6 @@ void VUPanel::resized()
                                          juce::jmax(1.0f, vuMeterOut.getX() - vuMeterIn.getRight() - 4.0f),
                                          meterHeight);
 
-    const auto readoutSize = juce::jlimit(9.0f, 15.0f, plotBounds.getWidth() * 0.08f);
-    peakReadoutFont = fire::ui::displayFont(readoutSize);
-    rmsReadoutFont = fire::ui::bodyFont(juce::jmax(8.0f, readoutSize * 0.70f));
-    captionFont = fire::ui::labelFont(juce::jmax(8.0f, readoutSize * 0.62f));
     scaleLayer = {};
     scaleLayerBounds = {};
     scaleLayerScale = 0.0f;
@@ -279,6 +282,15 @@ void VUPanel::rebuildScaleLayer(float displayScale)
     displayScale = juce::jmax(0.25f, displayScale);
     scaleLayerBounds = getLocalBounds();
     scaleLayerScale = displayScale;
+    cachedScaleSkin = fire::ui::skinFor(*this);
+    const auto lineSkin = fire::ui::isLineSkin(cachedScaleSkin);
+    const auto& palette = fire::ui::skinPalette(cachedScaleSkin);
+    const auto readoutSize = juce::jlimit(9.0f, 15.0f, getGraphPlotBounds().getWidth() * 0.08f);
+    const auto rmsSize = juce::jmax(8.0f, readoutSize * 0.70f);
+    const auto captionSize = juce::jmax(8.0f, readoutSize * 0.62f);
+    peakReadoutFont = lineSkin ? fire::ui::portfolioMonoFont(readoutSize) : fire::ui::displayFont(readoutSize);
+    rmsReadoutFont = lineSkin ? fire::ui::portfolioMonoFont(rmsSize) : fire::ui::bodyFont(rmsSize);
+    captionFont = lineSkin ? fire::ui::portfolioFont(captionSize, true) : fire::ui::labelFont(captionSize);
     scaleLayer = juce::Image(
         juce::Image::ARGB,
         juce::jmax(1, juce::roundToInt(static_cast<float>(getWidth()) * displayScale)),
@@ -286,21 +298,31 @@ void VUPanel::rebuildScaleLayer(float displayScale)
         true);
     juce::Graphics cacheGraphics(scaleLayer);
     cacheGraphics.addTransform(juce::AffineTransform::scale(displayScale));
-    cacheGraphics.setFont(fire::ui::labelFont(juce::jlimit(7.0f, 10.0f,
-                                                           scaleBounds.getWidth() * 0.24f)));
-    cacheGraphics.setColour(fire::ui::colours::textMuted.withAlpha(0.85f));
+    const auto scaleFontSize = juce::jlimit(7.0f, 10.0f, scaleBounds.getWidth() * 0.24f);
+    cacheGraphics.setFont(lineSkin ? fire::ui::portfolioMonoFont(scaleFontSize) : fire::ui::labelFont(scaleFontSize));
 
     constexpr std::array<int, 5> marks { 0, -24, -48, -72, -96 };
     for (const auto mark : marks)
     {
         const auto normalized = (static_cast<float>(mark) + 96.0f) / 96.0f;
         const auto y = scaleBounds.getBottom() - scaleBounds.getHeight() * normalized;
-        cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(mark == 0 ? 0.75f : 0.38f));
-        cacheGraphics.drawHorizontalLine(juce::roundToInt(y),
-                                         scaleBounds.getX(),
-                                         scaleBounds.getRight());
-        cacheGraphics.setColour(mark == 0 ? fire::ui::colours::warning.withAlpha(0.88f)
-                                          : fire::ui::colours::textMuted.withAlpha(0.85f));
+        cacheGraphics.setColour(lineSkin ? palette.hairline.withAlpha(0.72f)
+                                        : fire::ui::colours::hairline.withAlpha(mark == 0 ? 0.75f : 0.38f));
+        if (lineSkin)
+        {
+            // Leave a clear gap around the numbers instead of striking through them.
+            const auto halfGap = juce::jmin(scaleBounds.getWidth() * 0.5f, scaleFontSize * 1.4f + 2.0f);
+            if (halfGap < scaleBounds.getWidth() * 0.5f)
+            {
+                cacheGraphics.drawHorizontalLine(juce::roundToInt(y), scaleBounds.getX(), scaleBounds.getCentreX() - halfGap);
+                cacheGraphics.drawHorizontalLine(juce::roundToInt(y), scaleBounds.getCentreX() + halfGap, scaleBounds.getRight());
+            }
+        }
+        else
+            cacheGraphics.drawHorizontalLine(juce::roundToInt(y), scaleBounds.getX(), scaleBounds.getRight());
+        cacheGraphics.setColour(lineSkin ? (mark == 0 ? palette.textPrimary : palette.textMuted.withAlpha(0.90f))
+                                         : (mark == 0 ? fire::ui::colours::warning.withAlpha(0.88f)
+                                                      : fire::ui::colours::textMuted.withAlpha(0.85f)));
         cacheGraphics.drawText(juce::String(mark),
                                scaleBounds.withY(y - 6.0f).withHeight(12.0f),
                                juce::Justification::centred);

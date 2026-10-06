@@ -51,6 +51,7 @@ private:
     juce::Image scaleLayer;
     juce::Rectangle<int> scaleLayerBounds;
     float scaleLayerScale = 0.0f;
+    fire::ui::Skin cachedScaleSkin = fire::ui::Skin::modern;
     juce::Rectangle<float> leftReadoutBounds;
     juce::Rectangle<float> rightReadoutBounds;
     juce::Rectangle<float> scaleBounds;

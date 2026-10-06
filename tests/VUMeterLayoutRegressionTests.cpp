@@ -8,10 +8,16 @@
 
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 
 struct VUMeterTestAccess
 {
+    static juce::Image background(const VUMeter& meter)
+    {
+        return meter.backgroundCache;
+    }
+
     static juce::Rectangle<int> leftBounds(const VUMeter& meter)
     {
         return meter.leftMeterBounds;
@@ -76,6 +82,21 @@ struct VUMeterTestAccess
 
 struct VUPanelTestAccess
 {
+    static void resetPresentation(VUPanel& panel)
+    {
+        panel.resetMeterPresentation();
+    }
+
+    static juce::Rectangle<float> inputReadoutBounds(const VUPanel& panel)
+    {
+        return panel.leftReadoutBounds;
+    }
+
+    static juce::Rectangle<float> scaleBounds(const VUPanel& panel)
+    {
+        return panel.scaleBounds;
+    }
+
     static void applyLevels(VUPanel& panel, const MeterValues& values)
     {
         panel.vuMeterIn.updateLevels(values);
@@ -199,6 +220,39 @@ void paintMeter(VUMeter& meter)
     meter.paint(graphics);
 }
 
+juce::Image meterSnapshot(juce::Component& component, const juce::String& name = {})
+{
+    auto image = component.createComponentSnapshot(component.getLocalBounds());
+    REQUIRE(image.isValid());
+    if (const auto* directory = std::getenv("FIRE_METER_PREVIEW_DIR"); directory && name.isNotEmpty())
+    {
+        auto file = juce::File(directory).getChildFile(name + ".png");
+        REQUIRE(file.getParentDirectory().createDirectory().wasOk());
+        auto stream = file.createOutputStream();
+        REQUIRE(stream != nullptr);
+        stream->setPosition(0);
+        stream->truncate();
+        REQUIRE(juce::PNGImageFormat{}.writeImageToStream(image, *stream));
+    }
+    return image;
+}
+
+int countMeterColour(const juce::Image& image, juce::Rectangle<int> bounds, juce::Colour colour)
+{
+    int count = 0;
+    bounds = bounds.getIntersection(image.getBounds());
+    for (int y = bounds.getY(); y < bounds.getBottom(); ++y)
+        for (int x = bounds.getX(); x < bounds.getRight(); ++x)
+        {
+            const auto pixel = image.getPixelAt(x, y);
+            if (std::abs(int(pixel.getRed()) - int(colour.getRed())) < 25
+                && std::abs(int(pixel.getGreen()) - int(colour.getGreen())) < 25
+                && std::abs(int(pixel.getBlue()) - int(colour.getBlue())) < 25)
+                ++count;
+        }
+    return count;
+}
+
 void publishBypassedMeterPacket(FireAudioProcessor& processor,
                                 float amplitude)
 {
@@ -213,6 +267,78 @@ void publishBypassedMeterPacket(FireAudioProcessor& processor,
     processor.processBlockBypassed(buffer, midi);
 }
 } // namespace
+
+TEST_CASE("Meter tracks refresh their skin without resizing or resetting levels",
+          "[ui][meter][skin][cache]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    setChannelLayout(processor, 2);
+    juce::Component parent;
+    VUMeter meter(&processor);
+    parent.addAndMakeVisible(meter);
+    meter.setBounds(0, 0, 30, 160);
+    VUMeterTestAccess::updateBallistics(meter, 0.4f, 0.3f, 0.6f, 0.5f);
+    const auto levels = VUMeterTestAccess::levels(meter);
+
+    using fire::ui::Skin;
+    for (const auto skin : {Skin::modern, Skin::paper, Skin::ink, Skin::paper, Skin::modern})
+    {
+        CAPTURE(static_cast<int>(skin));
+        fire::ui::setSkin(parent, skin);
+        auto image = meterSnapshot(meter);
+        const auto idleTrack = image.getPixelAt(5, 17);
+        if (skin == Skin::paper)
+            CHECK(idleTrack.getPerceivedBrightness() > 0.75f);
+        if (skin == Skin::ink)
+            CHECK(idleTrack.getPerceivedBrightness() > 0.12f);
+        CHECK(VUMeterTestAccess::levels(meter) == levels);
+
+        const auto cachedBackground = VUMeterTestAccess::background(meter);
+        meterSnapshot(meter);
+        CHECK(VUMeterTestAccess::background(meter) == cachedBackground);
+    }
+}
+
+TEST_CASE("Line meter readouts and scales follow the palette after warming their cache",
+          "[ui][meter][skin][cache]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    VUPanel panel(processor);
+    panel.setFocusBandNum(-1);
+    panel.setSize(420, 340);
+    meterSnapshot(panel);
+
+    using fire::ui::Skin;
+    for (const auto skin : {Skin::paper, Skin::ink, Skin::paper})
+    {
+        CAPTURE(static_cast<int>(skin));
+        fire::ui::setSkin(panel, skin);
+        panel.sendLookAndFeelChange();
+        VUPanelTestAccess::resetPresentation(panel);
+        const auto name = juce::String(fire::ui::skinName(skin)).toLowerCase();
+        meterSnapshot(panel, name + "-levels-idle");
+        MeterValues values;
+        values.inputRMS_L = juce::Decibels::decibelsToGain(-18.0f);
+        values.inputRMS_R = juce::Decibels::decibelsToGain(-21.0f);
+        values.inputPeak_L = juce::Decibels::decibelsToGain(-6.0f);
+        values.inputPeak_R = juce::Decibels::decibelsToGain(-9.0f);
+        values.outputRMS_L = juce::Decibels::decibelsToGain(-24.0f);
+        values.outputRMS_R = juce::Decibels::decibelsToGain(-27.0f);
+        values.outputPeak_L = juce::Decibels::decibelsToGain(-12.0f);
+        values.outputPeak_R = juce::Decibels::decibelsToGain(-15.0f);
+        VUPanelTestAccess::applyLevels(panel, values);
+        const auto image = meterSnapshot(panel, name + "-levels-active");
+        const auto& palette = fire::ui::skinPalette(skin);
+        CHECK(countMeterColour(image, VUPanelTestAccess::inputReadoutBounds(panel).toNearestInt(),
+                               palette.accent) >= 10);
+        CHECK(countMeterColour(image, VUPanelTestAccess::scaleBounds(panel).toNearestInt(),
+                               palette.textMuted) >= 10);
+        CHECK(VUPanelTestAccess::inputPeakText(panel) == "-6.0");
+        CHECK(VUPanelTestAccess::outputPeakText(panel) == "-12.0");
+    }
+}
 
 TEST_CASE("VU meter updates bar bounds when the host channel layout changes",
           "[ui][meter][layout]")

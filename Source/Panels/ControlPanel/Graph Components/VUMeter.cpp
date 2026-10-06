@@ -41,6 +41,9 @@ void VUMeter::paint(juce::Graphics& g)
         0.25f,
         g.getInternalContext().getPhysicalPixelScaleFactor());
     const auto channelCount = mProcessor->getTotalNumInputChannels();
+    const auto skin = fire::ui::skinFor(*this);
+    const auto lineSkin = fire::ui::isLineSkin(skin);
+    const auto& palette = fire::ui::skinPalette(skin);
     const auto logicalBounds = getLocalBounds();
     const auto expectedWidth = juce::jmax(
         1,
@@ -54,7 +57,8 @@ void VUMeter::paint(juce::Graphics& g)
         || backgroundCacheBounds != logicalBounds
         || ! juce::approximatelyEqual(backgroundCacheScale, displayScale)
         || cachedChannelCount != channelCount
-        || cachedIsInput != mIsInput)
+        || cachedIsInput != mIsInput
+        || cachedSkin != skin)
     {
         if (cachedChannelCount != channelCount)
             updateMeterBounds(channelCount);
@@ -72,9 +76,10 @@ void VUMeter::paint(juce::Graphics& g)
     const auto peakHold0 = juce::jlimit(0.0f, 1.0f, mPeakHoldCh0Level);
     const auto peakHold1 = juce::jlimit(0.0f, 1.0f, mPeakHoldCh1Level);
 
-    const auto accent = mIsInput ? fire::ui::colours::flame
-                                 : fire::ui::colours::positive;
-    const auto drawChannel = [&g, accent, this](juce::Rectangle<int> bounds,
+    const auto accent = lineSkin ? (mIsInput ? palette.accent : palette.textSecondary)
+                                : (mIsInput ? fire::ui::colours::flame : fire::ui::colours::positive);
+    const auto holdColour = lineSkin ? accent : fire::ui::colours::whiteHot;
+    const auto drawChannel = [&g, accent, holdColour, lineSkin, this](juce::Rectangle<int> bounds,
                                                 float rms,
                                                 float peak,
                                                 float peakHold)
@@ -90,19 +95,25 @@ void VUMeter::paint(juce::Graphics& g)
 
         const auto peakY = levelToY(peak);
         const auto rmsY = levelToY(rms);
-        g.setColour(accent.withAlpha(0.22f));
+        g.setColour(accent.withAlpha(lineSkin ? 0.14f : 0.22f));
         g.fillRect(floatBounds.withTop(peakY));
 
-        g.setGradientFill(meterGradient);
+        if (lineSkin)
+            g.setColour(accent.withAlpha(0.86f));
+        else
+            g.setGradientFill(meterGradient);
         g.fillRect(floatBounds.withTop(rmsY));
 
         if (peakHold > 0.0001f)
         {
             const auto holdY = levelToY(peakHold);
-            g.setColour(fire::ui::colours::whiteHot.withAlpha(0.30f));
-            g.drawLine(floatBounds.getX(), holdY, floatBounds.getRight(), holdY, 4.0f);
-            g.setColour(fire::ui::colours::whiteHot);
-            g.drawLine(floatBounds.getX(), holdY, floatBounds.getRight(), holdY, 1.2f);
+            if (! lineSkin)
+            {
+                g.setColour(holdColour.withAlpha(0.30f));
+                g.drawLine(floatBounds.getX(), holdY, floatBounds.getRight(), holdY, 4.0f);
+            }
+            g.setColour(holdColour);
+            g.drawLine(floatBounds.getX(), holdY, floatBounds.getRight(), holdY, lineSkin ? 1.0f : 1.2f);
         }
     };
 
@@ -310,6 +321,7 @@ void VUMeter::rebuildBackgroundCache(float displayScale)
     backgroundCacheScale = displayScale;
     cachedChannelCount = mProcessor->getTotalNumInputChannels();
     cachedIsInput = mIsInput;
+    cachedSkin = fire::ui::skinFor(*this);
     backgroundCache = juce::Image(
         juce::Image::ARGB,
         juce::jmax(1, juce::roundToInt(static_cast<float>(getWidth()) * displayScale)),
@@ -329,18 +341,23 @@ void VUMeter::rebuildBackgroundCache(float displayScale)
                                          false);
     meterGradient.addColour(0.68, accent);
 
-    const auto drawTrack = [&cacheGraphics](juce::Rectangle<int> bounds)
+    const auto lineSkin = fire::ui::isLineSkin(cachedSkin);
+    const auto& palette = fire::ui::skinPalette(cachedSkin);
+    const auto trackColour = fire::ui::isLightSkin(cachedSkin) ? palette.surface0 : palette.surface2;
+    const auto drawTrack = [&cacheGraphics, lineSkin, &palette, trackColour](juce::Rectangle<int> bounds)
     {
         if (bounds.isEmpty())
             return;
 
         const auto track = bounds.toFloat();
-        cacheGraphics.setColour(fire::ui::colours::canvas.withAlpha(0.92f));
+        cacheGraphics.setColour(lineSkin ? trackColour : fire::ui::colours::canvas.withAlpha(0.92f));
         cacheGraphics.fillRoundedRectangle(track, 2.0f);
-        cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.85f));
-        cacheGraphics.drawRoundedRectangle(track.reduced(0.5f), 2.0f, 1.0f);
+        cacheGraphics.setColour(lineSkin ? palette.hairline.withAlpha(0.65f)
+                                        : fire::ui::colours::hairline.withAlpha(0.85f));
+        cacheGraphics.drawRoundedRectangle(track.reduced(0.5f), 2.0f, lineSkin ? 0.75f : 1.0f);
 
-        cacheGraphics.setColour(fire::ui::colours::textMuted.withAlpha(0.22f));
+        cacheGraphics.setColour(lineSkin ? palette.hairline.withAlpha(0.55f)
+                                        : fire::ui::colours::textMuted.withAlpha(0.22f));
         for (int division = 1; division < 8; ++division)
         {
             const auto y = track.getY() + track.getHeight() * division / 8.0f;

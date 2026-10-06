@@ -11,6 +11,7 @@
 #pragma once
 
 #include "../../../PluginProcessor.h"
+#include "../../../GUI/Skin.h"
 
 //==============================================================================
 /*
@@ -64,6 +65,7 @@ private:
     float backgroundCacheScale = 0.0f;
     int cachedChannelCount = 0;
     bool cachedIsInput = true;
+    fire::ui::Skin cachedSkin = fire::ui::Skin::modern;
 
     bool updateBallistics(float rmsCh0, float rmsCh1, float peakCh0, float peakCh1);
     void resetLevels() noexcept;

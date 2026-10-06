@@ -3,7 +3,11 @@
 
 name: CMake Build Matrix
 
-on: [ push, pull_request ]
+on:
+  push:
+    branches-ignore: [gh-pages]
+  pull_request:
+    branches-ignore: [gh-pages]
 
 env:
   PROJECT_NAME: Fire # Must match the JUCE project name from juce_add_plugin

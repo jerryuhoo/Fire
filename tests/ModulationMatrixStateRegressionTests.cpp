@@ -14,6 +14,7 @@
 
 struct ModulationMatrixRoutingComboBoxTestAccess
 {
+    static juce::CallOutBox* targetCallout(ModulationMatrixRoutingComboBox& combo) {return combo.targetCallout.getComponent();}
     static std::function<void(int)> createPopupResultHandler(
         ModulationMatrixRoutingComboBox& comboBox)
     {
@@ -48,6 +49,7 @@ struct ModulationMatrixRoutingComboBoxTestAccess
 
 struct ModulationMatrixRowTestAccess
 {
+    static auto targetChoices(const ModulationMatrixRow& row) {return row.buildTargetChoices();}
     static void setAmountPointerSource(
         ModulationMatrixRow& row,
         juce::MouseInputSource::InputSourceType type,
@@ -3175,4 +3177,77 @@ TEST_CASE("Cached modulation amount accessibility rejects stale value writes",
             desktopHost.removeFromDesktop();
         }
     }
+}
+
+
+TEST_CASE("Destination catalogue groups real module controls and marks only current chain targets active",
+          "[ui][modulation-matrix][target-picker][routing]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const int slot=processor.addInsertEffect(1,fire::effects::Type::reverb); REQUIRE(slot>=0);
+    const int shapeSlot=processor.addInsertEffect(1,fire::effects::Type::shape); REQUIRE(shapeSlot>=0);
+    REQUIRE(processor.setShapeMode(1,shapeSlot,3));
+    const ModulationRouting routing {0,ParameterIDAndName::getIDString(DRIVE_ID,3),.5f,true,false};
+    ModulationMatrixRow row(processor,0,routing,makeRoutingEditSession(processor),[](std::uint64_t,ModulationRouting) {});
+    const auto choices=ModulationMatrixRowTestAccess::targetChoices(row);
+    const auto targets=ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE(choices.size()==targets.size()+1);
+    const auto lookup=[&](const juce::String& id) -> const ModulationMatrixRoutingComboBox::TargetChoice&
+    {const auto found=std::find_if(choices.begin(),choices.end(),[&](const auto& choice) {return choice.parameterID==id;});REQUIRE(found!=choices.end());return *found;};
+    const auto& drive=lookup(ParameterIDAndName::getIDString(DRIVE_ID,0));
+    CHECK(drive.scope=="Band 1");CHECK(drive.module=="Drive");CHECK(drive.active);
+    const auto& inactive=lookup(routing.targetParameterID);CHECK(inactive.scope=="Band 4");CHECK_FALSE(inactive.active);
+    const auto& reverb=lookup(fire::effects::parameterID(1,slot,0));
+    CHECK(reverb.module.contains("Reverb"));CHECK(reverb.label=="Size");CHECK(reverb.active);
+    const auto& clouds=lookup(fire::clouds_params::parameterID(1,slot,fire::clouds_params::spreadField));CHECK_FALSE(clouds.active);
+    CHECK_FALSE(lookup(fire::analog_params::driveID(1,shapeSlot)).active);
+    REQUIRE(processor.setShapeMode(1,shapeSlot,fire::analog::legacyCount));
+    const auto analogChoices=ModulationMatrixRowTestAccess::targetChoices(row);
+    for(const auto& choice:analogChoices) if(choice.parameterID==fire::analog_params::driveID(1,shapeSlot)) CHECK(choice.active);
+    for(const auto& choice:choices) if(choice.itemId>1)
+    {REQUIRE(juce::isPositiveAndBelow(choice.itemId-2,static_cast<int>(targets.size())));CHECK(targets[static_cast<size_t>(choice.itemId-2)].parameterID==choice.parameterID);}
+    processor.removeModule(1,0); processor.removeInsertEffect(1,slot);
+    const auto refreshed=ModulationMatrixRowTestAccess::targetChoices(row);
+    for(const auto& choice:refreshed) if(choice.parameterID==drive.parameterID || choice.parameterID==reverb.parameterID) CHECK_FALSE(choice.active);
+}
+
+
+TEST_CASE("Searchable target picker retains inactive assignments and rejects hidden-session selections",
+          "[ui][modulation-matrix][target-picker][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    juce::Component host; host.setBounds(0,0,600,500);
+    ModulationMatrixRoutingComboBox combo; host.addAndMakeVisible(combo);combo.setBounds(10,10,260,32);
+    for(int id=1;id<=5;++id) combo.addItem(juce::String(id),id);
+    combo.setSelectedId(3,juce::dontSendNotification);
+    const std::vector<ModulationMatrixRoutingComboBox::TargetChoice> choices {
+        {1,"","","None","",true}, {2,"Band 1","Drive","Drive","drive1",true},
+        {3,"Band 2","Drive","Drive","drive2",false}, {4,"Master","Reverb","Size","masterFx1Control1",true},
+        {5,"Band 3","Shape","Bias","bias3",false}
+    };
+    combo.setTargetChoiceProvider([choices] {return choices;});
+    int committed=0;
+    combo.configurePopupSession([] {return ModulationMatrixRoutingComboBox::EditContext{};},[](const auto&) {return true;},
+        [&](auto&,int itemId,const auto&) {committed=itemId;});
+    host.addToDesktop(juce::ComponentPeer::windowIsTemporary);host.setVisible(true);combo.showPopup();
+    for(int elapsed=0;!ModulationMatrixRoutingComboBoxTestAccess::targetCallout(combo) && elapsed<1000;elapsed+=5)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(5);
+    auto* callout=ModulationMatrixRoutingComboBoxTestAccess::targetCallout(combo);REQUIRE(callout);
+    auto* picker=callout->findChildWithID("modulation_target_picker");REQUIRE(picker);
+    auto* search=dynamic_cast<juce::TextEditor*>(picker->findChildWithID("target_search"));REQUIRE(search);
+    auto* results=dynamic_cast<juce::ListBox*>(picker->findChildWithID("target_results"));REQUIRE(results); REQUIRE(results->getModel());
+    auto* all=dynamic_cast<PrimaryTextButton*>(picker->findChildWithID("target_all_targets"));REQUIRE(all);
+    auto* scope=dynamic_cast<juce::ComboBox*>(picker->findChildWithID("target_scope"));REQUIRE(scope);
+    CHECK(results->getModel()->getNumRows()==4);
+    search->setText("Drive Band 2",false);search->onTextChange();CHECK(results->getModel()->getNumRows()==1);
+    CHECK(results->getModel()->getNameForRow(0).contains("inactive"));
+    search->setText("Bias",false);search->onTextChange();CHECK(results->getModel()->getNumRows()==0);
+    all->onClick();CHECK(results->getModel()->getNumRows()==1);
+    search->setText({},false);search->onTextChange();scope->setSelectedId(2,juce::dontSendNotification);scope->onChange();
+    CHECK(results->getModel()->getNumRows()==1);CHECK(results->getModel()->getNameForRow(0).contains("Master"));
+    auto stale=search->onReturnKey;
+    host.setVisible(false);stale();CHECK(committed==0);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    CHECK(ModulationMatrixRoutingComboBoxTestAccess::targetCallout(combo)==nullptr);
 }

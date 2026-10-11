@@ -105,6 +105,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     MeterValues staleMeterValues;
     processor.getLatestMeterValues(staleMeterValues);
 
+    lfoPanel.onRevealModulationTarget = [safe = juce::Component::SafePointer<FireAudioProcessorEditor>(this)](const juce::String& id) { if (safe) safe->revealModulationTarget(id); };
+
     bandPanel.onModuleChanged = [this]
     {
         multiband.setOttMode(activeWorkspace == 0 && bandPanel.isOttSelected());
@@ -2164,6 +2166,136 @@ void FireAudioProcessorEditor::hidePresetBrowser()
     auto hidden = std::move(componentsHiddenForPresets); componentsHiddenForPresets.clear();
     for (auto component : hidden) {if (component && component->getParentComponent() == this) component->setVisible(true); if (!safe) return;}
     updateMainPanelVisibility(); if (safe) resized();
+}
+
+void FireAudioProcessorEditor::revealModulationTarget(const juce::String& parameterID)
+{
+    // Resolve stable parameter IDs before navigating. Revealing a destination
+    // must never insert a module, add an EQ point or enable audio processing.
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safe(this);
+    int scope=-1,slot=-1,node=-1,eqPoint=-1;
+    for(int candidateScope=0;candidateScope<fire::effects::scopeCount;++candidateScope)
+        for(int candidateSlot=0;candidateSlot<fire::effects::slotCount;++candidateSlot)
+        {
+            bool matches=parameterID==fire::analog_params::driveID(candidateScope,candidateSlot)
+                || parameterID==fire::core_modules::parameterID(candidateScope,candidateSlot,fire::core_modules::jitterField);
+            for(int field=0;field<static_cast<int>(fire::effects::controlCount);++field)
+                matches=matches || parameterID==fire::effects::parameterID(candidateScope,candidateSlot,field);
+            for(int field=fire::clouds_params::spreadField;field<fire::clouds_params::fieldCount;++field)
+                matches=matches || parameterID==fire::clouds_params::parameterID(candidateScope,candidateSlot,field);
+            for(int point=0;point<fire::eq::maxNodes;++point)
+                for(auto field:{fire::eq::Field::frequency,fire::eq::Field::gain,fire::eq::Field::q})
+                    if(parameterID==fire::core_modules::eqParameterID(candidateScope,candidateSlot,point,field))
+                    {matches=true;eqPoint=point;}
+            if(matches) {scope=candidateScope;slot=candidateSlot;node=fire::module_order::firstInsert+slot;}
+        }
+    if(scope<0)
+        for(int band=0;band<4;++band)
+            for(const auto& parameter:ParameterIDAndName::getModulatableParameterInfo())
+                if(parameterID==ParameterIDAndName::getIDString(parameter.idBase,band))
+                {
+                    scope=band+1;
+                    if(parameter.idBase==DRIVE_ID) node=0;
+                    else if(parameter.idBase==BIAS_ID || parameter.idBase==REC_ID || parameter.idBase==SHAPE_MIX_ID) node=1;
+                    else if(parameter.idBase.startsWith("comp")) node=2;
+                    else if(parameter.idBase==WIDTH_ID || parameter.idBase==PAN_ID || parameter.idBase==WIDTH_MIX_ID) node=3;
+                    else if(parameter.idBase.startsWith("ott")) node=4;
+                }
+    if(scope<0)
+        for(const auto& parameter:ParameterIDAndName::getGlobalParameterInfo()) if(parameterID==parameter.idBase)
+        {
+            scope=0;
+            if(parameterID!=OUTPUT_ID && parameterID!=MIX_ID)
+            {
+                bool lofi=parameterID==DOWNSAMPLE_ID || parameterID==BIT_DEPTH_ID || parameterID==JITTER_ID || parameterID==DOWNSAMPLE_MIX_ID;
+                for(auto* id:fire::effects::tapeIDs) lofi=lofi || parameterID==id;
+                node=lofi?1:0;
+                if(!lofi) for(int point=0;point<fire::eq::maxNodes;++point)
+                    for(auto field:{fire::eq::Field::frequency,fire::eq::Field::gain,fire::eq::Field::q})
+                        if(parameterID==fire::eq::parameterID(point,field)) eqPoint=point;
+            }
+        }
+    const auto* bandCount=processor.treeState.getRawParameterValue(NUM_BANDS_ID);
+    const int activeBands=bandCount?juce::jlimit(1,4,juce::roundToInt(bandCount->load())):1;
+    const bool available=scope>=0 && scope<=activeBands
+        && (node<0 || processor.isModulePresent(scope,node))
+        && (eqPoint<0 || processor.getEqNodeState(eqPoint,scope,slot).present);
+    if(!available)
+    {
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,"Destination unavailable",
+            "This destination belongs to an inactive band, a removed module or a removed EQ point. Add it to the chain to edit its controls.","OK",this);
+        return;
+    }
+    hidePresetBrowser(); if(!safe) return;
+    exitAssignMode(false); if(!safe) return;
+    windowLeftButton.setToggleState(scope!=0,juce::dontSendNotification);
+    windowRightButton.setToggleState(scope==0,juce::dontSendNotification);
+    windowLfoButton.setToggleState(false,juce::dontSendNotification);
+    selectWorkspace(scope==0?2:0,false); if(!safe) return;
+    auto& panel=scope==0?static_cast<juce::Component&>(globalPanel):static_cast<juce::Component&>(bandPanel);
+    if(scope>0)
+    {
+        const bool alreadyFocused=multiband.getFocusIndex()==scope-1;
+        multiband.setFocusIndex(scope-1); if(!safe) return;
+        if(alreadyFocused) updateWhenChangingFocus(scope-1);
+        if(!safe) return;
+    }
+    if(slot>=0)
+    {
+        if(scope==0) globalPanel.focusInsertEffect(slot);
+        else
+        {
+            // Band navigation exposes the same selection callback used by its
+            // module rail; it binds the existing slot without touching DSP state.
+            for(auto* child:bandPanel.getChildren())
+                if(auto* rack=dynamic_cast<fire::ui::EffectRackNavigation*>(child))
+                {rack->refresh();if(!safe) return;auto select=rack->onSelectEffect;if(select) select(slot);break;}
+        }
+    }
+    else if(scope>0 && node>=0)
+    {
+        // Re-selecting also exits an enlarged graph that may cover the knob.
+        bandPanel.setSwitch(node,false); if(!safe) return; bandPanel.setSwitch(node,true);
+    }
+    else if(scope==0 && node>=0)
+    {
+        const juce::String moduleName=node==0?"EQ":"Lo-Fi";
+        std::function<juce::Button*(juce::Component&)> findLegacyModule=[&](juce::Component& parent)->juce::Button*
+        {
+            if(auto* button=dynamic_cast<juce::Button*>(&parent);button && button->getButtonText()==moduleName
+                && button->getComponentID().isEmpty() && button->getProperties().getWithDefault("fireModuleRail",false)) return button;
+            for(auto* child:parent.getChildren()) if(auto* match=findLegacyModule(*child)) return match;
+            return nullptr;
+        };
+        if(auto* button=findLegacyModule(globalPanel))
+        {button->setToggleState(false,juce::dontSendNotification);button->setToggleState(true,juce::sendNotificationSync);}
+        if(!safe) return;
+        if(node==0) globalPanel.selectEqNode(juce::jmax(0,eqPoint));
+    }
+    if(!safe) return;
+    if(slot>=0 && eqPoint>=0)
+    {
+        std::function<EqControlsPanel*(juce::Component&)> findEq=[&](juce::Component& parent)->EqControlsPanel*
+        {
+            if(auto* controls=dynamic_cast<EqControlsPanel*>(&parent);controls && controls->isShowing()) return controls;
+            for(auto* child:parent.getChildren()) if(auto* match=findEq(*child)) return match;
+            return nullptr;
+        };
+        if(auto* controls=findEq(panel)) controls->selectNode(eqPoint);
+    }
+    if(!safe) return;
+    std::function<ModulatableSlider*(juce::Component&)> findKnob=[&](juce::Component& parent)->ModulatableSlider*
+    {
+        if(auto* slider=dynamic_cast<ModulatableSlider*>(&parent);slider && slider->getParamID()==parameterID && slider->isShowing()) return slider;
+        for(auto* child:parent.getChildren()) if(auto* match=findKnob(*child)) return match;
+        return nullptr;
+    };
+    if(auto* slider=findKnob(panel))
+    {
+        const juce::Component::SafePointer<ModulatableSlider> knob(slider);
+        if(slider->isEnabled()) slider->grabKeyboardFocus();
+        if(safe && knob) showValuePopupForSlider(knob);
+    }
 }
 
 bool FireAudioProcessorEditor::focusLoadedAnalogPreset()

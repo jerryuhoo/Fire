@@ -3837,7 +3837,16 @@ void LfoPanel::dismissTransientInteraction()
 void LfoPanel::configureModulationMatrixDialog(
     juce::DialogWindow::LaunchOptions& launchOptions)
 {
-    launchOptions.content.setOwned(new ModulationMatrixPanel(processor));
+    auto* matrix=new ModulationMatrixPanel(processor);
+    matrix->onRevealTarget=[safe=juce::Component::SafePointer<LfoPanel>(this)](const juce::String& parameterID)
+    {
+        if(!safe) return;
+        const auto id=parameterID;
+        auto callback=safe->onRevealModulationTarget;
+        safe->dismissModulationMatrixDialog();
+        if(safe && callback) callback(id);
+    };
+    launchOptions.content.setOwned(matrix);
     fire::ui::setSkin(*launchOptions.content, fire::ui::skinFor(*this));
     launchOptions.content->sendLookAndFeelChange();
     const auto initialSize =

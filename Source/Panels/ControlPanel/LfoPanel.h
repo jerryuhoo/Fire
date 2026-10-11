@@ -393,6 +393,7 @@ public:
     std::function<void(int lfoIndex)> onAssignButtonClicked;
     std::function<void(int lfoIndex)> onCurrentLfoChanged;
     std::function<void(int lfoIndex)> onLfoRemoved;
+    std::function<void(const juce::String& parameterID)> onRevealModulationTarget;
     int getCurrentLfoIndex() const noexcept { return currentLfoIndex; }
     juce::Viewport& getBankViewport() noexcept { return bankViewport; }
     int getBankRowPitch() const noexcept { return bankRowPitch; }

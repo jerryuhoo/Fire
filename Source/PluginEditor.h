@@ -166,6 +166,7 @@ private:
     FireAudioProcessor& processor;
     state::StateComponent stateComponent;
     fire::ui::MacroBar macroBar;
+    void revealModulationTarget(const juce::String& parameterID);
     std::unique_ptr<fire::ui::PresetBrowserPanel> presetBrowser;
     std::vector<juce::Component::SafePointer<juce::Component>> componentsHiddenForPresets;
     void showPresetBrowser();

@@ -34,6 +34,17 @@ class ModulationMatrixRoutingComboBox final : public FocusAwareComboBox
 {
 public:
     ModulationMatrixRoutingComboBox() = default;
+    ~ModulationMatrixRoutingComboBox() override;
+
+    struct TargetChoice
+    {
+        int itemId = 0;
+        juce::String scope, module, label, parameterID;
+        bool active = false;
+    };
+    using TargetChoiceProvider = std::function<std::vector<TargetChoice>()>;
+    std::function<void(int)> onRevealTarget;
+    void setTargetChoiceProvider(TargetChoiceProvider provider) { getTargetChoices = std::move(provider); }
 
     struct EditContext
     {
@@ -91,6 +102,8 @@ private:
     void clearPointerInteraction() noexcept;
     void closePopupWindow() noexcept;
 
+    TargetChoiceProvider getTargetChoices;
+    juce::Component::SafePointer<juce::CallOutBox> targetCallout;
     EditContextProvider getCurrentEditContext;
     EditContextValidator isEditContextValid;
     SelectionCommitter commitSelection;
@@ -168,6 +181,7 @@ public:
     void enablementChanged() override;
     void parentHierarchyChanged() override;
     void dismissTransientInteractions() noexcept;
+    std::function<void(const juce::String&)> onRevealTarget;
 
 private:
     friend struct ModulationMatrixRowTestAccess;
@@ -250,6 +264,7 @@ private:
     void completeAmountPointerDispatch(bool requestRebuild,
                                        bool notifyHost);
     void updateVisualState();
+    std::vector<ModulationMatrixRoutingComboBox::TargetChoice> buildTargetChoices() const;
 
     FireAudioProcessor& processor;
     FireLookAndFeel fireLookAndFeel;
@@ -299,6 +314,7 @@ public:
     void buildUiFromProcessorState();
     void requestUiRebuild();
     bool isUiRebuildPending() const noexcept;
+    std::function<void(const juce::String&)> onRevealTarget;
 
 private:
     void dismissTransientInteractions() noexcept;

@@ -14,6 +14,7 @@
 #include "../../GUI/ModulationSourceControls.h"
 
 #include <utility>
+#include <map>
 
 namespace
 {
@@ -55,7 +56,187 @@ bool haveSameRoutingState(const ModulationRouting& lhs,
         && lhs.isBipolar == rhs.isBipolar
         && lhs.isBypassed == rhs.isBypassed;
 }
+// A separate, owned look-and-feel keeps the transient window safe if a routing
+// or its editor disappears. All selections still pass through the row's edit epoch.
+class ModulationTargetPicker final : public juce::Component,
+                                     private juce::ListBoxModel,
+                                     private juce::KeyListener
+{
+public:
+    using Choice = ModulationMatrixRoutingComboBox::TargetChoice;
+    ModulationTargetPicker(std::vector<Choice> choices, int selected,
+                           fire::ui::Skin skin, std::function<void(int)> finish, std::function<void(int)> reveal)
+        : allChoices(std::move(choices)), selectedId(selected), onFinish(std::move(finish)), onReveal(std::move(reveal))
+    {
+        fire::ui::setSkin(*this,skin); look.setSkin(skin); setLookAndFeel(&look);
+        setTitle("Choose modulation destination"); setComponentID("modulation_target_picker");
+        setFocusContainerType(FocusContainerType::keyboardFocusContainer);
+        const auto& tones=fire::ui::paletteFor(*this);
+        addAndMakeVisible(search); search.setTitle("Search modulation targets");
+        search.setComponentID("target_search"); search.setTextToShowWhenEmpty("Search parameter, module or band...",tones.textMuted);
+        search.setColour(juce::TextEditor::backgroundColourId,tones.surface1);
+        search.setColour(juce::TextEditor::textColourId,tones.textPrimary);
+        search.setColour(juce::TextEditor::outlineColourId,tones.hairline);
+        search.setColour(juce::TextEditor::focusedOutlineColourId,tones.accent);
+        search.setIndents(10,8); search.addKeyListener(this);
+        search.onTextChange=[this] { rebuild(); };
+        search.onReturnKey=[this] { finishSelection(list.getSelectedRow()); };
+        search.onEscapeKey=[this] { finishSelection(-1); };
+        addAndMakeVisible(scope); scope.setTitle("Target band or master"); scope.setComponentID("target_scope");
+        scope.addItem("All scopes",1); scope.addItem("Master",2);
+        for(int band=1;band<=4;++band) scope.addItem("Band "+juce::String(band),band+2);
+        scope.setSelectedId(1,juce::dontSendNotification);
+        scope.onChange=[this] { rebuildModules(); rebuild(); };
+        addAndMakeVisible(module); module.setTitle("Target module"); module.setComponentID("target_module");
+        module.onChange=[this] { rebuild(); };
+        addAndMakeVisible(active); addAndMakeVisible(all);
+        active.setButtonText("Active chain"); active.setComponentID("target_active_chain");
+        active.setTitle("Show targets in current chains, plus the existing assignment");
+        all.setButtonText("All targets"); all.setComponentID("target_all_targets");
+        all.setTitle("Include removed modules and inactive bands");
+        active.onClick=[this] { activeOnly=true; rebuildModules(); rebuild(); };
+        all.onClick=[this] { activeOnly=false; rebuildModules(); rebuild(); };
+        addAndMakeVisible(revealButton); revealButton.setButtonText("Show control"); revealButton.setComponentID("target_reveal");
+        revealButton.setTitle("Show the selected destination in the reactor");
+        revealButton.onClick=[this]
+        {
+            const int row=list.getSelectedRow(); if(!juce::isPositiveAndBelow(row,getNumRows())) return;
+            auto callback=onReveal; const auto choice=allChoices[visible[static_cast<size_t>(row)]];
+            if(callback && choice.active && choice.itemId!=1) callback(choice.itemId);
+        };
+        addAndMakeVisible(list); list.setModel(this); list.setRowHeight(44); list.setMultipleSelectionEnabled(false);
+        list.setTitle("Modulation destinations"); list.setComponentID("target_results"); list.addKeyListener(this);
+        list.setColour(juce::ListBox::backgroundColourId,tones.canvas);
+        list.setColour(juce::ListBox::outlineColourId,tones.hairline);
+        list.setOutlineThickness(1);
+        for(auto* box:{&scope,&module})
+        {
+            box->setColour(juce::ComboBox::backgroundColourId,tones.surface1);
+            box->setColour(juce::ComboBox::textColourId,tones.textPrimary);
+            box->setColour(juce::ComboBox::outlineColourId,tones.hairline);
+        }
+        search.setExplicitFocusOrder(1); scope.setExplicitFocusOrder(2); module.setExplicitFocusOrder(3);
+        active.setExplicitFocusOrder(4); all.setExplicitFocusOrder(5); list.setExplicitFocusOrder(6);
+        rebuildModules(); rebuild(); setSize(460,420);
+    }
+    ~ModulationTargetPicker() override
+    {
+        list.setModel(nullptr); list.removeKeyListener(this); search.removeKeyListener(this); setLookAndFeel(nullptr);
+        if(onFinish) {auto callback=std::move(onFinish);callback(0);}
+    }
+    void focusSearch() { search.grabKeyboardFocus(); }
+    void styleCallout(juce::CallOutBox& callout)
+    {fire::ui::setSkin(callout,fire::ui::skinFor(*this));callout.setLookAndFeel(&calloutLook);}
+    void resized() override
+    {
+        auto area=getLocalBounds().reduced(14); area.removeFromTop(23);
+        search.setBounds(area.removeFromTop(34)); area.removeFromTop(9);
+        auto groups=area.removeFromTop(30); scope.setBounds(groups.removeFromLeft(126)); groups.removeFromLeft(8); module.setBounds(groups);
+        area.removeFromTop(9); auto filters=area.removeFromTop(28);
+        active.setBounds(filters.removeFromLeft(126)); filters.removeFromLeft(8); all.setBounds(filters.removeFromLeft(110));
+        area.removeFromTop(10); footer=area.removeFromBottom(31); revealButton.setBounds(footer.removeFromRight(104).reduced(0,3)); list.setBounds(area);
+    }
+    void paint(juce::Graphics& g) override
+    {
+        const auto& tones=fire::ui::paletteFor(*this); g.fillAll(tones.canvas);
+        g.setColour(tones.textPrimary); g.setFont(fire::ui::labelFont(12));
+        g.drawText("MODULATION DESTINATION",14,10,getWidth()-28,20,juce::Justification::centredLeft);
+        g.setColour(tones.textMuted); g.setFont(fire::ui::bodyFont(11));
+        g.drawText(juce::String(visible.size())+" targets  ·  Enter selects",footer,juce::Justification::centredLeft);
+        if(visible.empty()) g.drawText("No matching destinations",list.getBounds(),juce::Justification::centred);
+    }
+private:
+    bool scopeMatches(const Choice& choice) const {return scope.getSelectedId()==1 || choice.scope==scope.getText();}
+    bool chainMatches(const Choice& choice) const {return !activeOnly || choice.active || choice.itemId==selectedId;}
+    void rebuildModules()
+    {
+        const auto previous=module.getText(); juce::StringArray groups;
+        for(const auto& choice:allChoices) if(scopeMatches(choice) && chainMatches(choice) && choice.module.isNotEmpty()) groups.addIfNotAlreadyThere(choice.module);
+        groups.sortNatural(); module.clear(juce::dontSendNotification); module.addItem("All modules",1);
+        int next=2,selected=1;
+        for(const auto& name:groups) {if(name==previous) selected=next;module.addItem(name,next++);}
+        module.setSelectedId(selected,juce::dontSendNotification);
+    }
+    void rebuild()
+    {
+        const auto query=juce::StringArray::fromTokens(search.getText().trim()," ","");
+        visible.clear();
+        for(size_t index=0;index<allChoices.size();++index)
+        {
+            const auto& choice=allChoices[index];
+            if(!scopeMatches(choice) || !chainMatches(choice) || (module.getSelectedId()!=1 && choice.module!=module.getText())) continue;
+            const auto searchable=choice.scope+" "+choice.module+" "+choice.label+" "+choice.parameterID;
+            if(std::any_of(query.begin(),query.end(),[&](const auto& word) {return !searchable.containsIgnoreCase(word);})) continue;
+            visible.push_back(index);
+        }
+        active.setToggleState(activeOnly,juce::dontSendNotification); all.setToggleState(!activeOnly,juce::dontSendNotification);
+        list.updateContent(); list.deselectAllRows();
+        const auto selected=std::find_if(visible.begin(),visible.end(),[this](size_t index) {return allChoices[index].itemId==selectedId;});
+        if(!visible.empty()) list.selectRow(selected==visible.end()?0:static_cast<int>(selected-visible.begin()));
+        repaint();
+    }
+    int getNumRows() override {return static_cast<int>(visible.size());}
+    juce::String getNameForRow(int row) override
+    {
+        if(!juce::isPositiveAndBelow(row,getNumRows())) return {};
+        const auto& choice=allChoices[visible[static_cast<size_t>(row)]];
+        return choice.scope+", "+choice.module+", "+choice.label+(choice.active?"":", inactive");
+    }
+    void paintListBoxItem(int row,juce::Graphics& g,int width,int height,bool highlighted) override
+    {
+        if(!juce::isPositiveAndBelow(row,getNumRows())) return;
+        const auto& choice=allChoices[visible[static_cast<size_t>(row)]];
+        const auto& tones=fire::ui::paletteFor(*this);
+        if(highlighted) {g.setColour(tones.accent.withAlpha(.13f));g.fillRect(0,0,width,height);}
+        g.setColour(tones.textPrimary); g.setFont(fire::ui::bodyFont(13));
+        g.drawText(choice.label,12,3,width-24,20,juce::Justification::centredLeft);
+        auto context=choice.scope+(choice.module.isEmpty()?"":" / "+choice.module);
+        if(!choice.active && choice.itemId!=1) context+="  ·  "+juce::String(choice.itemId==selectedId?"current · inactive":"inactive");
+        g.setColour(tones.textMuted);g.setFont(fire::ui::bodyFont(10));g.drawText(context,12,24,width-24,15,juce::Justification::centredLeft);
+    }
+    void selectedRowsChanged(int row) override
+    {revealButton.setEnabled(onReveal && juce::isPositiveAndBelow(row,getNumRows()) && allChoices[visible[static_cast<size_t>(row)]].active && allChoices[visible[static_cast<size_t>(row)]].itemId!=1);}
+    void listBoxItemClicked(int row,const juce::MouseEvent& event) override
+    {if(event.mods.isLeftButtonDown() && !event.mods.isPopupMenu()) finishSelection(row);}
+    void returnKeyPressed(int row) override {finishSelection(row);}
+    void finishSelection(int row)
+    {
+        const int result=juce::isPositiveAndBelow(row,getNumRows())?allChoices[visible[static_cast<size_t>(row)]].itemId:0;
+        if(onFinish) {auto callback=std::move(onFinish);callback(result);}
+    }
+    bool keyPressed(const juce::KeyPress& key,juce::Component* origin) override
+    {
+        if(key==juce::KeyPress::escapeKey) {finishSelection(-1);return true;}
+        if(origin==&search && key==juce::KeyPress::downKey) {list.grabKeyboardFocus();return true;}
+        return false;
+    }
+    class CalloutLook final : public juce::LookAndFeel_V4
+    {
+        void drawCallOutBoxBackground(juce::CallOutBox& box,juce::Graphics& g,const juce::Path& path,juce::Image&) override
+        {
+            const auto& tones=fire::ui::paletteFor(box);
+            juce::DropShadow(juce::Colours::black.withAlpha(.18f),7,{0,2}).drawForPath(g,path);
+            g.setColour(tones.canvas);g.fillPath(path);g.setColour(tones.hairline);g.strokePath(path,juce::PathStrokeType(1));
+        }
+    };
+    FireLookAndFeel look;
+    CalloutLook calloutLook;
+    std::vector<Choice> allChoices;
+    std::vector<size_t> visible;
+    int selectedId;
+    bool activeOnly=true;
+    std::function<void(int)> onFinish,onReveal;
+    juce::TextEditor search;
+    FocusAwareComboBox scope,module;
+    PrimaryTextButton active,all,revealButton;
+    juce::ListBox list;
+    juce::Rectangle<int> footer;
+};
+
 } // namespace
+
+ModulationMatrixRoutingComboBox::~ModulationMatrixRoutingComboBox()
+{ dismissTransientInteraction(); }
 
 void ModulationMatrixRoutingComboBox::configurePopupSession(
     EditContextProvider contextProvider,
@@ -416,6 +597,8 @@ void ModulationMatrixRoutingComboBox::clearPointerInteraction() noexcept
 
 void ModulationMatrixRoutingComboBox::closePopupWindow() noexcept
 {
+    auto callout=targetCallout; targetCallout=nullptr;
+    if(callout) {callout->exitModalState(0);if(callout) callout->dismiss();}
     juce::ComboBox::hidePopup();
 }
 
@@ -509,6 +692,27 @@ void ModulationMatrixRoutingComboBox::showPopup()
         popupSessionActive = false;
         ++popupSessionRevision;
         closePopupWindow();
+        return;
+    }
+
+    if(getTargetChoices)
+    {
+        auto finish=createPopupResultHandler(requestContext,requestInteractionGeneration);
+        auto reveal=[safe=juce::Component::SafePointer<ModulationMatrixRoutingComboBox>(this),requestContext,requestInteractionGeneration,finish](int itemId)
+        {
+            if(!safe || !safe->isPopupContextCurrent(requestContext,requestInteractionGeneration)) return;
+            finish(0);
+            if(!safe || !safe->isContextCurrent(requestContext)) return;
+            auto callback=safe->onRevealTarget; if(callback) callback(itemId);
+        };
+        auto picker=std::make_unique<ModulationTargetPicker>(getTargetChoices(),getSelectedId(),fire::ui::skinFor(*this),std::move(finish),std::move(reveal));
+        auto* content=picker.get();
+        if(auto* display=juce::Desktop::getInstance().getDisplays().getDisplayForRect(getScreenBounds()))
+            picker->setSize(juce::jmin(460,display->userBounds.getLargestIntegerWithin().getWidth()-40),juce::jmin(420,display->userBounds.getLargestIntegerWithin().getHeight()-70));
+        auto& callout=juce::CallOutBox::launchAsynchronously(std::move(picker),getScreenBounds(),nullptr);
+        targetCallout=&callout; content->styleCallout(callout);
+        callout.setDismissalMouseClicksAreAlwaysConsumed(true);
+        content->focusSearch();
         return;
     }
 
@@ -1073,7 +1277,10 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
         if (processor.isModulationSourcePresent(sourceIndex))
             sourceMenu.getRootMenu()->addColouredItem(
                 sourceIndex + 1,
-                fire::mod_sources::name(sourceIndex),
+                sourceIndex >= fire::mod_sources::firstMacro
+                    && processor.getMacroDisplayName(sourceIndex-fire::mod_sources::firstMacro) != fire::mod_sources::name(sourceIndex)
+                        ? fire::mod_sources::name(sourceIndex)+" · "+processor.getMacroDisplayName(sourceIndex-fire::mod_sources::firstMacro)
+                        : fire::mod_sources::name(sourceIndex),
                 fire::ui::modulationSourceColour(sourceIndex));
     sourceMenu.setTextWhenNothingSelected("Choose source");
     sourceMenu.setSelectedId(processor.isModulationSourcePresent(routing.sourceLfoIndex)
@@ -1173,6 +1380,16 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
         destinationMenu.addItem(allPossibleTargets[i].displayText, static_cast<int>(i) + 2);
     }
 
+    destinationMenu.setTargetChoiceProvider([this] { return buildTargetChoices(); });
+    for(const auto& choice:buildTargetChoices()) if(choice.itemId>1)
+        destinationMenu.changeItemText(choice.itemId,choice.scope+" / "+choice.module+" / "+choice.label);
+    destinationMenu.onRevealTarget=[this](int itemId)
+    {
+        if(!juce::isPositiveAndBelow(itemId-2,static_cast<int>(allPossibleTargets.size()))) return;
+        const auto parameterID=allPossibleTargets[static_cast<size_t>(itemId-2)].parameterID;
+        auto callback=onRevealTarget; if(callback) callback(parameterID);
+    };
+
     // 3. Set the currently selected destination
     const auto& currentTargetId = routing.targetParameterID;
     if (currentTargetId.isNotEmpty())
@@ -1234,6 +1451,82 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     bypassButton.setExplicitFocusOrder(5);
     removeButton.setExplicitFocusOrder(6);
     updateVisualState();
+}
+
+std::vector<ModulationMatrixRoutingComboBox::TargetChoice> ModulationMatrixRow::buildTargetChoices() const
+{
+    using Choice=ModulationMatrixRoutingComboBox::TargetChoice;
+    using Type=fire::effects::Type;
+    std::map<juce::String,Choice> details;
+    const auto* bandCount=processor.treeState.getRawParameterValue(NUM_BANDS_ID);
+    const int activeBands=bandCount?juce::jlimit(1,4,juce::roundToInt(bandCount->load())):1;
+    auto add=[&](const juce::String& id,int scope,const juce::String& module,const juce::String& label,bool active)
+    {details[id]={0,scope==0?"Master":"Band "+juce::String(scope),module,label,id,active && scope<=activeBands};};
+    for(int scope=1;scope<=4;++scope)
+        for(const auto& parameter:ParameterIDAndName::getModulatableParameterInfo())
+        {
+            if(parameter.idBase.startsWith("bandFx")) continue;
+            int node=-1; juce::String module="Output",label=parameter.name;
+            if(parameter.idBase==DRIVE_ID) {node=0;module="Drive";}
+            else if(parameter.idBase==BIAS_ID || parameter.idBase==REC_ID || parameter.idBase==SHAPE_MIX_ID) {node=1;module="Shape";}
+            else if(parameter.idBase.startsWith("comp")) {node=2;module="Compressor";}
+            else if(parameter.idBase==WIDTH_ID || parameter.idBase==PAN_ID || parameter.idBase==WIDTH_MIX_ID) {node=3;module="Stereo";}
+            else if(parameter.idBase.startsWith("ott")) {node=4;module="OTT"; if(label.startsWithIgnoreCase("ott")) label=label.substring(3).trim();}
+            add(ParameterIDAndName::getIDString(parameter.idBase,scope-1),scope,module,label,node<0 || processor.isModulePresent(scope,node));
+        }
+    for(const auto& parameter:ParameterIDAndName::getGlobalParameterInfo())
+    {
+        if(parameter.idBase.startsWith("masterFx")) continue;
+        const bool output=parameter.idBase==OUTPUT_ID || parameter.idBase==MIX_ID;
+        bool lofi=parameter.idBase==DOWNSAMPLE_ID || parameter.idBase==BIT_DEPTH_ID || parameter.idBase==JITTER_ID || parameter.idBase==DOWNSAMPLE_MIX_ID;
+        for(auto* id:fire::effects::tapeIDs) lofi=lofi || parameter.idBase==id;
+        add(parameter.idBase,0,output?"Output":lofi?"Lo-Fi":"EQ",parameter.name,output || processor.isModulePresent(0,lofi?1:0));
+    }
+    for(int scope=0;scope<fire::effects::scopeCount;++scope)
+        for(int slot=0;slot<fire::effects::slotCount;++slot)
+        {
+            const auto type=processor.getInsertEffectType(scope,slot);
+            const bool present=type!=Type::none && processor.isModulePresent(scope,fire::module_order::firstInsert+slot);
+            const auto module="FX "+juce::String(slot+1)+" · "+fire::effects::name(type);
+            for(int control=0;control<static_cast<int>(fire::effects::controlCount);++control)
+            {
+                const juce::String name=fire::effects::controls(type)[static_cast<size_t>(control)].name;
+                const bool discrete=(type==Type::drive && control>=1 && control<=3)
+                    || (type==Type::shape && (control==0 || control==3))
+                    || (type==Type::delay && control==4)
+                    || (type==Type::chordResonator && control==1);
+                add(fire::effects::parameterID(scope,slot,control),scope,module,
+                    type==Type::none || name.isEmpty()?"Control "+juce::String(control+1):name,present && name.isNotEmpty() && !discrete);
+            }
+            for(int field=fire::clouds_params::spreadField;field<fire::clouds_params::fieldCount;++field)
+                add(fire::clouds_params::parameterID(scope,slot,field),scope,module,
+                    "Granular "+juce::String(fire::clouds_params::fieldNames[static_cast<size_t>(field)]),present && type==Type::granular);
+            add(fire::analog_params::driveID(scope,slot),scope,module,"Analog Drive",present && type==Type::shape && processor.getShapeMode(scope,slot)>=fire::analog::legacyCount);
+            add(fire::core_modules::parameterID(scope,slot,fire::core_modules::jitterField),scope,module,"Jitter",present && type==Type::lofi);
+            for(int node=0;node<fire::eq::maxNodes;++node)
+                for(auto field:{fire::eq::Field::frequency,fire::eq::Field::gain,fire::eq::Field::q})
+                    add(fire::core_modules::eqParameterID(scope,slot,node,field),scope,module,
+                        "Point "+juce::String(node+1)+(field==fire::eq::Field::frequency?" Frequency":field==fire::eq::Field::gain?" Gain":" Q"),present && type==Type::eq && processor.getEqNodeState(node,scope,slot).present);
+        }
+    for(int node=0;node<fire::eq::maxNodes;++node)
+        if(!processor.getEqNodeState(node).present)
+            for(auto field:{fire::eq::Field::frequency,fire::eq::Field::gain,fire::eq::Field::q})
+                if(auto found=details.find(fire::eq::parameterID(node,field));found!=details.end()) found->second.active=false;
+    std::vector<Choice> result {{1,"","","None","",true}};
+    for(size_t index=0;index<allPossibleTargets.size();++index)
+    {
+        const auto& target=allPossibleTargets[index];
+        auto found=details.find(target.parameterID);
+        Choice entry=found!=details.end()?found->second:Choice{0,"Master","Other",target.displayText,target.parameterID,false};
+        entry.itemId=static_cast<int>(index)+2; result.push_back(std::move(entry));
+    }
+    std::stable_sort(result.begin()+1,result.end(),[](const Choice& left,const Choice& right)
+    {
+        if(left.scope!=right.scope) return left.scope=="Master" || (right.scope!="Master" && left.scope.compareNatural(right.scope)<0);
+        if(left.module!=right.module) return left.module.compareNatural(right.module)<0;
+        return left.label.compareNatural(right.label)<0;
+    });
+    return result;
 }
 
 void ModulationMatrixRow::lookAndFeelChanged()
@@ -1922,6 +2215,8 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
             routingState.routings.getReference(i),
             editSession,
             std::move(onDelete)));
+        rows.back()->onRevealTarget=[safePanel](const juce::String& parameterID)
+        {if(safePanel && safePanel->onRevealTarget) {auto callback=safePanel->onRevealTarget;callback(parameterID);}};
         contentComponent.addAndMakeVisible(*rows.back());
     }
 

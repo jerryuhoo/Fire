@@ -234,12 +234,26 @@ public:
 
     juce::Font getComboBoxFont(juce::ComboBox& box) override
     {
+        if (static_cast<bool>(box.getProperties().getWithDefault("fireSpectrumToolbar", false)))
+            return fire::ui::isLineSkin(currentSkin) ? fire::ui::portfolioFont(11.0f * scale)
+                                                    : fire::ui::bodyFont(11.0f * scale);
         if (fire::ui::isLineSkin(currentSkin))
             return fire::ui::portfolioFont(juce::jlimit(10.0f,14.0f*scale,static_cast<float>(box.getHeight())*.42f));
         if (box.getComponentID() == "header_preset")
             return fire::ui::bodyFont(13.0f * scale);
         return fire::ui::bodyFont(juce::jlimit(10.0f, 14.0f * scale,
                                               static_cast<float>(box.getHeight()) * 0.42f));
+    }
+
+    void positionComboBoxText(juce::ComboBox& box, juce::Label& label) override
+    {
+        if (static_cast<bool>(box.getProperties().getWithDefault("fireSpectrumToolbar", false)))
+        {
+            label.setBounds(juce::roundToInt(6.0f * scale), 0,
+                juce::jmax(0, box.getWidth() - juce::roundToInt(24.0f * scale)), box.getHeight());
+            label.setFont(getComboBoxFont(box));
+        }
+        else juce::LookAndFeel_V4::positionComboBoxText(box, label);
     }
 
     juce::Font getPopupMenuFont() override
@@ -381,6 +395,26 @@ public:
         auto bounds = juce::Rectangle<float>(0.5f, 0.5f,
                                               static_cast<float>(width) - 1.0f,
                                               static_cast<float>(height) - 1.0f);
+        if (static_cast<bool>(box.getProperties().getWithDefault("fireSpectrumToolbar", false)))
+        {
+            const auto& palette = skinPalette(currentSkin);
+            g.setColour(palette.textPrimary.withAlpha(0.07f * hover + 0.05f * press));
+            g.fillRoundedRectangle(bounds, 3.0f * scale);
+            if (focus > 0.01f)
+            {
+                g.setColour(palette.accent.withAlpha(0.7f * focus));
+                g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f * scale, 0.9f * scale);
+            }
+            const auto centre = bounds.removeFromRight(18.0f * scale).getCentre();
+            juce::Path arrow;
+            arrow.startNewSubPath(centre.x - 3 * scale, centre.y - scale);
+            arrow.lineTo(centre.x, centre.y + 2 * scale);
+            arrow.lineTo(centre.x + 3 * scale, centre.y - scale);
+            g.setColour(palette.textSecondary.withAlpha(1.0f - 0.6f * disabled));
+            g.strokePath(arrow, juce::PathStrokeType(1.15f * scale, juce::PathStrokeType::curved,
+                                                   juce::PathStrokeType::rounded));
+            return;
+        }
         auto base = themeColour(box.findColour(juce::ComboBox::backgroundColourId))
                         .interpolatedWith(themeColour(colours::raised), juce::jmax(focus * 0.85f, hover * 0.38f));
         base = base.darker(press * 0.10f).interpolatedWith(themeColour(colours::surface0), disabled * 0.48f);
@@ -693,6 +727,37 @@ public:
         const auto disabledAmount = animation.disabled;
         auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
         const auto id = button.getComponentID();
+        if (static_cast<bool>(button.getProperties().getWithDefault("fireSpectrumToolbar", false)))
+        {
+            const auto& palette = skinPalette(currentSkin);
+            g.setColour(palette.textPrimary.withAlpha(0.07f * hoverAmount + 0.05f * pressAmount));
+            g.fillRoundedRectangle(bounds, 3.0f * scale);
+            if (focusAmount > 0.01f)
+            {
+                g.setColour(palette.accent.withAlpha(0.7f * focusAmount));
+                g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f * scale, 0.9f * scale);
+            }
+            const auto ink = palette.textSecondary.interpolatedWith(palette.textPrimary, hoverAmount)
+                .withMultipliedAlpha(1.0f - 0.6f * disabledAmount);
+            if (id == "zoom")
+                drawIcon(g, button.getToggleState() ? Icon::restore : Icon::expand, bounds.reduced(3.0f * scale), ink);
+            else
+            {
+                // A line and chevron suggest folding the display into its rail.
+                const auto c = bounds.getCentre();
+                const auto direction = button.getToggleState() ? 1.0f : -1.0f;
+                juce::Path fold;
+                fold.startNewSubPath(c.x - 4 * scale, c.y - direction * 2 * scale);
+                fold.lineTo(c.x, c.y + direction * 2 * scale);
+                fold.lineTo(c.x + 4 * scale, c.y - direction * 2 * scale);
+                fold.startNewSubPath(c.x - 4 * scale, c.y - direction * 5 * scale);
+                fold.lineTo(c.x + 4 * scale, c.y - direction * 5 * scale);
+                g.setColour(ink);
+                g.strokePath(fold, juce::PathStrokeType(1.15f * scale, juce::PathStrokeType::curved,
+                                                       juce::PathStrokeType::rounded));
+            }
+            return;
+        }
         const auto isHeaderControl = id.startsWith("header_") || id == "workspace_tab";
         const auto animatedSelection = static_cast<bool>(
             button.getProperties().getWithDefault("fireAnimatedSelection", false));
@@ -888,6 +953,7 @@ public:
                         bool down) override
     {
         using namespace fire::ui;
+        if (static_cast<bool>(button.getProperties().getWithDefault("fireSpectrumToolbar", false))) return;
         const auto animation = getPrimaryButtonAnimation(button, highlighted, down);
         highlighted = animation.hover > 0.001f;
         down = animation.press > 0.001f;

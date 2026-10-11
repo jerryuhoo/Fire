@@ -459,13 +459,17 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     });
     updateWhenChangingFocus(multiband.getFocusIndex());
     addAndMakeVisible(filterControl);
+    addAndMakeVisible(spectrumToolbar);
     spectrumChannelBox.setComponentID("spectrum_channel");
+    spectrumChannelBox.getProperties().set("fireSpectrumToolbar", true);
     spectrumChannelBox.setTitle("Spectrum channel");
-    spectrumChannelBox.setTooltip("Analyse Left, Right, or Stereo energy. Stereo averages channel power per frequency; opposite phases do not cancel.");
+    spectrumChannelBox.setTooltip("Spectrum source: Left, Right, Stereo energy, Mono (L+R)/2, or Side (L-R)/2. Changes the display only.");
     spectrumChannelBox.addItem("Left", 1);
     spectrumChannelBox.addItem("Right", 2);
     spectrumChannelBox.addItem("Stereo", 3);
-    spectrumChannelBox.setSelectedId(juce::jlimit(1, 3,
+    spectrumChannelBox.addItem("Mono", 4);
+    spectrumChannelBox.addItem("Side", 5);
+    spectrumChannelBox.setSelectedId(juce::jlimit(1, 5,
         processor.getAppSettings().getIntValue("spectrumChannel", 3)), juce::dontSendNotification);
     spectrumChannelMode = static_cast<SpectrumProcessor::ChannelMode>(spectrumChannelBox.getSelectedId() - 1);
     spectrumChannelBox.onChange = [this]
@@ -624,6 +628,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     zoomButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::whiteHot);
     zoomButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textSecondary);
     zoomButton.setComponentID("zoom");
+    zoomButton.getProperties().set("fireSpectrumToolbar", true);
     zoomButton.setTitle("Toggle spectrum zoom");
     zoomButton.setTooltip("Toggle spectrum zoom");
 
@@ -631,6 +636,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     spectrumCollapseButton.setButtonText("Hide spectrum");
     spectrumCollapseButton.setClickingTogglesState(true);
     spectrumCollapseButton.setComponentID("spectrum_collapse");
+    spectrumCollapseButton.getProperties().set("fireSpectrumToolbar", true);
     spectrumCollapseButton.setTitle("Collapse spectrum in modulation workspace");
     spectrumCollapseButton.setTooltip("Give the LFO editor more space by hiding the spectrum");
     spectrumCollapseButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
@@ -928,7 +934,7 @@ void FireAudioProcessorEditor::resized()
         contentArea = bounds;
 
         auto navigationControls = navigationArea.reduced(juce::roundToInt(4.0f * scale), 0);
-        if (activeWorkspace == 1) navigationControls.removeFromRight(juce::roundToInt(126.0f * scale) + gap);
+        if (spectrumCollapsed) navigationControls.removeFromRight(juce::roundToInt(26.0f * scale) + gap);
         const auto macroWidth = juce::roundToInt(navigationControls.getWidth() * 0.53f);
         macroBar.setBounds(navigationControls.removeFromRight(macroWidth)
             .withSizeKeepingCentre(macroWidth, juce::roundToInt(30.0f * scale)));
@@ -942,10 +948,6 @@ void FireAudioProcessorEditor::resized()
         windowLfoButton.setBounds(tabs.removeFromLeft(tabWidth));
         tabs.removeFromLeft(tabGap);
         windowRightButton.setBounds(tabs);
-        auto collapseBounds = navigationArea.withWidth(juce::roundToInt(126.0f * scale))
-                                  .withRightX(navigationArea.getRight());
-        spectrumCollapseButton.setBounds(collapseBounds.reduced(0, juce::roundToInt(3.0f * scale)));
-
         bandPanel.setBounds(contentArea);
         globalPanel.setBounds(contentArea);
         lfoPanel.setBounds(contentArea);
@@ -968,17 +970,36 @@ void FireAudioProcessorEditor::resized()
     spectrumChannelBox.setVisible(! spectrumCollapsed);
     spectrumCollapseButton.setVisible(activeWorkspace == 1 && ! zoomButton.getToggleState());
     spectrumCollapseButton.setButtonText(spectrumCollapsed ? "Show spectrum" : "Hide spectrum");
+    spectrumCollapseButton.setTitle(spectrumCollapsed ? "Show spectrum" : "Hide spectrum");
+    spectrumCollapseButton.setTooltip(spectrumCollapsed ? "Show the spectrum above Mod Forge" : "Hide the spectrum to give Mod Forge more space");
 
-    const auto zoomSize = juce::jmax(22, juce::roundToInt(27.0f * scale));
-    zoomButton.setBounds(spectrumCardArea.getRight() - zoomSize - gap,
-                         spectrumCardArea.getBottom() - zoomSize - gap,
-                         zoomSize,
-                         zoomSize);
-    // Keep channel selection beside zoom, below frequency labels and band
-    // handles. The analyser keeps all its existing vertical space.
-    const auto channelWidth = juce::roundToInt(82.0f * scale);
-    spectrumChannelBox.setBounds(zoomButton.getX() - gap - channelWidth,
-                                zoomButton.getY(), channelWidth, zoomSize);
+    // One inset toolbar replaces the separate channel box and large hide key.
+    // When collapsed only a small restore glyph remains in the navigation row.
+    const auto keySize = juce::roundToInt(22.0f * scale);
+    const auto pad = juce::jmax(1, juce::roundToInt(2.0f * scale));
+    const auto channelWidth = juce::roundToInt(62.0f * scale);
+    const auto toolbarHeight = keySize + 2 * pad;
+    if (spectrumCollapsed)
+    {
+        spectrumToolbar.setBounds(navigationArea.withWidth(toolbarHeight)
+            .withRightX(navigationArea.getRight()).withSizeKeepingCentre(toolbarHeight, toolbarHeight));
+        spectrumCollapseButton.setBounds(spectrumToolbar.getBounds().reduced(pad));
+        spectrumToolbar.setDividers(-1, -1);
+    }
+    else
+    {
+        const bool canCollapse = spectrumCollapseButton.isVisible();
+        const auto toolbarWidth = channelWidth + keySize * (canCollapse ? 2 : 1) + 2 * pad;
+        spectrumToolbar.setBounds(spectrumCardArea.getRight() - toolbarWidth - gap,
+                                  spectrumCardArea.getBottom() - toolbarHeight - gap,
+                                  toolbarWidth, toolbarHeight);
+        auto controls = spectrumToolbar.getBounds().reduced(pad);
+        spectrumChannelBox.setBounds(controls.removeFromLeft(channelWidth));
+        zoomButton.setBounds(controls.removeFromLeft(keySize));
+        if (canCollapse) spectrumCollapseButton.setBounds(controls);
+        spectrumToolbar.setDividers(pad + channelWidth, canCollapse ? pad + channelWidth + keySize : -1);
+    }
+    spectrumToolbar.setVisible(true);
     synchroniseSpectrumHostBypassState(false);
 
     if (valuePopup.isVisible())

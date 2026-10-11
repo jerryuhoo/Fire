@@ -19,7 +19,8 @@
 class SpectrumProcessor
 {
 public:
-    enum class ChannelMode { left, right, stereoEnergy };
+    // Persisted analyser preference: keep existing numeric values stable.
+    enum class ChannelMode { left = 0, right = 1, stereoEnergy = 2, mono = 3, side = 4 };
 
     SpectrumProcessor() : forwardFFT (fftOrder), window (fftSize, juce::dsp::WindowingFunction<float>::hamming)
     {
@@ -195,7 +196,9 @@ public:
 
     /** Message-thread only. Stereo energy is sqrt((|L|^2 + |R|^2) / 2)
         per FFT bin, so opposed-phase content cannot cancel. Identical mono
-        channels retain the same level, and one-sided signals read -3.01 dB. */
+        channels retain the same level, and one-sided signals read -3.01 dB.
+        Mono and Side transform (L+R)/2 and (L-R)/2 in the time domain,
+        retaining phase cancellation and the -6.02 dB one-sided calibration. */
     bool popLatestMagnitudes(float* processedDestination, int processedSize,
                              float* originalDestination, int originalSize,
                              ChannelMode mode, std::uint64_t minimumCaptureEpoch = 0)
@@ -209,6 +212,21 @@ public:
         {
             std::copy_n(processedRightScratch.data(), fftBufferSize, processedDestination);
             std::copy_n(originalRightScratch.data(), fftBufferSize, originalDestination);
+        }
+        else if (mode == ChannelMode::mono || mode == ChannelMode::side)
+        {
+            // Mix coherent samples before windowing/FFT: magnitude-domain
+            // addition/subtraction would lose the relative channel phase.
+            // Use the existing consumer buffers; audio capture is unchanged.
+            const auto rightGain = mode == ChannelMode::mono ? 0.5f : -0.5f;
+            for (int sample = 0; sample < fftSize; ++sample)
+            {
+                const auto index = static_cast<size_t>(sample);
+                processedDestination[sample] = processedDestination[sample] * 0.5f
+                                            + processedRightScratch[index] * rightGain;
+                originalDestination[sample] = originalDestination[sample] * 0.5f
+                                           + originalRightScratch[index] * rightGain;
+            }
         }
         doProcessing(processedDestination, processedSize);
         doProcessing(originalDestination, originalSize);

@@ -267,16 +267,26 @@ Match off. Closing the editor retains the comparison state in the processor.
 ### 3.2. Spectrogram
 
 Use the spectrum to place up to four frequency bands. The channel selector
-beside its expand button offers **Left**, **Right** and **Stereo**; Stereo is the
-default. Both the input and processed traces follow this selection. Stereo
-combines the two channels' energy at each frequency, so a right-only sound is
-visible and opposite-polarity left/right signals do not cancel the display.
-For identical left/right signals it retains the single-channel reference level;
-a signal in only one channel reads about 3 dB below that channel's solo trace.
+beside its expand button offers **Left**, **Right**, **Stereo**, **Mono** and
+**Side**; Stereo is the default. Both the input and processed traces follow this
+selection. Stereo combines the two channels' energy at each frequency, so a
+right-only sound is visible and opposite-polarity left/right signals do not
+cancel the display. For identical left/right signals it retains the
+single-channel reference level; a signal in only one channel reads about 3 dB
+below that channel's solo trace.
+
+**Mono** analyses `(L + R) / 2` to show the mono sum, including phase cancellation.
+**Side** analyses `(L - R) / 2` to show the difference between the channels.
+The channels are combined before the FFT: identical signals retain their level
+in Mono and disappear in Side; opposite-polarity signals disappear in Mono and
+retain their level in Side. A signal present in only one channel reads about
+6 dB below its solo trace in either mode, and a mono input has no Side signal.
 
 The channel choice is a local display preference and does not change the sound,
-routing or preset. In **Mod Forge**, **Hide spectrum** gives the LFO editor more
-room; **Show spectrum** restores it.
+routing or preset. A compact strip inside the spectrum groups the channel menu,
+expand/restore icon and, in **Mod Forge**, a fold icon for hiding the spectrum.
+When hidden, a small restore icon beside the workspace controls brings it back;
+there is no separate full-width “Hide spectrum” button.
 
 ### 3.3. Band Effect
 
@@ -817,8 +827,10 @@ Waveform/stereo-history capture runs only while a corresponding graph is
 visible. Reopening a view requires fresh samples, preventing a stale trace from
 flashing onscreen. These switches affect display work; audio processing,
 modulation, delay/reverb tails and the separate granular/frozen-audio history
-continue normally. Stereo mode performs more FFT work than a single-channel
-view, so the measured cost is reported separately in the
+continue normally. Mono and Side combine the already captured samples on the
+message thread without changing the audio path or adding buffers. Stereo mode
+performs more FFT work than these views, so the measured cost is reported
+separately in the
 [CPU audit and repeatable benchmarks](benchmarks/CPU_AUDIT.md).
 
 ### Flanger and Phaser

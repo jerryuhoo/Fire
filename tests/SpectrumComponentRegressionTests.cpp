@@ -1003,3 +1003,86 @@ TEST_CASE("Stereo spectrum capture epochs discard partial frames from all channe
         REQUIRE(rightDry[size_t(sample)] == 8);
     }
 }
+
+TEST_CASE("Mono and Side spectra retain channel phase for wet and dry frames",
+          "[fft][spectrum][mono-side][regression]")
+{
+    using Mode = SpectrumProcessor::ChannelMode;
+    // These values are persisted as an analyser preference, not an audio
+    // parameter. Adding modes must preserve existing users' selected channel.
+    STATIC_REQUIRE(static_cast<int>(Mode::left) == 0);
+    STATIC_REQUIRE(static_cast<int>(Mode::right) == 1);
+    STATIC_REQUIRE(static_cast<int>(Mode::stereoEnergy) == 2);
+    const auto magnitudes = [](Mode mode, float wetLeft, float wetRight,
+                               float dryLeft, float dryRight, bool monoInput = false)
+    {
+        SpectrumProcessor spectrum;
+        std::array<float, SpectrumProcessor::fftBufferSize> wet {}, dry {};
+        for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+        {
+            const auto tone = std::sin(juce::MathConstants<float>::twoPi * 37.0f
+                                      * float(sample) / float(SpectrumProcessor::fftSize));
+            if (monoInput)
+                spectrum.pushNextSamplePairIntoFifo(tone * wetLeft, tone * dryLeft);
+            else
+                spectrum.pushNextStereoSamplePairIntoFifo(tone * wetLeft, tone * wetRight,
+                                                           tone * dryLeft, tone * dryRight);
+        }
+        REQUIRE(spectrum.popLatestMagnitudes(wet.data(), int(wet.size()), dry.data(), int(dry.size()), mode));
+        return std::array<float, 2> { wet[37], dry[37] };
+    };
+    const auto reference = magnitudes(Mode::left, 1, 0, .4f, 0);
+    REQUIRE(reference[0] > 100);
+    REQUIRE(reference[1] > 40);
+
+    SECTION("in-phase channels retain Mono level and cancel Side")
+    {
+        const auto mono = magnitudes(Mode::mono, 1, 1, .4f, .4f);
+        const auto side = magnitudes(Mode::side, 1, 1, .4f, .4f);
+        for (size_t channel = 0; channel < 2; ++channel)
+        {
+            CHECK(mono[channel] == Catch::Approx(reference[channel]));
+            CHECK(side[channel] == 0);
+        }
+    }
+    SECTION("opposite-phase channels cancel Mono and retain Side level")
+    {
+        const auto mono = magnitudes(Mode::mono, 1, -1, .4f, -.4f);
+        const auto side = magnitudes(Mode::side, 1, -1, .4f, -.4f);
+        for (size_t channel = 0; channel < 2; ++channel)
+        {
+            CHECK(mono[channel] == 0);
+            CHECK(side[channel] == Catch::Approx(reference[channel]));
+        }
+    }
+    SECTION("either isolated channel reads minus six dB in both modes")
+    {
+        for (const auto mode : { Mode::mono, Mode::side })
+            for (const bool rightOnly : { false, true })
+            {
+                const auto result = magnitudes(mode, rightOnly ? 0 : 1, rightOnly ? 1 : 0,
+                                                rightOnly ? 0 : .4f, rightOnly ? .4f : 0);
+                for (size_t channel = 0; channel < 2; ++channel)
+                    CHECK(result[channel] == Catch::Approx(reference[channel] * .5f));
+            }
+    }
+    SECTION("wet and dry phase relationships remain independent")
+    {
+        const auto mono = magnitudes(Mode::mono, 1, 1, .4f, -.4f);
+        const auto side = magnitudes(Mode::side, 1, 1, .4f, -.4f);
+        CHECK(mono[0] == Catch::Approx(reference[0]));
+        CHECK(mono[1] == 0);
+        CHECK(side[0] == 0);
+        CHECK(side[1] == Catch::Approx(reference[1]));
+    }
+    SECTION("a mono input has no Side signal")
+    {
+        const auto mono = magnitudes(Mode::mono, 1, 0, .4f, 0, true);
+        const auto side = magnitudes(Mode::side, 1, 0, .4f, 0, true);
+        for (size_t channel = 0; channel < 2; ++channel)
+        {
+            CHECK(mono[channel] == Catch::Approx(reference[channel]));
+            CHECK(side[channel] == 0);
+        }
+    }
+}

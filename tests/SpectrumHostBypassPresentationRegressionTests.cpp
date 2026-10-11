@@ -2,9 +2,26 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <array>
+#include <cstdlib>
+#include <vector>
 
 struct SpectrumHostBypassPresentationTestAccess final
 {
+    static void applySkin(FireAudioProcessorEditor& editor, fire::ui::Skin skin) { editor.applySkin(skin); }
+    static void selectWorkspace(FireAudioProcessorEditor& editor, int workspace)
+    {
+        editor.windowLeftButton.setToggleState(workspace==0,juce::dontSendNotification);
+        editor.windowLfoButton.setToggleState(workspace==1,juce::dontSendNotification);
+        editor.windowRightButton.setToggleState(workspace==2,juce::dontSendNotification);
+        editor.selectWorkspace(workspace,false);
+    }
+    static juce::ComboBox& channel(FireAudioProcessorEditor& editor) { return editor.spectrumChannelBox; }
+    static juce::Button& zoom(FireAudioProcessorEditor& editor) { return editor.zoomButton; }
+    static juce::Button& collapse(FireAudioProcessorEditor& editor) { return editor.spectrumCollapseButton; }
+    static juce::Rectangle<int> spectrumBounds(const FireAudioProcessorEditor& editor) { return editor.spectrumCardArea; }
+    static juce::Rectangle<int> navigationBounds(const FireAudioProcessorEditor& editor) { return editor.navigationArea; }
+
     static void selectChannel(FireAudioProcessorEditor& editor, int id)
     { editor.spectrumChannelBox.setSelectedId(id, juce::sendNotificationSync); }
 
@@ -339,11 +356,34 @@ TEST_CASE("Spectrum demand follows source changes library and collapsed presenta
     editor.setVisible(true);
     const juce::ScopeGuard cleanup { [&] { editor.removeFromDesktop(); } };
     REQUIRE(processor.isSpectrumCaptureEnabled());
-    const auto originalEpoch = SpectrumHostBypassPresentationTestAccess::requiredCaptureEpoch(editor);
-    SpectrumHostBypassPresentationTestAccess::selectChannel(editor, 2);
-    SpectrumHostBypassPresentationTestAccess::selectChannel(editor, 1);
-    CHECK(SpectrumHostBypassPresentationTestAccess::requiredCaptureEpoch(editor) > originalEpoch);
-    CHECK(SpectrumHostBypassPresentationTestAccess::spectraAwaitFreshFrames(editor));
+    std::vector<float> parameterValues;
+    for(auto* parameter:processor.getParameters()) parameterValues.push_back(parameter->getValue());
+    SpectrumHostBypassPresentationTestAccess::selectChannel(editor, 3);
+    juce::AudioBuffer<float> frame(2, SpectrumProcessor::fftSize);
+    for(int sample=0;sample<frame.getNumSamples();++sample)
+    {frame.setSample(0,sample,0.2f);frame.setSample(1,sample,-0.1f);}
+    for(int id:{2,1,3,4,5})
+    {
+        CAPTURE(id);
+        processor.pushDataPairToFFT(frame,frame); // Pending frame belongs to the previous source.
+        const auto originalEpoch=SpectrumHostBypassPresentationTestAccess::requiredCaptureEpoch(editor);
+        SpectrumHostBypassPresentationTestAccess::selectChannel(editor,id);
+        CHECK(SpectrumHostBypassPresentationTestAccess::requiredCaptureEpoch(editor)>originalEpoch);
+        editor.timerCallback(); SpectrumHostBypassPresentationTestAccess::tickSpectra(editor);
+        CHECK(SpectrumHostBypassPresentationTestAccess::spectraAwaitFreshFrames(editor));
+        CHECK(processor.getAppSettings().getIntValue("spectrumChannel",0)==id);
+        if(id>=4)
+        {
+            FireAudioProcessor reopenedProcessor; reopenedProcessor.hasUpdateCheckBeenPerformed=true;
+            FireAudioProcessorEditor reopened(reopenedProcessor);
+            CHECK(SpectrumHostBypassPresentationTestAccess::channel(reopened).getSelectedId()==id);
+        }
+        processor.pushDataPairToFFT(frame,frame);
+        editor.timerCallback(); SpectrumHostBypassPresentationTestAccess::tickSpectra(editor);
+        CHECK_FALSE(SpectrumHostBypassPresentationTestAccess::spectraAwaitFreshFrames(editor));
+    }
+    for(int index=0;index<processor.getParameters().size();++index)
+        CHECK(processor.getParameters()[index]->getValue()==parameterValues[static_cast<size_t>(index)]);
     SpectrumHostBypassPresentationTestAccess::showLibrary(editor, true);
     CHECK_FALSE(processor.isSpectrumCaptureEnabled());
     CHECK_FALSE(processor.isHistoryCaptureEnabled());
@@ -356,4 +396,79 @@ TEST_CASE("Spectrum demand follows source changes library and collapsed presenta
     editor.setVisible(false);
     CHECK_FALSE(processor.isSpectrumCaptureEnabled());
     CHECK_FALSE(processor.isHistoryCaptureEnabled());
+}
+
+
+TEST_CASE("Spectrum toolbar stays aligned and reachable beside macros in every skin and scale",
+          "[ui][editor][spectrum][toolbar][layout][skin][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor; processor.hasUpdateCheckBeenPerformed=true;
+    FireAudioProcessorEditor editor(processor); editor.stopTimer();
+    editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);editor.setVisible(true);
+    const juce::ScopeGuard cleanup{[&] {editor.removeFromDesktop();}};
+    auto* toolbar=editor.findChildWithID("spectrum_toolbar");REQUIRE(toolbar);
+    auto* macros=editor.findChildWithID("performance_macros");REQUIRE(macros);
+    auto& source=SpectrumHostBypassPresentationTestAccess::channel(editor);
+    auto& zoom=SpectrumHostBypassPresentationTestAccess::zoom(editor);
+    auto& collapse=SpectrumHostBypassPresentationTestAccess::collapse(editor);
+    for(auto* control:std::array<juce::Component*,3>{&source,&zoom,&collapse})
+        REQUIRE(control->getParentComponent()==&editor);
+    CHECK(source.getItemText(source.indexOfItemId(4))=="Mono");
+    CHECK(source.getItemText(source.indexOfItemId(5))=="Side");
+    const auto click=[&](juce::Button& button,bool state)
+    {
+        REQUIRE(button.isShowing());REQUIRE(button.isEnabled());button.triggerClick();
+        for(int elapsed=0;button.getToggleState()!=state && elapsed<1000;elapsed+=5)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(5);
+        REQUIRE(button.getToggleState()==state);
+    };
+    const auto snapshot=[&](const juce::String& name)
+    {
+        if(const auto* directory=std::getenv("FIRE_SPECTRUM_TOOLBAR_PREVIEW_DIR"))
+        {
+            auto file=juce::File(directory).getChildFile(name+".png");REQUIRE(file.getParentDirectory().createDirectory().wasOk());
+            auto stream=file.createOutputStream();REQUIRE(stream);stream->setPosition(0);stream->truncate();
+            REQUIRE(juce::PNGImageFormat{}.writeImageToStream(editor.createComponentSnapshot(editor.getLocalBounds()),*stream));
+        }
+    };
+    const auto checkExpanded=[&](bool canCollapse)
+    {
+        REQUIRE(toolbar->isShowing());REQUIRE(source.isShowing());REQUIRE(zoom.isShowing());
+        CHECK(collapse.isShowing()==canCollapse);
+        CHECK(SpectrumHostBypassPresentationTestAccess::spectrumBounds(editor).contains(toolbar->getBounds()));
+        std::vector<juce::Component*> controls{&source,&zoom}; if(canCollapse) controls.push_back(&collapse);
+        for(size_t i=0;i<controls.size();++i)
+        {
+            CAPTURE(controls[i]->getComponentID());
+            CHECK(toolbar->getBounds().contains(controls[i]->getBounds()));
+            CHECK(controls[i]->getHeight()>0);
+            CHECK(controls[i]->getY()==source.getY());CHECK(controls[i]->getHeight()==source.getHeight());
+            if(macros->isShowing()) CHECK_FALSE(controls[i]->getBounds().intersects(macros->getBounds()));
+            for(size_t other=i+1;other<controls.size();++other)
+                CHECK_FALSE(controls[i]->getBounds().intersects(controls[other]->getBounds()));
+        }
+        CHECK(zoom.getWidth()==zoom.getHeight());
+        if(canCollapse) CHECK(collapse.getWidth()==collapse.getHeight());
+    };
+    for(auto skin:fire::ui::skins)
+        for(int width:{1000,1400,2000})
+        {
+            CAPTURE(fire::ui::skinName(skin),width);
+            SpectrumHostBypassPresentationTestAccess::applySkin(editor,skin);editor.setSize(width,width/2);
+            for(int workspace:{0,2,1})
+            {SpectrumHostBypassPresentationTestAccess::selectWorkspace(editor,workspace);checkExpanded(workspace==1);}
+            const auto imagePrefix=juce::String(fire::ui::skinName(skin)).toLowerCase()+"-"+juce::String(width);
+            snapshot(imagePrefix+"-mod-expanded");
+            click(collapse,true);
+            REQUIRE(collapse.isShowing());CHECK_FALSE(source.isShowing());CHECK_FALSE(zoom.isShowing());
+            CHECK(toolbar->isShowing());CHECK(toolbar->getWidth()==toolbar->getHeight());
+            CHECK(toolbar->getBounds().contains(collapse.getBounds()));
+            CHECK(SpectrumHostBypassPresentationTestAccess::navigationBounds(editor).contains(toolbar->getBounds()));
+            CHECK_FALSE(toolbar->getBounds().intersects(macros->getBounds()));
+            CHECK(macros->isShowing());snapshot(imagePrefix+"-mod-collapsed");
+            click(collapse,false);checkExpanded(true);
+            click(zoom,true);checkExpanded(false);CHECK_FALSE(macros->isShowing());
+            click(zoom,false);checkExpanded(true);CHECK(macros->isShowing());
+        }
 }

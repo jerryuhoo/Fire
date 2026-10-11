@@ -19,6 +19,7 @@
 #include "GUI/ValuePopup.h"
 #include "GUI/PresetBrowserPanel.h"
 #include "GUI/MacroBar.h"
+#include "GUI/SpectrumToolbar.h"
 #include "Panels/ControlPanel/BandPanel.h"
 #include "Panels/ControlPanel/GlobalPanel.h"
 #include "Panels/ControlPanel/LfoPanel.h"
@@ -292,6 +293,7 @@ private:
     SpectrumComponent processedSpectrum { 1, true };
     SpectrumComponent originalSpectrum { 0, false };
     SpectrumBackground specBackground;
+    fire::ui::SpectrumToolbar spectrumToolbar;
     juce::ComboBox spectrumChannelBox;
     SpectrumProcessor::ChannelMode spectrumChannelMode = SpectrumProcessor::ChannelMode::stereoEnergy;
 

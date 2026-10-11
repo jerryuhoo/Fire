@@ -68,10 +68,14 @@ TEST_CASE("CPU audit stereo spectrum frame and transform", "[cpu-ui][cpu-spectru
         source[sample] = .2f * std::sin(float(sample) * .073f);
     for (const auto mode : { SpectrumProcessor::ChannelMode::left,
                              SpectrumProcessor::ChannelMode::right,
-                             SpectrumProcessor::ChannelMode::stereoEnergy })
+                             SpectrumProcessor::ChannelMode::stereoEnergy,
+                             SpectrumProcessor::ChannelMode::mono,
+                             SpectrumProcessor::ChannelMode::side })
     {
         const std::string name = mode == SpectrumProcessor::ChannelMode::left ? "Left"
-                               : mode == SpectrumProcessor::ChannelMode::right ? "Right" : "Stereo energy";
+                               : mode == SpectrumProcessor::ChannelMode::right ? "Right"
+                               : mode == SpectrumProcessor::ChannelMode::stereoEnergy ? "Stereo energy"
+                               : mode == SpectrumProcessor::ChannelMode::mono ? "Mono" : "Side";
         BENCHMARK("Spectrum full-frame capture + FFT / " + name)
         {
             for (const auto sample : source)

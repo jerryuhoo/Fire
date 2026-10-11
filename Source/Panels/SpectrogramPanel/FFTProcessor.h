@@ -19,6 +19,8 @@
 class SpectrumProcessor
 {
 public:
+    enum class ChannelMode { left, right, stereoEnergy };
+
     SpectrumProcessor() : forwardFFT (fftOrder), window (fftSize, juce::dsp::WindowingFunction<float>::hamming)
     {
         window.fillWindowingTables (fftSize, juce::dsp::WindowingFunction<float>::blackman);
@@ -59,9 +61,19 @@ public:
 
     void pushNextSamplePairIntoFifo (float processedSample, float originalSample) noexcept
     {
+        pushNextStereoSamplePairIntoFifo(processedSample, processedSample,
+                                        originalSample, originalSample);
+    }
+
+    void pushNextStereoSamplePairIntoFifo(float processedLeft, float processedRight,
+                                          float originalLeft, float originalRight) noexcept
+    {
         const auto index = static_cast<size_t>(fifoIndex++);
-        processedFifo[index] = std::isfinite(processedSample) ? processedSample : 0.0f;
-        originalFifo[index] = std::isfinite(originalSample) ? originalSample : 0.0f;
+        const auto finite = [](float value) { return std::isfinite(value) ? value : 0.0f; };
+        processedFifo[index] = finite(processedLeft);
+        processedRightFifo[index] = finite(processedRight);
+        originalFifo[index] = finite(originalLeft);
+        originalRightFifo[index] = finite(originalRight);
 
         if (fifoIndex == fftSize)
         {
@@ -111,7 +123,9 @@ public:
                              int processedDestinationSize,
                              float* originalDestination,
                              int originalDestinationSize,
-                             std::uint64_t minimumCaptureEpoch = 0) noexcept
+                             std::uint64_t minimumCaptureEpoch = 0,
+                             float* processedRightDestination = nullptr,
+                             float* originalRightDestination = nullptr) noexcept
     {
         if (processedDestination == nullptr || processedDestinationSize < fftBufferSize
             || originalDestination == nullptr || originalDestinationSize < fftBufferSize)
@@ -153,6 +167,14 @@ public:
             juce::FloatVectorOperations::clear(originalDestination + fftSize,
                                                 originalDestinationSize - fftSize);
 
+            if (processedRightDestination != nullptr && originalRightDestination != nullptr)
+            {
+                std::copy_n(newestFrame.processedRight.data(), fftSize, processedRightDestination);
+                std::copy_n(newestFrame.originalRight.data(), fftSize, originalRightDestination);
+                juce::FloatVectorOperations::clear(processedRightDestination + fftSize, fftSize);
+                juce::FloatVectorOperations::clear(originalRightDestination + fftSize, fftSize);
+            }
+
             // Reset or a newer publication may have won while this frame was
             // copied. The claimed slot is coherent, but no longer belongs to
             // the current epoch/newest-only contract.
@@ -171,6 +193,41 @@ public:
         return false;
     }
 
+    /** Message-thread only. Stereo energy is sqrt((|L|^2 + |R|^2) / 2)
+        per FFT bin, so opposed-phase content cannot cancel. Identical mono
+        channels retain the same level, and one-sided signals read -3.01 dB. */
+    bool popLatestMagnitudes(float* processedDestination, int processedSize,
+                             float* originalDestination, int originalSize,
+                             ChannelMode mode, std::uint64_t minimumCaptureEpoch = 0)
+    {
+        if (! popLatestFramePair(processedDestination, processedSize,
+                                 originalDestination, originalSize, minimumCaptureEpoch,
+                                 processedRightScratch.data(), originalRightScratch.data()))
+            return false;
+
+        if (mode == ChannelMode::right)
+        {
+            std::copy_n(processedRightScratch.data(), fftBufferSize, processedDestination);
+            std::copy_n(originalRightScratch.data(), fftBufferSize, originalDestination);
+        }
+        doProcessing(processedDestination, processedSize);
+        doProcessing(originalDestination, originalSize);
+        if (mode == ChannelMode::stereoEnergy)
+        {
+            doProcessing(processedRightScratch.data(), fftBufferSize);
+            doProcessing(originalRightScratch.data(), fftBufferSize);
+            for (int bin = 0; bin < numBins; ++bin)
+            {
+                const auto index = static_cast<size_t>(bin);
+                processedDestination[bin] = std::hypot(processedDestination[bin],
+                    processedRightScratch[index]) * juce::MathConstants<float>::sqrt2 * 0.5f;
+                originalDestination[bin] = std::hypot(originalDestination[bin],
+                    originalRightScratch[index]) * juce::MathConstants<float>::sqrt2 * 0.5f;
+            }
+        }
+        return true;
+    }
+
 private:
     // Triple buffering leaves one writable slot while one is published and
     // another may be held by the UI. New frames replace old unpublished data,
@@ -181,6 +238,7 @@ private:
     {
         std::array<float, fftSize> processed {};
         std::array<float, fftSize> original {};
+        std::array<float, fftSize> processedRight {}, originalRight {};
         std::uint64_t captureEpoch = 0;
     };
 
@@ -213,6 +271,8 @@ private:
         auto& destination = frameStorage[static_cast<size_t>(destinationIndex)];
         std::copy (processedFifo.begin(), processedFifo.end(), destination.processed.begin());
         std::copy (originalFifo.begin(), originalFifo.end(), destination.original.begin());
+        std::copy(processedRightFifo.begin(), processedRightFifo.end(), destination.processedRight.begin());
+        std::copy(originalRightFifo.begin(), originalRightFifo.end(), destination.originalRight.begin());
         destination.captureEpoch = activeCaptureEpoch;
 
         const auto generation = ++publicationGeneration;
@@ -224,6 +284,9 @@ private:
 
     std::array<float, fftSize> processedFifo {};
     std::array<float, fftSize> originalFifo {};
+    std::array<float, fftSize> processedRightFifo {}, originalRightFifo {};
+    // Only the single message-thread consumer touches transform scratch.
+    std::array<float, fftBufferSize> processedRightScratch {}, originalRightScratch {};
     std::array<FramePair, frameStorageSize> frameStorage {};
     std::atomic<std::uint64_t> publishedState { 0 };
     std::atomic<int> readerFrameIndex { -1 };

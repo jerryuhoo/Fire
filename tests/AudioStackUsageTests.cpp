@@ -174,6 +174,13 @@ TEST_CASE("Real processing and callback resets fit a 256 KiB audio thread stack"
     auto reference = std::make_unique<FireAudioProcessor>();
     configureStackTestProcessor(*subject);
     configureStackTestProcessor(*reference);
+    // Keep the worst-case analyser path on this small audio stack even when
+    // there is no native editor. Capture demand is otherwise off by default.
+    FireAudioProcessor::HistoryCaptureSubscription subjectHistory(*subject), referenceHistory(*reference);
+    subjectHistory.setActive(true);
+    referenceHistory.setActive(true);
+    subject->setSpectrumCaptureEnabled(true);
+    reference->setSpectrumCaptureEnabled(true);
     int streamOffset = 0;
     const auto run = [&](int blockSize, int count, bool bypassed = false)
     {

@@ -288,6 +288,8 @@ private:
     SpectrumComponent processedSpectrum { 1, true };
     SpectrumComponent originalSpectrum { 0, false };
     SpectrumBackground specBackground;
+    juce::ComboBox spectrumChannelBox;
+    SpectrumProcessor::ChannelMode spectrumChannelMode = SpectrumProcessor::ChannelMode::stereoEnergy;
 
     // Labels
     juce::Label hqLabel;

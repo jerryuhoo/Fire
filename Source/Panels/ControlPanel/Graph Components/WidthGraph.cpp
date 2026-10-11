@@ -12,7 +12,7 @@
 #include "../../../GUI/InterfaceDefines.h"
 
 //==============================================================================
-WidthGraph::WidthGraph(FireAudioProcessor& p) : processor(p)
+WidthGraph::WidthGraph(FireAudioProcessor& p) : processor(p), historyCapture(p)
 {
     historySourceToken = processor.getHistorySourceToken();
     setGraphIdentity("STEREO FIELD", fire::ui::ModuleRole::stereo);
@@ -62,6 +62,9 @@ void WidthGraph::paint(juce::Graphics& g)
 
 void WidthGraph::timerCallback()
 {
+    // Some hosts detach a peer without a visibility callback. The existing
+    // UI timer also reconciles capture demand before reading any history.
+    historyCapture.setActive(isShowing());
     synchroniseHistorySource();
 
     if (! isShowing())
@@ -150,8 +153,10 @@ void WidthGraph::visibilityChanged()
 
 void WidthGraph::graphShowingStateChanged(bool isNowShowing)
 {
+    historyCapture.setActive(isNowShowing);
     if (! isNowShowing)
     {
+        synchroniseHistorySource();
         stopTimer();
         return;
     }

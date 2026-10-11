@@ -169,6 +169,8 @@ TEST_CASE("History source requests publish one epoch-tagged snapshot",
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
+    FireAudioProcessor::HistoryCaptureSubscription capture(processor);
+    capture.setActive(true);
     processor.prepareToPlay(sampleRate, blockSize);
 
     FireAudioProcessor::HistorySnapshot initial;
@@ -219,6 +221,9 @@ TEST_CASE("History decimation is independent of host block partitioning",
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor singleBlockProcessor;
     FireAudioProcessor splitBlockProcessor;
+    FireAudioProcessor::HistoryCaptureSubscription singleCapture(singleBlockProcessor), splitCapture(splitBlockProcessor);
+    singleCapture.setActive(true);
+    splitCapture.setActive(true);
     singleBlockProcessor.prepareToPlay(sampleRate, blockSize * 2);
     splitBlockProcessor.prepareToPlay(sampleRate, blockSize * 2);
 
@@ -248,6 +253,8 @@ TEST_CASE("History A to B to A cannot reuse the first A ring buffer",
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
+    FireAudioProcessor::HistoryCaptureSubscription capture(processor);
+    capture.setActive(true);
     processor.prepareToPlay(sampleRate, blockSize);
 
     processor.setHistoryArray(0);
@@ -285,6 +292,8 @@ TEST_CASE("History graphs hard-clear on a source request without audio",
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
+    FireAudioProcessor::HistoryCaptureSubscription capture(processor);
+    capture.setActive(true);
     processor.prepareToPlay(sampleRate, blockSize);
 
     Oscilloscope oscilloscope(processor);
@@ -304,11 +313,13 @@ TEST_CASE("History graphs hard-clear on a source request without audio",
     CHECK(notYetPublished.right.isEmpty());
 }
 
-TEST_CASE("Width graph consumes hidden history before its first visible repaint",
+TEST_CASE("Width graph consumes shared history before its first visible repaint",
           "[ui][history][width-graph][visibility][freshness][regression]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
+    FireAudioProcessor::HistoryCaptureSubscription capture(processor);
+    capture.setActive(true);
     processor.prepareToPlay(sampleRate, blockSize);
     REQUIRE(processor.getTotalNumInputChannels() == 2);
 
@@ -344,6 +355,8 @@ TEST_CASE("Width graph consumes hidden history before its first visible repaint"
     REQUIRE(WidthGraphHistorySourceTestAccess::fadeFramesRemaining(widthGraph)
             == 23);
 
+    // The explicit subscription above represents a second visible consumer:
+    // hiding this graph alone must not stop the shared producer.
     const auto stableSourceToken = processor.getHistorySourceToken();
     const auto visibleGeneration = visibleSnapshot.generation;
     desktopHost.setVisible(false);
@@ -456,4 +469,96 @@ TEST_CASE("Width graph consumes hidden history before its first visible repaint"
         CHECK(WidthGraphHistorySourceTestAccess::fadeFramesRemaining(widthGraph)
               == 24);
     }
+}
+
+TEST_CASE("Analysis capture sleeps with no consumers without changing processed audio",
+          "[processor][history][fft][capture-demand][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor idle, visible;
+    idle.prepareToPlay(sampleRate, blockSize);
+    visible.prepareToPlay(sampleRate, blockSize);
+    FireAudioProcessor::HistoryCaptureSubscription capture(visible);
+    capture.setActive(true);
+    const auto epoch = visible.setSpectrumCaptureEnabled(true);
+    const auto idleGeneration = idle.getHistoryGeneration();
+    const auto visibleGeneration = visible.getHistoryGeneration();
+    juce::AudioBuffer<float> input(2, blockSize), idleOutput(2, blockSize), visibleOutput(2, blockSize);
+    juce::MidiBuffer midi;
+    for (int block = 0; block < 40; ++block)
+    {
+        for (int ch = 0; ch < 2; ++ch)
+            for (int sample = 0; sample < blockSize; ++sample)
+                input.setSample(ch, sample, .15f * std::sin(.07f * float(block * blockSize + sample) + float(ch)));
+        idleOutput.makeCopyOf(input, true);
+        visibleOutput.makeCopyOf(input, true);
+        idle.processBlock(idleOutput, midi);
+        visible.processBlock(visibleOutput, midi);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int sample = 0; sample < blockSize; ++sample)
+                REQUIRE(idleOutput.getSample(ch, sample) == visibleOutput.getSample(ch, sample));
+    }
+    CHECK(idle.getHistoryGeneration() == idleGeneration);
+    CHECK(visible.getHistoryGeneration() > visibleGeneration);
+    std::array<float, SpectrumProcessor::fftBufferSize> wet {}, dry {};
+    CHECK_FALSE(idle.popLatestFFTFrames(wet.data(), int(wet.size()), dry.data(), int(dry.size())));
+    REQUIRE(visible.popLatestFFTFrames(wet.data(), int(wet.size()), dry.data(), int(dry.size()), epoch));
+
+    capture.setActive(false);
+    const auto stopEpoch = visible.setSpectrumCaptureEnabled(false);
+    const auto stoppedGeneration = visible.getHistoryGeneration();
+    for (int block = 0; block < 40; ++block) processHistoryBlock(visible, .7f);
+    CHECK(visible.getHistoryGeneration() == stoppedGeneration);
+    CHECK_FALSE(visible.popLatestFFTFrames(wet.data(), int(wet.size()), dry.data(), int(dry.size()), stopEpoch));
+
+    capture.setActive(true);
+    const auto resumeEpoch = visible.setSpectrumCaptureEnabled(true);
+    FireAudioProcessor::HistorySnapshot fresh;
+    CHECK_FALSE(visible.copyHistorySnapshot(fresh));
+    processHistoryBlock(visible, .1f);
+    REQUIRE(visible.copyHistorySnapshot(fresh));
+    CHECK(fresh.left.size() == capturedSamplesPerBlock);
+    CHECK_FALSE(visible.popLatestFFTFrames(wet.data(), int(wet.size()), dry.data(), int(dry.size()), resumeEpoch));
+}
+
+TEST_CASE("Visible history graphs subscribe once and reopen in a fresh epoch",
+          "[ui][history][capture-demand][visibility][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.prepareToPlay(sampleRate, blockSize);
+    juce::Component host;
+    host.setBounds(0, 0, 700, 280);
+    host.setVisible(false);
+    Oscilloscope waveform(processor);
+    WidthGraph stereo(processor);
+    waveform.setBounds(0, 0, 300, 200);
+    stereo.setBounds(320, 0, 300, 200);
+    host.addAndMakeVisible(waveform);
+    host.addAndMakeVisible(stereo);
+    host.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    CHECK_FALSE(processor.isHistoryCaptureEnabled());
+    host.setVisible(true);
+    REQUIRE(processor.isHistoryCaptureEnabled());
+    const auto firstEpoch = processor.getHistorySourceToken();
+    waveform.setVisible(false);
+    CHECK(processor.isHistoryCaptureEnabled());
+    CHECK(processor.getHistorySourceToken() == firstEpoch);
+    processHistoryBlock(processor, .2f);
+    host.setVisible(false);
+    CHECK_FALSE(processor.isHistoryCaptureEnabled());
+    CHECK(processor.getHistorySourceToken() != firstEpoch);
+    FireAudioProcessor::HistorySnapshot snapshot;
+    CHECK_FALSE(processor.copyHistorySnapshot(snapshot));
+    host.setVisible(true);
+    REQUIRE(processor.isHistoryCaptureEnabled());
+    CHECK(WidthGraphHistorySourceTestAccess::isHardCleared(stereo));
+    processHistoryBlock(processor, .4f);
+    REQUIRE(processor.copyHistorySnapshot(snapshot));
+    CHECK(snapshot.left.size() == capturedSamplesPerBlock);
+    host.removeFromDesktop();
+    // A host may remove its peer without sending visibilityChanged; the
+    // existing UI tick reconciles that transition as a fallback.
+    stereo.timerCallback();
+    CHECK_FALSE(processor.isHistoryCaptureEnabled());
 }

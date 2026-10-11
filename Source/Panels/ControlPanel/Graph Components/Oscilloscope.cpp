@@ -19,7 +19,7 @@ float finiteSample(float value) noexcept { return std::isfinite(value) ? value :
 }
 
 //==============================================================================
-Oscilloscope::Oscilloscope(FireAudioProcessor& p) : processor(p)
+Oscilloscope::Oscilloscope(FireAudioProcessor& p) : processor(p), historyCapture(p)
 {
     historySourceToken = processor.getHistorySourceToken();
     setGraphIdentity("WAVEFORM", fire::ui::ModuleRole::drive);
@@ -102,6 +102,9 @@ void Oscilloscope::paint(juce::Graphics& g)
 
 void Oscilloscope::timerCallback()
 {
+    // Some hosts detach a peer without a visibility callback. The existing
+    // UI timer also reconciles capture demand before reading any history.
+    historyCapture.setActive(isShowing());
     synchroniseHistorySource();
 
     if (! isShowing() || getWidth() <= 0 || getHeight() <= 0)
@@ -189,8 +192,10 @@ void Oscilloscope::visibilityChanged()
 
 void Oscilloscope::graphShowingStateChanged(bool isNowShowing)
 {
+    historyCapture.setActive(isNowShowing);
     if (! isNowShowing)
     {
+        synchroniseHistorySource();
         stopTimer();
         return;
     }

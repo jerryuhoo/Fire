@@ -5,6 +5,19 @@
 
 struct SpectrumHostBypassPresentationTestAccess final
 {
+    static void selectChannel(FireAudioProcessorEditor& editor, int id)
+    { editor.spectrumChannelBox.setSelectedId(id, juce::sendNotificationSync); }
+
+    static void showLibrary(FireAudioProcessorEditor& editor, bool show)
+    { if (show) editor.showPresetBrowser(); else editor.hidePresetBrowser(); }
+
+    static void collapseSpectrum(FireAudioProcessorEditor& editor, bool collapse)
+    {
+        editor.selectWorkspace(1, false);
+        editor.spectrumCollapseButton.setToggleState(collapse, juce::dontSendNotification);
+        editor.resized();
+    }
+
     static void synchronise(FireAudioProcessorEditor& editor,
                             bool animate)
     {
@@ -304,4 +317,43 @@ TEST_CASE("Editor reattachment discards FFT frames completed while hidden",
 
     CHECK_FALSE(SpectrumHostBypassPresentationTestAccess::spectraAwaitFreshFrames(
         editor));
+}
+
+TEST_CASE("Spectrum demand follows source changes library and collapsed presentation",
+          "[ui][editor][spectrum][capture-demand][source-epoch][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    processor.setRateAndBufferSizeDetails(48000.0, 512);
+    processor.prepareToPlay(48000.0, 512);
+    const auto previousMode = processor.getAppSettings().getIntValue("spectrumChannel", 3);
+    const juce::ScopeGuard restoreSetting { [&]
+    {
+        processor.getAppSettings().setValue("spectrumChannel", previousMode);
+        processor.getAppSettings().saveIfNeeded();
+    } };
+    FireAudioProcessorEditor editor(processor);
+    CHECK_FALSE(processor.isSpectrumCaptureEnabled());
+    editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor.setVisible(true);
+    const juce::ScopeGuard cleanup { [&] { editor.removeFromDesktop(); } };
+    REQUIRE(processor.isSpectrumCaptureEnabled());
+    const auto originalEpoch = SpectrumHostBypassPresentationTestAccess::requiredCaptureEpoch(editor);
+    SpectrumHostBypassPresentationTestAccess::selectChannel(editor, 2);
+    SpectrumHostBypassPresentationTestAccess::selectChannel(editor, 1);
+    CHECK(SpectrumHostBypassPresentationTestAccess::requiredCaptureEpoch(editor) > originalEpoch);
+    CHECK(SpectrumHostBypassPresentationTestAccess::spectraAwaitFreshFrames(editor));
+    SpectrumHostBypassPresentationTestAccess::showLibrary(editor, true);
+    CHECK_FALSE(processor.isSpectrumCaptureEnabled());
+    CHECK_FALSE(processor.isHistoryCaptureEnabled());
+    SpectrumHostBypassPresentationTestAccess::showLibrary(editor, false);
+    CHECK(processor.isSpectrumCaptureEnabled());
+    SpectrumHostBypassPresentationTestAccess::collapseSpectrum(editor, true);
+    CHECK_FALSE(processor.isSpectrumCaptureEnabled());
+    SpectrumHostBypassPresentationTestAccess::collapseSpectrum(editor, false);
+    CHECK(processor.isSpectrumCaptureEnabled());
+    editor.setVisible(false);
+    CHECK_FALSE(processor.isSpectrumCaptureEnabled());
+    CHECK_FALSE(processor.isHistoryCaptureEnabled());
 }

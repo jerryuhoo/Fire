@@ -514,6 +514,22 @@ public:
         std::uint64_t generation = 0;
     };
 
+    /** A visible waveform/stereo graph owns one subscription. No allocation,
+        locking or UI calls occur on the audio thread. Frozen audio uses a
+        separate DSP history and is never affected by these subscriptions. */
+    class HistoryCaptureSubscription
+    {
+    public:
+        explicit HistoryCaptureSubscription(FireAudioProcessor& owner) : processor(owner) {}
+        ~HistoryCaptureSubscription() { setActive(false); }
+        void setActive(bool shouldBeActive) noexcept;
+    private:
+        FireAudioProcessor& processor;
+        bool active = false;
+        JUCE_DECLARE_NON_COPYABLE(HistoryCaptureSubscription)
+    };
+    bool isHistoryCaptureEnabled() const noexcept
+    { return historyCaptureConsumers.load(std::memory_order_acquire) > 0; }
     static constexpr int globalHistorySourceIndex = 4;
     void setHistoryArray(int bandIndex);
     std::uint64_t getHistorySourceToken() const noexcept;
@@ -536,6 +552,13 @@ public:
                             float* originalDestination,
                             int originalDestinationSize,
                             std::uint64_t minimumCaptureEpoch = 0) noexcept;
+    bool popLatestSpectrumMagnitudes(float* processedDestination, int processedSize,
+                                      float* originalDestination, int originalSize,
+                                      SpectrumProcessor::ChannelMode mode,
+                                      std::uint64_t minimumCaptureEpoch = 0);
+    std::uint64_t setSpectrumCaptureEnabled(bool enabled) noexcept;
+    bool isSpectrumCaptureEnabled() const noexcept
+    { return spectrumCaptureEnabled.load(std::memory_order_acquire); }
     std::uint64_t requestFreshFFTFrameEpoch() noexcept;
     void pushDataPairToFFT(const juce::AudioBuffer<float>& processedBuffer,
                            const juce::AudioBuffer<float>& originalBuffer);
@@ -1040,6 +1063,7 @@ private:
     void publishLatencyToHost();
     void timerCallback() override;
     void captureHistorySamples();
+    void requestFreshHistoryEpoch() noexcept;
     void resetDownsamplingState() noexcept;
     void primeLatencyMatchedBypass(juce::AudioBuffer<float>& inputBuffer,
                                    bool useHQ);
@@ -1104,6 +1128,7 @@ private:
     static constexpr std::uint64_t historySourceMask = 0x7u;
     static_assert(std::atomic<std::uint64_t>::is_always_lock_free,
                   "History source publication must remain RT-safe");
+    std::atomic<int> historyCaptureConsumers { 0 };
     std::array<std::atomic<float>, historyLength> historyArrayL {};
     std::array<std::atomic<float>, historyLength> historyArrayR {};
     std::atomic<int> historyWritePosition { 0 };
@@ -1126,6 +1151,7 @@ private:
     std::atomic<std::uint64_t> historyPublicationSequence { 0 };
 
     // Spectrum
+    std::atomic<bool> spectrumCaptureEnabled { false };
     SpectrumProcessor spectrumProcessor;
 
     // dry audio buffer

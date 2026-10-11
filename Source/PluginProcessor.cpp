@@ -5701,11 +5701,15 @@ void FireAudioProcessor::processWetBlock(
                                 band->mOutputRightPeak);
     }
 
-    mWetBuffer.makeCopyOf(buffer, true);
-    captureHistorySamples();
-    pushDataPairToFFT(mWetBuffer, delayMatchedDryBuffer);
+    if (isHistoryCaptureEnabled())
+    {
+        mWetBuffer.makeCopyOf(buffer, true);
+        captureHistorySamples();
+    }
+    if (isSpectrumCaptureEnabled())
+        pushDataPairToFFT(buffer, delayMatchedDryBuffer);
     if (publishMeterPacket)
-        calculateAndStoreLevels(mWetBuffer,
+        calculateAndStoreLevels(buffer,
                                 mOutputLeftRMSGlobal,
                                 mOutputRightRMSGlobal,
                                 mOutputLeftPeakGlobal,
@@ -6912,6 +6916,26 @@ void FireAudioProcessor::setHistoryArray(int bandIndex)
     }
 }
 
+void FireAudioProcessor::HistoryCaptureSubscription::setActive(bool shouldBeActive) noexcept
+{
+    if (active == shouldBeActive) return;
+    active = shouldBeActive;
+    const auto previous = active
+        ? processor.historyCaptureConsumers.fetch_add(1, std::memory_order_acq_rel)
+        : processor.historyCaptureConsumers.fetch_sub(1, std::memory_order_acq_rel);
+    jassert(active || previous > 0);
+    if ((active && previous == 0) || (! active && previous == 1))
+        processor.requestFreshHistoryEpoch();
+}
+
+void FireAudioProcessor::requestFreshHistoryEpoch() noexcept
+{
+    // The low bits select the existing source. Bump only its generation to
+    // invalidate the pre-hide ring immediately, even without another callback.
+    historySourceRequestToken.fetch_add(historySourceMask + 1u,
+                                       std::memory_order_acq_rel);
+}
+
 void FireAudioProcessor::captureHistorySamples()
 {
     const std::array<const juce::AudioBuffer<float>*, 5> sourceBuffers {
@@ -7112,6 +7136,22 @@ bool FireAudioProcessor::popLatestFFTFrames(float* processedDestination,
                                                  minimumCaptureEpoch);
 }
 
+bool FireAudioProcessor::popLatestSpectrumMagnitudes(float* processedDestination, int processedSize,
+                                                        float* originalDestination, int originalSize,
+                                                        SpectrumProcessor::ChannelMode mode,
+                                                        std::uint64_t minimumCaptureEpoch)
+{
+    return spectrumProcessor.popLatestMagnitudes(processedDestination, processedSize,
+        originalDestination, originalSize, mode, minimumCaptureEpoch);
+}
+
+std::uint64_t FireAudioProcessor::setSpectrumCaptureEnabled(bool enabled) noexcept
+{
+    if (spectrumCaptureEnabled.exchange(enabled, std::memory_order_acq_rel) != enabled)
+        return requestFreshFFTFrameEpoch();
+    return 0;
+}
+
 std::uint64_t FireAudioProcessor::requestFreshFFTFrameEpoch() noexcept
 {
     return spectrumProcessor.requestFreshCaptureEpoch();
@@ -7127,11 +7167,14 @@ void FireAudioProcessor::pushDataPairToFFT(const juce::AudioBuffer<float>& proce
 
     const auto* processedData = processedBuffer.getReadPointer(0);
     const auto* originalData = originalBuffer.getReadPointer(0);
+    const auto* processedRight = processedBuffer.getReadPointer(processedBuffer.getNumChannels() > 1 ? 1 : 0);
+    const auto* originalRight = originalBuffer.getReadPointer(originalBuffer.getNumChannels() > 1 ? 1 : 0);
     const int samplesToPush = juce::jmin(processedBuffer.getNumSamples(),
                                           originalBuffer.getNumSamples());
 
     for (int sample = 0; sample < samplesToPush; ++sample)
-        spectrumProcessor.pushNextSamplePairIntoFifo(processedData[sample], originalData[sample]);
+        spectrumProcessor.pushNextStereoSamplePairIntoFifo(processedData[sample], processedRight[sample],
+                                                           originalData[sample], originalRight[sample]);
 }
 
 bool FireAudioProcessor::processFFT(float* tempFFTData, int bufferSize)

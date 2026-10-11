@@ -36,6 +36,7 @@ private:
     friend struct OscilloscopeRenderingTestAccess;
 
     FireAudioProcessor& processor;
+    FireAudioProcessor::HistoryCaptureSubscription historyCapture;
 
     juce::Array<float> historyL;
     juce::Array<float> historyR;

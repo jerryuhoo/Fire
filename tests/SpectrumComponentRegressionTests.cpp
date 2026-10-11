@@ -948,3 +948,58 @@ TEST_CASE("A rapid host-bypass reversal never fades the retained frame back in",
     SpectrumComponentTestAccess::tick(spectrum);
     CHECK(SpectrumComponentTestAccess::presentationOpacity(spectrum) > 0.0f);
 }
+
+TEST_CASE("Spectrum channel modes preserve stereo power without phase cancellation",
+          "[fft][spectrum][stereo][regression]")
+{
+    const auto magnitudes = [](SpectrumProcessor::ChannelMode mode, float left, float right)
+    {
+        SpectrumProcessor spectrum;
+        std::array<float, SpectrumProcessor::fftBufferSize> wet {}, dry {};
+        for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+        {
+            const auto tone = std::sin(juce::MathConstants<float>::twoPi * 37.0f
+                                      * float(sample) / float(SpectrumProcessor::fftSize));
+            spectrum.pushNextStereoSamplePairIntoFifo(tone * left, tone * right,
+                                                       tone * left * .5f, tone * right * .5f);
+        }
+        REQUIRE(spectrum.popLatestMagnitudes(wet.data(), int(wet.size()), dry.data(), int(dry.size()), mode));
+        CHECK(dry[37] == Catch::Approx(wet[37] * .5f).margin(1.e-5f));
+        return wet[37];
+    };
+    const auto reference = magnitudes(SpectrumProcessor::ChannelMode::left, 1, 0);
+    REQUIRE(reference > 100);
+    CHECK(magnitudes(SpectrumProcessor::ChannelMode::left, 0, 1) == 0);
+    CHECK(magnitudes(SpectrumProcessor::ChannelMode::right, 0, 1) == Catch::Approx(reference));
+    CHECK(magnitudes(SpectrumProcessor::ChannelMode::right, 1, 0) == 0);
+    CHECK(magnitudes(SpectrumProcessor::ChannelMode::stereoEnergy, 0, 1)
+          == Catch::Approx(reference / std::sqrt(2.0f)));
+    CHECK(magnitudes(SpectrumProcessor::ChannelMode::stereoEnergy, 1, 1) == Catch::Approx(reference));
+    CHECK(magnitudes(SpectrumProcessor::ChannelMode::stereoEnergy, 1, -1) == Catch::Approx(reference));
+}
+
+TEST_CASE("Stereo spectrum capture epochs discard partial frames from all channels",
+          "[fft][spectrum][stereo][source-epoch][regression]")
+{
+    SpectrumProcessor spectrum;
+    for (int sample = 0; sample < SpectrumProcessor::fftSize / 2; ++sample)
+        spectrum.pushNextStereoSamplePairIntoFifo(1, 2, 3, 4);
+    const auto epoch = spectrum.requestFreshCaptureEpoch();
+    spectrum.beginInputBlock();
+    std::array<float, SpectrumProcessor::fftBufferSize> wet {}, dry {}, rightWet {}, rightDry {};
+    for (int sample = 0; sample < SpectrumProcessor::fftSize / 2; ++sample)
+        spectrum.pushNextStereoSamplePairIntoFifo(5, 6, 7, 8);
+    CHECK_FALSE(spectrum.popLatestFramePair(wet.data(), int(wet.size()), dry.data(), int(dry.size()),
+                                           epoch, rightWet.data(), rightDry.data()));
+    for (int sample = 0; sample < SpectrumProcessor::fftSize / 2; ++sample)
+        spectrum.pushNextStereoSamplePairIntoFifo(5, 6, 7, 8);
+    REQUIRE(spectrum.popLatestFramePair(wet.data(), int(wet.size()), dry.data(), int(dry.size()),
+                                       epoch, rightWet.data(), rightDry.data()));
+    for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+    {
+        REQUIRE(wet[size_t(sample)] == 5);
+        REQUIRE(rightWet[size_t(sample)] == 6);
+        REQUIRE(dry[size_t(sample)] == 7);
+        REQUIRE(rightDry[size_t(sample)] == 8);
+    }
+}

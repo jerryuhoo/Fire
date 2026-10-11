@@ -1,5 +1,19 @@
 # DSP / UI CPU 审计
 
+## 可重复的实时预算回归
+
+`Benchmarks "[cpu-realtime]"` 覆盖 48/96 kHz、64/128 samples、1/4 个串行实例，以及默认、四频段 Transformer HQ、四频段 Tape HQ；每项比较 UI 数据采集关闭/开启。`FIRE_CPU_EXTENDED=1` 额外覆盖 192 kHz 和 32 samples。实时声音处理与颗粒冻结历史不受 UI 数据采集开关影响。
+
+使用 Release 构建运行，例如：
+
+```sh
+FIRE_CPU_REPORT_PATH=/tmp/fire-cpu-report.json ./Builds/JUCE9-Release/Benchmarks '[cpu-realtime]'
+```
+
+可用 `FIRE_CPU_RATES=96000`、`FIRE_CPU_BLOCKS=64`、`FIRE_CPU_INSTANCES=1,4`、`FIRE_CPU_MODES=0,22,23` 缩小范围；`FIRE_CPU_CALLBACKS` 默认 512，前置 128 次预热。报告记录 CPU、系统、构建版本/提交/配置、日期和场景，以及平均、50/95/99 百分位、最大回调时间与串行实时预算比例。所有场景要求音频输出有限，不把某台机器的绝对耗时设为 CI 失败阈值。
+
+采集开启只测音频线程上的 FFT FIFO 与波形历史发布，不包含消息线程的双声道 FFT 或绘制。图形成本仍由 `[cpu-ui]` 单独测量。四实例串行结果表示它们共用一个处理线程的预算，不等同于宿主多核 CPU 表或实际掉音次数；应在同机同构建配置下比较保存的报告。
+
 ## 2026-10-05：最终兼容性核查
 
 未使用的独立 Shape 延迟预算移至插件输出，保持原有 Lo-Fi 取样相位、DSP 时钟和数字音色。独立 Shape 存在时使用对齐机架；布局切换在静音拓扑边界完成，宿主报告的 PDC 保持不变。原始音色 Golden 文件保留，没有重录。

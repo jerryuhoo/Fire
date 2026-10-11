@@ -33,6 +33,7 @@ private:
     friend struct GraphViewSelectorTestAccess;
 
     FireAudioProcessor& processor;
+    FireAudioProcessor::HistoryCaptureSubscription historyCapture;
     juce::Array<float> historyL;
     juce::Array<float> historyR;
     FireAudioProcessor::HistorySnapshot historyScratch;

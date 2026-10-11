@@ -456,6 +456,28 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     });
     updateWhenChangingFocus(multiband.getFocusIndex());
     addAndMakeVisible(filterControl);
+    spectrumChannelBox.setComponentID("spectrum_channel");
+    spectrumChannelBox.setTitle("Spectrum channel");
+    spectrumChannelBox.setTooltip("Analyse Left, Right, or Stereo energy. Stereo averages channel power per frequency; opposite phases do not cancel.");
+    spectrumChannelBox.addItem("Left", 1);
+    spectrumChannelBox.addItem("Right", 2);
+    spectrumChannelBox.addItem("Stereo", 3);
+    spectrumChannelBox.setSelectedId(juce::jlimit(1, 3,
+        processor.getAppSettings().getIntValue("spectrumChannel", 3)), juce::dontSendNotification);
+    spectrumChannelMode = static_cast<SpectrumProcessor::ChannelMode>(spectrumChannelBox.getSelectedId() - 1);
+    spectrumChannelBox.onChange = [this]
+    {
+        spectrumChannelMode = static_cast<SpectrumProcessor::ChannelMode>(spectrumChannelBox.getSelectedId() - 1);
+        requiredFftCaptureEpoch = processor.requestFreshFFTFrameEpoch();
+        multiband.clearOttSpectrum();
+        processedSpectrum.setHostBypassed(true, false);
+        originalSpectrum.setHostBypassed(true, false);
+        spectrumBypassPresentationInitialised = false;
+        synchroniseSpectrumHostBypassState(false);
+        processor.getAppSettings().setValue("spectrumChannel", spectrumChannelBox.getSelectedId());
+        processor.getAppSettings().saveIfNeeded();
+    };
+    addAndMakeVisible(spectrumChannelBox);
 
     // The processor may already be host-bypassed when an editor is opened.
     // Establish that state without ever painting a retained analyser frame.
@@ -664,6 +686,8 @@ void FireAudioProcessorEditor::setSkinPreference(fire::ui::Skin skin)
 
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
 {
+    processor.setSpectrumCaptureEnabled(false);
+    spectrumChannelBox.onChange = nullptr;
     processor.getAppSettings().removeChangeListener(this);
     stateComponent.onBrowserRequested = nullptr;
     if (presetBrowser) {presetBrowser->onClose = nullptr; presetBrowser->onPresetSelected = nullptr; presetBrowser->onLibraryChanged = nullptr;}
@@ -930,6 +954,7 @@ void FireAudioProcessorEditor::resized()
     multiband.setVisible(! spectrumCollapsed && activeWorkspace != 2);
     filterControl.setVisible(! spectrumCollapsed && activeWorkspace == 2);
     zoomButton.setVisible(! spectrumCollapsed);
+    spectrumChannelBox.setVisible(! spectrumCollapsed);
     spectrumCollapseButton.setVisible(activeWorkspace == 1 && ! zoomButton.getToggleState());
     spectrumCollapseButton.setButtonText(spectrumCollapsed ? "Show spectrum" : "Hide spectrum");
 
@@ -938,6 +963,12 @@ void FireAudioProcessorEditor::resized()
                          spectrumCardArea.getBottom() - zoomSize - gap,
                          zoomSize,
                          zoomSize);
+    // Keep channel selection beside zoom, below frequency labels and band
+    // handles. The analyser keeps all its existing vertical space.
+    const auto channelWidth = juce::roundToInt(82.0f * scale);
+    spectrumChannelBox.setBounds(zoomButton.getX() - gap - channelWidth,
+                                zoomButton.getY(), channelWidth, zoomSize);
+    synchroniseSpectrumHostBypassState(false);
 
     if (valuePopup.isVisible())
     {
@@ -1383,7 +1414,16 @@ void FireAudioProcessorEditor::advanceAnimations(float deltaSeconds)
 void FireAudioProcessorEditor::synchroniseSpectrumHostBypassState(
     bool animateTransition)
 {
-    if (spectrumPresentationSuspended && isShowing())
+    const bool needsSpectrum = isShowing() && processedSpectrum.isShowing()
+        && ! processedSpectrum.getBounds().isEmpty()
+        && ! (presetBrowser && presetBrowser->isVisible());
+    if (! needsSpectrum)
+    {
+        if (! spectrumPresentationSuspended) suspendSpectrumPresentation();
+        return;
+    }
+    processor.setSpectrumCaptureEnabled(true);
+    if (spectrumPresentationSuspended)
     {
         // Ask the audio producer for a new capture epoch. Any completed or
         // in-flight hidden-session publication carries an older epoch and is
@@ -1437,6 +1477,7 @@ void FireAudioProcessorEditor::synchroniseSpectrumHostBypassState(
 
 void FireAudioProcessorEditor::suspendSpectrumPresentation()
 {
+    processor.setSpectrumCaptureEnabled(false);
     multiband.clearOttSpectrum();
     // Hidden editors do not animate. Clear immediately and require a frame
     // published after reattachment before either spectrum can reappear.
@@ -1837,18 +1878,15 @@ void FireAudioProcessorEditor::timerCallback()
     const bool isBypassed = lastBypassedState;
     if (isBypassed) multiband.clearOttSpectrum();
 
-    if (! isBypassed && spectrumCardArea.intersects(getLocalBounds()))
+    if (! isBypassed && ! spectrumPresentationSuspended && spectrumCardArea.intersects(getLocalBounds()))
     {
-        if (processor.popLatestFFTFrames(processedFftFrame.data(),
+        if (processor.popLatestSpectrumMagnitudes(processedFftFrame.data(),
                                          static_cast<int>(processedFftFrame.size()),
                                          originalFftFrame.data(),
                                          static_cast<int>(originalFftFrame.size()),
+                                         spectrumChannelMode,
                                          requiredFftCaptureEpoch))
         {
-            const auto fftBufferSize = static_cast<int>(processedFftFrame.size());
-            if (! processor.processFFT(processedFftFrame.data(), fftBufferSize)
-                || ! processor.processFFT(originalFftFrame.data(), fftBufferSize))
-                return;
 
             const auto* mixParameter = processor.treeState.getRawParameterValue(MIX_ID);
             const float specAlpha = mixParameter != nullptr ? mixParameter->load() : 1.0f;
@@ -2092,6 +2130,7 @@ void FireAudioProcessorEditor::showPresetBrowser()
         if (component != presetBrowser.get() && component->isVisible()
             && dynamic_cast<juce::ResizableCornerComponent*>(component) == nullptr) componentsHiddenForPresets.emplace_back(component);
     for (auto component : componentsHiddenForPresets) {if (component) component->setVisible(false); if (!safe) return;}
+    suspendSpectrumPresentation();
     presetBrowser->setVisible(true); presetBrowser->setBounds(getLocalBounds()); presetBrowser->open();
     if (safe)
     {

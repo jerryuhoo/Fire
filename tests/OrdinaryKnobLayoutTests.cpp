@@ -26,12 +26,49 @@ void activateKnobLayoutButton(juce::Component& root, const juce::String& name)
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 }
 
+void checkCompactMacroKnobs(fire::ui::MacroBar& bar, juce::Point<int> ordinaryDialSize)
+{
+    std::vector<juce::Rectangle<int>> dialBounds;
+    juce::Point<int> referenceBox, referenceDial;
+    for (auto* child : bar.getChildren())
+    {
+        if (! child->isVisible()) continue;
+        CHECK(bar.getLocalBounds().contains(child->getBounds()));
+        auto* slider = dynamic_cast<juce::Slider*>(child);
+        if (slider == nullptr || ! slider->isRotary()) continue;
+        CAPTURE(slider->getComponentID(), slider->getBounds().toString());
+        const auto box = sizeOf(slider->getLocalBounds());
+        const auto layout = slider->getLookAndFeel().getSliderLayout(*slider);
+        const auto dial = sizeOf(layout.sliderBounds);
+        REQUIRE(box.x > 0);
+        CHECK(box.x == box.y);
+        CHECK(dial.x > 0);
+        CHECK(dial.y > 0);
+        CHECK(dial.x < ordinaryDialSize.x);
+        CHECK(dial.y < ordinaryDialSize.y);
+        CHECK(slider->getLocalBounds().contains(layout.sliderBounds));
+        if (dialBounds.empty()) { referenceBox = box; referenceDial = dial; }
+        else { CHECK(box == referenceBox); CHECK(dial == referenceDial); }
+        for (const auto& previous : dialBounds) CHECK_FALSE(previous.intersects(slider->getBounds()));
+        for (auto* neighbour : bar.getChildren())
+            if (neighbour != slider && neighbour->isVisible()) CHECK_FALSE(neighbour->getBounds().intersects(slider->getBounds()));
+        dialBounds.push_back(slider->getBounds());
+    }
+    CHECK(dialBounds.size() == static_cast<size_t>(fire::mod_sources::macroCount));
+}
+
 void checkOrdinaryKnobs(juce::Component& root, juce::Point<int> boxSize,
                         juce::Point<int> dialSize, int& checked)
 {
     for (auto* child : root.getChildren())
     {
         if (! child->isVisible()) continue;
+        if (auto* macroBar = dynamic_cast<fire::ui::MacroBar*>(child))
+        {
+            CHECK(root.getLocalBounds().contains(macroBar->getBounds()));
+            checkCompactMacroKnobs(*macroBar, dialSize);
+            continue;
+        }
         if (auto* slider = dynamic_cast<juce::Slider*>(child); slider && slider->isRotary())
         {
             const auto layout = slider->getLookAndFeel().getSliderLayout(*slider);

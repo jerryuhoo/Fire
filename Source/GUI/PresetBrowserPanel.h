@@ -186,6 +186,11 @@ public:
         closeButton.setButtonText("Back to Reactor"); closeButton.setTitle("Close preset browser"); closeButton.setComponentID("preset_browser_close");
         closeButton.setTooltip("Return to the processing page (Escape)");
         closeButton.onClick=[safe=juce::Component::SafePointer<PresetBrowserPanel>(this)] {if(safe && safe->onClose) safe->onClose();};
+        addAndMakeVisible(locateButton);
+        locateButton.setButtonText("Locate current"); locateButton.setTitle("Locate the current preset");
+        locateButton.setComponentID("preset_locate_current");
+        locateButton.setTooltip("Show the playing preset in its collection, clearing the search");
+        locateButton.onClick=[safe=juce::Component::SafePointer<PresetBrowserPanel>(this)] {if(safe) safe->locateCurrentPreset();};
         addAndMakeVisible(search); search.setLookAndFeel(&searchLook);
         search.setTextToShowWhenEmpty("Search sounds, colour or space...",paletteFor(*this).textMuted);
         search.setColour(juce::TextEditor::backgroundColourId,juce::Colour(0xff141a22));
@@ -195,7 +200,7 @@ public:
         search.setOpaque(false);
         search.setTitle("Search presets"); search.setComponentID("preset_search"); search.setSelectAllWhenFocused(true);
         search.onTextChange=[safe=juce::Component::SafePointer<PresetBrowserPanel>(this)] {if(safe) safe->rebuildRows();};
-        viewport.setViewedComponent(&content,false); viewport.setScrollBarsShown(true,false);
+        viewport.setComponentID("preset_list_viewport"); viewport.setViewedComponent(&content,false); viewport.setScrollBarsShown(true,false);
         viewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId,paletteFor(*this).textMuted.withAlpha(.3f)); addAndMakeVisible(viewport);
         sidebar.setViewedComponent(&categoriesContent,false); sidebar.setScrollBarsShown(true,false);
         sidebar.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId,paletteFor(*this).textMuted.withAlpha(.2f)); addAndMakeVisible(sidebar);
@@ -206,14 +211,22 @@ public:
     std::function<void()> onClose, onLibraryChanged;
     void open()
     {
-        category="All Sounds"; search.setText({},false); message.clear(); refreshLibrary();
+        const auto previousSelection = selectedKey;
+        message.clear(); refreshLibrary(); rememberRecent(selectedKey);
+        if(category=="Recent") rebuildRows(false);
+        // Reopening the browser keeps the user's query, collection and scroll.
+        // Only a newly loaded sound moves the viewport, and never discards a filter.
+        if (!hasOpened || revealOnNextOpen || selectedKey != previousSelection) revealCurrentRow();
+        hasOpened = true; revealOnNextOpen = false;
     }
     void refreshSelection()
     {
         const auto current=presets.getCurrentPresetKey(); if(current==selectedKey) return;
-        selectedKey=current;
+        if(!isVisible()) revealOnNextOpen=true;
+        selectedKey=current; rememberRecent(current);
         for(auto& row:rows) {row->selected=row->entry.key==selectedKey; row->repaint();}
-        repaint(footer.toNearestInt());
+        locateButton.setEnabled(hasCurrentLibraryEntry());
+        refreshRecentCount(); repaint(footer.toNearestInt());
     }
     void lookAndFeelChanged() override
     {
@@ -258,7 +271,9 @@ public:
         categoriesContent.setSize(sidebar.getWidth()-juce::roundToInt(5*scale),juce::jmax(sidebar.getHeight(),pitch*static_cast<int>(categoryButtons.size())));
         for(size_t i=0;i<categoryButtons.size();++i)
         {categoryButtons[i]->scale=scale; categoryButtons[i]->setBounds(0,static_cast<int>(i)*pitch,categoriesContent.getWidth(),pitch-juce::roundToInt(3*scale));}
-        footer=area.removeFromBottom(69*scale); area.removeFromBottom(15*scale); listTitle=area.removeFromTop(27*scale);
+        footer=area.removeFromBottom(69*scale);
+        locateButton.setBounds(footer.withTrimmedTop(14*scale).removeFromRight(115*scale).withHeight(30*scale).toNearestInt());
+        area.removeFromBottom(15*scale); listTitle=area.removeFromTop(27*scale);
         viewport.setBounds(area.toNearestInt()); viewport.setScrollBarThickness(juce::roundToInt(4*scale));
         const int height=juce::roundToInt(60*scale);
         content.setSize(viewport.getWidth()-juce::roundToInt(7*scale),juce::jmax(viewport.getHeight(),height*static_cast<int>(rows.size())));
@@ -281,12 +296,12 @@ public:
         g.setColour(theme.accent.withAlpha(.18f)); g.drawLine(footer.getX(),footer.getY(),footer.getRight(),footer.getY(),1);
         const ::state::StatePresets::BrowserEntry* selected=nullptr;
         for(const auto& entry:entries) if(entry.key==selectedKey && !entry.removed) {selected=&entry;break;}
-        auto detail=footer.withTrimmedTop(10*scale); g.setColour(theme.accent); g.setFont(labelFont(12*scale));
+        auto detail=footer.withTrimmedTop(10*scale).withTrimmedRight(130*scale); g.setColour(theme.accent); g.setFont(labelFont(12*scale));
         g.drawText(message.isNotEmpty()?message:selected?selected->name:"Click a preset to audition",detail.removeFromTop(20*scale),juce::Justification::centredLeft);
         g.setColour(paletteFor(*this).textSecondary); g.setFont(bodyFont(10.5f*scale));
         g.drawFittedText(message.isNotEmpty()?"Browse Favourites or restore removed sounds from Recycle Bin on the left.":selected?selected->description:
             category=="Recycle Bin"?"Restore a sound to its original collection. Your current sound keeps playing.":"Single-click to audition. Double-click or Escape returns to the reactor.",detail.toNearestInt(),juce::Justification::centredLeft,2);
-        if(rows.empty()) {g.setColour(paletteFor(*this).textSecondary);g.setFont(bodyFont(15*scale));g.drawText(category=="Favourites"?"Star a sound to add it here":category=="Recycle Bin"?"Your recycle bin is empty":"No sounds match this search",viewport.getBounds().toFloat(),juce::Justification::centred);}
+        if(rows.empty()) {g.setColour(paletteFor(*this).textSecondary);g.setFont(bodyFont(15*scale));g.drawText(category=="Recent"?"Your recently auditioned sounds appear here":category=="Favourites"?"Star a sound to add it here":category=="Recycle Bin"?"Your recycle bin is empty":"No sounds match this search",viewport.getBounds().toFloat(),juce::Justification::centred);}
     }
     bool keyPressed(const juce::KeyPress& key) override
     {
@@ -297,16 +312,17 @@ public:
             int current=-1;for(size_t i=0;i<rows.size();++i) if(rows[i]->entry.key==selectedKey) current=static_cast<int>(i);
             const int next=juce::jlimit(0,static_cast<int>(rows.size())-1,current+(key.isKeyCode(juce::KeyPress::downKey)?1:-1));
             const auto tag=rows[static_cast<size_t>(next)]->entry.tag;viewport.setViewPosition(0,rows[static_cast<size_t>(next)]->getY());
-            if(onPresetSelected) onPresetSelected(tag);return true;
+            const juce::Component::SafePointer<PresetBrowserPanel> safe(this);
+            if(onPresetSelected) onPresetSelected(tag);if(safe) safe->refreshSelection();return true;
         }
         return false;
     }
 private:
-    static bool matchesCategory(const ::state::StatePresets::BrowserEntry& entry,const juce::String& group)
+    bool matchesCategory(const ::state::StatePresets::BrowserEntry& entry,const juce::String& group) const
     {
         if(group=="Recycle Bin") return entry.removed;
         if(entry.removed) return false;
-        return group=="All Sounds"||(group=="Favourites"?entry.favourite:group=="User"?!entry.factory:entry.category==group);
+        return group=="All Sounds"||(group=="Recent"?recentKeys.contains(entry.key):group=="Favourites"?entry.favourite:group=="User"?!entry.factory:entry.category==group);
     }
     void refreshCategorySelection()
     {for(auto& button:categoryButtons) button->setToggleState(button->name==category,juce::dontSendNotification);closeButton.accent=categoryPalette(*this,category).accent;repaint();}
@@ -314,9 +330,9 @@ private:
     {
         ++libraryGeneration; entries=presets.getBrowserEntries(true); selectedKey=presets.getCurrentPresetKey();
         const auto position=sidebar.getViewPosition();
-        std::vector<juce::String> names {"All Sounds","Favourites"};
+        std::vector<juce::String> names {"All Sounds","Favourites","Recent"};
         for(const auto& entry:entries) if(entry.factory && std::find(names.begin(),names.end(),entry.category)==names.end()) names.push_back(entry.category);
-        std::sort(names.begin()+2,names.end());names.push_back("User");names.push_back("Recycle Bin");categoryButtons.clear();
+        std::sort(names.begin()+3,names.end());names.push_back("User");names.push_back("Recycle Bin");categoryButtons.clear();
         const auto epoch=libraryGeneration;const juce::Component::SafePointer<PresetBrowserPanel> safe(this);
         for(const auto& name:names)
         {
@@ -326,7 +342,9 @@ private:
             button->onClick=[safe,epoch,name] {if(safe && safe->libraryGeneration==epoch && safe->isShowing() && safe->isEnabled()) safe->selectCategory(name);};
             categoriesContent.addAndMakeVisible(*button);categoryButtons.push_back(std::move(button));
         }
+        if(std::find(names.begin(),names.end(),category)==names.end()) category="All Sounds";
         rebuildRows(false);refreshCategorySelection();resized();sidebar.setViewPosition(position);
+        locateButton.setEnabled(hasCurrentLibraryEntry());
     }
     void performAction(const juce::String& key,bool favourite,bool value=false)
     {
@@ -344,7 +362,10 @@ private:
     {
         const auto position=resetScroll?juce::Point<int>{}:viewport.getViewPosition();++generation;rows.clear();
         const auto query=search.getText().trim();const auto epoch=generation;const juce::Component::SafePointer<PresetBrowserPanel> safe(this);
-        for(const auto& entry:entries)
+        auto visibleEntries=entries;
+        if(category=="Recent") std::stable_sort(visibleEntries.begin(),visibleEntries.end(),[this](const auto& left,const auto& right)
+        {return recentKeys.indexOf(left.key)<recentKeys.indexOf(right.key);});
+        for(const auto& entry:visibleEntries)
         {
             if(!matchesCategory(entry,category)) continue;
             if(query.isNotEmpty() && !(entry.name+" "+entry.description+" "+entry.category).containsIgnoreCase(query)) continue;
@@ -360,7 +381,7 @@ private:
             row->remove.setTitle((entry.removed?"Restore ":"Delete ")+entry.name);row->remove.setComponentID((entry.removed?"presetRestore:":"presetDelete:")+entry.key);
             row->remove.setTooltip(entry.removed?"Restore to the original collection":entry.factory?"Hide this factory sound. Restore it from Recycle Bin.":"Move this user preset into Recycle Bin. Restore it at any time.");
             const auto live=[safe,epoch] {return safe && safe->generation==epoch && safe->isShowing() && safe->isEnabled();};
-            row->onClick=[safe,live,tag=entry.tag,removed=entry.removed] {if(live() && !removed && safe->onPresetSelected) {safe->message.clear();safe->onPresetSelected(tag);}};
+            row->onClick=[safe,live,tag=entry.tag,removed=entry.removed] {if(live() && !removed && safe->onPresetSelected) {safe->message.clear();safe->onPresetSelected(tag);if(safe) safe->refreshSelection();}};
             row->onDoubleClick=[safe,live,removed=entry.removed] {if(live() && !removed && safe->onClose) safe->onClose();};
             row->favourite.onClick=[safe,live,key=entry.key,value=!entry.favourite] {if(live()) safe->performAction(key,true,value);};
             row->remove.onClick=[safe,live,key=entry.key] {if(live()) safe->performAction(key,false);};
@@ -368,16 +389,49 @@ private:
         }
         resized();viewport.setViewPosition(position);repaint();
     }
+    bool hasCurrentLibraryEntry() const
+    {return std::any_of(entries.begin(),entries.end(),[this](const auto& entry) {return entry.key==selectedKey && !entry.removed;});}
+    void rememberRecent(const juce::String& key)
+    {
+        if(key.isEmpty() || !hasCurrentLibraryEntry()) return;
+        recentKeys.removeString(key); recentKeys.insert(0,key);
+        while(recentKeys.size()>24) recentKeys.remove(recentKeys.size()-1);
+        refreshRecentCount();
+    }
+    void refreshRecentCount()
+    {
+        for(auto& button:categoryButtons) if(button->name=="Recent")
+        {button->count=static_cast<int>(std::count_if(entries.begin(),entries.end(),[this](const auto& entry) {return matchesCategory(entry,"Recent");}));button->repaint();}
+    }
+    void revealCurrentRow()
+    {
+        for(const auto& row:rows) if(row->entry.key==selectedKey)
+        {
+            const auto top=viewport.getViewPositionY();
+            if(row->getY()<top) viewport.setViewPosition(0,row->getY());
+            else if(row->getBottom()>top+viewport.getViewHeight()) viewport.setViewPosition(0,row->getBottom()-viewport.getViewHeight());
+            break;
+        }
+    }
+    void locateCurrentPreset()
+    {
+        refreshSelection();
+        for(const auto& entry:entries) if(entry.key==selectedKey && !entry.removed)
+        {category=entry.factory?entry.category:"User";search.setText({},false);message.clear();rebuildRows();refreshCategorySelection();revealCurrentRow();break;}
+    }
     ::state::StatePresets& presets;
     SearchLook searchLook;
     juce::Viewport viewport,sidebar;
     juce::Component content,categoriesContent;
     juce::TextEditor search;
     ActionButton closeButton;
+    PrimaryTextButton locateButton;
     std::vector<::state::StatePresets::BrowserEntry> entries;
     std::vector<std::unique_ptr<Row>> rows;
     std::vector<std::unique_ptr<CategoryButton>> categoryButtons;
     juce::String category {"All Sounds"},selectedKey,message;
+    juce::StringArray recentKeys;
+    bool hasOpened=false,revealOnNextOpen=false;
     juce::Rectangle<float> headerTitle,categoryTitle,listTitle,footer;
     float scale=1;
     std::uint64_t generation=0,libraryGeneration=0;

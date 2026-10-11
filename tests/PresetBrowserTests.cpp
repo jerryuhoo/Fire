@@ -300,3 +300,79 @@ TEST_CASE("Reopening an editor on Tape Studio Print displays its Master tape ins
     REQUIRE(mode); CHECK(processor.getShapeMode(0, 0) == 23);
     CHECK(processor.treeState.copyState().toXmlString() == parameters);
 }
+
+TEST_CASE("Reopening the library preserves collection search and scroll without hiding the current preset action",
+          "[preset-browser][ui][navigation][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor; LibraryFolder folder(processor);
+    fire::ui::PresetBrowserPanel browser(processor.statePresets);
+    browser.setSize(1000,500); browser.open(); browser.selectCategory("Analog Drive"); browser.setSearchText("a");
+    auto* viewport=find<juce::Viewport>(browser,[](auto& item) {return item.getComponentID()=="preset_list_viewport";}); REQUIRE(viewport);
+    viewport->setViewPosition(0,160); const auto position=viewport->getViewPosition(); REQUIRE(position.y>0);
+    const auto count=browser.getVisiblePresetCount(); browser.open();
+    CHECK(browser.getSelectedCategory()=="Analog Drive"); CHECK(browser.getVisiblePresetCount()==count);
+    CHECK(viewport->getViewPosition()==position);
+    auto* search=find<juce::TextEditor>(browser,[](auto& item) {return item.getComponentID()=="preset_search";}); REQUIRE(search);
+    CHECK(search->getText()=="a");
+    const auto entries=processor.statePresets.getBrowserEntries();
+    const auto guitar=std::find_if(entries.begin(),entries.end(),[](const auto& entry) {return entry.category=="Guitar";}); REQUIRE(guitar!=entries.end());
+    REQUIRE(processor.statePresets.loadPreset(guitar->tag));
+    browser.open(); CHECK(browser.getSelectedCategory()=="Analog Drive"); CHECK(search->getText()=="a");
+    auto* locate=find<PrimaryTextButton>(browser,[](auto& button) {return button.getComponentID()=="preset_locate_current";}); REQUIRE(locate); REQUIRE(locate->isEnabled());
+    locate->onClick(); CHECK(browser.getSelectedCategory()=="Guitar"); CHECK(search->isEmpty());
+    auto* current=find<juce::Button>(browser,[&](auto& button) {return button.getComponentID()=="presetSound:"+guitar->key;}); REQUIRE(current);
+    CHECK(viewport->getViewArea().intersects(current->getBounds()));
+}
+
+TEST_CASE("Recently used presets are unique ordered and omit recycled sounds",
+          "[preset-browser][ui][navigation][recent]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor; LibraryFolder folder(processor);
+    fire::ui::PresetBrowserPanel browser(processor.statePresets); browser.setSize(1000,500); browser.open();
+    const auto entries=processor.statePresets.getBrowserEntries(); REQUIRE(entries.size()>2);
+    for(int index:{0,1,0}) {REQUIRE(processor.statePresets.loadPreset(entries[static_cast<size_t>(index)].tag));browser.refreshSelection();}
+    browser.selectCategory("Recent"); CHECK(browser.getVisiblePresetCount()==2);
+    auto* first=find<juce::Button>(browser,[](auto& button) {return button.getComponentID().startsWith("presetSound:");}); REQUIRE(first);
+    CHECK(first->getComponentID()=="presetSound:"+entries[0].key);
+    REQUIRE(processor.statePresets.removeBrowserPreset(entries[0].key)); browser.open();
+    CHECK(browser.getSelectedCategory()=="Recent"); CHECK(browser.getVisiblePresetCount()==1);
+    REQUIRE(processor.statePresets.restoreBrowserPreset(entries[0].key)); browser.open();
+    CHECK(browser.getVisiblePresetCount()==2);
+}
+
+TEST_CASE("Show modulation control navigates legacy and insert modules without editing the sound",
+          "[modulation-matrix][target-picker][ui][navigation]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor; processor.hasUpdateCheckBeenPerformed=true;
+    LibraryFolder folder(processor);
+    const int bandSlot=processor.addInsertEffect(1,fire::effects::Type::reverb);REQUIRE(bandSlot>=0);
+    const int masterSlot=processor.addInsertEffect(0,fire::effects::Type::eq);REQUIRE(masterSlot>=0);
+    REQUIRE(processor.addInsertEffect(0,fire::effects::Type::lofi)>=0);
+    auto editor=std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setSize(1000,500);editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);editor->setVisible(true);
+    auto* lfo=find<LfoPanel>(*editor,[](auto&) {return true;});REQUIRE(lfo);REQUIRE(lfo->onRevealModulationTarget);
+    std::vector<float> values;
+    for(auto* parameter:processor.getParameters()) values.push_back(parameter->getValue());
+    const juce::StringArray targets {
+        ParameterIDAndName::getIDString(DRIVE_ID,0),
+        fire::effects::parameterID(1,bandSlot,0),
+        fire::eq::parameterID(1,fire::eq::Field::gain),
+        fire::core_modules::eqParameterID(0,masterSlot,1,fire::eq::Field::frequency),
+        DOWNSAMPLE_ID
+    };
+    for(const auto& target:targets)
+    {
+        CAPTURE(target);lfo->onRevealModulationTarget(target);
+        auto* knob=find<ModulatableSlider>(*editor,[&](auto& slider) {return slider.getParamID()==target && slider.isShowing();});
+        REQUIRE(knob);
+    }
+    for(int index=0;index<processor.getParameters().size();++index)
+    {
+        auto* parameter=processor.getParameters()[index];
+        if(auto* named=dynamic_cast<juce::AudioProcessorParameterWithID*>(parameter);named && named->paramID==BAND_FOCUS_ID) continue;
+        CHECK(parameter->getValue()==values[static_cast<size_t>(index)]);
+    }
+}

@@ -3,6 +3,16 @@
 #include <Utility/CloudsParameters.h>
 #include <catch2/catch_test_macros.hpp>
 
+struct CloudsReservedUiTestAccess
+{
+    static void flushDirtyUpdates(state::StateComponent& component)
+    {
+        // Parameter listeners run synchronously; invoke the real timer body on
+        // the message thread so a slow CI timer scheduler cannot hide a result.
+        component.timerCallback();
+    }
+};
+
 namespace
 {
 struct TemporaryPresetDirectory
@@ -19,10 +29,9 @@ void writeParameter(FireAudioProcessor& processor, const juce::String& id, float
     parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
 }
 
-void dispatchDirtyUpdates()
+void dispatchDirtyUpdates(state::StateComponent& component)
 {
-    // Exercise the actual parameter listener and 30 Hz dirty-update timer.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    CloudsReservedUiTestAccess::flushDirtyUpdates(component);
 }
 }
 
@@ -43,7 +52,7 @@ TEST_CASE("Reserved granular engine writes do not dirty selected preset UI", "[c
     presets.setCurrentPresetKey("Reserved.fire");
     state::StateComponent component(processor.stateAB, presets, processor.treeState);
     component.synchronisePresetSelectionFromManager();
-    dispatchDirtyUpdates();
+    dispatchDirtyUpdates(component);
 
     auto* box = component.getPresetBox();
     REQUIRE(box != nullptr);
@@ -57,14 +66,14 @@ TEST_CASE("Reserved granular engine writes do not dirty selected preset UI", "[c
             CAPTURE(scope, value);
             writeParameter(processor, fire::clouds_params::parameterID(
                 scope, 0, fire::clouds_params::engineField), value);
-            dispatchDirtyUpdates();
+            dispatchDirtyUpdates(component);
             CHECK(box->getSelectedId() == selected);
             CHECK(box->getText() == "Reserved");
         }
 
     // A real Granular Size change must still use the usual dirty mechanism.
     writeParameter(processor, fire::effects::parameterID(0, 0, 0), 0.75f);
-    dispatchDirtyUpdates();
+    dispatchDirtyUpdates(component);
     CHECK(box->getSelectedId() == 0);
     CHECK(box->getText() == "Reserved*");
 }

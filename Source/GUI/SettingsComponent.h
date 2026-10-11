@@ -12,6 +12,8 @@
 #include "InterfaceDefines.h"
 #include "LookAndFeel.h"
 #include "PrimaryButton.h"
+#include "../Utility/BuildDiagnostics.h"
+#include <functional>
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 
@@ -22,12 +24,13 @@ class SettingsComponent : public juce::Component
 {
 public:
     static constexpr int minimumContentWidth = 300;
-    static constexpr int minimumContentHeight = 250;
+    static constexpr int minimumContentHeight = 420;
     static constexpr int minimumDialogWidth = 340;
-    static constexpr int minimumDialogHeight = 300;
+    static constexpr int minimumDialogHeight = 460;
 
-    SettingsComponent(juce::PropertiesFile& props)
-        : appProperties(props)
+    SettingsComponent(juce::PropertiesFile& props,
+                      std::function<juce::String()> diagnostics = {})
+        : appProperties(props), diagnosticsProvider(std::move(diagnostics))
     {
         setLookAndFeel(&fireLookAndFeel);
         setOpaque(true);
@@ -53,6 +56,25 @@ public:
         companyLabel.setFont(fire::ui::labelFont(12.0f), false);
         companyLabel.setColour(juce::HyperlinkButton::textColourId, fire::ui::colours::signalCool);
         addAndMakeVisible(companyLabel);
+
+        diagnosticsText.setComponentID("buildDiagnostics");
+        diagnosticsText.setMultiLine(true);
+        diagnosticsText.setReadOnly(true);
+        diagnosticsText.setCaretVisible(false);
+        diagnosticsText.setFont(fire::ui::bodyFont(11.5f));
+        diagnosticsText.setTitle("Build and audio diagnostics");
+        addAndMakeVisible(diagnosticsText);
+        copyDiagnostics.setButtonText("Copy diagnostics");
+        copyDiagnostics.setComponentID("copyDiagnostics");
+        copyDiagnostics.setTooltip("Copy build and audio configuration. Nothing is sent automatically.");
+        addAndMakeVisible(copyDiagnostics);
+        copyDiagnostics.onClick = [this]
+        {
+            refreshDiagnostics();
+            juce::SystemClipboard::copyTextToClipboard(diagnosticsText.getText());
+            copyDiagnostics.setButtonText("Copied");
+        };
+        refreshDiagnostics();
 
         // --- Auto-Update Toggle ---
         addAndMakeVisible(autoUpdateToggle);
@@ -111,6 +133,11 @@ public:
     {
         if (! isShowing())
             dismissPointerGestures();
+        else
+        {
+            refreshDiagnostics();
+            copyDiagnostics.setButtonText("Copy diagnostics");
+        }
     }
 
     void enablementChanged() override
@@ -146,7 +173,7 @@ public:
         const int horizontalInset = juce::jlimit(12, 28, getWidth() / 10);
         const int verticalInset = juce::jlimit(12, 20, getHeight() / 12);
         auto bounds = getLocalBounds().reduced(horizontalInset, verticalInset);
-        const auto logoHeight = juce::jmin(58, juce::roundToInt(bounds.getHeight() * 0.20f));
+        const auto logoHeight = juce::jmin(42, juce::roundToInt(bounds.getHeight() * 0.13f));
         auto logoArea = bounds.removeFromTop(logoHeight);
         fireGlyphArea = logoArea.withSizeKeepingCentre(juce::jmin(logoHeight, 72),
                                                        juce::jmin(logoHeight, 72));
@@ -175,16 +202,35 @@ public:
         // 5. Place the toggle button
         autoUpdateToggle.setBounds(bounds.removeFromTop(24));
 
-        // Future settings components can continue to be laid out from the remaining bounds...
+        bounds.removeFromTop(8);
+        auto copyRow = bounds.removeFromBottom(28);
+        copyDiagnostics.setBounds(copyRow.withSizeKeepingCentre(juce::jmin(180, copyRow.getWidth()), 28));
+        bounds.removeFromBottom(6);
+        diagnosticsText.setBounds(bounds);
     }
 
 private:
     friend struct SettingsComponentTestAccess;
+    void refreshDiagnostics()
+    {
+        diagnosticsText.setText(diagnosticsProvider ? diagnosticsProvider()
+            : "Fire " + juce::String(VERSION) + "\nBuild: " + fire::diagnostics::buildIdentifier()
+                + "\nAudio configuration unavailable", false);
+    }
+
     void applySkin(fire::ui::Skin skin)
     {
         const auto previous = fire::ui::skinFor(*this);
         fire::ui::setSkin(*this, skin); fireLookAndFeel.setSkin(skin);
         fire::ui::remapSkinColours(*this, previous, skin);
+        const auto& palette = fire::ui::paletteFor(*this);
+        diagnosticsText.setColour(juce::TextEditor::backgroundColourId, palette.surface1);
+        diagnosticsText.setColour(juce::TextEditor::textColourId, palette.textPrimary);
+        diagnosticsText.setColour(juce::TextEditor::outlineColourId, palette.hairline);
+        diagnosticsText.setColour(juce::TextEditor::focusedOutlineColourId, palette.accent);
+        diagnosticsText.setColour(juce::TextEditor::highlightColourId, palette.accent.withAlpha(0.25f));
+        diagnosticsText.setColour(juce::TextEditor::highlightedTextColourId, palette.textPrimary);
+        diagnosticsText.applyFontToAllText(fire::ui::bodyFont(11.5f));
         skinLabel.setColour(juce::Label::textColourId, fire::ui::paletteFor(*this).textMuted);
         companyLabel.setColour(juce::HyperlinkButton::textColourId,
             fire::ui::isLineSkin(skin) ? fire::ui::paletteFor(*this).accent
@@ -334,9 +380,13 @@ private:
         if (safeThis != nullptr) vintageSkin.dismissPointerGesture();
         if (safeThis != nullptr) paperSkin.dismissPointerGesture();
         if (safeThis != nullptr) inkSkin.dismissPointerGesture();
+        if (safeThis != nullptr) copyDiagnostics.dismissPointerGesture();
     }
 
     juce::PropertiesFile& appProperties;
+    std::function<juce::String()> diagnosticsProvider;
+    juce::TextEditor diagnosticsText;
+    DialogSessionButton<PrimaryTextButton> copyDiagnostics;
 
     juce::Rectangle<int> fireGlyphArea;
     FireLookAndFeel fireLookAndFeel;

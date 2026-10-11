@@ -28,6 +28,7 @@
 
 class FireAudioProcessor;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct CloudsReservedUiTestAccess;
 struct StatePresetsScanTestAccess;
 struct StateComponentDialogTestAccess;
 struct StateComponentMenuTestAccess;
@@ -284,6 +285,7 @@ PluginProcessor).
 
     private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        friend struct ::CloudsReservedUiTestAccess;
         friend struct ::StateComponentDialogTestAccess;
         friend struct ::StateComponentMenuTestAccess;
         friend struct ::StateComponentManualUpdateTestAccess;

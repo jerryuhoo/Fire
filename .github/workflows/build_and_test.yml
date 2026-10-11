@@ -172,6 +172,11 @@ jobs:
             ${{ matrix.pluginval-binary }} --strictness-level 10 --timeout-ms "${{ env.PLUGINVAL_TIMEOUT_MS }}" --verbose --validate "${{ env.VST3_PATH }}"
           fi
 
+      - name: Audio Unit load and state validation
+        if: ${{ matrix.name == 'macOS' }}
+        run: |
+          pluginval.app/Contents/MacOS/pluginval --strictness-level 10 --timeout-ms "${{ env.PLUGINVAL_TIMEOUT_MS }}" --skip-gui-tests --verbose --validate "${{ env.AU_PATH }}"
+
       - name: Verify macOS bundle signatures
         if: ${{ matrix.name == 'macOS' }}
         run: |
@@ -195,6 +200,25 @@ jobs:
         if: ${{ matrix.name == 'Linux' }}
         working-directory: ${{ env.ARTIFACTS_PATH }}
         run: 7z a -tzip "${{ env.ARTIFACT_NAME }}.zip" "-xr!lib${{ env.PRODUCT_NAME }}_SharedCode.a" .
+
+      - name: Developer ID sign and notarize macOS release
+        if: ${{ matrix.name == 'macOS' && startsWith(github.ref, 'refs/tags/v') && vars.FIRE_MACOS_NOTARIZE == 'true' }}
+        timeout-minutes: 40
+        env:
+          FIRE_MACOS_CERTIFICATE_BASE64: ${{ secrets.FIRE_MACOS_CERTIFICATE_BASE64 }}
+          FIRE_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.FIRE_MACOS_CERTIFICATE_PASSWORD }}
+          FIRE_MACOS_SIGNING_IDENTITY: ${{ secrets.FIRE_MACOS_SIGNING_IDENTITY }}
+          FIRE_NOTARY_KEY_BASE64: ${{ secrets.FIRE_NOTARY_KEY_BASE64 }}
+          FIRE_NOTARY_KEY_ID: ${{ secrets.FIRE_NOTARY_KEY_ID }}
+          FIRE_NOTARY_ISSUER_ID: ${{ secrets.FIRE_NOTARY_ISSUER_ID }}
+        run: packaging/sign-and-notarize-macos.sh "$ARTIFACTS_PATH" "$ARTIFACTS_PATH/$ARTIFACT_NAME.zip"
+
+      - name: Upload notarization receipt
+        if: ${{ matrix.name == 'macOS' && startsWith(github.ref, 'refs/tags/v') && vars.FIRE_MACOS_NOTARIZE == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOS-notarization-receipt
+          path: "${{ env.ARTIFACTS_PATH }}/notarization-receipt.json"
 
       - name: Upload Zip
         uses: actions/upload-artifact@v4

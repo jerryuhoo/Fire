@@ -3910,11 +3910,17 @@ namespace state
             auto& processor = static_cast<FireAudioProcessor&>(
                 safeThis->procStatePresets.getProcessor());
             auto settingsPanel = std::make_unique<SettingsComponent>(
-                processor.getAppSettings());
+                processor.getAppSettings(), [safeThis]
+                {
+                    if (! safeThis) return juce::String("Instance unavailable");
+                    auto& owner = static_cast<FireAudioProcessor&>(safeThis->procStatePresets.getProcessor());
+                    const auto* hq = owner.treeState.getRawParameterValue(HQ_ID);
+                    return fire::diagnostics::report(owner, hq != nullptr && hq->load() > 0.5f);
+                });
 
             juce::DialogWindow::LaunchOptions options;
             options.content.setOwned(settingsPanel.release());
-            options.content->setSize(400, 300);
+            options.content->setSize(460, 460);
             options.dialogTitle = "Settings";
             options.dialogBackgroundColour = COLOUR6;
             options.escapeKeyTriggersCloseButton = true;

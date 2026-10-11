@@ -1,4 +1,4 @@
-# Fire (Version 2.0.0) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://app.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
+# Fire (Version 2.0.1 — in development) [![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
 
 ![Fire 2.0 Vintage skin with a sound-reactive Warm Triode tube and three-band processing](Fire1.png)
 
@@ -36,86 +36,56 @@ Hope you like it!
 
 [Download here](https://github.com/jerryuhoo/Fire/releases/latest)
 
-### macOS Installation Guide for Fire Plugin
+### Install the downloaded build
 
-Thank you for downloading the **Fire** plugin!
+Unzip the archive from the [official releases](https://github.com/jerryuhoo/Fire/releases/latest),
+close your DAW, and copy the formats it supports into the folders below. Restart
+or rescan plug-ins in the DAW. Fire is an **audio effect**; put it on an audio or
+instrument track after the instrument.
 
-#### ❗️Why macOS Blocks This Plugin
+| Platform | VST3 | Audio Unit | CLAP |
+| --- | --- | --- | --- |
+| macOS | `~/Library/Audio/Plug-Ins/VST3/` | `~/Library/Audio/Plug-Ins/Components/` | `~/Library/Audio/Plug-Ins/CLAP/` |
+| Windows | `C:\Program Files\Common Files\VST3\` | — | `C:\Program Files\Common Files\CLAP\` |
+| Linux | `~/.vst3/` | — | `~/.clap/` |
 
-When you try to load the plugin in your DAW on macOS, you may see an error like:
+Create a missing user folder if needed. Windows system folders may require
+administrator permission; your DAW may also support a custom CLAP search path.
+macOS archives contain both Apple silicon and Intel code.
 
-> "Fire.vst3" cannot be opened because the developer cannot be verified.
+### macOS security and signing
 
-This **does not mean** the plugin contains any virus or malicious code.
+Current public builds carry an **ad-hoc code signature** and have not been
+Apple-notarized. macOS may therefore block a downloaded plug-in. Obtain the
+archive from the official release page, then use **System Settings → Privacy &
+Security → Open Anyway** if macOS offers that action for the blocked plug-in.
+For an ad-hoc build you trust, an alternative is to remove only its quarantine
+attribute after copying it to your user plug-in folder:
 
-Instead, this is due to **Apple’s security policy**, which requires developers to:
-
-- Enroll in the Apple Developer Program
-- Pay **$99/year**
-- Notarize and sign each build with an Apple-issued certificate
-
-As an independent developer releasing **free** software, I currently do not have the budget to enroll in the paid program. Therefore, macOS treats this unsigned plugin as “unverified.”
-
----
-
-#### ✅ How to Install and Use the Plugin
-
-To use the Fire plugin on macOS, follow these steps to manually allow it.
-
-##### 🔧 Step 1: Move the Plugin to the Correct Location
-
-Copy the plugin files to the standard plugin folders:
-
-```bash
-# VST3
-~/Library/Audio/Plug-Ins/VST3/
-
-# Audio Unit (.component)
-~/Library/Audio/Plug-Ins/Components/
-
-# CLAP (if applicable)
-~/Library/Audio/Plug-Ins/CLAP/
-````
-
-##### 🛡 Step 2: Remove Quarantine Attribute
-
-macOS adds a quarantine flag to files downloaded from the internet. Remove it using Terminal:
-
-```bash
-xattr -rd com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Fire.vst3
-xattr -rd com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/Fire.component
+```sh
+xattr -rd com.apple.quarantine "$HOME/Library/Audio/Plug-Ins/VST3/Fire.vst3"
+xattr -rd com.apple.quarantine "$HOME/Library/Audio/Plug-Ins/Components/Fire.component"
+xattr -rd com.apple.quarantine "$HOME/Library/Audio/Plug-Ins/CLAP/Fire.clap"
 ```
 
-If you're using the CLAP version:
+Run only the commands for the formats you installed. The shipped bundles are
+already signed; you do not need to replace their signatures. If verification
+fails, download a fresh archive rather than changing the bundle contents. Future
+Developer ID releases will state their notarization status in their release
+notes. Maintainers can enable the [optional signing and notarization workflow](docs/releasing/MACOS_SIGNING.md).
 
-```bash
-xattr -rd com.apple.quarantine ~/Library/Audio/Plug-Ins/CLAP/Fire.clap
-```
+### First sound and support
 
-##### 📝 Step 3: Ad-Hoc Code Sign (Optional but Recommended)
+1. Insert Fire on a track that is playing audio and open the preset name field.
+2. Choose a collection and click a sound. Use the main macros to shape it, or
+   select **Band Lab** / **Master Lab** to edit its chain.
+3. Adjust the band/global Mix and Output to compare at a similar loudness.
+4. Open **Menu → Settings** to choose a skin or view the loaded version, build,
+   format and audio configuration. **Copy diagnostics** copies this information
+   locally for a bug report; nothing is sent automatically.
 
-Some DAWs still require the plugin to be signed, even if it’s local. You can apply an ad-hoc (self) signature:
-
-```bash
-codesign --deep --force --sign - ~/Library/Audio/Plug-Ins/VST3/Fire.vst3
-codesign --deep --force --sign - ~/Library/Audio/Plug-Ins/Components/Fire.component
-```
-
-##### 🚀 Step 4: Launch Your DAW
-
-Now open your DAW. The plugin should scan and load without issues.
-
----
-
-#### ❤️ Support Independent Developers
-
-If you appreciate this plugin and would like to support development, you can consider donating via PayPal or sharing the plugin with others.
-
-Thank you for your understanding!
-
-[![PayPal](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/donate/?business=9NTZ9PADW6LYN&no_recurring=0&item_name=Thank+you+for+supporting+this+open-source+plugin%21+With+your+support%2C+I%E2%80%99ll+continue+improving+and+updating+it%21&currency_code=USD)
-
----
+See the [User Manual](#3-user-manual), [modulation guide](#34-lfo--modulation)
+and [latest downloads](https://github.com/jerryuhoo/Fire/releases/latest).
 
 ### ✅ OPTION 2 – Build with JUCE or CMake
 
@@ -387,7 +357,23 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ## 6. Update Notes
 
-### 2.0.0 (unreleased)
+### 2.0.1 (in development)
+
+- Add stereo-aware spectrum modes and avoid unnecessary display collection when
+  the editor is closed.
+- Put four named macros on the main page; save their names with presets and
+  projects. Search and group modulation targets by their active chain.
+- Remember the sound library's search, collection and scroll position, and add
+  recent sounds.
+- Add build/audio diagnostics and a local copy action to Settings.
+- Harmonize Paper and Ink meter tracks and invalidate their skin-dependent
+  caches correctly.
+- Validate CLAP loading, audio and fresh-instance state restoration in CI,
+  alongside AU and VST3 plug-in validation. Remove a timing-dependent UI test.
+- Add an opt-in Developer ID/notarization workflow while preserving the default
+  ad-hoc build. Version 2.0.0 remains available as the current public release.
+
+### 2.0.0
 
 - Add reorderable band and master effect chains with Chorus, Delay, Reverb,
   Clouds Granular, Lo-Fi, Flanger, Phaser and Chord Resonator, plus band OTT.

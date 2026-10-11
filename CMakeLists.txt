@@ -222,6 +222,47 @@ include(Assets)
 # MacOS only: Cleans up folder and target organization on Xcode.
 include(XcodePrettify)
 
+# Include a source revision in support reports. Track the active ref so a
+# rebuild after committing reconfigures this value; exports without .git use
+# the compile timestamp from BuildDiagnostics.cpp.
+set(FIRE_BUILD_REVISION "local")
+find_package(Git QUIET)
+if (GIT_FOUND)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --short=12 HEAD
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        OUTPUT_VARIABLE FireGitRevision OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET RESULT_VARIABLE FireGitResult)
+    if (FireGitResult EQUAL 0)
+        set(FIRE_BUILD_REVISION "${FireGitRevision}")
+        execute_process(COMMAND "${GIT_EXECUTABLE}" diff --quiet --ignore-submodules --
+            Source CMakeLists.txt Fire.jucer VERSION
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            RESULT_VARIABLE FireGitDirty ERROR_QUIET)
+        if (FireGitDirty EQUAL 1)
+            string(APPEND FIRE_BUILD_REVISION "-modified")
+        endif ()
+        execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --git-path HEAD
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            OUTPUT_VARIABLE FireGitHead OUTPUT_STRIP_TRAILING_WHITESPACE)
+        execute_process(COMMAND "${GIT_EXECUTABLE}" symbolic-ref -q HEAD
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            OUTPUT_VARIABLE FireGitRef OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        get_filename_component(FireGitHead "${FireGitHead}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FireGitHead}")
+        if (FireGitRef)
+            execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --git-path "${FireGitRef}"
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                OUTPUT_VARIABLE FireGitRefPath OUTPUT_STRIP_TRAILING_WHITESPACE)
+            get_filename_component(FireGitRefPath "${FireGitRefPath}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FireGitRefPath}")
+        endif ()
+    endif ()
+endif ()
+
+# Only this small translation unit needs rebuilding when the revision changes.
+set_source_files_properties(Source/Utility/BuildDiagnostics.cpp PROPERTIES
+    COMPILE_DEFINITIONS "FIRE_BUILD_REVISION=\"${FIRE_BUILD_REVISION}\";FIRE_BUILD_CONFIGURATION=\"$<CONFIG>\"")
+
 # This is where you can set preprocessor definitions for JUCE and your plugin
 target_compile_definitions(SharedCode
     INTERFACE
@@ -287,3 +328,22 @@ endif ()
 
 # Output some config for CI (like our PRODUCT_NAME)
 include(GitHubENV)
+
+# Exercise the distributed CLAP binary through its host API rather than linked
+# SharedCode, including state restoration into a fresh plug-in instance.
+add_executable(FireClapSmoke tools/validation/ClapSmoke.cpp)
+target_include_directories(FireClapSmoke PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/modules/clap-juce-extensions/clap-libs/clap/include")
+if (CMAKE_DL_LIBS)
+    target_link_libraries(FireClapSmoke PRIVATE ${CMAKE_DL_LIBS})
+endif ()
+set_target_properties(FireClapSmoke PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/validation")
+add_dependencies(FireClapSmoke Fire_CLAP)
+if (APPLE)
+    add_test(NAME "CLAP load, audio and state roundtrip"
+        COMMAND FireClapSmoke "$<TARGET_BUNDLE_DIR:Fire_CLAP>" "${CURRENT_VERSION}")
+else ()
+    add_test(NAME "CLAP load, audio and state roundtrip"
+        COMMAND FireClapSmoke "$<TARGET_FILE:Fire_CLAP>" "${CURRENT_VERSION}")
+endif ()
+set_tests_properties("CLAP load, audio and state roundtrip" PROPERTIES TIMEOUT 120)

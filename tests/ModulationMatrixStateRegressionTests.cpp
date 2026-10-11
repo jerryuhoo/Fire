@@ -1,6 +1,7 @@
 #include "../Source/Panels/ControlPanel/ModulationMatrixPanel.h"
 #include "../Source/Panels/TopPanel/Preset.h"
 #include "../Source/PluginProcessor.h"
+#include "../Source/PluginEditor.h"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -3250,4 +3251,43 @@ TEST_CASE("Searchable target picker retains inactive assignments and rejects hid
     host.setVisible(false);stale();CHECK(committed==0);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
     CHECK(ModulationMatrixRoutingComboBoxTestAccess::targetCallout(combo)==nullptr);
+}
+
+
+TEST_CASE("Show control focuses Chord Resonator root selectors without editing parameters",
+          "[ui][modulation-matrix][target-picker][navigation][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor; processor.hasUpdateCheckBeenPerformed=true;
+    const int masterSlot=processor.addInsertEffect(0,fire::effects::Type::chordResonator);
+    const int bandSlot=processor.addInsertEffect(1,fire::effects::Type::chordResonator);
+    REQUIRE(masterSlot>=0); REQUIRE(bandSlot>=0);
+    FireAudioProcessorEditor editor(processor);
+    editor.setSize(1000,500);editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);editor.setVisible(true);
+    LfoPanel* lfo=nullptr;
+    for(auto* child:editor.getChildren()) if(auto* panel=dynamic_cast<LfoPanel*>(child)) lfo=panel;
+    REQUIRE(lfo); REQUIRE(lfo->onRevealModulationTarget);
+    std::vector<float> values;
+    for(auto* parameter:processor.getParameters()) values.push_back(parameter->getValue());
+    const juce::StringArray targets {fire::effects::parameterID(0,masterSlot,0),fire::effects::parameterID(1,bandSlot,0)};
+    for(const auto& target:targets)
+    {
+        CAPTURE(target);
+        lfo->onRevealModulationTarget(target);
+        std::function<juce::ComboBox*(juce::Component&)> findRoot=[&](juce::Component& parent)->juce::ComboBox*
+        {
+            if(auto* combo=dynamic_cast<juce::ComboBox*>(&parent);combo && combo->getComponentID()==target && combo->isShowing()) return combo;
+            for(auto* child:parent.getChildren()) if(auto* found=findRoot(*child)) return found;
+            return nullptr;
+        };
+        auto* root=findRoot(editor);REQUIRE(root);REQUIRE(root->isEnabled());
+        CHECK(root->hasKeyboardFocus(true));
+        CHECK_FALSE(root->isPopupActive());
+    }
+    for(int index=0;index<processor.getParameters().size();++index)
+    {
+        auto* parameter=processor.getParameters()[index];
+        if(auto* named=dynamic_cast<juce::AudioProcessorParameterWithID*>(parameter);named && named->paramID==BAND_FOCUS_ID) continue;
+        CHECK(parameter->getValue()==values[static_cast<size_t>(index)]);
+    }
 }

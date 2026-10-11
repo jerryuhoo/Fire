@@ -2296,6 +2296,23 @@ void FireAudioProcessorEditor::revealModulationTarget(const juce::String& parame
         if(slider->isEnabled()) slider->grabKeyboardFocus();
         if(safe && knob) showValuePopupForSlider(knob);
     }
+    else
+    {
+        // Chord Resonator's Root is a modulatable parameter presented as a
+        // note selector. Keep navigation tied to its stable ID, just like dials.
+        std::function<juce::ComboBox*(juce::Component&)> findSelector=[&](juce::Component& parent)->juce::ComboBox*
+        {
+            if(auto* selector=dynamic_cast<juce::ComboBox*>(&parent);selector && selector->getComponentID()==parameterID && selector->isShowing()) return selector;
+            for(auto* child:parent.getChildren()) if(auto* match=findSelector(*child)) return match;
+            return nullptr;
+        };
+        if(auto* selector=findSelector(panel))
+        {
+            const juce::Component::SafePointer<juce::ComboBox> control(selector);
+            hideValuePopup();
+            if(safe && control && control->isEnabled()) control->grabKeyboardFocus();
+        }
+    }
 }
 
 bool FireAudioProcessorEditor::focusLoadedAnalogPreset()

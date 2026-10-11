@@ -91,6 +91,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     : AudioProcessorEditor(&p),
       processor(p),
       stateComponent { p.stateAB, p.statePresets, p.treeState },
+      macroBar(p),
       // Initialize bandPanel and globalPanel with the popup callbacks
       bandPanel(p, {}, {}, {}, {}, {}),
       globalPanel(processor, {}, {}, {}, {}, {}),
@@ -489,6 +490,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
     processedSpectrum.setInterceptsMouseClicks(false, false);
     // presets
+    addAndMakeVisible(macroBar);
     addAndMakeVisible(stateComponent);
     stateComponent.getPresetBox()->addListener(this);
     stateComponent.getToggleABButton()->addListener(this);
@@ -689,6 +691,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     processor.setSpectrumCaptureEnabled(false);
     spectrumChannelBox.onChange = nullptr;
     processor.getAppSettings().removeChangeListener(this);
+    macroBar.dismissEditing();
     stateComponent.onBrowserRequested = nullptr;
     if (presetBrowser) {presetBrowser->onClose = nullptr; presetBrowser->onPresetSelected = nullptr; presetBrowser->onLibraryChanged = nullptr;}
     // Stop the high-frequency modulation channel before any child control is
@@ -885,6 +888,7 @@ void FireAudioProcessorEditor::resized()
     hqButton.setBounds(hqSlot.withSizeKeepingCentre(hqSlot.getWidth(), headerControlHeight));
     headerContent.removeFromRight(gap);
     stateComponent.setBounds(headerContent);
+    macroBar.setVisible(! zoomButton.getToggleState());
 
     bounds.reduce(fire::ui::isVintage(*this)
                       ? juce::roundToInt(20.0f * scale) : gap, gap);
@@ -921,8 +925,13 @@ void FireAudioProcessorEditor::resized()
         bounds.removeFromTop(gap);
         contentArea = bounds;
 
-        auto tabs = navigationArea.withSizeKeepingCentre(
-            juce::jmin(navigationArea.getWidth(), juce::roundToInt(510.0f * scale)),
+        auto navigationControls = navigationArea.reduced(juce::roundToInt(4.0f * scale), 0);
+        if (activeWorkspace == 1) navigationControls.removeFromRight(juce::roundToInt(126.0f * scale) + gap);
+        const auto macroWidth = juce::roundToInt(navigationControls.getWidth() * 0.53f);
+        macroBar.setBounds(navigationControls.removeFromRight(macroWidth)
+            .withSizeKeepingCentre(macroWidth, juce::roundToInt(30.0f * scale)));
+        navigationControls.removeFromRight(gap);
+        auto tabs = navigationControls.withSizeKeepingCentre(navigationControls.getWidth(),
             juce::jmin(navigationArea.getHeight(), juce::roundToInt(30.0f * scale)));
         const auto tabGap = juce::jmax(3, juce::roundToInt(5.0f * scale));
         const int tabWidth = (tabs.getWidth() - tabGap * 2) / 3;
@@ -1064,6 +1073,8 @@ void FireAudioProcessorEditor::visibilityChanged()
                 return;
         }
 
+        macroBar.dismissEditing();
+        if (safeThis == nullptr) return;
         bandPanel.dismissTransientInteraction();
         if (safeThis == nullptr)
             return;
@@ -1735,6 +1746,8 @@ void FireAudioProcessorEditor::timerCallback()
                 return;
         }
 
+        macroBar.dismissEditing();
+        if (safeThis == nullptr) return;
         bandPanel.dismissTransientInteraction();
         if (safeThis == nullptr)
             return;
@@ -1935,7 +1948,9 @@ void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animate
     {
         if (willHideBandPanel)
         {
-            bandPanel.dismissTransientInteraction();
+            macroBar.dismissEditing();
+        if (safeThis == nullptr) return;
+        bandPanel.dismissTransientInteraction();
 
             if (safeThis == nullptr)
                 return;
@@ -2122,6 +2137,7 @@ void FireAudioProcessorEditor::showPresetBrowser()
     if (!presetBrowser || presetBrowser->isVisible()) return;
     const juce::Component::SafePointer<FireAudioProcessorEditor> safe(this);
     exitAssignMode(false); if (!safe) return;
+    macroBar.dismissEditing(); if (!safe) return;
     bandPanel.dismissTransientInteraction(); if (!safe) return;
     globalPanel.dismissTransientInteraction(); if (!safe) return;
     stateComponent.dismissPointerGestures(); if (!safe) return;
@@ -2676,6 +2692,7 @@ void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* s
         if (safeThis == nullptr)
             return;
 
+        macroBar.refresh();
         stateComponent.synchroniseABButtonFromManager();
         if (safeThis == nullptr)
             return;

@@ -303,6 +303,7 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
                        const juce::AudioProcessor& processor) noexcept
 {
     int formatVersion = 0;
+    if (!fire::macro_names::valid(snapshot)) return false;
     fire::effects::FrozenRecordings frozenAudio;
     if (!fire::effects::readFrozenAudioState(snapshot, frozenAudio)) return false;
     if (! snapshot.hasTagName("AB_STATE") || snapshot.getNumChildElements() > 3
@@ -426,6 +427,7 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
 bool isLoadablePresetState(const juce::XmlElement& xml,
                            const juce::AudioProcessor& processor) noexcept
 {
+    if (!fire::macro_names::valid(xml)) return false;
     fire::effects::FrozenRecordings frozenAudio;
     if (!fire::effects::readFrozenAudioState(xml, frozenAudio)) return false;
     bool legacyWithoutOtt = false;
@@ -562,6 +564,7 @@ void writeSerializablePresetSnapshotToXml(
     juce::XmlElement& xml)
 {
     xml.deleteAllChildElements();
+    fire::macro_names::write(xml, snapshot.macroNames);
     xml.setAttribute("presetFormatVersion", 2);
     xml.setAttribute("ottSchemaVersion", 1);
     xml.setAttribute("insertEffectsSchemaVersion", 1);
@@ -706,6 +709,9 @@ namespace state
                 fireProc.requestMultibandTopologyReset();
             } };
 
+            fire::macro_names::Names names;
+            fire::macro_names::read(xml, names);
+            fireProc.restoreMacroDisplayNames(names);
             fireProc.restoreFrozenAudio(frozenAudio);
 
             if (! preserveLoudnessComparison)
@@ -2053,6 +2059,7 @@ namespace state
                 if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
                     // if not in xml set current
                     p->setValueNotifyingHost(p->getDefaultValue());
+            fireProc.restoreMacroDisplayNames(fire::macro_names::defaults());
             // set preset combobox to 0
             {
                 const juce::ScopedLock lock(identityLock);

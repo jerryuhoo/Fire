@@ -3156,6 +3156,48 @@ bool FireAudioProcessor::redoEdit()
 }
 void FireAudioProcessor::checkpointEditHistory() noexcept { if (editHistory) editHistory->checkpoint(); }
 
+fire::macro_names::Names FireAudioProcessor::getMacroDisplayNames() const
+{
+    const juce::ScopedLock lock(macroNamesLock);
+    return macroDisplayNames;
+}
+
+juce::String FireAudioProcessor::getMacroDisplayName(int index) const
+{
+    if (! juce::isPositiveAndBelow(index, fire::mod_sources::macroCount)) return {};
+    return getMacroDisplayNames()[static_cast<size_t>(index)];
+}
+
+void FireAudioProcessor::restoreMacroDisplayNames(const fire::macro_names::Names& names)
+{
+    const juce::ScopedLock lock(macroNamesLock);
+    for (int i = 0; i < fire::mod_sources::macroCount; ++i)
+        macroDisplayNames[static_cast<size_t>(i)] = fire::macro_names::sanitise(names[static_cast<size_t>(i)], i);
+    macroNamesRevision.fetch_add(1, std::memory_order_release);
+}
+
+bool FireAudioProcessor::setMacroDisplayName(int index, const juce::String& name, std::uint64_t expectedRevision)
+{
+    if (! juce::isPositiveAndBelow(index, fire::mod_sources::macroCount)) return false;
+    const auto normalised = fire::macro_names::sanitise(name, index);
+    if (getMacroDisplayName(index) == normalised) return false;
+    checkpointEditHistory();
+    {
+        beginMultibandTopologyEdit();
+        const juce::ScopeGuard publish { [this] { finishMainStateEdit(false); } };
+        if (expectedRevision != std::numeric_limits<std::uint64_t>::max()
+            && expectedRevision != getMacroNamesRevision()) return false;
+        auto names = getMacroDisplayNames();
+        names[static_cast<size_t>(index)] = normalised;
+        restoreMacroDisplayNames(names);
+        if (editHistory) editHistory->changed();
+    }
+    sendChangeMessage();
+    updateHostDisplay(juce::AudioProcessorListener::ChangeDetails{}.withNonParameterStateChanged(true));
+    return true; // Host notification may delete the editor/processor.
+}
+
+
 //==============================================================================
 const juce::String FireAudioProcessor::getName() const
 {
@@ -4152,7 +4194,8 @@ FireAudioProcessor::captureSerializableMainStateSnapshot() const
         savedEditorSize.height,
         stateAB.captureSerializableStateSnapshot(),
         loudnessMatch.settings(),
-        std::move(frozenAudio)
+        std::move(frozenAudio),
+        getMacroDisplayNames()
     };
 }
 
@@ -4286,7 +4329,8 @@ FireAudioProcessor::captureSerializablePresetStateSnapshot() const
         return {
             std::move(snapshot.parameterState),
             std::move(snapshot.lfoData),
-            std::move(snapshot.routings)
+            std::move(snapshot.routings),
+            {}, getMacroDisplayNames()
         };
     }
 
@@ -4295,7 +4339,8 @@ FireAudioProcessor::captureSerializablePresetStateSnapshot() const
         std::move(snapshot.parameterState),
         std::move(snapshot.lfoData),
         std::move(snapshot.routings),
-        std::move(snapshot.frozenAudio)
+        std::move(snapshot.frozenAudio),
+        std::move(snapshot.macroNames)
     };
 }
 
@@ -4314,7 +4359,8 @@ FireAudioProcessor::captureCurrentSerializablePresetStateSnapshotForABFallback()
         std::move(snapshot.parameterState),
         std::move(snapshot.lfoData),
         std::move(snapshot.routings),
-        std::move(frozenAudio)
+        std::move(frozenAudio),
+        getMacroDisplayNames()
     };
 }
 
@@ -5835,6 +5881,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     // replacements; inactive-only copies are serialised by StateAB's lock.
     // Therefore every section below belongs to one valid state generation.
     auto mainState = captureCoherentSerializableMainStateSnapshot();
+    fire::macro_names::write(xmlState, mainState.macroNames);
     xmlState.setAttribute("stateFormatVersion", hostStateFormatVersion);
     xmlState.setAttribute("ottSchemaVersion", 1);
     xmlState.setAttribute("insertEffectsSchemaVersion", 1);
@@ -5922,6 +5969,8 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
     if (xmlState == nullptr || ! xmlState->hasTagName("state"))
         return;
+    fire::macro_names::Names restoredMacroNames;
+    if (!fire::macro_names::read(*xmlState, restoredMacroNames)) return;
     fire::effects::FrozenRecordings frozenAudio;
     if (!fire::effects::readFrozenAudioState(*xmlState, frozenAudio)) return;
 
@@ -6441,6 +6490,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             requestMultibandTopologyReset();
         } };
         treeState.replaceState(treeToLoad);
+        restoreMacroDisplayNames(restoredMacroNames);
         restoreFrozenAudio(frozenAudio);
         if (xmlCurrentState != nullptr)
         {
@@ -10227,6 +10277,8 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
     constexpr float comparisonTolerance = 1.0e-6f;
     if (! state::canLoadStateFromXml(incomingPresetXml, *this))
         return false;
+    fire::macro_names::Names expectedMacroNames;
+    if (!fire::macro_names::read(incomingPresetXml, expectedMacroNames) || expectedMacroNames != getMacroDisplayNames()) return false;
     fire::effects::FrozenRecordings expectedAudio;
     if (!fire::effects::readFrozenAudioState(incomingPresetXml, expectedAudio)) return false;
     const auto currentAudio = captureSerializablePresetStateSnapshot().frozenAudio;

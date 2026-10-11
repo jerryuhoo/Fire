@@ -19,7 +19,7 @@ public:
             slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 96, 22);
             slider.setComponentID(mod_sources::ids[index]);
             const auto title = index == 0 ? juce::String("Attack") : index == 1 ? juce::String("Release")
-                : index == 2 ? juce::String("Sensitivity") : "Macro " + juce::String(static_cast<int>(index) - 2);
+                : index == 2 ? juce::String("Sensitivity") : processor.getMacroDisplayName(static_cast<int>(index) - 3);
             slider.setTitle(title); label.setText(title, juce::dontSendNotification);
             label.setJustificationType(juce::Justification::centred);
             label.setColour(juce::Label::textColourId, paletteFor(*this).textSecondary);
@@ -103,7 +103,15 @@ public:
     }
 private:
     void timerCallback() override
-    { level = processor.getLfoManager().getLfoOutput(mod_sources::envelope); repaint(meterArea); }
+    {
+        level = processor.getLfoManager().getLfoOutput(mod_sources::envelope); repaint(meterArea);
+        const auto names = processor.getMacroDisplayNames();
+        for (size_t i = 0; i < names.size(); ++i)
+        {
+            labels[i + 3].setText(names[i], juce::dontSendNotification);
+            sliders[i + 3].setTitle("Macro " + juce::String(static_cast<int>(i) + 1) + ": " + names[i]);
+        }
+    }
     FireAudioProcessor& processor;
     FireLookAndFeel lookAndFeel;
     std::array<PrimarySlider, 7> sliders;

@@ -18,6 +18,7 @@
 #include "GUI/ValueEntryPopup.h"
 #include "GUI/ValuePopup.h"
 #include "GUI/PresetBrowserPanel.h"
+#include "GUI/MacroBar.h"
 #include "Panels/ControlPanel/BandPanel.h"
 #include "Panels/ControlPanel/GlobalPanel.h"
 #include "Panels/ControlPanel/LfoPanel.h"
@@ -135,6 +136,7 @@ private:
     void applySkin(fire::ui::Skin skin);
     friend struct DistortionGraphSourceEpochTestAccess;
     friend struct MeterFreshnessTestAccess;
+    friend struct MacroBarTestAccess;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct SkinNavigationMotionTestAccess;
     friend struct ModulationUiDispatchTestAccess;
@@ -163,6 +165,7 @@ private:
     // access the processor object that created it.
     FireAudioProcessor& processor;
     state::StateComponent stateComponent;
+    fire::ui::MacroBar macroBar;
     std::unique_ptr<fire::ui::PresetBrowserPanel> presetBrowser;
     std::vector<juce::Component::SafePointer<juce::Component>> componentsHiddenForPresets;
     void showPresetBrowser();

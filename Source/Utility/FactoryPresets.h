@@ -409,6 +409,7 @@ inline std::vector<std::unique_ptr<juce::XmlElement>> create(FireAudioProcessor&
         }
         if (analogScene)
         {
+            fire::macro_names::write(*preset, {"Drive", "Tone", "Output trim", "Dry blend"});
             const auto addMacro = [&](int macro, const juce::String& target, float depth)
             {
                 ModulationRouting route; route.sourceLfoIndex = fire::mod_sources::firstMacro + macro;
@@ -448,6 +449,7 @@ inline std::vector<std::unique_ptr<juce::XmlElement>> create(FireAudioProcessor&
             else if (index >= 12 && definition.categoryIndex == 6) routeMacro(2, fire::effects::parameterID(0, 0, 0), 0.2f);
             else { set(FILTER_BYPASS_ID, 1); routeMacro(2, PEAK_GAIN_ID, 0.12f); }
             routeMacro(3, MIX_ID, -0.35f);
+            fire::macro_names::write(*preset, {"Intensity", "Width", index == 6 || index == 8 ? "Space" : index == 7 ? "Feedback" : index >= 12 && definition.categoryIndex == 6 ? "Size" : "Tone", "Dry blend"});
             if (index < 12)
                 preset->setAttribute("presetDescription", preset->getStringAttribute("presetDescription")
                     + " Macros: 1 intensity, 2 width, 3 tone/space, 4 dry blend.");

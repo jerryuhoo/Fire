@@ -104,6 +104,7 @@
         </GROUP>
       </GROUP>
       <GROUP id="{0204F696-B0DF-CD89-2550-E45618BFEF7E}" name="Utility">
+        <FILE id="fireMacroNames" name="MacroNames.h" compile="0" resource="0" file="Source/Utility/MacroNames.h"/>
         <FILE id="fireBuildDiagnosticsCpp" name="BuildDiagnostics.cpp" compile="1" resource="0" file="Source/Utility/BuildDiagnostics.cpp"/>
         <FILE id="fireBuildDiagnostics" name="BuildDiagnostics.h" compile="0" resource="0" file="Source/Utility/BuildDiagnostics.h"/>
         <FILE id="eqParam1" name="EqParameters.h" compile="0" resource="0" file="Source/Utility/EqParameters.h"/>
@@ -122,6 +123,7 @@
         <FILE id="modSourceParams01" name="ModulationSources.h" compile="0" resource="0" file="Source/Utility/ModulationSources.h"/>
       </GROUP>
       <GROUP id="{A397A229-19FD-F110-6940-6CC5C037D4D0}" name="GUI">
+        <FILE id="fireMacroBar" name="MacroBar.h" compile="0" resource="0" file="Source/GUI/MacroBar.h"/>
         <FILE id="fireIcon1" name="FireIcons.h" compile="0" resource="0" file="Source/GUI/FireIcons.h"/>
         <FILE id="brandMarks" name="BrandMarks.h" compile="0" resource="0" file="Source/GUI/BrandMarks.h"/>
         <FILE id="logoMotion" name="FireLogoMotion.h" compile="0" resource="0" file="Source/GUI/FireLogoMotion.h"/>

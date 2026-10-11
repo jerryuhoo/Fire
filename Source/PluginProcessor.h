@@ -32,6 +32,7 @@
 #include "Panels/SpectrogramPanel/FFTProcessor.h"
 #include "GUI/InterfaceDefines.h"
 #include "Utility/AudioHelpers.h"
+#include "Utility/MacroNames.h"
 #include "Utility/FiltersUtil.h"
 #include "DSP/LfoManager.h"
 #include "DSP/ModulationRouting.h"
@@ -41,6 +42,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <limits>
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 #include <functional>
 #endif
@@ -424,6 +426,11 @@ public:
     bool undoEdit();
     bool redoEdit();
     void checkpointEditHistory() noexcept;
+    fire::macro_names::Names getMacroDisplayNames() const;
+    juce::String getMacroDisplayName(int index) const;
+    bool setMacroDisplayName(int index, const juce::String& name, std::uint64_t expectedRevision = std::numeric_limits<std::uint64_t>::max());
+    void restoreMacroDisplayNames(const fire::macro_names::Names& names);
+    std::uint64_t getMacroNamesRevision() const noexcept { return macroNamesRevision.load(std::memory_order_acquire); }
 
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
@@ -463,6 +470,7 @@ public:
         std::vector<LfoData> lfoData;
         juce::Array<ModulationRouting> routings;
         fire::effects::FrozenRecordings frozenAudio;
+        fire::macro_names::Names macroNames = fire::macro_names::defaults();
     };
     SerializablePresetStateSnapshot captureSerializablePresetStateSnapshot() const;
     void restoreFrozenAudio(const fire::effects::FrozenRecordings&);
@@ -475,6 +483,9 @@ private:
     // StateAB snapshots itself while later processor members (notably
     // StatePresets) are still under construction. Keep that constructor path
     // on the LFO/APVTS-only snapshot until the full main model is alive.
+    mutable juce::CriticalSection macroNamesLock;
+    fire::macro_names::Names macroDisplayNames = fire::macro_names::defaults();
+    std::atomic<std::uint64_t> macroNamesRevision { 0 };
     std::atomic<bool> serializableMainStateReady { false };
 public:
     const juce::StringArray& getLfoRateSyncDivisions() const;
@@ -877,6 +888,7 @@ private:
         juce::XmlElement abState { "AB_STATE" };
         fire::dsp::LoudnessMatchState::Settings loudnessMatch;
         fire::effects::FrozenRecordings frozenAudio;
+        fire::macro_names::Names macroNames = fire::macro_names::defaults();
     };
 
     void initialiseParameterCache();

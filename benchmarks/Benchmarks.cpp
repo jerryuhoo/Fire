@@ -313,7 +313,7 @@ TEST_CASE("CPU audit realtime budget and multiple instances", "[cpu-realtime]")
                     }
                 }
     auto* report = new juce::DynamicObject();
-    report->setProperty("utc", juce::Time::getCurrentTime().toISO8601(true));
+    report->setProperty("timestamp", juce::Time::getCurrentTime().toISO8601(true));
     report->setProperty("version", juce::String(VERSION));
     report->setProperty("build_identifier", fire::diagnostics::buildIdentifier());
     report->setProperty("architecture", fire::diagnostics::architecture());

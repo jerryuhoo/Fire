@@ -164,6 +164,9 @@ Builds/Fire_artefacts/Release/
 
 > **Tip:** Use `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` on macOS if you want to build for universal binaries.
 
+Build and release checks, including running the AU/VST3 validators and CLAP
+state/audio smoke host, are documented in [Validation](docs/releasing/VALIDATION.md).
+
 ## 3. User Manual
 
 『Fire』has a top panel, a spectrogram, four graph visualizers, band effect, and global effect.
@@ -186,6 +189,12 @@ Builds/Fire_artefacts/Release/
   auditioning; double-click, Escape or **Back to Reactor** returns to the
   processing page. Up/down arrows audition neighbouring sounds when the
   search field is not focused. The current sound stays highlighted.
+  Closing and reopening the library preserves the collection, search and scroll
+  position for this editor session. **Recent** lists up to 24 recently auditioned
+  sounds. A newly loaded preset scrolls into view when it matches the current
+  filter; **Locate current** clears the search and opens its collection when
+  you want to jump directly to it. This browsing history is temporary and is
+  not stored in the sound preset or DAW project.
   Collections have distinct dark colour palettes. Use each row's star to
   save it in **Favourites**; favourites persist in your local library.
   Delete moves user files into Fire's **Recycle Bin** and hides factory
@@ -212,8 +221,23 @@ Builds/Fire_artefacts/Release/
   Returning from the library selects the scene's active Shape module: Master
   treatments open in Master Lab, split-band colours focus the upper band, and
   single-band colours open in Band Lab. The sound's parameters stay unchanged.
+- **Performance macros**: Four compact knobs beside the workspace tabs provide
+  immediate access to **M1–M4**. Double-click a macro name to rename it for the
+  current sound (up to 32 characters); Enter applies the name and Escape cancels.
+  An empty name returns to “Macro 1”, etc. Names are saved with user presets,
+  A/B and DAW projects and participate in Undo/Redo. Factory scenes provide
+  descriptive names such as Drive, Tone and Space. DAW automation continues to
+  address the same four macro parameters. Double-clicking a macro knob resets
+  its value to zero.
 - **Save**: Save your preset to user folder.
-- **Menu**: Other settings including init, open preset folder, rescan preset folder, open GitHub page, check for new version.
+- **Menu**: Init, preset-folder actions, the project website, updates, skins and
+  **Settings**. Settings includes a selectable support report with the loaded
+  version, build revision/time/configuration, AU/VST3/CLAP format, running
+  architecture, OS/JUCE/host, sample rate, block size, channels, latency and HQ
+  state. **Copy diagnostics** refreshes the report and copies it to the clipboard
+  for you to paste into a bug report. It does not send it anywhere or include
+  presets, personal paths or device identifiers. Projucer builds without Git
+  metadata use a local build timestamp.
 
 #### Equal-loudness A/B listening
 
@@ -242,7 +266,17 @@ Match off. Closing the editor retains the comparison state in the processor.
 
 ### 3.2. Spectrogram
 
-- You can split up frequency to four bands for multiband distortion.
+Use the spectrum to place up to four frequency bands. The channel selector
+beside its expand button offers **Left**, **Right** and **Stereo**; Stereo is the
+default. Both the input and processed traces follow this selection. Stereo
+combines the two channels' energy at each frequency, so a right-only sound is
+visible and opposite-polarity left/right signals do not cancel the display.
+For identical left/right signals it retains the single-channel reference level;
+a signal in only one channel reads about 3 dB below that channel's solo trace.
+
+The channel choice is a local display preference and does not change the sound,
+routing or preset. In **Mod Forge**, **Hide spectrum** gives the LFO editor more
+room; **Show spectrum** restores it.
 
 ### 3.3. Band Effect
 
@@ -316,6 +350,18 @@ signed percentage depth, bipolar/unipolar selection, an **Active** power button
 and a remove icon. Use **Add routing** to create a connection; close the window
 with its native close button or Escape. The column layout stays aligned while
 scrolling and resizing.
+
+Click **Destination** to open a searchable picker. Search names, module names,
+parameter IDs or band names; scope and module filters narrow the results.
+**Active chain** shows controls belonging to the current Band/Master chains,
+while retaining an existing inactive assignment so you can inspect or replace
+it. **All targets** also includes inactive bands and absent modules. These
+choices retain their stable host parameter IDs when modules are reordered.
+Click a result or press Enter to assign it; Escape cancels. From the search
+field, Down moves keyboard focus into the results. Highlight a target with the
+arrow keys and choose **Show control** to close the matrix, open its Band or
+Master module and focus the corresponding knob. Revealing a control does not
+insert a module or enable processing; unavailable destinations stay unavailable.
 
 Assigned knobs use a translucent source-coloured range band. A bright outlined
 dot shows the current modulated value, while the neutral inner notch marks the
@@ -764,6 +810,16 @@ readouts. Traces settle below the display floor, and bypass clears held peaks as
 well as live data. Graph cards use a soft hover edge and an expand/restore icon.
 All motion follows signal data or interaction; static geometry is cached and
 hidden displays stop their animation timers.
+
+Display data is collected only when needed: the main FFT capture pauses while
+the editor is closed, the library covers it or the spectrum is collapsed.
+Waveform/stereo-history capture runs only while a corresponding graph is
+visible. Reopening a view requires fresh samples, preventing a stale trace from
+flashing onscreen. These switches affect display work; audio processing,
+modulation, delay/reverb tails and the separate granular/frozen-audio history
+continue normally. Stereo mode performs more FFT work than a single-channel
+view, so the measured cost is reported separately in the
+[CPU audit and repeatable benchmarks](benchmarks/CPU_AUDIT.md).
 
 ### Flanger and Phaser
 

@@ -175,7 +175,21 @@ jobs:
       - name: Audio Unit load and state validation
         if: ${{ matrix.name == 'macOS' }}
         run: |
-          pluginval.app/Contents/MacOS/pluginval --strictness-level 10 --timeout-ms "${{ env.PLUGINVAL_TIMEOUT_MS }}" --skip-gui-tests --verbose --validate "${{ env.AU_PATH }}"
+          # AU hosts instantiate registered components by type/subtype/maker,
+          # even when --validate is given a bundle path. Register this exact
+          # build on the disposable hosted runner before starting pluginval.
+          installed_au="$HOME/Library/Audio/Plug-Ins/Components/${{ env.PRODUCT_NAME }}.component"
+          mkdir -p "$(dirname "$installed_au")"
+          ditto "$AU_PATH" "$installed_au"
+          codesign --verify --deep --strict "$installed_au"
+          pluginval.app/Contents/MacOS/pluginval --strictness-level 10 --timeout-ms "${{ env.PLUGINVAL_TIMEOUT_MS }}" --skip-gui-tests --verbose --validate "$installed_au" 2>&1 | tee "$RUNNER_TEMP/fire-au-validation.log"
+          python3 - "$RUNNER_TEMP/fire-au-validation.log" "$VERSION" <<'PY'
+          import pathlib, re, sys
+          log = pathlib.Path(sys.argv[1]).read_text()
+          expected = re.escape("Blue Wings Music: Fire v" + sys.argv[2])
+          if not re.search(r"(?m)^" + expected + r"\s*$", log) or not re.search(r"(?m)^SUCCESS\s*$", log):
+              raise SystemExit("AU validation did not confirm the current build version and success")
+          PY
 
       - name: Verify macOS bundle signatures
         if: ${{ matrix.name == 'macOS' }}

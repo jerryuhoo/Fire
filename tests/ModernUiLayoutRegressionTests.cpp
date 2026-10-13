@@ -161,8 +161,13 @@ TEST_CASE("Workspace output controls align and spectrum collapse restores across
         CHECK(lfoEditor->getHeight() > expandedHeight + size.y / 6);
         snapshot(editor, "fire-modern-mod-expanded-" + juce::String(size.x));
         activate(button(editor, "MASTER LAB"));
-        CHECK(spectrum->isVisible());
-        CHECK_FALSE(collapse.isVisible());
+        CHECK_FALSE(spectrum->isVisible());
+        CHECK(collapse.isVisible());
+        CHECK(collapse.getToggleState());
+        activate(button(editor, "BAND LAB"));
+        CHECK_FALSE(spectrum->isVisible());
+        CHECK(collapse.isVisible());
+        CHECK(collapse.getToggleState());
         activate(button(editor, "MOD FORGE"));
         CHECK_FALSE(spectrum->isVisible());
         activate(collapse);

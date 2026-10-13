@@ -284,9 +284,13 @@ retain their level in Side. A signal present in only one channel reads about
 
 The channel choice is a local display preference and does not change the sound,
 routing or preset. A compact strip inside the spectrum groups the channel menu,
-expand/restore icon and, in **Mod Forge**, a fold icon for hiding the spectrum.
+expand/restore icon and a fold icon for hiding the spectrum in **Band Lab**,
+**Mod Forge** or **Master Lab**. The hidden state is shared across these pages.
 When hidden, a small restore icon beside the workspace controls brings it back;
 there is no separate full-width “Hide spectrum” button.
+The strip is translucent while idle and becomes fully visible when the pointer
+moves over it. An open channel menu, a pressed control or keyboard focus keeps it
+readable.
 
 ### 3.3. Band Effect
 

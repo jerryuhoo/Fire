@@ -135,6 +135,7 @@ public:
 
 private:
     void applySkin(fire::ui::Skin skin);
+    void refreshSpectrumToolbarOpacity();
     friend struct DistortionGraphSourceEpochTestAccess;
     friend struct MeterFreshnessTestAccess;
     friend struct MacroBarTestAccess;
@@ -294,7 +295,7 @@ private:
     SpectrumComponent originalSpectrum { 0, false };
     SpectrumBackground specBackground;
     fire::ui::SpectrumToolbar spectrumToolbar;
-    juce::ComboBox spectrumChannelBox;
+    fire::ui::SpectrumChannelComboBox spectrumChannelBox;
     SpectrumProcessor::ChannelMode spectrumChannelMode = SpectrumProcessor::ChannelMode::stereoEnergy;
 
     // Labels

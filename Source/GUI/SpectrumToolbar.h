@@ -1,15 +1,36 @@
 #pragma once
 #include "FireTheme.h"
 #include "Skin.h"
+#include "FocusAwareComboBox.h"
 #include <array>
 
 namespace fire::ui
 {
+// Preserve popup/keyboard focus feedback without letting a pointer click leave
+// the whole toolbar highlighted after the pointer has moved away. In particular,
+// mouseDown must also switch modality when this box already owns keyboard focus.
+class SpectrumChannelComboBox final : public FocusAwareComboBox
+{
+public:
+    void mouseDown(const juce::MouseEvent& event) override
+    {
+        notePointerInteraction();
+        juce::ComboBox::mouseDown(event);
+    }
+    void mouseWheelMove(const juce::MouseEvent& event,
+                        const juce::MouseWheelDetails& wheel) override
+    {
+        notePointerInteraction();
+        juce::ComboBox::mouseWheelMove(event, wheel);
+    }
+};
+
 // Shared surface for the analyser's compact, separately accessible controls.
 // Keeping the controls as editor children preserves their input/lifetime guards.
 class SpectrumToolbar final : public juce::Component
 {
 public:
+    static constexpr float idleAlpha = 0.30f;
     SpectrumToolbar() { setComponentID("spectrum_toolbar"); }
     void setDividers(int first, int second)
     {

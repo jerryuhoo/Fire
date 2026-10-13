@@ -17,10 +17,15 @@ struct SpectrumHostBypassPresentationTestAccess final
         editor.selectWorkspace(workspace,false);
     }
     static juce::ComboBox& channel(FireAudioProcessorEditor& editor) { return editor.spectrumChannelBox; }
+    static void refreshToolbarOpacity(FireAudioProcessorEditor& editor) { editor.refreshSpectrumToolbarOpacity(); }
     static juce::Button& zoom(FireAudioProcessorEditor& editor) { return editor.zoomButton; }
     static juce::Button& collapse(FireAudioProcessorEditor& editor) { return editor.spectrumCollapseButton; }
     static juce::Rectangle<int> spectrumBounds(const FireAudioProcessorEditor& editor) { return editor.spectrumCardArea; }
     static juce::Rectangle<int> navigationBounds(const FireAudioProcessorEditor& editor) { return editor.navigationArea; }
+    static int panelHeight(const FireAudioProcessorEditor& editor, int workspace)
+    { return workspace==0?editor.bandPanel.getHeight():workspace==1?editor.lfoPanel.getHeight():editor.globalPanel.getHeight(); }
+    static bool multibandIsVisible(const FireAudioProcessorEditor& editor) { return editor.multiband.isVisible(); }
+    static bool filterIsVisible(const FireAudioProcessorEditor& editor) { return editor.filterControl.isVisible(); }
 
     static void selectChannel(FireAudioProcessorEditor& editor, int id)
     { editor.spectrumChannelBox.setSelectedId(id, juce::sendNotificationSync); }
@@ -30,7 +35,6 @@ struct SpectrumHostBypassPresentationTestAccess final
 
     static void collapseSpectrum(FireAudioProcessorEditor& editor, bool collapse)
     {
-        editor.selectWorkspace(1, false);
         editor.spectrumCollapseButton.setToggleState(collapse, juce::dontSendNotification);
         editor.resized();
     }
@@ -389,10 +393,29 @@ TEST_CASE("Spectrum demand follows source changes library and collapsed presenta
     CHECK_FALSE(processor.isHistoryCaptureEnabled());
     SpectrumHostBypassPresentationTestAccess::showLibrary(editor, false);
     CHECK(processor.isSpectrumCaptureEnabled());
-    SpectrumHostBypassPresentationTestAccess::collapseSpectrum(editor, true);
-    CHECK_FALSE(processor.isSpectrumCaptureEnabled());
-    SpectrumHostBypassPresentationTestAccess::collapseSpectrum(editor, false);
-    CHECK(processor.isSpectrumCaptureEnabled());
+    for(int workspace:{0,1,2})
+    {
+        CAPTURE(workspace);
+        SpectrumHostBypassPresentationTestAccess::selectWorkspace(editor,workspace);
+        const auto expandedEpoch=SpectrumHostBypassPresentationTestAccess::requiredCaptureEpoch(editor);
+        SpectrumHostBypassPresentationTestAccess::collapseSpectrum(editor,true);
+        for(int destination:{(workspace+1)%3,(workspace+2)%3,workspace})
+        {
+            SpectrumHostBypassPresentationTestAccess::selectWorkspace(editor,destination);
+            CHECK_FALSE(processor.isSpectrumCaptureEnabled());
+            CHECK(SpectrumHostBypassPresentationTestAccess::spectraAwaitFreshFrames(editor));
+            CHECK(SpectrumHostBypassPresentationTestAccess::collapse(editor).isShowing());
+        }
+        processor.pushDataPairToFFT(frame,frame); // Never reuse a hidden-workspace publication.
+        SpectrumHostBypassPresentationTestAccess::collapseSpectrum(editor,false);
+        CHECK(processor.isSpectrumCaptureEnabled());
+        CHECK(SpectrumHostBypassPresentationTestAccess::requiredCaptureEpoch(editor)>expandedEpoch);
+        editor.timerCallback();SpectrumHostBypassPresentationTestAccess::tickSpectra(editor);
+        CHECK(SpectrumHostBypassPresentationTestAccess::spectraAwaitFreshFrames(editor));
+        processor.pushDataPairToFFT(frame,frame);
+        editor.timerCallback();SpectrumHostBypassPresentationTestAccess::tickSpectra(editor);
+        CHECK_FALSE(SpectrumHostBypassPresentationTestAccess::spectraAwaitFreshFrames(editor));
+    }
     editor.setVisible(false);
     CHECK_FALSE(processor.isSpectrumCaptureEnabled());
     CHECK_FALSE(processor.isHistoryCaptureEnabled());
@@ -456,19 +479,114 @@ TEST_CASE("Spectrum toolbar stays aligned and reachable beside macros in every s
         {
             CAPTURE(fire::ui::skinName(skin),width);
             SpectrumHostBypassPresentationTestAccess::applySkin(editor,skin);editor.setSize(width,width/2);
+            std::array<int,3> expandedHeights {};
             for(int workspace:{0,2,1})
-            {SpectrumHostBypassPresentationTestAccess::selectWorkspace(editor,workspace);checkExpanded(workspace==1);}
+            {
+                SpectrumHostBypassPresentationTestAccess::selectWorkspace(editor,workspace);checkExpanded(true);
+                expandedHeights[static_cast<size_t>(workspace)]=SpectrumHostBypassPresentationTestAccess::panelHeight(editor,workspace);
+            }
             const auto imagePrefix=juce::String(fire::ui::skinName(skin)).toLowerCase()+"-"+juce::String(width);
             snapshot(imagePrefix+"-mod-expanded");
-            click(collapse,true);
-            REQUIRE(collapse.isShowing());CHECK_FALSE(source.isShowing());CHECK_FALSE(zoom.isShowing());
-            CHECK(toolbar->isShowing());CHECK(toolbar->getWidth()==toolbar->getHeight());
-            CHECK(toolbar->getBounds().contains(collapse.getBounds()));
-            CHECK(SpectrumHostBypassPresentationTestAccess::navigationBounds(editor).contains(toolbar->getBounds()));
-            CHECK_FALSE(toolbar->getBounds().intersects(macros->getBounds()));
-            CHECK(macros->isShowing());snapshot(imagePrefix+"-mod-collapsed");
-            click(collapse,false);checkExpanded(true);
+            const auto checkCollapsed=[&](int workspace)
+            {
+                REQUIRE(collapse.isShowing());CHECK(collapse.getToggleState());
+                CHECK_FALSE(source.isShowing());CHECK_FALSE(zoom.isShowing());
+                CHECK_FALSE(SpectrumHostBypassPresentationTestAccess::multibandIsVisible(editor));
+                CHECK_FALSE(SpectrumHostBypassPresentationTestAccess::filterIsVisible(editor));
+                CHECK(toolbar->isShowing());CHECK(toolbar->getWidth()==toolbar->getHeight());
+                CHECK(toolbar->getBounds().contains(collapse.getBounds()));
+                CHECK(SpectrumHostBypassPresentationTestAccess::navigationBounds(editor).contains(toolbar->getBounds()));
+                CHECK_FALSE(toolbar->getBounds().intersects(macros->getBounds()));CHECK(macros->isShowing());
+                CHECK(SpectrumHostBypassPresentationTestAccess::panelHeight(editor,workspace)>expandedHeights[static_cast<size_t>(workspace)]);
+            };
+            const std::array<const char*,3> workspaceNames {"band","mod","master"};
+            for(int workspace:{0,2,1})
+            {
+                CAPTURE(workspace);
+                SpectrumHostBypassPresentationTestAccess::selectWorkspace(editor,workspace);
+                click(collapse,true);checkCollapsed(workspace);
+                snapshot(imagePrefix+"-"+workspaceNames[static_cast<size_t>(workspace)]+"-collapsed");
+                for(int destination:{(workspace+1)%3,(workspace+2)%3,workspace})
+                {SpectrumHostBypassPresentationTestAccess::selectWorkspace(editor,destination);checkCollapsed(destination);}
+                click(collapse,false);checkExpanded(true);
+                CHECK(SpectrumHostBypassPresentationTestAccess::panelHeight(editor,workspace)==expandedHeights[static_cast<size_t>(workspace)]);
+                CHECK(SpectrumHostBypassPresentationTestAccess::multibandIsVisible(editor)==(workspace!=2));
+                CHECK(SpectrumHostBypassPresentationTestAccess::filterIsVisible(editor)==(workspace==2));
+            }
             click(zoom,true);checkExpanded(false);CHECK_FALSE(macros->isShowing());
             click(zoom,false);checkExpanded(true);CHECK(macros->isShowing());
         }
+
+    // Exercise input behaviour once, separately from the skin/size geometry
+    // matrix. Keep this temporary peer away from the real pointer and use
+    // production keyboard/popup handlers; never move the user's OS cursor.
+    INFO("Toolbar opacity follows pointer, popup and keyboard interaction");
+    SpectrumHostBypassPresentationTestAccess::applySkin(editor,fire::ui::Skin::paper);
+    editor.setSize(1400,700);
+    editor.setTopLeftPosition(-20000,-20000);
+    SpectrumHostBypassPresentationTestAccess::selectWorkspace(editor,1);
+    const auto previousMode=processor.getAppSettings().getIntValue("spectrumChannel",3);
+    const juce::ScopeGuard restoreMode{[&]
+    {processor.getAppSettings().setValue("spectrumChannel",previousMode);processor.getAppSettings().saveIfNeeded();}};
+    const auto checkGroup=[&](bool engaged)
+    {
+        SpectrumHostBypassPresentationTestAccess::refreshToolbarOpacity(editor);
+        const auto alpha=toolbar->getAlpha();
+        if(engaged) CHECK(alpha==Catch::Approx(1.0f));
+        else {CHECK(alpha>0.0f);CHECK(alpha<0.6f);}
+        for(auto* control:std::array<juce::Component*,3>{&source,&zoom,&collapse})
+            CHECK(control->getAlpha()==Catch::Approx(alpha));
+    };
+    editor.giveAwayKeyboardFocus();
+    SpectrumHostBypassPresentationTestAccess::refreshToolbarOpacity(editor);
+    for(int elapsed=0;toolbar->getAlpha()>=0.6f && elapsed<1000;elapsed+=5)
+    {
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(5);
+        SpectrumHostBypassPresentationTestAccess::refreshToolbarOpacity(editor);
+    }
+    checkGroup(false);snapshot("paper-toolbar-idle-1400");
+    source.grabKeyboardFocus();
+    static_cast<juce::Component&>(source).keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
+    REQUIRE(source.hasKeyboardFocus(true));checkGroup(true);snapshot("paper-toolbar-active-1400");
+    source.showPopup();REQUIRE(source.isPopupActive());checkGroup(true);
+    // A mouse click on an already keyboard-focused selector must switch its
+    // modality, rather than keep the group bright after the menu is dismissed.
+    const auto point=source.getLocalBounds().getCentre().toFloat();
+    const auto pointerEvent=[&](juce::ModifierKeys modifiers)
+    {
+        const auto now=juce::Time::getCurrentTime();
+        return juce::MouseEvent{juce::Desktop::getInstance().getMainMouseSource(),point,modifiers,0,0,0,0,0,
+            &source,&source,now,point,now,1,false};
+    };
+    source.mouseDown(pointerEvent(juce::ModifierKeys::leftButtonModifier));
+    source.mouseUp(pointerEvent({}));
+    REQUIRE(source.isPopupActive());checkGroup(true);
+    source.hidePopup();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    source.grabKeyboardFocus(); // Direct focus restoration preserves pointer modality.
+    REQUIRE(source.hasKeyboardFocus(true));
+    checkGroup(false);
+
+    SpectrumHostBypassPresentationTestAccess::collapseSpectrum(editor,true);
+    collapse.grabKeyboardFocus();
+    static_cast<juce::Component&>(collapse).keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
+    for(int elapsed=0;toolbar->getAlpha()<1.0f && elapsed<1000;elapsed+=5)
+    {
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(5);
+        SpectrumHostBypassPresentationTestAccess::refreshToolbarOpacity(editor);
+    }
+    checkGroup(true);
+    CHECK_FALSE(source.isVisible());CHECK_FALSE(zoom.isVisible());
+    SpectrumHostBypassPresentationTestAccess::showLibrary(editor,true);
+    checkGroup(false);
+    for(auto* control:std::array<juce::Component*,4>{toolbar,&source,&zoom,&collapse}) CHECK_FALSE(control->isVisible());
+    SpectrumHostBypassPresentationTestAccess::showLibrary(editor,false);
+    REQUIRE(toolbar->isShowing());REQUIRE(collapse.isShowing());
+    CHECK_FALSE(source.isShowing());CHECK_FALSE(zoom.isShowing());
+    editor.setVisible(false);checkGroup(false);
+    for(auto* control:std::array<juce::Component*,4>{toolbar,&source,&zoom,&collapse}) CHECK_FALSE(control->isShowing());
+    editor.setVisible(true);
+    SpectrumHostBypassPresentationTestAccess::refreshToolbarOpacity(editor);
+    REQUIRE(collapse.isShowing());
+    click(collapse,false);checkExpanded(true);
 }

@@ -637,8 +637,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     spectrumCollapseButton.setClickingTogglesState(true);
     spectrumCollapseButton.setComponentID("spectrum_collapse");
     spectrumCollapseButton.getProperties().set("fireSpectrumToolbar", true);
-    spectrumCollapseButton.setTitle("Collapse spectrum in modulation workspace");
-    spectrumCollapseButton.setTooltip("Give the LFO editor more space by hiding the spectrum");
+    spectrumCollapseButton.setTitle("Hide spectrum");
+    spectrumCollapseButton.setTooltip("Hide the spectrum to give the current workspace more space");
     spectrumCollapseButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
     spectrumCollapseButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
     spectrumCollapseButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textSecondary);
@@ -904,8 +904,7 @@ void FireAudioProcessorEditor::resized()
         bounds.removeFromBottom(juce::roundToInt(4.0f * scale));
     contentArea = {};
     navigationArea = {};
-    const bool spectrumCollapsed = activeWorkspace == 1
-                                   && spectrumCollapseButton.getToggleState()
+    const bool spectrumCollapsed = spectrumCollapseButton.getToggleState()
                                    && ! zoomButton.getToggleState();
 
     if (zoomButton.getToggleState())
@@ -968,10 +967,10 @@ void FireAudioProcessorEditor::resized()
     filterControl.setVisible(! spectrumCollapsed && activeWorkspace == 2);
     zoomButton.setVisible(! spectrumCollapsed);
     spectrumChannelBox.setVisible(! spectrumCollapsed);
-    spectrumCollapseButton.setVisible(activeWorkspace == 1 && ! zoomButton.getToggleState());
+    spectrumCollapseButton.setVisible(! zoomButton.getToggleState());
     spectrumCollapseButton.setButtonText(spectrumCollapsed ? "Show spectrum" : "Hide spectrum");
     spectrumCollapseButton.setTitle(spectrumCollapsed ? "Show spectrum" : "Hide spectrum");
-    spectrumCollapseButton.setTooltip(spectrumCollapsed ? "Show the spectrum above Mod Forge" : "Hide the spectrum to give Mod Forge more space");
+    spectrumCollapseButton.setTooltip(spectrumCollapsed ? "Show the spectrum above the workspace" : "Hide the spectrum to give the current workspace more space");
 
     // One inset toolbar replaces the separate channel box and large hide key.
     // When collapsed only a small restore glyph remains in the navigation row.
@@ -1000,6 +999,7 @@ void FireAudioProcessorEditor::resized()
         spectrumToolbar.setDividers(pad + channelWidth, canCollapse ? pad + channelWidth + keySize : -1);
     }
     spectrumToolbar.setVisible(true);
+    refreshSpectrumToolbarOpacity();
     synchroniseSpectrumHostBypassState(false);
 
     if (valuePopup.isVisible())
@@ -1639,9 +1639,33 @@ void FireAudioProcessorEditor::drawWorkspaceSelection(juce::Graphics& g)
     g.fillRoundedRectangle(selector, fire::ui::Metrics::radiusSmall * fireLookAndFeel.scale);
 }
 
+void FireAudioProcessorEditor::refreshSpectrumToolbarOpacity()
+{
+    // All four components remain independent siblings for their existing hit
+    // targets and input guards. Opacity changes never reveal a hidden control.
+    const bool presented = isShowing() && spectrumToolbar.isShowing()
+        && ! (presetBrowser && presetBrowser->isVisible());
+    const auto buttonEngaged = [](const auto& button)
+    {
+        return button.isShowing() && (button.isMouseOverOrDragging(true)
+            || button.isDown() || button.getFocusAnimation() > 0.01f);
+    };
+    const bool engaged = presented && (spectrumToolbar.isMouseOverOrDragging(false)
+        || (spectrumChannelBox.isShowing()
+            && (spectrumChannelBox.isMouseOverOrDragging(true)
+                || spectrumChannelBox.shouldShowInteractionFocus()))
+        || buttonEngaged(zoomButton) || buttonEngaged(spectrumCollapseButton));
+    const float alpha = engaged ? 1.0f : fire::ui::SpectrumToolbar::idleAlpha;
+    for (auto* component : std::array<juce::Component*, 4>{
+             &spectrumToolbar, &spectrumChannelBox, &zoomButton, &spectrumCollapseButton})
+        if (! juce::approximatelyEqual(component->getAlpha(), alpha))
+            component->setAlpha(alpha);
+}
+
 void FireAudioProcessorEditor::timerCallback()
 {
     const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
+    refreshSpectrumToolbarOpacity();
 
     // Coalesce a stream of native live-resize callbacks into one physical
     // pixel cache rebuild after the final size has remained stable briefly.

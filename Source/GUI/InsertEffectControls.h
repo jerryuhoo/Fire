@@ -240,7 +240,11 @@ public:
                     slider->parameterID = id; slider->setComponentID(id);
                     eqAttachments[static_cast<size_t>(node)][static_cast<size_t>(control)] = std::make_unique<SliderAttachment>(processor.treeState, id, *slider);
                     if (! isCurrent()) return;
-                    slider->textFromValueFunction = {}; slider->valueFromTextFunction = {};
+                    // Continuous EQ ranges intentionally keep their full
+                    // resolution. Round only the readout and retain the
+                    // attachment's parameter-aware parser for typed edits.
+                    slider->textFromValueFunction = {};
+                    slider->setNumDecimalPlacesToDisplay(control == 0 ? 0 : control == 1 ? 1 : 2);
                     slider->setTextValueSuffix(control == 0 ? " Hz" : control == 1 ? " dB" : "");
                     slider->setLabel(control == 0 ? "Frequency" : control == 1 ? "Gain" : "Q", colour);
                     slider->setTitle("EQ point " + juce::String(node + 1) + (control == 0 ? " Frequency" : control == 1 ? " Gain" : " Q"));

@@ -769,6 +769,60 @@ void ModulationMatrixPrimaryButton::paintButton(juce::Graphics& g, bool, bool)
     const auto press = getPressAnimation();
     const auto enabledAlpha = isEnabled() ? 1.0f : 0.42f;
     const bool active = getToggleState();
+    if (isLineSkin(*this))
+    {
+        const auto skin = skinFor(*this);
+        const auto& palette = paletteFor(*this);
+        const auto unit = juce::jlimit(.75f, 2.5f, getHeight() / 30.0f);
+        const auto emphasis = juce::jmax(hover, press);
+        const bool iconOnly = appearance == Appearance::enable || appearance == Appearance::remove;
+        if (!iconOnly || emphasis > .01f)
+        {
+            auto face = active || appearance == Appearance::add ? lineSelectionSurface(skin) : palette.surface1;
+            face = face.interpolatedWith(lineHoverSurface(skin), emphasis * .65f);
+            g.setColour(face.withMultipliedAlpha(enabledAlpha));
+            g.fillRoundedRectangle(bounds, 3.0f * unit);
+        }
+        if (!iconOnly || focus > .01f)
+        {
+            g.setColour((focus > .01f ? palette.accent : palette.hairline).withMultipliedAlpha(enabledAlpha));
+            g.drawRoundedRectangle(bounds, 3.0f * unit, 1.0f);
+        }
+        if (appearance == Appearance::enable)
+        {
+            drawLineLamp(g, bounds.withSizeKeepingCentre(20.0f * unit, 20.0f * unit),
+                         skin, active, isEnabled(), juce::jmax(hover, focus), false, unit);
+        }
+        else if (appearance == Appearance::remove)
+        {
+            const auto centre = bounds.getCentre();
+            g.setColour(palette.textSecondary.interpolatedWith(lineInk(colours::danger, skin), emphasis)
+                .withMultipliedAlpha(enabledAlpha));
+            juce::Path minus;
+            minus.startNewSubPath(centre.x - 4.5f * unit, centre.y);
+            minus.lineTo(centre.x + 4.5f * unit, centre.y);
+            g.strokePath(minus, juce::PathStrokeType(1.1f * unit,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        else
+        {
+            const auto ink = appearance == Appearance::add ? palette.accent
+                : active ? lineInk(findColour(juce::TextButton::textColourOnId), skin) : palette.textPrimary;
+            g.setColour(ink.withMultipliedAlpha(enabledAlpha));
+            auto textBounds = bounds.reduced(6.0f * unit, 2.0f * unit);
+            if (appearance == Appearance::add)
+            {
+                const auto x = bounds.getX() + 16.0f * unit;
+                const auto y = bounds.getCentreY();
+                g.drawLine(x - 3.5f * unit, y, x + 3.5f * unit, y, 1.1f * unit);
+                g.drawLine(x, y - 3.5f * unit, x, y + 3.5f * unit, 1.1f * unit);
+                textBounds.removeFromLeft(22.0f * unit);
+            }
+            g.setFont(portfolioFont((appearance == Appearance::add ? 11.5f : 10.5f) * unit));
+            g.drawFittedText(getButtonText(), textBounds.toNearestInt(), juce::Justification::centred, 1);
+        }
+        return;
+    }
     auto ink = findColour(active ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId);
     auto fill = paletteFor(*this).surface1.interpolatedWith(paletteFor(*this).raised, hover * 0.65f + press * 0.25f);
     auto outline = paletteFor(*this).hairline.withAlpha(0.70f + hover * 0.30f);

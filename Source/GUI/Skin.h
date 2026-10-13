@@ -80,6 +80,14 @@ inline juce::Colour lineBrandAccent(Skin skin) noexcept
 { return skin == Skin::paper ? juce::Colour(0xff2948dc) : juce::Colour(0xffa3b5ff); }
 inline juce::Colour lineProjectTint(Skin skin) noexcept
 { return skin == Skin::paper ? juce::Colour(0xffeae1d6) : juce::Colour(0xff292320); }
+// These roles follow the portfolio's theme.css/project.css, including the
+// Fire project accent and its tinted selection surface.
+inline juce::Colour lineHoverSurface(Skin skin) noexcept
+{ return skinPalette(skin).raised; }
+inline juce::Colour lineSelectionSurface(Skin skin) noexcept
+{ return lineProjectTint(skin); }
+inline juce::Colour lineSubtleText(Skin skin) noexcept
+{ return skin == Skin::paper ? juce::Colour(0xff898a82) : juce::Colour(0xff8a96a7); }
 
 // Constructor-assigned JUCE colours override LookAndFeel defaults. Translate
 // only neutral tones, leaving module and modulation-source colours intact.

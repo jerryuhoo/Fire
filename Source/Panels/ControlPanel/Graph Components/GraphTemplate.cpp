@@ -94,21 +94,38 @@ void GraphTemplate::paint(juce::Graphics& g)
                                      juce::jmax(hover * 0.52f, focus * 0.78f));
     if (emphasis > 0.001f)
     {
-        auto bounds = getLocalBounds().toFloat().reduced(1.0f + press * scale);
-        const auto accent = getGraphAccent();
-        g.setGradientFill(juce::ColourGradient(accent.withAlpha(emphasis * 0.055f * (1 - disabled * 0.72f)),
-            bounds.getCentreX(), bounds.getY(), accent.withAlpha(0.0f), bounds.getCentreX(), bounds.getBottom(), false));
-        g.fillRoundedRectangle(bounds, fire::ui::Metrics::radius);
-        g.setColour(accent.withAlpha(emphasis * 0.25f * (1 - disabled * 0.72f)));
-        g.drawRoundedRectangle(bounds, fire::ui::Metrics::radius, juce::jmax(0.8f, scale));
+        if (fire::ui::isLineSkin(*this))
+        {
+            // Portfolio figures sit on an open canvas. Interaction accents
+            // the existing header rule without enclosing or tinting the plot.
+            const auto& palette = fire::ui::paletteFor(*this);
+            const auto plot = getGraphPlotBounds();
+            g.setColour(palette.accent.withAlpha((emphasis * 0.32f + focus * 0.26f)
+                                                * (1.0f - disabled * 0.72f)));
+            g.drawLine(plot.getX(), plot.getY() - 2.0f * scale,
+                       plot.getRight(), plot.getY() - 2.0f * scale, 0.85f);
+        }
+        else
+        {
+            auto bounds = getLocalBounds().toFloat().reduced(1.0f + press * scale);
+            const auto accent = getGraphAccent();
+            g.setGradientFill(juce::ColourGradient(accent.withAlpha(emphasis * 0.055f * (1 - disabled * 0.72f)),
+                bounds.getCentreX(), bounds.getY(), accent.withAlpha(0.0f), bounds.getCentreX(), bounds.getBottom(), false));
+            g.fillRoundedRectangle(bounds, fire::ui::Metrics::radius);
+            g.setColour(accent.withAlpha(emphasis * 0.25f * (1 - disabled * 0.72f)));
+            g.drawRoundedRectangle(bounds, fire::ui::Metrics::radius, juce::jmax(0.8f, scale));
+        }
     }
     if (onZoomRequested)
     {
         auto header = getGraphHeaderBounds();
         const auto icon = header.removeFromRight(18 * scale).withSizeKeepingCentre(14 * scale, 14 * scale);
+        const auto& palette = fire::ui::paletteFor(*this);
+        const bool lineSkin = fire::ui::isLineSkin(*this);
         fire::ui::drawIcon(g, mZoomState ? fire::ui::Icon::restore : fire::ui::Icon::expand,
-                          icon, fire::ui::paletteFor(*this).textMuted.interpolatedWith(getGraphAccent(), emphasis)
-                              .withAlpha((0.6f + emphasis * 0.35f) * (1 - disabled * 0.65f)));
+                          icon, palette.textMuted.interpolatedWith(lineSkin ? palette.accent : getGraphAccent(), emphasis)
+                              .withAlpha(((lineSkin ? 0.76f : 0.6f) + emphasis * (lineSkin ? 0.24f : 0.35f))
+                                         * (1 - disabled * 0.65f)));
     }
 }
 
@@ -541,9 +558,19 @@ void GraphTemplate::rebuildStaticLayer(float displayScale)
 
     const auto accent = getGraphAccent();
     const auto bounds = getLocalBounds().toFloat();
-    fire::ui::drawPanel(cacheGraphics, bounds, accent, true, fire::ui::skinFor(*this));
-
+    const bool lineSkin = fire::ui::isLineSkin(*this);
     auto plotBounds = getGraphPlotBounds();
+    if (lineSkin)
+    {
+        const auto& palette = fire::ui::paletteFor(*this);
+        cacheGraphics.fillAll(palette.canvas);
+        cacheGraphics.setColour(palette.hairline.withAlpha(0.72f));
+        cacheGraphics.drawLine(plotBounds.getX(), plotBounds.getY() - 2.0f * scale,
+                               plotBounds.getRight(), plotBounds.getY() - 2.0f * scale, 0.75f);
+    }
+    else
+        fire::ui::drawPanel(cacheGraphics, bounds, accent, true, fire::ui::skinFor(*this));
+
     if (fire::ui::isVintage(*this))
     {
         // The warm metal surround holds a dark instrument screen. Preserve
@@ -558,7 +585,7 @@ void GraphTemplate::rebuildStaticLayer(float displayScale)
         cacheGraphics.drawRoundedRectangle(plotBounds.reduced(1.0f),
                                             fire::ui::Metrics::radiusSmall - 1.0f, 1.0f);
     }
-    else
+    else if (! lineSkin)
     {
         cacheGraphics.setColour(fire::ui::paletteFor(*this).canvas.withAlpha(0.50f));
         cacheGraphics.fillRoundedRectangle(plotBounds, fire::ui::Metrics::radiusSmall);
@@ -566,9 +593,9 @@ void GraphTemplate::rebuildStaticLayer(float displayScale)
     fire::ui::drawTechGrid(cacheGraphics,
                            plotBounds,
                            juce::jmax(12.0f, 20.0f * scale),
-                           0.08f, fire::ui::skinFor(*this));
+                           lineSkin ? 0.12f : 0.08f, fire::ui::skinFor(*this));
 
-    cacheGraphics.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(0.27f));
+    cacheGraphics.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(lineSkin ? 0.32f : 0.27f));
     cacheGraphics.drawHorizontalLine(juce::roundToInt(plotBounds.getCentreY()),
                                      plotBounds.getX(),
                                      plotBounds.getRight());
@@ -578,7 +605,14 @@ void GraphTemplate::rebuildStaticLayer(float displayScale)
 
     auto headerBounds = getGraphHeaderBounds();
     headerBounds.removeFromRight(20 * scale);
-    cacheGraphics.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 22.0f, headerBounds.getHeight() * 0.46f)));
+    if (lineSkin)
+    {
+        auto caption = fire::ui::portfolioMonoFont(juce::jlimit(9.0f, 20.0f, headerBounds.getHeight() * 0.43f));
+        caption.setExtraKerningFactor(0.055f);
+        cacheGraphics.setFont(caption);
+    }
+    else
+        cacheGraphics.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 22.0f, headerBounds.getHeight() * 0.46f)));
     cacheGraphics.setColour(fire::ui::paletteFor(*this).textSecondary);
     cacheGraphics.drawText(graphTitle.toUpperCase(),
                            headerBounds.withTrimmedLeft(fire::ui::Metrics::space8),

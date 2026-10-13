@@ -34,8 +34,8 @@ inline juce::Colour effectColour(effects::Type type)
 }
 
 // Reuses the existing module buttons rather than duplicating their attachments,
-// accessibility or selection behaviour. The row pitch always equals 1/5 of the
-// viewport; adding modules extends the content, never shrinks existing rows.
+// accessibility or selection behaviour. Adding modules extends the content,
+// never shrinks existing rows. Line skins cap tall rails at a compact row size.
 class EffectRackNavigation final : public juce::Component
 {
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
@@ -614,6 +614,8 @@ private:
     void layoutRows()
     {
         rowPitch = juce::jmax(1, viewport.getHeight() / 5);
+        if (isLineSkin(*this))
+            rowPitch = juce::jmin(rowPitch, juce::jmax(1, juce::roundToInt(44.0f * scale)));
         const auto width = juce::jmax(1, viewport.getWidth() - juce::roundToInt(6.0f * scale));
         content.setSize(width, juce::jmax(viewport.getHeight(), rowPitch * static_cast<int>(visibleRows.size())));
         const auto margin = juce::jmax(1, juce::roundToInt(2.0f * scale));
@@ -683,6 +685,9 @@ private:
     }
     void lookAndFeelChanged() override
     {
+        // Switching back from a compact skin must also restore the classic
+        // five-row geometry without requiring the host to resize its window.
+        layoutRows();
         if (usesNavigationMotion(*this)) return;
         updateSelection(false);
         selectionY.snapTo(selectionY.target);

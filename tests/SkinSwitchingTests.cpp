@@ -487,6 +487,28 @@ TEST_CASE("Paper and Ink preferences persist with readable settings and library 
         skinSnapshot(reopened,juce::String(fire::ui::skinName(skin)).toLowerCase()+"-preset-library");
         skinButton(reopened,"preset_browser_close").triggerClick();
         CHECK(soundXml(processor)==before);
+        // Export complete analogue workspaces as well as isolated line art so
+        // the figure caption and controls can be inspected at real editor size.
+        if (std::getenv("FIRE_SKIN_PREVIEW_DIR") != nullptr)
+            for (int model : {0, 11})
+            {
+                FireAudioProcessor previewProcessor;
+                files.prepare(previewProcessor,"line-figure-"+juce::String(static_cast<int>(skin))+"-"+juce::String(model));
+                REQUIRE(previewProcessor.setShapeMode(1,-1,fire::analog::legacyCount+model));
+                FireAudioProcessorEditor previewEditor(previewProcessor);
+                prepareEditor(previewEditor);previewEditor.setSize(1400,700);
+                previewEditor.setSkinPreference(skin);
+                auto* previewBand=findSkinControl<BandPanel>(previewEditor,[](auto&) {return true;});
+                REQUIRE(previewBand!=nullptr);previewBand->setSwitch(1,true);
+                // Peerless previews deliberately stop the editor timer. Seed
+                // the hardware's silent frame from the selected processor model.
+                auto* hardware=findSkinControl<fire::ui::HardwareColourPanel>(previewEditor,
+                    [](auto& panel) {return panel.isVisible();});
+                REQUIRE(hardware!=nullptr);
+                hardware->setState(previewProcessor.getShapeMode(1)-fire::analog::legacyCount,0,0);
+                skinSnapshot(previewEditor,juce::String(fire::ui::skinName(skin)).toLowerCase()
+                    + (model==0 ? "-analog-tube-1400" : "-analog-tape-1400"));
+            }
     }
     CHECK(fire::ui::skinFromValue(0)==Skin::modern);
     CHECK(fire::ui::skinFromValue(1)==Skin::vintage);

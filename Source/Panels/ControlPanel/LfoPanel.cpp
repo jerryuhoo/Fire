@@ -3093,6 +3093,8 @@ void LfoPanel::refreshBank(bool force)
 void LfoPanel::layoutBank()
 {
     bankRowPitch = juce::jmax(1, bankViewport.getHeight() / 5);
+    if (fire::ui::isLineSkin(*this))
+        bankRowPitch = juce::jmin(bankRowPitch, juce::jmax(1, juce::roundToInt(44.0f * scale)));
     const auto width = juce::jmax(1, bankViewport.getWidth() - juce::roundToInt(6 * scale));
     bankContent.setSize(width, juce::jmax(bankViewport.getHeight(), bankRowPitch * static_cast<int>(visibleLfoSlots.size())));
     const auto margin = juce::jmax(1, juce::roundToInt(2 * scale));
@@ -3135,6 +3137,7 @@ void LfoPanel::removeBankLfo(int index)
 
 void LfoPanel::lookAndFeelChanged()
 {
+    layoutBank();
     if (!fire::ui::usesNavigationMotion(*this))
     {
         lfoSelectionPosition.snapTo(lfoSelectionPosition.target);
@@ -3174,8 +3177,20 @@ void LfoPanel::paint(juce::Graphics& g)
 void LfoPanel::paintChrome(juce::Graphics& g) const
 {
     fire::ui::drawCanvas(g, getLocalBounds().toFloat(), fire::ui::skinFor(*this));
-    fire::ui::drawPanel(g, centerColumnArea.toFloat(), fire::ui::colours::modulation, false, fire::ui::skinFor(*this));
-    fire::ui::drawPanel(g, rightColumnArea.toFloat(), fire::ui::colours::flame, false, fire::ui::skinFor(*this));
+    if (fire::ui::isLineSkin(*this))
+    {
+        g.setColour(fire::ui::paletteFor(*this).hairline);
+        for(const auto area:{centerColumnArea,rightColumnArea})
+        {
+            const auto rule=area.toFloat().reduced(.5f);
+            if(!rule.isEmpty()) g.drawLine(rule.getX(),rule.getY(),rule.getRight(),rule.getY(),.85f);
+        }
+    }
+    else
+    {
+        fire::ui::drawPanel(g, centerColumnArea.toFloat(), fire::ui::colours::modulation, false, fire::ui::skinFor(*this));
+        fire::ui::drawPanel(g, rightColumnArea.toFloat(), fire::ui::colours::flame, false, fire::ui::skinFor(*this));
+    }
 
     const auto titleHeight = juce::jmax(9.0f, 21.0f * scale);
     const auto drawPlainTitle = [&g, titleHeight, this](juce::Rectangle<int> area,
@@ -3183,14 +3198,18 @@ void LfoPanel::paintChrome(juce::Graphics& g) const
     {
         auto titleArea = area.toFloat().removeFromTop(titleHeight)
                              .withTrimmedLeft(juce::jmax(7.0f, 10.0f * scale));
-        g.setColour(fire::ui::paletteFor(*this).textSecondary);
-        g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, titleHeight * 0.46f)));
+        const bool line=fire::ui::isLineSkin(*this);
+        g.setColour(line ? fire::ui::lineSubtleText(fire::ui::skinFor(*this)) : fire::ui::paletteFor(*this).textSecondary);
+        g.setFont(line ? fire::ui::portfolioMonoFont(juce::jlimit(9.5f,18.0f,titleHeight*.44f)).withExtraKerningFactor(.035f)
+                       : fire::ui::labelFont(juce::jlimit(10.0f,20.0f,titleHeight*.46f)));
         g.drawText(title, titleArea, juce::Justification::centredLeft);
     };
     auto bankTitle = leftColumnArea.reduced(juce::roundToInt(8.0f * scale))
         .removeFromTop(juce::roundToInt(22.0f * scale));
-    g.setColour(fire::ui::paletteFor(*this).textSecondary.withAlpha(0.82f));
-    g.setFont(fire::ui::labelFont(juce::jlimit(10.0f, 20.0f, bankTitle.getHeight() * 0.46f)));
+    const bool line=fire::ui::isLineSkin(*this);
+    g.setColour(line ? fire::ui::lineSubtleText(fire::ui::skinFor(*this)) : fire::ui::paletteFor(*this).textSecondary.withAlpha(0.82f));
+    g.setFont(line ? fire::ui::portfolioMonoFont(juce::jlimit(9.5f,18.0f,bankTitle.getHeight()*.44f)).withExtraKerningFactor(.035f)
+                   : fire::ui::labelFont(juce::jlimit(10.0f,20.0f,bankTitle.getHeight()*.46f)));
     g.drawText("LFO BANK", bankTitle.withTrimmedRight(juce::roundToInt(25 * scale)), juce::Justification::centredLeft);
     drawPlainTitle(centerColumnArea, "SHAPE FORGE");
     drawPlainTitle(rightColumnArea, "MOTION");
@@ -3204,7 +3223,9 @@ void LfoPanel::paintChrome(juce::Graphics& g) const
 
 void LfoPanel::paintSelection(juce::Graphics& g)
 {
-    if (visibleLfoSlots.empty()) return;
+    // Line-skin buttons own their quiet selected surface; do not paint a
+    // second rounded selection plate underneath their smaller corner radius.
+    if (fire::ui::isLineSkin(*this) || visibleLfoSlots.empty()) return;
     const auto last = static_cast<int>(visibleLfoSlots.size()) - 1;
     const auto position = juce::jlimit(0.0f, static_cast<float>(last), lfoSelectionPosition.current);
     const auto lowerRow = juce::jlimit(0, last, static_cast<int>(std::floor(position)));

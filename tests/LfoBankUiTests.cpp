@@ -89,3 +89,70 @@ TEST_CASE("LFO navigation matches the Band rail width row height and selection t
         }
     }
 }
+
+TEST_CASE("Line rails remain compact with a collapsed spectrum and reveal their final controls",
+          "[skin][line-skin][ui][layout][lfo-bank][rack-interaction]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;processor.hasUpdateCheckBeenPerformed=true;
+    for(int slot=4;slot<fire::lfo_bank::capacity;++slot) REQUIRE(processor.addLfo()==slot);
+    for(int slot=0;slot<fire::effects::slotCount;++slot)
+        REQUIRE(processor.addInsertEffect(1,fire::effects::Type::chorus)==slot);
+    FireAudioProcessorEditor editor(processor);editor.stopTimer();
+    editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);editor.setVisible(true);
+    const juce::ScopeGuard cleanup{[&] {editor.removeFromDesktop();}};
+    auto* lfo=bankFind<LfoPanel>(editor,[](auto&) {return true;});
+    auto* band=bankFind<BandPanel>(editor,[](auto&) {return true;});
+    REQUIRE(lfo);REQUIRE(band);
+    auto* rail=bankFind<fire::ui::EffectRackNavigation>(*band,[](auto&) {return true;});REQUIRE(rail);
+    auto* collapse=bankFind<juce::Button>(editor,[](auto& b) {return b.getComponentID()=="spectrum_collapse";});REQUIRE(collapse);
+    const auto workspace=[&](const juce::String& text)
+    {
+        auto* button=bankFind<juce::Button>(editor,[&](auto& b) {return b.getButtonText()==text;});REQUIRE(button);
+        button->triggerClick();pumpBank();
+    };
+    for(auto skin:{fire::ui::Skin::paper,fire::ui::Skin::ink,fire::ui::Skin::modern,fire::ui::Skin::vintage})
+    {
+        fire::ui::setSkin(editor,skin);editor.sendLookAndFeelChange();
+        for(int width:{1000,2000})
+        {
+            CAPTURE(static_cast<int>(skin),width);
+            editor.setSize(width,width/2);
+            collapse->setToggleState(true,juce::sendNotificationSync);
+            workspace("MOD FORGE");
+            CHECK(lfo->getBankRowPitch()==rail->getRowPitch());
+            if(fire::ui::isLineSkin(skin))
+            {
+                CHECK(rail->getRowPitch()<=juce::roundToInt(46.0f*width/1000.0f));
+                CHECK(rail->getRowPitch()*5<rail->getViewport().getHeight());
+            }
+            else
+            {
+                CHECK(rail->getViewport().getHeight()-rail->getRowPitch()*5<5);
+                CHECK(lfo->getBankViewport().getHeight()-lfo->getBankRowPitch()*5<5);
+            }
+            clickBank(*lfo,"lfoBankSelect16");CHECK(lfo->getCurrentLfoIndex()==15);
+            auto* last=bankFind<juce::Button>(*lfo,[](auto& b) {return b.getComponentID()=="lfoBankSelect16";});REQUIRE(last);
+            CHECK(lfo->getBankViewport().getViewArea().contains(last->getBounds()));
+            auto* removeLfo=bankFind<CloseButton>(*lfo,[](auto& b) {return b.getComponentID()=="lfoBankRemove16";});REQUIRE(removeLfo);
+            CHECK(last->getBounds().contains(removeLfo->getBounds()));
+            CHECK(removeLfo->getWidth()>=24);CHECK(removeLfo->getHeight()>=24);
+            workspace("BAND LAB");REQUIRE(rail->onSelectEffect);rail->onSelectEffect(7);
+            const auto rowID=fire::effects::parameterID(1,7,fire::effects::typeField);
+            auto* row=bankFind<juce::Button>(*rail,[&](auto& b) {return b.getComponentID()==rowID;});REQUIRE(row);
+            CHECK(row->getToggleState());CHECK(rail->getViewport().getViewArea().contains(row->getBounds()));
+            for(const auto& id:juce::StringArray{rowID+"Remove",fire::effects::parameterID(1,7,fire::effects::enabledField)})
+            {
+                auto* action=bankFind<juce::Button>(*rail,[&](auto& b) {return b.getComponentID()==id;});REQUIRE(action);
+                CHECK(row->getBounds().contains(action->getBounds()));
+                CHECK(action->getWidth()>=16);CHECK(action->getHeight()>=16);
+                if(auto* remove=dynamic_cast<CloseButton*>(action)) remove->setPresented(true,false);
+                CHECK(action->hitTest(action->getWidth()/2,action->getHeight()/2));
+            }
+            collapse->setToggleState(false,juce::sendNotificationSync);
+            CHECK(lfo->getBankRowPitch()==rail->getRowPitch());
+            CHECK(processor.isLfoPresent(15));
+            CHECK(processor.getInsertEffectType(1,7)==fire::effects::Type::chorus);
+        }
+    }
+}

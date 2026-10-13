@@ -376,3 +376,60 @@ TEST_CASE("Show modulation control navigates legacy and insert modules without e
         CHECK(parameter->getValue()==values[static_cast<size_t>(index)]);
     }
 }
+
+TEST_CASE("Paper and Ink libraries retain collection identity with light selections and accessible row actions",
+          "[preset-browser][ui][skin][layout][render]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor; processor.hasUpdateCheckBeenPerformed = true;
+    LibraryFolder folder(processor);
+    FireLookAndFeel look;
+    fire::ui::PresetBrowserPanel browser(processor.statePresets);
+    browser.setLookAndFeel(&look);
+    browser.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    browser.setVisible(true);
+    const juce::ScopeGuard cleanup {[&] {browser.removeFromDesktop(); browser.setLookAndFeel(nullptr);}};
+    browser.open();
+    const auto entries = processor.statePresets.getBrowserEntries();
+    const auto vocal = std::find_if(entries.begin(), entries.end(), [](const auto& entry) {return entry.category == "Vocals";});
+    REQUIRE(vocal != entries.end());
+    REQUIRE(processor.statePresets.loadPreset(vocal->tag));
+    browser.refreshSelection();
+    for (const auto skin : {fire::ui::Skin::paper, fire::ui::Skin::ink})
+    {
+        look.setSkin(skin); fire::ui::setSkin(browser, skin); browser.sendLookAndFeelChange();
+        for (const int width : {1000, 1400, 2000})
+        {
+            CAPTURE(fire::ui::skinName(skin), width);
+            browser.setSize(width, width / 2); browser.selectCategory("Vocals");
+            auto* category = find<juce::Button>(browser, [](auto& b) {return b.getComponentID() == "presetCategory:Vocals";});
+            REQUIRE(category != nullptr); REQUIRE(category->getToggleState());
+            auto categoryImage = category->createComponentSnapshot(category->getLocalBounds());
+            const auto tint = categoryImage.getPixelAt(juce::roundToInt(6.0f * width / 1000), category->getHeight() / 2);
+            const auto page = fire::ui::skinPalette(skin).canvas;
+            // A selected navigation item must remain a pale tint in Paper and
+            // a restrained dark tint in Ink, rather than a solid accent block.
+            CHECK(std::abs(tint.getPerceivedBrightness() - page.getPerceivedBrightness()) < .18f);
+            auto* row = find<juce::Button>(browser, [&](auto& b) {return b.getComponentID() == "presetSound:" + vocal->key;});
+            REQUIRE(row != nullptr);
+            auto rowImage = row->createComponentSnapshot(row->getLocalBounds());
+            const auto rowFill = rowImage.getPixelAt(row->getWidth() / 2, juce::roundToInt(4.0f * width / 1000));
+            CHECK(std::abs(rowFill.getPerceivedBrightness() - page.getPerceivedBrightness()) < .20f);
+            auto* favourite = find<juce::Button>(*row, [](auto& b) {return b.getComponentID().startsWith("presetFavourite:");});
+            auto* remove = find<juce::Button>(*row, [](auto& b) {return b.getComponentID().startsWith("presetDelete:");});
+            REQUIRE(favourite != nullptr); REQUIRE(remove != nullptr);
+            for (auto* action : {favourite, remove})
+            {
+                CHECK(action->getWidth() >= 24); CHECK(action->getHeight() >= 24);
+                CHECK(row->getComponentAt(action->getBounds().getCentre()) == action);
+            }
+            CHECK_FALSE(favourite->getBounds().intersects(remove->getBounds()));
+            preview(browser, "portfolio-" + juce::String(fire::ui::skinName(skin)).toLowerCase() + "-library-vocals-" + juce::String(width));
+            browser.selectCategory("Synths");
+            auto* synths = find<juce::Button>(browser, [](auto& b) {return b.getComponentID() == "presetCategory:Synths";});
+            REQUIRE(synths != nullptr);
+            auto synthImage = synths->createComponentSnapshot(synths->getLocalBounds());
+            CHECK(synthImage.getPixelAt(juce::roundToInt(6.0f * width / 1000), synths->getHeight() / 2) != tint);
+        }
+    }
+}

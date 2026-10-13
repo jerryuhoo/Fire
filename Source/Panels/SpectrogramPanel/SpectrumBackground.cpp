@@ -91,12 +91,26 @@ void SpectrumBackground::createBackgroundImage()
     g.addTransform(juce::AffineTransform::scale(lastDisplayScale));
 
     const auto area = bounds.toFloat();
-    if (fire::ui::isVintage(*this)) g.fillAll(fire::ui::paletteFor(*this).canvas);
-    else fire::ui::drawCanvas(g, area, fire::ui::skinFor(*this));
-
-    // A very restrained technical grid gives the analyser depth without
-    // competing with the moving spectrum.
-    fire::ui::drawTechGrid(g, area, 24.0f * scale, 0.055f, fire::ui::skinFor(*this));
+    const auto skin = fire::ui::skinFor(*this);
+    const auto& palette = fire::ui::paletteFor(*this);
+    const bool lineSkin = fire::ui::isLineSkin(skin);
+    if (lineSkin)
+    {
+        // The website's figures share the page canvas and a quiet lower rule.
+        // Keep the analyser open rather than enclosing it in a surface card.
+        g.fillAll(palette.canvas);
+        g.setColour(palette.hairline.withAlpha(0.72f));
+        g.drawLine(area.getX(), area.getBottom() - 0.5f,
+                   area.getRight(), area.getBottom() - 0.5f, 0.75f);
+    }
+    else
+    {
+        if (fire::ui::isVintage(*this)) g.fillAll(palette.canvas);
+        else fire::ui::drawCanvas(g, area, skin);
+        // Line skins already have frequency/amplitude guides below; a second
+        // decorative grid would compete with those calibrated positions.
+        fire::ui::drawTechGrid(g, area, 24.0f * scale, 0.055f, skin);
+    }
 
     const float headerHeight = juce::jmax(22.0f * scale, area.getHeight() * 0.19f);
     juce::ColourGradient headerShade(fire::ui::paletteFor(*this).surface2.withAlpha(0.72f),
@@ -106,7 +120,7 @@ void SpectrumBackground::createBackgroundImage()
     g.setGradientFill(headerShade);
     if (!fire::ui::isLineSkin(*this)) g.fillRect(area.withHeight(headerHeight));
 
-    g.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(0.26f));
+    g.setColour(palette.hairline.withAlpha(lineSkin ? 0.24f : 0.26f));
     for (int division = 1; division < 5; ++division)
     {
         const float y = fire::ui::pixelAligned(area.getY() + area.getHeight() * division / 5.0f,
@@ -120,12 +134,14 @@ void SpectrumBackground::createBackgroundImage()
                                                    lastDisplayScale);
         const bool major = freq == 20 || freq == 100 || freq == 200 || freq == 1000
                         || freq == 2000 || freq == 10000 || freq == 20000;
-        g.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(major ? 0.30f : 0.12f));
+        g.setColour(palette.hairline.withAlpha(lineSkin ? (major ? 0.36f : 0.14f)
+                                                                 : (major ? 0.30f : 0.12f)));
         g.drawVerticalLine(juce::roundToInt(xPos), headerHeight, area.getBottom());
     }
 
-    g.setFont(fire::ui::bodyFont(11.0f * scale));
-    g.setColour(fire::ui::paletteFor(*this).textSecondary.withAlpha(0.84f));
+    g.setFont(lineSkin ? fire::ui::portfolioMonoFont(10.0f * scale)
+                       : fire::ui::bodyFont(11.0f * scale));
+    g.setColour(palette.textSecondary.withAlpha(lineSkin ? 0.94f : 0.84f));
     for (const auto freq : frequenciesForTextLabels)
     {
         const float xPos = transformToLog(freq) * area.getWidth();

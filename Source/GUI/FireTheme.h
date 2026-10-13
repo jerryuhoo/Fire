@@ -417,6 +417,16 @@ inline juce::Font portfolioMonoFont(float height)
     return juce::Font{juce::FontOptions().withName(name).withHeight(height)};
 }
 
+inline juce::Font portfolioSerifFont(float height)
+{
+   #if JUCE_LINUX
+    const auto name="Liberation Serif";
+   #else
+    const auto name="Georgia";
+   #endif
+    return juce::Font{juce::FontOptions().withName(name).withStyle("Italic").withHeight(height)};
+}
+
 inline juce::Font labelFont(float height = 11.0f)
 {
     return juce::Font { juce::FontOptions().withHeight(height).withStyle("Bold") };
@@ -468,8 +478,8 @@ inline void drawLineLamp(juce::Graphics& g, juce::Rectangle<float> bounds, Skin 
     const auto radius=juce::jmax(1.8f*scale,juce::jmin(bounds.getWidth(),bounds.getHeight())*.19f);
     const auto lamp=juce::Rectangle<float>(radius*2,radius*2).withCentre(bounds.getCentre());
     const auto opacity=enabled ? 1.0f : .32f;
-    const auto edge=selectedRow ? lineOnAccent(skin) : palette.textMuted;
-    const auto light=selectedRow ? (skin==Skin::ink ? palette.textPrimary : lineOnAccent(skin)) : palette.accent;
+    const auto edge=selectedRow ? palette.accent : palette.textMuted;
+    const auto light=palette.accent;
     if (on)
     {
         g.setColour(light.withAlpha(.07f*opacity));g.fillEllipse(lamp.expanded(2*scale));
@@ -560,8 +570,8 @@ inline void drawPanel(juce::Graphics& g, juce::Rectangle<float> bounds,
     {
         g.setColour(palette.surface1);
         g.fillRoundedRectangle(area, 3.0f);
-        g.setColour(palette.hairline);
-        g.drawRoundedRectangle(area, 3.0f, 0.85f);
+        g.setColour(palette.hairline.withAlpha(.80f));
+        g.drawRoundedRectangle(area, 3.0f, 0.8f);
         return;
     }
     juce::ColourGradient metal(palette.surface1.brighter(0.045f), area.getTopLeft(),

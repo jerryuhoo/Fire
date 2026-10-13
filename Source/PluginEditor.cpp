@@ -1305,6 +1305,13 @@ void FireAudioProcessorEditor::rebuildBackgroundCache()
         {
             cacheGraphics.setColour(fire::ui::paletteFor(*this).canvas);
             cacheGraphics.fillRect(header);
+            const auto& palette = fire::ui::paletteFor(*this);
+            const auto unit = fireLookAndFeel.scale;
+            // A quiet masthead divider follows the portfolio's editorial
+            // layout without adding a framed header panel.
+            cacheGraphics.setColour(palette.hairline.withAlpha(.65f));
+            cacheGraphics.drawVerticalLine(logoArea.getRight()+juce::roundToInt(3*unit),
+                header.getY()+13*unit,header.getBottom()-13*unit);
         }
         if (fire::ui::isVintage(*this))
         {
@@ -1563,7 +1570,7 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
     if (fire::ui::isLineSkin(*this))
     {
         auto title=brand.removeFromTop(brand.getHeight()*.67f);
-        const auto font=fire::ui::portfolioFont(25*fireLookAndFeel.scale,true);
+        const auto font=fire::ui::portfolioFont(27*fireLookAndFeel.scale,true).withExtraKerningFactor(-.045f);
         const auto width=juce::GlyphArrangement::getStringWidth(font,"Fire");
         g.setFont(font);
         g.setColour(fire::ui::paletteFor(*this).textPrimary);
@@ -1601,11 +1608,14 @@ void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
     }
     else fire::ui::brand::drawWingsMark(g,wingsBounds);
     signature.removeFromLeft(4.0f * fireLookAndFeel.scale);
-    g.setFont(fire::ui::labelFont(8.0f * fireLookAndFeel.scale));
+    g.setFont(fire::ui::isLineSkin(*this)
+        ? fire::ui::portfolioMonoFont(7.5f * fireLookAndFeel.scale).withExtraKerningFactor(.035f)
+        : fire::ui::labelFont(8.0f * fireLookAndFeel.scale));
     g.setColour((fire::ui::isVintage(*this)?juce::Colour(0xfff0e2bd):fire::ui::paletteFor(*this).textSecondary));
     g.drawText("BLUE WINGS", signature.removeFromTop(signature.getHeight() * 0.55f),
                juce::Justification::centredLeft);
-    g.setFont(fire::ui::bodyFont(9.0f * fireLookAndFeel.scale));
+    g.setFont(fire::ui::isLineSkin(*this) ? fire::ui::portfolioMonoFont(8.5f * fireLookAndFeel.scale)
+                                         : fire::ui::bodyFont(9.0f * fireLookAndFeel.scale));
     g.setColour((fire::ui::isVintage(*this)?juce::Colour(0xfff0e2bd):fire::ui::paletteFor(*this).textMuted));
     g.drawText("v" VERSION, signature, juce::Justification::centredLeft);
 }

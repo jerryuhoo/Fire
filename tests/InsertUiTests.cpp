@@ -168,3 +168,92 @@ TEST_CASE("Master Lo-Fi exposes tape wow and flutter while switching modules hid
     for (auto* id : fire::effects::tapeIDs)
         CHECK_FALSE(find<ModulatableSlider>(editor, [&](auto& s) {return s.parameterID == id;})->isShowing());
 }
+
+TEST_CASE("Leaving legacy Shape hides its mode selectors immediately in every skin",
+          "[insertfx][ui][shape-selector][visibility][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;processor.hasUpdateCheckBeenPerformed=true;
+    for(auto type:{fire::effects::Type::eq,fire::effects::Type::chorus,fire::effects::Type::shape})
+        REQUIRE(processor.addInsertEffect(1,type)>=0);
+    FireLookAndFeel look;
+    BandPanel band(processor,{},{},{},{},{});
+    band.setLookAndFeel(&look);band.setSize(1000,280);band.setVisible(true);
+    const juce::ScopeGuard detachLook{[&] {band.setLookAndFeel(nullptr);}};
+    auto* rail=find<fire::ui::EffectRackNavigation>(band,[](auto&) {return true;});REQUIRE(rail);REQUIRE(rail->onSelectEffect);
+    const auto before=processor.treeState.copyState().toXmlString();
+    for(auto skin:fire::ui::skins)
+    {
+        CAPTURE(static_cast<int>(skin));
+        look.setSkin(skin);fire::ui::setSkin(band,skin);band.sendLookAndFeelChange();
+        for(int slot:{0,1,2,-1})
+        {
+            CAPTURE(slot);
+            band.setSwitch(1,true);
+            auto* legacy=find<juce::ComboBox>(band,[](auto& menu) {return menu.getComponentID()=="mode1";});REQUIRE(legacy);
+            REQUIRE(legacy->isVisible());
+            rail->onSelectEffect(slot);
+            // No message-loop or animation tick may be needed to conceal the
+            // old selector over EQ, another effect, inserted Shape or empty UI.
+            for(int bandIndex=0;bandIndex<4;++bandIndex)
+            {
+                const auto id=ParameterIDAndName::getIDString(MODE_ID,bandIndex);
+                auto* selector=find<juce::ComboBox>(band,[&](auto& menu) {return menu.getComponentID()==id;});REQUIRE(selector);
+                CHECK_FALSE(selector->isVisible());
+            }
+            if(slot==2)
+            {
+                const auto id=fire::effects::parameterID(1,slot,0);
+                auto* inserted=find<juce::ComboBox>(band,[&](auto& menu) {return menu.getComponentID()==id;});REQUIRE(inserted);
+                CHECK(inserted->isVisible());
+            }
+            CHECK(processor.treeState.copyState().toXmlString()==before);
+        }
+    }
+}
+
+TEST_CASE("Inserted EQ readouts are concise while edits retain parameter precision in every skin",
+          "[insertfx][ui][eq][format][precision][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    REQUIRE(processor.addInsertEffect(0,fire::effects::Type::eq)==0);
+    REQUIRE(processor.addInsertEffect(1,fire::effects::Type::eq)==0);
+    FireLookAndFeel look;
+    BandPanel band(processor,{},{},{},{},{});
+    GlobalPanel master(processor,{},{},{},{},{});
+    band.setLookAndFeel(&look);master.setLookAndFeel(&look);
+    band.setSize(1000,280);master.setSize(1000,280);band.setVisible(true);master.setVisible(true);
+    const juce::ScopeGuard detachLook{[&] {band.setLookAndFeel(nullptr);master.setLookAndFeel(nullptr);}};
+    auto* rail=find<fire::ui::EffectRackNavigation>(band,[](auto&) {return true;});REQUIRE(rail);REQUIRE(rail->onSelectEffect);
+    for(auto skin:fire::ui::skins)
+    {
+        CAPTURE(static_cast<int>(skin));look.setSkin(skin);
+        for(int scope:{0,1})
+        {
+            CAPTURE(scope);
+            auto& panel=scope==0?static_cast<juce::Component&>(master):static_cast<juce::Component&>(band);
+            fire::ui::setSkin(panel,skin);panel.sendLookAndFeelChange();
+            const auto beforeBind=processor.treeState.copyState().toXmlString();
+            if(scope==0) master.focusInsertEffect(0);else rail->onSelectEffect(0);
+            CHECK(processor.treeState.copyState().toXmlString()==beforeBind);
+            const std::array<double,3> displayValues {20.0000001,0.0000001,0.99999999};
+            const std::array<const char*,3> displayText {"20 Hz","0.0 dB","1.00"};
+            const std::array<const char*,3> editText {"833.375 Hz","-5.237 dB","1.234567"};
+            const std::array<float,3> editValues {833.375f,-5.237f,1.234567f};
+            for(int control=0;control<3;++control)
+            {
+                CAPTURE(control);
+                const auto id=fire::core_modules::eqParameterID(scope,0,0,static_cast<fire::eq::Field>(control));
+                auto* knob=find<ModulatableSlider>(panel,[&](auto& slider) {return slider.getParamID()==id;});REQUIRE(knob);
+                CHECK(knob->getTextFromValue(displayValues[static_cast<size_t>(control)])==displayText[static_cast<size_t>(control)]);
+                REQUIRE(knob->valueFromTextFunction!=nullptr);
+                CHECK(knob->getInterval()==0.0);
+                const auto parsed=knob->getValueFromText(editText[static_cast<size_t>(control)]);
+                CHECK(parsed==Catch::Approx(editValues[static_cast<size_t>(control)]).margin(control==0?.001:.00001));
+                knob->setValue(parsed,juce::sendNotificationSync);
+                CHECK(processor.treeState.getRawParameterValue(id)->load()==Catch::Approx(editValues[static_cast<size_t>(control)]).margin(control==0?.001:.00001));
+            }
+        }
+    }
+}

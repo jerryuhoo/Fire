@@ -12,6 +12,12 @@
 warm paper with dark ink, or the Fire website's blue-black page with warm white
 text and peach accents. Both use the website's colours and typography. Flat controls, fine outlines,
 monospaced values and schematic tube/tape displays keep the interface quiet.
+The sound library uses lightly tinted collection selections, fine row dividers,
+small-cornered fields and restrained action icons, following the personal
+portfolio's Atmos Check and PluginHub product pages. Open sections, monospaced
+captions and a small serif accent carry the same visual language into Fire.
+Each collection keeps a subtle colour
+identity; selected sounds use an accent title rather than a solid colour block.
 Modulation-source colours remain identifiable, tube filaments still respond to
 audio, and tape reels retain their continuous transport. The selected appearance
 persists locally and does not alter presets, processing or undo history.

@@ -67,10 +67,9 @@ void CloseButton::paintButton(juce::Graphics& g, bool, bool)
 
     if (fire::ui::isLineSkin(*this))
     {
-        const auto skin=fire::ui::skinFor(*this);
         const auto& palette=fire::ui::paletteFor(*this);
         const auto selected=fire::ui::isInSelectedModuleRow(*this);
-        const auto ink=selected ? fire::ui::lineOnAccent(skin) : palette.textSecondary;
+        const auto ink=selected ? palette.accent : palette.textSecondary;
         const auto emphasis=juce::jmax(hover,focus);
         if (emphasis>.01f)
         {

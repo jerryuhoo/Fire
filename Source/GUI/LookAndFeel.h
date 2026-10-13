@@ -168,7 +168,8 @@ public:
                   paletteSkin ? palette.textPrimary : modernButtonOnText);
 
         setColour(juce::Slider::textBoxTextColourId, themeColour(colours::textPrimary));
-        setColour(juce::Slider::textBoxBackgroundColourId, themeColour(colours::surface0).withAlpha(0.94f));
+        setColour(juce::Slider::textBoxBackgroundColourId, isLineSkin(skin) ? juce::Colours::transparentBlack
+                                                                                       : themeColour(colours::surface0).withAlpha(0.94f));
         setColour(juce::Slider::textBoxOutlineColourId, themeColour(colours::hairline));
         setColour(juce::Slider::textBoxHighlightColourId, primaryAccent.withAlpha(0.35f));
         setColour(juce::Slider::trackColourId, primaryAccent);
@@ -224,10 +225,11 @@ public:
         return fire::ui::bodyFont(height * scale);
     }
 
-    juce::Font getTextButtonFont(juce::TextButton&, int buttonHeight) override
+    juce::Font getTextButtonFont(juce::TextButton& button, int buttonHeight) override
     {
         if (fire::ui::isLineSkin(currentSkin))
-            return fire::ui::portfolioFont(juce::jlimit(9.0f,14.0f*scale,static_cast<float>(buttonHeight)*.36f),true);
+            return fire::ui::portfolioFont(juce::jlimit(10.0f,12.5f*scale,static_cast<float>(buttonHeight)*.42f),
+                static_cast<bool>(button.getProperties().getWithDefault("firePrimaryAction",false)));
         return fire::ui::labelFont(juce::jlimit(9.0f, 15.0f * scale,
                                                static_cast<float>(buttonHeight) * 0.38f));
     }
@@ -547,7 +549,10 @@ public:
         using namespace fire::ui;
         auto bounds = label.getLocalBounds().toFloat();
         const auto background = label.findColour(juce::Label::backgroundColourId);
-        if (! background.isTransparent())
+        const bool quietValue = isLineSkin(currentSkin) && !label.isBeingEdited()
+            && label.getComponentID() != "parameter_title"
+            && dynamic_cast<juce::Slider*>(label.getParentComponent()) != nullptr;
+        if (! background.isTransparent() && !quietValue)
         {
             g.setColour(background);
             g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
@@ -781,8 +786,9 @@ public:
                 || button.getRadioGroupId()!=0;
             drawLineSurface(g, bounds, hoverAmount, pressAmount, focusAmount,
                             1.0f - disabledAmount * 0.60f,
-                            button.getToggleState() || primary, display,navigation);
-            const auto ink=(button.getToggleState() || primary ? lineOnAccent(currentSkin) : palette.textPrimary)
+                            button.getToggleState(), display, navigation, primary,
+                            static_cast<bool>(button.getProperties().getWithDefault("fireModuleRail",false)), id=="workspace_tab");
+            const auto ink=(primary ? lineOnAccent(currentSkin) : button.getToggleState() ? palette.accent : palette.textPrimary)
                 .withAlpha(1.0f-disabledAmount*.60f);
             if (id == "header_previous" || id == "header_next")
                 drawArrowIcon(g, bounds, id, ink);
@@ -972,7 +978,7 @@ public:
                 : vintageInk(themeColour(colour)).interpolatedWith(themeColour(colours::textPrimary), animation.hover * 0.25f);
             colour = colour.withMultipliedAlpha(1.0f - animation.disabled * 0.68f);
             if (isLineSkin(currentSkin))
-                colour=(button.getToggleState() ? lineOnAccent(currentSkin) : skinPalette(currentSkin).textPrimary)
+                colour=(button.getToggleState() ? skinPalette(currentSkin).accent : skinPalette(currentSkin).textPrimary)
                     .withAlpha(1.0f-animation.disabled*.68f);
             auto area = button.getLocalBounds().toFloat().reduced(8 * scale, 3 * scale);
             auto iconBounds = labelled ? area.removeFromLeft(20 * scale) : area;
@@ -983,7 +989,8 @@ public:
             {
                 area.removeFromLeft(5 * scale);
                 g.setColour(colour);
-                g.setFont(fire::ui::labelFont(juce::jmin(12 * scale, button.getHeight() * 0.38f)));
+                g.setFont(isLineSkin(currentSkin) ? portfolioFont(juce::jmin(12 * scale, button.getHeight() * 0.38f))
+                                                  : labelFont(juce::jmin(12 * scale, button.getHeight() * 0.38f)));
                 g.drawFittedText(button.getButtonText(), area.toNearestInt(), juce::Justification::centredLeft, 1);
             }
             return;
@@ -1024,7 +1031,8 @@ public:
                            .interpolatedWith(themeColour(colours::textMuted).withAlpha(0.45f), animation.disabled);
 
         if (isLineSkin(currentSkin))
-            colour = (button.getToggleState() || static_cast<bool>(button.getProperties().getWithDefault("firePrimaryAction",false)) ? lineOnAccent(currentSkin)
+            colour = (static_cast<bool>(button.getProperties().getWithDefault("firePrimaryAction",false)) ? lineOnAccent(currentSkin)
+                          : button.getToggleState() ? skinPalette(currentSkin).accent
                           : skinPalette(currentSkin).textPrimary).withAlpha(1.0f - animation.disabled * 0.60f);
 
         g.setColour(colour);
@@ -1247,25 +1255,33 @@ private:
     void drawLineSurface(juce::Graphics& g,
                          juce::Rectangle<float> bounds,
                          float hover, float press, float focus, float opacity,
-                         bool selected, bool display = false, bool navigation=false) const
+                         bool selected, bool display = false, bool navigation=false,
+                         bool primary=false, bool moduleRail=false, bool sectionNavigation=false) const
     {
+        using namespace fire::ui;
         const auto& palette = fire::ui::skinPalette(currentSkin);
-        const auto radius = navigation ? juce::jmin(20*scale,bounds.getHeight()*.5f)
-                                      : juce::jmin(2.5f*scale,bounds.getHeight()*.14f);
-        auto face = display ? palette.surface0 : navigation ? palette.canvas : palette.surface1;
-        face = selected && !display ? palette.accent : face.interpolatedWith(palette.raised,
-            juce::jlimit(0.0f,1.0f,hover*.55f+press*.65f));
-        g.setColour(face.withAlpha(opacity));
+        const auto radius = juce::jmin(3.0f*scale,bounds.getHeight()*.16f);
+        auto face = primary ? palette.accent : selected && !display ? lineSelectionSurface(currentSkin)
+                   : display ? palette.canvas : navigation ? lineHoverSurface(currentSkin) : palette.surface1;
+        if (!primary) face=face.interpolatedWith(lineHoverSurface(currentSkin),juce::jlimit(0.0f,1.0f,hover*.55f+press*.65f));
+        const auto fillAlpha = sectionNavigation ? 0.0f
+            : navigation && !selected && !primary ? juce::jmax(hover,press)*opacity : opacity;
+        g.setColour(face.withAlpha(fillAlpha));
         g.fillRoundedRectangle(bounds, radius);
-        const auto edgeAlpha=navigation && !selected ? juce::jmax(hover,focus)*opacity : opacity;
-        g.setColour((selected && !display ? palette.accent : palette.hairline.interpolatedWith(palette.accent,focus*.75f)).withAlpha(edgeAlpha));
-        g.drawRoundedRectangle(bounds, radius, juce::jmax(0.75f, 0.85f * scale));
-        if (selected && !navigation && !display)
+        const auto edgeAlpha=sectionNavigation ? focus*.6f*opacity
+            : navigation ? (selected ? .22f : focus*.8f)*opacity : .85f*opacity;
+        g.setColour((primary || (selected && !display) ? palette.accent
+                     : palette.hairline.interpolatedWith(palette.accent,focus*.80f)).withAlpha(edgeAlpha));
+        g.drawRoundedRectangle(bounds, radius, juce::jmax(0.7f, 0.8f * scale));
+        if (selected && !display && !primary)
         {
-            g.setColour(fire::ui::lineOnAccent(currentSkin).withAlpha(opacity));
-            const auto mark = bounds.withSizeKeepingCentre(11 * scale, 1.3f * scale)
-                .withBottomY(bounds.getBottom() - 3 * scale);
-            g.fillRect(mark);
+            g.setColour(palette.accent.withAlpha(.85f*opacity));
+            if (moduleRail)
+                g.fillRoundedRectangle(bounds.withWidth(1.6f*scale).withX(bounds.getX()+2*scale)
+                    .reduced(0,7*scale),.8f*scale);
+            else
+                g.fillRect(bounds.withSizeKeepingCentre(navigation ? bounds.getWidth()*.38f : 10*scale,1.1f*scale)
+                    .withBottomY(bounds.getBottom()-3*scale));
         }
     }
 
@@ -1662,6 +1678,20 @@ private:
             const auto arcState = calculateDialArcState(sliderPos, reductionPercent, isDrive);
             const auto angle = startAngle + arcState.requestedProportion * (endAngle - startAngle);
             const auto stroke = juce::jmax(1.0f, (isDrive ? 1.8f : 1.35f) * scale);
+            // Quiet calibration marks give the line dials a precise scale;
+            // compact toolbar macros deliberately keep their uncluttered face.
+            if (radius >= 18.0f * scale)
+            {
+                const int divisions = isDrive ? 12 : 8;
+                g.setColour(palette.hairline.withAlpha(.80f * opacity));
+                for (int tick = 0; tick <= divisions; ++tick)
+                {
+                    const auto theta = startAngle + (endAngle - startAngle) * float(tick) / float(divisions);
+                    const auto inner = centre.getPointOnCircumference(trackRadius + 2.0f * scale, theta);
+                    const auto outer = centre.getPointOnCircumference(trackRadius + (tick % 2 == 0 ? 4.0f : 3.4f) * scale, theta);
+                    g.drawLine({inner, outer}, juce::jmax(.65f, .7f * scale));
+                }
+            }
             juce::Path track;
             track.addCentredArc(centre.x, centre.y, trackRadius, trackRadius,
                 0.0f, startAngle, endAngle, true);
@@ -1672,7 +1702,7 @@ private:
                 juce::Path value;
                 value.addCentredArc(centre.x, centre.y, trackRadius, trackRadius, 0.0f,
                     startAngle, startAngle + arcState.effectiveProportion * (endAngle - startAngle), true);
-                g.setColour(palette.textPrimary.withAlpha(opacity));
+                g.setColour((isDrive ? palette.accent : palette.textPrimary).withAlpha(opacity));
                 g.strokePath(value, juce::PathStrokeType(stroke, juce::PathStrokeType::curved,
                                                        juce::PathStrokeType::rounded));
                 if (isDrive && arcState.hasReduction())
@@ -1687,13 +1717,13 @@ private:
             const auto disc = bounds.reduced(radius * dialDiscInsetProportion);
             g.setColour(palette.surface1.withAlpha(opacity));
             g.fillEllipse(disc);
-            g.setColour(palette.hairline.withAlpha(opacity));
+            g.setColour(palette.hairline.withAlpha(.85f * opacity));
             g.drawEllipse(disc, juce::jmax(0.7f, 0.8f * scale));
             juce::Path needle;
             needle.startNewSubPath(0, -disc.getHeight() * 0.07f);
             needle.lineTo(0, -disc.getHeight() * 0.35f);
             g.setColour(palette.textBright.withAlpha(opacity));
-            g.strokePath(needle, juce::PathStrokeType(juce::jmax(1.0f, 1.25f * scale),
+            g.strokePath(needle, juce::PathStrokeType(juce::jmax(1.0f, 1.35f * scale),
                 juce::PathStrokeType::curved, juce::PathStrokeType::rounded),
                 juce::AffineTransform::rotation(angle).translated(centre.x, centre.y));
             if (focusAmount > 0.01f || hoverAmount > 0.01f)

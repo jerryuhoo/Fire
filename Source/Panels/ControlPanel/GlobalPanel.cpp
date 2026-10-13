@@ -22,16 +22,19 @@ void drawMinimalSurface(juce::Graphics& g, const juce::Component& owner, juce::R
     if (bounds.isEmpty())
         return;
 
-    bounds = bounds.reduced(0.5f);
     if (fire::ui::isLineSkin(owner))
     {
-        const auto& palette = fire::ui::paletteFor(owner);
+        // Website sections share the page canvas; a single rule establishes
+        // hierarchy without enclosing the processing controls in a card.
+        const auto& palette=fire::ui::paletteFor(owner);
         g.setColour(palette.canvas);
         g.fillRect(bounds);
+        const auto rule=bounds.reduced(.5f);
         g.setColour(palette.hairline);
-        g.drawLine(bounds.getX(),bounds.getY(),bounds.getRight(),bounds.getY(),.85f);
+        g.drawLine(rule.getX(),rule.getY(),rule.getRight(),rule.getY(),.85f);
         return;
     }
+    bounds = bounds.reduced(0.5f);
     juce::ColourGradient fill(fire::ui::paletteFor(owner).surface1.withAlpha(fire::ui::isVintage(owner) ? 1.0f : 0.72f),
                               bounds.getX(), bounds.getY(),
                               fire::ui::paletteFor(owner).surface0.withAlpha(fire::ui::isVintage(owner) ? 1.0f : 0.88f),
@@ -50,9 +53,12 @@ void drawMinimalTitle(juce::Graphics& g, const juce::Component& owner,
                       juce::Rectangle<float> bounds,
                       const juce::String& text)
 {
-    const auto height=juce::jlimit(10.0f,20.0f,bounds.getHeight()*.46f);
-    g.setFont(fire::ui::isLineSkin(owner) ? fire::ui::portfolioMonoFont(height) : fire::ui::labelFont(height));
-    g.setColour(fire::ui::paletteFor(owner).textSecondary.withAlpha(0.82f));
+    const bool line=fire::ui::isLineSkin(owner);
+    const auto height=line ? juce::jlimit(9.5f,18.0f,bounds.getHeight()*.44f)
+                           : juce::jlimit(10.0f,20.0f,bounds.getHeight()*.46f);
+    g.setFont(line ? fire::ui::portfolioMonoFont(height).withExtraKerningFactor(.035f) : fire::ui::labelFont(height));
+    g.setColour(line ? fire::ui::lineSubtleText(fire::ui::skinFor(owner))
+                     : fire::ui::paletteFor(owner).textSecondary.withAlpha(0.82f));
     g.drawText(text.toUpperCase(), bounds, juce::Justification::centredLeft);
 }
 

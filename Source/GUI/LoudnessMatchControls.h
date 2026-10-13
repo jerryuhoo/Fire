@@ -205,10 +205,11 @@ private:
             const auto scale = juce::jlimit(0.4f, 3.0f, getHeight() / 32.0f);
             const auto& palette = paletteFor(*this);
             const bool vintage = isVintage(*this);
-            const auto currentAccent = vintage
+            const auto rawAccent = vintage
                 ? vintageHeaderLegend(accent == colours::gold || accent == colours::positive)
                 : accent == colours::textMuted ? palette.textMuted
                 : accent == colours::textSecondary ? palette.textSecondary : accent;
+            const auto currentAccent = isLineSkin(*this) ? lineInk(rawAccent, skinFor(*this)) : rawAccent;
             const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
             const auto radius = juce::jmin(Metrics::radiusSmall * scale, bounds.getHeight() * 0.5f);
             const auto hover = getHoverAnimation();
@@ -254,7 +255,7 @@ private:
                 g.setColour(currentAccent.withAlpha(0.72f));
                 g.fillRect(track.withWidth(track.getWidth() * progress));
             }
-            g.setFont(bodyFont(10.5f * scale));
+            g.setFont(isLineSkin(*this) ? portfolioFont(10.5f * scale) : bodyFont(10.5f * scale));
             auto textBounds = getLocalBounds().reduced(3, 2);
             if (vintage)
             {

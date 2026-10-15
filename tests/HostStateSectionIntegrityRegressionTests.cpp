@@ -168,9 +168,12 @@ TEST_CASE("Versioned host states reject malformed model sections atomically",
         routing->setAttribute("depth", "0.5oops");
     }
 
-    SECTION("duplicate populated routing")
+    SECTION("legacy host schema rejects duplicate populated routing")
     {
+        incomingXml->setAttribute("stateFormatVersion", 1);
         auto* routingState = incomingXml->getChildByName("MODULATION_STATE");
+        REQUIRE(routingState != nullptr);
+        routingState->removeAttribute("schemaVersion");
         auto* routing = findRoutingForTarget(*incomingXml, driveParameterID());
         REQUIRE(routingState != nullptr);
         REQUIRE(routing != nullptr);

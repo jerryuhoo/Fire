@@ -795,18 +795,21 @@ TEST_CASE("Modulation routing edits stop at the shared capacity",
         CHECK(state.routings.getLast().sourceLfoIndex == 2);
         CHECK(state.revision == initialRevision + 1);
 
-        manager.assignLfoToTarget(3, fullRoutings[0].targetParameterID);
+        // A different source adds a contributor and therefore requires a
+        // free slot; it must not evict the existing target's source at capacity.
+        CHECK(manager.assignLfoToTarget(3, fullRoutings[0].targetParameterID)
+              == LfoManager::AssignmentResult::capacityReached);
         state = manager.getModulationRoutingStateSnapshot();
-        REQUIRE(state.routings.size()
-                == LfoManager::maximumModulationRoutings);
-        CHECK(state.routings[0].sourceLfoIndex == 3);
-        CHECK(state.revision == initialRevision + 2);
+        REQUIRE(state.routings.size() == LfoManager::maximumModulationRoutings);
+        CHECK(state.routings[0].sourceLfoIndex == fullRoutings[0].sourceLfoIndex);
+        CHECK(state.revision == initialRevision + 1);
+        CHECK(manager.assignLfoToTarget(fullRoutings[0].sourceLfoIndex, fullRoutings[0].targetParameterID)
+              == LfoManager::AssignmentResult::unchanged);
 
         manager.assignLfoToTarget(2, "capacity_overflow_target");
         state = manager.getModulationRoutingStateSnapshot();
-        CHECK(state.routings.size()
-              == LfoManager::maximumModulationRoutings);
-        CHECK(state.revision == initialRevision + 2);
+        CHECK(state.routings.size() == LfoManager::maximumModulationRoutings);
+        CHECK(state.revision == initialRevision + 1);
         CHECK(std::none_of(
             state.routings.begin(),
             state.routings.end(),

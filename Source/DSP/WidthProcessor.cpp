@@ -43,6 +43,7 @@ WidthProcessor::RouteRecipeSignature WidthProcessor::makeRouteRecipe(
                                                 provider->modulationDepth)
                                  : 0.0f;
     recipe.isBipolar = provider->isBipolar;
+    recipe.signalIsOffset = provider->signalIsOffset;
     return recipe;
 }
 
@@ -58,7 +59,8 @@ void WidthProcessor::serviceRouteTransition(
                && first.sourceIndex == second.sourceIndex
                && juce::exactlyEqual(first.modulationDepth,
                                      second.modulationDepth)
-               && first.isBipolar == second.isBipolar;
+               && first.isBipolar == second.isBipolar
+               && first.signalIsOffset == second.signalIsOffset;
     };
 
     if (! transition.initialised)

@@ -9,6 +9,12 @@ inline constexpr int envelope = lfo_bank::capacity;
 inline constexpr int firstMacro = envelope + 1;
 inline constexpr int macroCount = 4;
 inline constexpr int sourceCount = firstMacro + macroCount;
+// Internal aggregate channels are never persisted as user source identities.
+inline constexpr int maximumRoutings = 128;
+inline constexpr int firstAggregateSignal = sourceCount;
+inline constexpr int signalCount = firstAggregateSignal + maximumRoutings;
+inline bool isAggregateSignal(int index) noexcept
+{ return index >= firstAggregateSignal && index < signalCount; }
 inline constexpr int parameterCount = 3 + macroCount;
 inline constexpr int schemaVersion = 1;
 inline constexpr std::array<const char*, parameterCount> ids{

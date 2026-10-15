@@ -35,7 +35,8 @@ public:
         clearModulation,
         invertDepth,
         togglePolarity,
-        toggleBypass
+        toggleBypass,
+        editModulation
     };
 
     ModulatableSlider();
@@ -94,6 +95,14 @@ public:
     {
         return modulationHandlePressAnimation;
     }
+    // Message-thread display summary. Zero keeps standalone/legacy callers
+    // on the original single-route rendering path until a snapshot arrives.
+    int modulationRouteCount = 0;
+    bool usesModulationSummary = false;
+    double modulationOffsetMinimum = 0.0, modulationOffsetMaximum = 0.0, modulationOffsetCurrent = 0.0;
+    bool needsMatrixEditing() const noexcept { return modulationRouteCount > 1 || usesModulationSummary; }
+    std::function<void(const juce::String&)> onEditModulationRequested;
+    std::function<int(const juce::String&)> getModulationRouteCount;
     bool isModulated = false;
     bool isBipolar = true;
     bool isBypassed = false;
@@ -172,6 +181,7 @@ private:
     float readoutOpacity = 1.0f;
     void valueChanged() override;
     friend struct ModulatableSliderTestAccess;
+    friend struct MultiSourceModulationUiTestAccess;
     friend struct LfoBankUiTestAccess;
     friend struct ModulatableSliderInteractionTestAccess;
 

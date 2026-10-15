@@ -1,4 +1,5 @@
 #include "helpers/ProcessingLatency.h"
+#include "helpers/SingleSourceRouting.h"
 #include <PluginProcessor.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -88,7 +89,7 @@ void applyGlobalRecipe(FireAudioProcessor& processor,
         return;
     }
 
-    processor.assignLfoToTarget(recipe.sourceIndex, OUTPUT_ID);
+    fire::tests::assignSingleSourceRoute(processor, recipe.sourceIndex, OUTPUT_ID);
     processor.setModulationDepth(OUTPUT_ID, recipe.depth);
     const auto info = processor.getModulationInfoForParameter(OUTPUT_ID);
     REQUIRE(info.isModulated);

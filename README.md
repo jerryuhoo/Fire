@@ -1,4 +1,4 @@
-# Fire (Version 2.0.1 — in development) [![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
+# Fire (Version 2.1.0 — in development) [![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
 
 ![Fire 2.0 Vintage skin with a sound-reactive Warm Triode tube and three-band processing](Fire1.png)
 
@@ -383,6 +383,19 @@ arrow keys and choose **Show control** to close the matrix, open its Band or
 Master module and focus the corresponding knob. Revealing a control does not
 insert a module or enable processing; unavailable destinations stay unavailable.
 
+Multiple matrix rows can target the same parameter. Contributions are summed
+before the final parameter-range clamp; assigning another source adds a route.
+Each row offers **From / To** offsets, **Curve** and **Depth via Macro**. Offsets
+are percentages of the target's normalised range relative to its base knob;
+Depth scales both endpoints. For example, From −20% to +30% spans those offsets
+at 100% Depth. Editing an endpoint enables a custom range; Bi/Uni restores the
+standard −50%…+50% or 0%…100% range. Curve offers Linear, Ease in, Ease out and
+S curve. Depth via Macro multiplies that route's Depth by the selected macro.
+A multi-route or custom-mapping knob badge opens its routes in the matrix;
+its range and moving marker show their combined result. Existing single-source
+presets keep their original mapping. New mapping presets use format 3 and
+require Fire 2.1 or later.
+
 Assigned knobs use a translucent source-coloured range band. A bright outlined
 dot shows the current modulated value, while the neutral inner notch marks the
 base value. Bypassed modulation is dimmed and does not show a moving dot.
@@ -423,7 +436,13 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ## 6. Update Notes
 
-### 2.0.1 (in development)
+### 2.1.0 (in development)
+
+- Add multi-source modulation, per-route offset ranges, response curves and
+  macro-controlled depth, with combined knob feedback and expanded matrix rows.
+- Preserve older single-source presets and append no changes to their parameter IDs.
+
+### 2.0.1 (unreleased)
 
 - Add stereo-aware spectrum modes and avoid unnecessary display collection when
   the editor is closed.

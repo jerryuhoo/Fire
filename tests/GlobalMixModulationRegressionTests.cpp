@@ -1,4 +1,5 @@
 #include "helpers/ProcessingLatency.h"
+#include "helpers/SingleSourceRouting.h"
 #include <PluginProcessor.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -327,7 +328,7 @@ void checkSourceBridge(bool useHq)
         alwaysWet.processBlock(wetAudio, midi);
     }
 
-    subject.assignLfoToTarget(1, MIX_ID);
+    fire::tests::assignSingleSourceRoute(subject, 1, MIX_ID);
     const int audibleOffset = fire::tests::legacyControlOutputDelay(useHq, subject.getLatencySamples());
     const int eventSamples = audibleOffset + routeRampSamples + 1;
     juce::AudioBuffer<float> subjectAudio(2, eventSamples);

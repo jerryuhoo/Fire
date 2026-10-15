@@ -3916,6 +3916,16 @@ void LfoPanel::configureModulationMatrixDialogResizeLimits(
                                 juce::jmax(4096, minimumDialogHeight));
 }
 
+void LfoPanel::openModulationMatrixForTarget(const juce::String& parameterID)
+{
+    const juce::Component::SafePointer<LfoPanel> safe(this);
+    const auto target = parameterID;
+    showModulationMatrixDialog();
+    if (!safe) return;
+    if (auto* dialog = modulationMatrixDialog.getComponent())
+        if (auto* matrix = dynamic_cast<ModulationMatrixPanel*>(dialog->getContentComponent())) matrix->focusTarget(target);
+}
+
 void LfoPanel::showModulationMatrixDialog()
 {
     const juce::Component::SafePointer<LfoPanel> safeThis(this);

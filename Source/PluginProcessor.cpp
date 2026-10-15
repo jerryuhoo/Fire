@@ -15,6 +15,7 @@
 #include "Utility/StrictNumberParser.h"
 #include "Utility/EditHistory.h"
 #include "Utility/FrozenAudioState.h"
+#include "Utility/ModulationStateValidation.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -84,7 +85,11 @@ bool areModulationRoutingsEquivalent(const ModulationRouting& current,
            && current.targetParameterID == expected.targetParameterID
            && arePresetFloatsEquivalent(current.depth, expected.depth)
            && current.isBipolar == expected.isBipolar
-           && current.isBypassed == expected.isBypassed;
+           && current.isBypassed == expected.isBypassed
+           && current.customRange == expected.customRange
+           && arePresetFloatsEquivalent(current.rangeStart, expected.rangeStart)
+           && arePresetFloatsEquivalent(current.rangeEnd, expected.rangeEnd)
+           && current.curve == expected.curve && current.depthMacro == expected.depthMacro;
 }
 
 struct FilterFrequencyRange
@@ -117,7 +122,7 @@ Slope getSlopeParameterValue(const std::atomic<float>* parameter) noexcept
 constexpr int minimumProcessingBlockCapacity = 8192;
 constexpr double safePeakHoldSeconds = 0.05;
 constexpr double safePeakReleaseSeconds = 0.05;
-constexpr int hostStateFormatVersion = 1;
+constexpr int hostStateFormatVersion = 2;
 constexpr int oldestWrappedHostParameterCount = 19;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 std::atomic<HostBypassDenormalStateHook>
@@ -277,8 +282,9 @@ bool isValidVersionedHostLfoState(const juce::XmlElement& lfoState, int expected
 bool isValidVersionedHostRoutingState(
     const juce::XmlElement& routingState,
     juce::AudioProcessorValueTreeState& parameterState,
-    int sourceCount) noexcept
+    int sourceCount, bool advancedMapping) noexcept
 {
+    if (!fire::modulation_state::hasSchema(routingState, advancedMapping)) return false;
     if (! routingState.hasTagName("MODULATION_STATE")
         || routingState.getNumChildElements()
                > LfoManager::maximumModulationRoutings)
@@ -292,9 +298,9 @@ bool isValidVersionedHostRoutingState(
         int source = -1;
         if (! routing->hasTagName("ROUTING")
             || routing->getNumChildElements() != 0
-            || ! parseStrictNonNegativeIntegerAttribute(*routing,
-                                                        "source",
-                                                        source)
+            || !(advancedMapping
+                    ? fire::modulation_state::readStrictIntegerAttribute(*routing, "source", source)
+                    : parseStrictNonNegativeIntegerAttribute(*routing, "source", source))
             || ! juce::isPositiveAndBelow(source, sourceCount)
             || ! routing->hasAttribute("target")
             || ! hasStrictFiniteAttributeInRange(*routing,
@@ -307,6 +313,8 @@ bool isValidVersionedHostRoutingState(
             return false;
         }
 
+        if (advancedMapping && !fire::modulation_state::hasValidMapping(*routing)) return false;
+
         // Current Init snapshots contain empty preallocated slots. They have no
         // semantic routing and may repeat, but all populated targets must be
         // known and unique.
@@ -315,7 +323,7 @@ bool isValidVersionedHostRoutingState(
         if (target.isEmpty())
             continue;
         if (parameterState.getParameter(target) == nullptr
-            || seenTargets.contains(target))
+            || (!advancedMapping && seenTargets.contains(target)))
         {
             return false;
         }
@@ -653,6 +661,7 @@ makeCompressorRecipe(const ModulatedValueProvider& provider,
                                                 provider.modulationDepth)
                                  : 0.0f;
     recipe.isBipolar = recipe.routed ? provider.isBipolar : true;
+    recipe.signalIsOffset = recipe.routed && provider.signalIsOffset;
     return recipe;
 }
 
@@ -667,7 +676,8 @@ static bool sameCompressorRecipe(
 
     return lhs.sourceIndex == rhs.sourceIndex
            && juce::exactlyEqual(lhs.modulationDepth, rhs.modulationDepth)
-           && lhs.isBipolar == rhs.isBipolar;
+           && lhs.isBipolar == rhs.isBipolar
+           && lhs.signalIsOffset == rhs.signalIsOffset;
 }
 
 static void serviceCompressorRecipeTransition(
@@ -759,6 +769,7 @@ makeShapeControlRecipe(const ModulatedValueProvider& provider,
                                                 provider.modulationDepth)
                                  : 0.0f;
     recipe.isBipolar = recipe.routed ? provider.isBipolar : true;
+    recipe.signalIsOffset = recipe.routed && provider.signalIsOffset;
     return recipe;
 }
 
@@ -773,7 +784,8 @@ static bool sameShapeControlRecipe(
 
     return lhs.sourceIndex == rhs.sourceIndex
            && juce::exactlyEqual(lhs.modulationDepth, rhs.modulationDepth)
-           && lhs.isBipolar == rhs.isBipolar;
+           && lhs.isBipolar == rhs.isBipolar
+           && lhs.signalIsOffset == rhs.signalIsOffset;
 }
 
 static void serviceShapeControlRecipeTransition(
@@ -862,6 +874,7 @@ static DriveControlTransitionState::RecipeSignature makeDriveRecipe(
                                                 provider.modulationDepth)
                                  : 0.0f;
     recipe.isBipolar = recipe.routed ? provider.isBipolar : true;
+    recipe.signalIsOffset = recipe.routed && provider.signalIsOffset;
     recipe.isExtremeModeOn = recipe.routed && isExtremeModeOn;
     return recipe;
 }
@@ -878,6 +891,7 @@ static bool sameDriveRecipe(
     return lhs.sourceIndex == rhs.sourceIndex
            && juce::exactlyEqual(lhs.modulationDepth, rhs.modulationDepth)
            && lhs.isBipolar == rhs.isBipolar
+           && lhs.signalIsOffset == rhs.signalIsOffset
            && lhs.isExtremeModeOn == rhs.isExtremeModeOn;
 }
 
@@ -1060,6 +1074,7 @@ static OutputGainTransitionState::RecipeSignature makeOutputGainRecipe(
                                                 provider.modulationDepth)
                                  : 0.0f;
     recipe.isBipolar = provider.isBipolar;
+    recipe.signalIsOffset = provider.signalIsOffset;
     recipe.isLinked = recipe.routed && isLinked;
     return recipe;
 }
@@ -1075,7 +1090,8 @@ static bool sameOutputGainRecipe(
 
     return lhs.sourceIndex == rhs.sourceIndex
            && juce::exactlyEqual(lhs.modulationDepth, rhs.modulationDepth)
-           && lhs.isBipolar == rhs.isBipolar;
+           && lhs.isBipolar == rhs.isBipolar
+           && lhs.signalIsOffset == rhs.signalIsOffset;
 }
 
 static void synchroniseLegacyGain(juce::dsp::Gain<float>& gain,
@@ -1358,7 +1374,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec, bool withInserts
     dcFilterDryBuffer.setSize(numChannels, maximumBlockSize);
     // Preallocate the entire source bank, including Envelope and all Macros,
     // so binding an auxiliary route cannot grow this buffer on the audio thread.
-    upsampledLfoOutputs.setSize(fire::mod_sources::sourceCount, maximumBlockSize * 4);
+    upsampledLfoOutputs.setSize(4, maximumBlockSize * 4);
     safePeakEnvelopeBuffer.setSize(1, maximumBlockSize);
     safePeakEnvelopeBuffer.clear();
 
@@ -1772,74 +1788,29 @@ void BandProcessor::processDriveShapeStage(juce::AudioBuffer<float>& buffer,
     {
         auto oversampledBlock = oversampling->processSamplesUp(block);
 
-        // --- Modulation source upsampling ---
-        upsampledLfoOutputs.setSize(juce::jmin(fire::mod_sources::sourceCount, lfoOutputs.getNumChannels()),
-                                    static_cast<int>(oversampledBlock.getNumSamples()),
-                                    false,
-                                    false,
-                                    true);
-        if (upsampledLfoOutputs.getNumSamples() > 0)
+        // Only four controls run at the oversampled rate. Keep their scratch
+        // lanes separate from the source identities (including aggregate
+        // channels), so adding routes does not multiply every Shape's memory.
+        const std::array<int, 4> sources { params.driveLfoSourceIndex, params.biasLfoSourceIndex,
+                                          params.recLfoSourceIndex, params.shapeMixLfoSourceIndex };
+        const std::array<ModulatedValueProvider*, 4> providers { &paramsForProcessing.driveVal,
+            &paramsForProcessing.biasVal, &paramsForProcessing.recVal, &paramsForProcessing.shapeMixValProvider };
+        const auto samples = static_cast<int>(oversampledBlock.getNumSamples());
+        upsampledLfoOutputs.setSize(4, samples, false, false, true);
+        const int ratio = juce::jmax(1, samples / juce::jmax(1, buffer.getNumSamples()));
+        for (size_t lane = 0; lane < sources.size(); ++lane)
         {
-            std::array<bool, fire::mod_sources::sourceCount> neededSources {};
-            for (const int source : {params.driveLfoSourceIndex, params.biasLfoSourceIndex,
-                                     params.recLfoSourceIndex, params.shapeMixLfoSourceIndex})
-                if (juce::isPositiveAndBelow(source, upsampledLfoOutputs.getNumChannels()))
-                    neededSources[static_cast<size_t>(source)] = true;
-            const int baseSamplesInChunk = buffer.getNumSamples();
-            const int oversamplingRatio = baseSamplesInChunk > 0
-                                              ? upsampledLfoOutputs.getNumSamples() / baseSamplesInChunk
-                                              : 1;
-            const int safeOversamplingRatio = juce::jmax(1, oversamplingRatio);
-
-            for (int channel = 0; channel < upsampledLfoOutputs.getNumChannels(); ++channel)
-            {
-                // Only these four providers run at the oversampled rate.
-                // Unassigned/dormant bank channels are never read by this stage.
-                if (! neededSources[static_cast<size_t>(channel)]) continue;
-                auto* dest = upsampledLfoOutputs.getWritePointer(channel);
-                if (lfoOutputs.getNumSamples() <= 0)
-                {
-                    juce::FloatVectorOperations::clear(dest, upsampledLfoOutputs.getNumSamples());
-                    continue;
-                }
-                const auto* src = lfoOutputs.getReadPointer(channel);
-
-                if (lfoOutputs.getNumSamples() == 1)
-                {
-                    juce::FloatVectorOperations::fill(dest, src[0], upsampledLfoOutputs.getNumSamples());
-                    continue;
-                }
-
-                // LFO samples describe base-rate instants. Repeat each value
-                // for the corresponding oversampled interval so the mapping is
-                // independent of host callback and internal chunk boundaries.
-                // The previous endpoint-normalised interpolation changed its
-                // step with every callback length, producing different audio
-                // for the same timeline when a host repartitioned its blocks.
-                for (int i = 0; i < upsampledLfoOutputs.getNumSamples(); ++i)
-                {
-                    const int sourceIndex = juce::jlimit(
-                        0,
-                        lfoOutputs.getNumSamples() - 1,
-                        lfoSampleOffset + i / safeOversamplingRatio);
-                    dest[i] = src[sourceIndex];
-                }
-            }
-        }
-
-        // Bind the upsampled LFO signals to the providers
-        if (juce::isPositiveAndBelow(params.driveLfoSourceIndex, upsampledLfoOutputs.getNumChannels()))
-            paramsForProcessing.driveVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.driveLfoSourceIndex);
-        if (juce::isPositiveAndBelow(params.biasLfoSourceIndex, upsampledLfoOutputs.getNumChannels()))
-            paramsForProcessing.biasVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.biasLfoSourceIndex);
-        if (juce::isPositiveAndBelow(params.recLfoSourceIndex, upsampledLfoOutputs.getNumChannels()))
-            paramsForProcessing.recVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.recLfoSourceIndex);
-        if (std::abs(paramsForProcessing.shapeMixValProvider.modulationDepth) > 1.0e-6f
-            && juce::isPositiveAndBelow(params.shapeMixLfoSourceIndex,
-                                        upsampledLfoOutputs.getNumChannels()))
-        {
-            paramsForProcessing.shapeMixValProvider.lfoSignal =
-                upsampledLfoOutputs.getReadPointer(params.shapeMixLfoSourceIndex);
+            auto& provider = *providers[lane];
+            provider.lfoSignal = nullptr;
+            if ((!hasCompleteBaseRateLfoChunk && lfoOutputs.getNumSamples() != 1)
+                || !juce::isPositiveAndBelow(sources[lane], lfoOutputs.getNumChannels())
+                || (lane == 3 && std::abs(provider.modulationDepth) <= 1.0e-6f)) continue;
+            auto* destination = upsampledLfoOutputs.getWritePointer(static_cast<int>(lane));
+            const auto* source = lfoOutputs.getReadPointer(sources[lane]);
+            // Zero-order hold preserves the existing sample/chunk timeline.
+            for (int sample = 0; sample < samples; ++sample)
+                destination[sample] = source[lfoOutputs.getNumSamples() == 1 ? 0 : lfoSampleOffset + sample / ratio];
+            provider.lfoSignal = destination;
         }
         // Output gain runs after downsampling, so it must use the original-rate
         // LFO. Using the oversampled signal here consumed only its first quarter.
@@ -2711,8 +2682,8 @@ float FireAudioProcessor::getModulatedValueAtSample(const CachedParameter& param
                                      ? juce::jlimit(0.0f, 1.0f, rawNormalisedBase)
                                      : parameter.ranged->getDefaultValue();
 
-    float effectiveDepth = routingInfo.depth;
-    if (routingInfo.isBipolar)
+    float effectiveDepth = routingInfo.signalIsOffset ? 1.0f : routingInfo.depth;
+    if (!routingInfo.signalIsOffset && routingInfo.isBipolar)
     {
         lfoValue = lfoValue * 2.0f - 1.0f;
         effectiveDepth *= 0.5f;
@@ -2768,7 +2739,7 @@ float FireAudioProcessor::getSnapshotModulatedValueAtSample(
     const float normalisedValue = juce::jlimit(
         0.0f,
         1.0f,
-        normalisedBase + mappedLfo * effectiveDepth);
+        normalisedBase + (provider.signalIsOffset ? juce::jlimit(-1.0f, 1.0f, rawLfoValue) : mappedLfo * effectiveDepth));
     const float value = provider.range.convertFrom0to1(normalisedValue);
     return std::isfinite(value) ? value : baseValue;
 }
@@ -3955,7 +3926,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     mWetBuffer.clear();
     hostBypassWetBuffer.setSize(outputChannels, maximumBlockSize);
     hostBypassWetBuffer.clear();
-    lfoOutputBuffer.setSize(fire::mod_sources::sourceCount, maximumBlockSize);
+    lfoOutputBuffer.setSize(fire::mod_sources::signalCount, maximumBlockSize);
     lfoOutputBuffer.clear();
     lofiDryBuffer.setSize(outputChannels, maximumBlockSize);
     lofiDryBuffer.clear();
@@ -5597,7 +5568,7 @@ void FireAudioProcessor::processWetBlock(
         multibandTopologyResetGeneration.load(std::memory_order_acquire);
     lastAudioCallbackGenerationAtStart = topologySequenceAtCallbackStart;
 
-    lfoOutputBuffer.setSize(fire::mod_sources::sourceCount, numSamples, false, false, true);
+    lfoOutputBuffer.setSize(fire::mod_sources::signalCount, numSamples, false, false, true);
     lfoOutputBuffer.clear();
 
     // Routes, staged shapes and every scalar DSP recipe are selected under
@@ -5946,6 +5917,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 
     // 4. Save Modulation Matrix Routings
     auto modMatrixState = std::make_unique<juce::XmlElement>("MODULATION_STATE");
+    modMatrixState->setAttribute("schemaVersion", fire::modulation_state::schemaVersion);
     for (const auto& routing : mainState.routings)
     {
         auto routingXml = std::make_unique<juce::XmlElement>("ROUTING");
@@ -6194,7 +6166,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 *xmlState, "stateFormatVersion", incomingFormatVersion)
             || ! parseStrictNonNegativeIntegerAttribute(
                 *xmlState, "savedParameterCount", declaredParameterCount)
-            || incomingFormatVersion != hostStateFormatVersion
+            || incomingFormatVersion < 1 || incomingFormatVersion > hostStateFormatVersion
             || declaredParameterCount != incomingParameterIDs.size()
             || xmlState->getChildByName("otherState") == nullptr
             || versionedLfoState == nullptr
@@ -6204,7 +6176,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                                               "MODULATION_STATE") != 1
             || ! isValidVersionedHostLfoState(*versionedLfoState, lfoCountInState)
             || ! isValidVersionedHostRoutingState(*versionedRoutingState,
-                                                  treeState, hasAuxiliaryState ? fire::mod_sources::sourceCount : lfoCountInState)
+                                                  treeState, hasAuxiliaryState ? fire::mod_sources::sourceCount : lfoCountInState, incomingFormatVersion >= 2)
             || xmlState->getChildByName("AB_STATE") == nullptr)
         {
             return;
@@ -6434,6 +6406,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 
     juce::Array<ModulationRouting> loadedRoutings;
     juce::StringArray loadedRoutingTargets;
+    const bool advancedMapping = xmlState->getIntAttribute("stateFormatVersion", 0) >= 2;
     if (auto* modMatrixState = xmlState->getChildByName("MODULATION_STATE"))
     {
         for (auto* routingXml : modMatrixState->getChildIterator())
@@ -6444,13 +6417,14 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             if (! routingXml->hasTagName("ROUTING"))
                 continue;
 
-            auto routing = ModulationRouting::readFromXml(*routingXml);
+            auto routing = advancedMapping ? ModulationRouting::readFromXml(*routingXml)
+                : fire::modulation_state::readLegacy(*routingXml);
             if (!hasAuxiliaryState) routing.sourceLfoIndex = juce::jmin(routing.sourceLfoIndex, fire::lfo_bank::capacity - 1);
             if (routing.targetParameterID.isEmpty()
                 || treeState.getParameter(routing.targetParameterID) == nullptr
                 || fire::mod_sources::isParameterID(routing.targetParameterID)
                 || migratedCloudsRoutingTargets.contains(routing.targetParameterID)
-                || loadedRoutingTargets.contains(routing.targetParameterID))
+                || (!advancedMapping && loadedRoutingTargets.contains(routing.targetParameterID)))
                 continue;
 
             loadedRoutingTargets.add(routing.targetParameterID);
@@ -7696,11 +7670,11 @@ void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackP
         target.effect.shapeModel = juce::roundToInt(loadCachedParameter(shapeModelParameters[static_cast<size_t>(scope)][slot]));
         const auto& analogDrive = analogDriveParameters[static_cast<size_t>(scope)][slot];
         target.effect.analogDrive.baseValue = loadCachedParameter(analogDrive);
-        target.effect.analogDrive.range = {0, 100}; target.effect.analogDrive.modulationDepth = 0; target.effect.analogDrive.lfoSignal = nullptr;
+        target.effect.analogDrive.range = {0, 100}; target.effect.analogDrive.modulationDepth = 0; target.effect.analogDrive.lfoSignal = nullptr; target.effect.analogDrive.signalIsOffset = false;
         target.analogDriveSource = -1;
         LfoManager::AudioThreadRoutingInfo analogRouting;
         if (analogDrive.ranged && lfoManager->getAudioThreadRoutingInfo(analogDrive.ranged, analogRouting))
-        {target.effect.analogDrive.modulationDepth = analogRouting.depth; target.effect.analogDrive.isBipolar = analogRouting.isBipolar; target.analogDriveSource = analogRouting.sourceLfoIndex;}
+        {target.effect.analogDrive.modulationDepth = analogRouting.depth; target.effect.analogDrive.isBipolar = analogRouting.isBipolar; target.effect.analogDrive.signalIsOffset = analogRouting.signalIsOffset; target.analogDriveSource = analogRouting.sourceLfoIndex;}
         target.effect.analogDriveSource = target.analogDriveSource;
 
         target.effect.enabled = loadCachedParameter(cache[fire::effects::enabledField]) > 0.5f;
@@ -7711,23 +7685,23 @@ void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackP
         {
             auto& provider = target.effect.values[control];
             provider.baseValue = loadCachedParameter(cache[control], 0.5f);
-            provider.range = {0.0f, 1.0f}; provider.lfoSignal = nullptr;
+            provider.range = {0.0f, 1.0f}; provider.lfoSignal = nullptr; provider.signalIsOffset = false; provider.modulationDepth = 0;
             target.sources[control] = -1;
             LfoManager::AudioThreadRoutingInfo routing;
             if (cache[control].ranged && lfoManager->getAudioThreadRoutingInfo(cache[control].ranged, routing))
             {
-                provider.modulationDepth = routing.depth; provider.isBipolar = routing.isBipolar;
+                provider.modulationDepth = routing.depth; provider.isBipolar = routing.isBipolar; provider.signalIsOffset = routing.signalIsOffset;
                 target.sources[control] = routing.sourceLfoIndex;
             }
         }
         const auto& core = coreModuleParameters[static_cast<size_t>(scope)][slot];
         auto& jitter = target.effect.jitter;
         jitter.baseValue = loadCachedParameter(core[fire::core_modules::jitterField]);
-        jitter.range = {0, 1}; jitter.lfoSignal = nullptr; jitter.modulationDepth = 0;
+        jitter.range = {0, 1}; jitter.lfoSignal = nullptr; jitter.modulationDepth = 0; jitter.signalIsOffset = false;
         target.jitterSource = -1;
         LfoManager::AudioThreadRoutingInfo jitterRouting;
         if (core[fire::core_modules::jitterField].ranged && lfoManager->getAudioThreadRoutingInfo(core[fire::core_modules::jitterField].ranged, jitterRouting))
-        {jitter.modulationDepth = jitterRouting.depth; jitter.isBipolar = jitterRouting.isBipolar; target.jitterSource = jitterRouting.sourceLfoIndex;}
+        {jitter.modulationDepth = jitterRouting.depth; jitter.isBipolar = jitterRouting.isBipolar; jitter.signalIsOffset = jitterRouting.signalIsOffset; target.jitterSource = jitterRouting.sourceLfoIndex;}
         if (target.effect.type == fire::effects::Type::eq)
             for (int node = 0; node < fire::eq::maxNodes; ++node)
             {
@@ -7743,10 +7717,10 @@ void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackP
                 {
                     const auto& cached = field(static_cast<fire::eq::Field>(control));
                     auto& value = destination.controls[static_cast<size_t>(control)];
-                    value.value = loadCachedParameter(cached); value.depth = 0; value.source = -1; value.signal = nullptr;
+                    value.value = loadCachedParameter(cached); value.depth = 0; value.source = -1; value.signal = nullptr; value.signalIsOffset = false;
                     LfoManager::AudioThreadRoutingInfo routing;
                     if (cached.ranged && lfoManager->getAudioThreadRoutingInfo(cached.ranged, routing))
-                    { value.depth = routing.depth; value.bipolar = routing.isBipolar; value.source = routing.sourceLfoIndex; }
+                    { value.depth = routing.depth; value.bipolar = routing.isBipolar; value.signalIsOffset = routing.signalIsOffset; value.source = routing.sourceLfoIndex; }
                 }
                 destination.state.frequency = destination.controls[0].value;
                 destination.state.gainDb = destination.controls[1].value;
@@ -7760,7 +7734,7 @@ void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackP
         {
             const auto field = static_cast<size_t>(fire::clouds_params::spreadField) + control;
             auto& provider = target.effect.clouds.values[control];
-            provider.lfoSignal = nullptr;
+            provider.lfoSignal = nullptr; provider.signalIsOffset = false; provider.modulationDepth = 0;
             target.cloudsSources[control] = -1;
             // Empty/non-granular slots have no Clouds modulation work.
             if (! isGranular) continue;
@@ -7770,7 +7744,7 @@ void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackP
             if (clouds[field].ranged && lfoManager->getAudioThreadRoutingInfo(clouds[field].ranged, routing))
             {
                 provider.modulationDepth = routing.depth;
-                provider.isBipolar = routing.isBipolar;
+                provider.isBipolar = routing.isBipolar; provider.signalIsOffset = routing.signalIsOffset;
                 target.cloudsSources[control] = routing.sourceLfoIndex;
             }
         }
@@ -7927,6 +7901,7 @@ void FireAudioProcessor::prepareHqCallbackContext(
             {
                 provider.modulationDepth = routingInfo.depth;
                 provider.isBipolar = routingInfo.isBipolar;
+                provider.signalIsOffset = routingInfo.signalIsOffset;
                 lfoIndex = routingInfo.sourceLfoIndex;
             }
         };
@@ -8024,6 +7999,7 @@ void FireAudioProcessor::prepareAudioCallbackParameterSnapshot(
         {
             destination.provider.modulationDepth = routingInfo.depth;
             destination.provider.isBipolar = routingInfo.isBipolar;
+            destination.provider.signalIsOffset = routingInfo.signalIsOffset;
             destination.lfoSourceIndex = routingInfo.sourceLfoIndex;
         }
     };
@@ -9758,25 +9734,20 @@ void FireAudioProcessor::applyGlobalMix(
 
 FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParameter(const juce::String& parameterID) const
 {
-    const juce::ScopedLock sl(lfoManager->getLfoDataLock());
-    // Find the routing in the manager's list
-    for (const auto& routing : lfoManager->getModulationRoutings())
+    std::array<float, fire::mod_sources::sourceCount> values {};
+    std::array<bool, fire::mod_sources::sourceCount> present {};
+    for (int index = 0; index < fire::mod_sources::sourceCount; ++index)
     {
-        if (routing.targetParameterID == parameterID)
-        {
-            if (isModulationSourcePresent(routing.sourceLfoIndex))
-            {
-                const float unipolarLfoValue = lfoManager->getLfoOutput(routing.sourceLfoIndex);
-                float finalLfoValue = routing.isBipolar ? (unipolarLfoValue * 2.0f - 1.0f) : unipolarLfoValue;
-                return { true, routing.sourceLfoIndex + 1, routing.depth, finalLfoValue, routing.isBipolar, routing.isBypassed };
-            }
-        }
+        values[static_cast<size_t>(index)] = lfoManager->getLfoOutput(index);
+        present[static_cast<size_t>(index)] = isModulationSourcePresent(index);
     }
-    return { false, 0, 0.0f, 0.0f, true, false }; // Default "not modulated" state
+    const juce::ScopedLock lock(lfoManager->getLfoDataLock());
+    return fire::ui::summariseModulation(lfoManager->getModulationRoutings(), parameterID, values, present);
 }
 
 void FireAudioProcessor::setModulationValue(const juce::String& targetParameterID, float newValue)
 {
+    if (getModulationInfoForParameter(targetParameterID).usesMappedDisplay) return;
     auto* parameter = treeState.getParameter(targetParameterID);
     auto* rawParameter = treeState.getRawParameterValue(targetParameterID);
     if (parameter == nullptr || rawParameter == nullptr || ! std::isfinite(newValue))
@@ -9824,6 +9795,7 @@ void FireAudioProcessor::setModulationValue(const juce::String& targetParameterI
 
 void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterID, float newDepth)
 {
+    if (getModulationInfoForParameter(targetParameterID).usesMappedDisplay) return;
     if (! std::isfinite(newDepth))
         return;
 
@@ -9853,6 +9825,7 @@ void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterI
 
 void FireAudioProcessor::toggleBipolarMode(const juce::String& targetParameterID)
 {
+    if (getModulationInfoForParameter(targetParameterID).usesMappedDisplay) return;
     bool didUpdate = false;
     {
         const juce::ScopedLock lock(lfoManager->getLfoDataLock());
@@ -9874,6 +9847,7 @@ void FireAudioProcessor::toggleBipolarMode(const juce::String& targetParameterID
 
 void FireAudioProcessor::resetModulation(const juce::String& targetParameterID)
 {
+    if (getModulationInfoForParameter(targetParameterID).usesMappedDisplay) return;
     bool didUpdate = false;
     {
         const juce::ScopedLock lock(lfoManager->getLfoDataLock());
@@ -10399,62 +10373,36 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
             return false;
 
     juce::Array<ModulationRouting> expectedRoutings;
+    const bool advancedMapping = presetXml.getIntAttribute("presetFormatVersion", 0) >= 3;
     if (const auto* routingState = presetXml.getChildByName("MODULATION_STATE"))
-    {
         for (auto* routingXml : routingState->getChildIterator())
         {
-            if (! routingXml->hasTagName("ROUTING")
-                || expectedRoutings.size()
-                       >= LfoManager::maximumModulationRoutings)
-                continue;
-
-            auto routing = ModulationRouting::readFromXml(*routingXml);
-            bool targetAlreadyUsed = false;
-            for (const auto& existing : expectedRoutings)
-                if (existing.targetParameterID == routing.targetParameterID)
-                {
-                    targetAlreadyUsed = true;
-                    break;
-                }
-
-            if (! targetAlreadyUsed
-                && routing.targetParameterID.isNotEmpty()
-                && treeState.getParameter(routing.targetParameterID) != nullptr)
-                expectedRoutings.add(std::move(routing));
+            if (!routingXml->hasTagName("ROUTING")
+                || expectedRoutings.size() >= LfoManager::maximumModulationRoutings) continue;
+            auto routing = advancedMapping ? ModulationRouting::readFromXml(*routingXml)
+                                          : fire::modulation_state::readLegacy(*routingXml);
+            if (routing.targetParameterID.isEmpty() || treeState.getParameter(routing.targetParameterID) == nullptr) continue;
+            bool duplicateLegacy = false;
+            if (!advancedMapping)
+                for (const auto& previous : expectedRoutings)
+                    duplicateLegacy |= previous.targetParameterID == routing.targetParameterID;
+            if (!duplicateLegacy) expectedRoutings.add(std::move(routing));
         }
-    }
 
-    // Empty routing slots are an implementation detail of the live manager and
-    // are neither written nor restored by presets. Compare unique targets as a
-    // set because their array order has no DSP meaning.
-    juce::Array<ModulationRouting> currentRoutings;
-    juce::StringArray currentRoutingTargets;
-    for (const auto& routing : lfoManager->getModulationRoutingsCopy())
-    {
-        if (routing.targetParameterID.isEmpty())
-            continue;
-        if (currentRoutingTargets.contains(routing.targetParameterID))
-            return false;
-
-        currentRoutingTargets.add(routing.targetParameterID);
-        currentRoutings.add(routing);
-    }
-
-    if (currentRoutings.size() != expectedRoutings.size())
-        return false;
-
+    // Compare a multiset of complete routes: array position is not sound state,
+    // but two identical contributors still contribute twice.
+    auto currentRoutings = lfoManager->getModulationRoutingsCopy();
+    for (int index = currentRoutings.size(); --index >= 0;)
+        if (currentRoutings[index].targetParameterID.isEmpty()) currentRoutings.remove(index);
+    if (currentRoutings.size() != expectedRoutings.size()) return false;
     for (const auto& expected : expectedRoutings)
     {
-        bool foundEquivalentRouting = false;
-        for (const auto& candidate : currentRoutings)
-            if (candidate.targetParameterID == expected.targetParameterID)
-            {
-                foundEquivalentRouting = areModulationRoutingsEquivalent(candidate, expected);
-                break;
-            }
-
-        if (! foundEquivalentRouting)
-            return false;
+        int match = -1;
+        for (int index = 0; index < currentRoutings.size(); ++index)
+            if (areModulationRoutingsEquivalent(currentRoutings[index], expected))
+            { match = index; break; }
+        if (match < 0) return false;
+        currentRoutings.remove(match);
     }
 
     return true;
@@ -10523,27 +10471,8 @@ void FireAudioProcessor::shiftLfoModulationTargets(int startIndex,
             remappedTargets.add(newTarget);
         }
 
-        // A band target is intentionally unique throughout the UI/API. Corrupt
-        // or legacy states can contain duplicate source routings; keep the
-        // first one produced by this move and reset the remaining slots. Leave
-        // unrelated (including global) routings exactly as they were.
-        for (int routingIndex = 0; routingIndex < remappedTargets.size(); ++routingIndex)
-        {
-            auto& target = remappedTargets.getReference(routingIndex);
-            if (target.isEmpty()
-                || target == routings.getReference(routingIndex).targetParameterID)
-                continue;
-
-            for (int earlierIndex = 0; earlierIndex < routingIndex; ++earlierIndex)
-            {
-                if (remappedTargets[earlierIndex] == target)
-                {
-                    target.clear();
-                    break;
-                }
-            }
-        }
-
+        // Every contributor follows its target when a band moves. Multiple
+        // routes sharing a destination are intentional in the new matrix.
         for (int routingIndex = 0; routingIndex < routings.size(); ++routingIndex)
         {
             auto& routing = routings.getReference(routingIndex);

@@ -403,6 +403,7 @@ public:
     void handleAsyncUpdate() override;
     void dismissTransientInteraction();
     void dismissModulationMatrixDialog();
+    void openModulationMatrixForTarget(const juce::String& parameterID);
     void visibilityChanged() override;
     void enablementChanged() override;
 

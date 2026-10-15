@@ -97,7 +97,8 @@ public:
             if (initialised && (route.routed != routed
                 || (routed && (route.source != parameters.sources[i]
                     || ! juce::exactlyEqual(route.depth, routeDepth)
-                    || route.bipolar != provider.isBipolar))))
+                    || route.bipolar != provider.isBipolar
+                                   || route.signalIsOffset != provider.signalIsOffset))))
             {
                 route.anchor = route.lastValue;
                 route.blend.setCurrentAndTargetValue(0.0f);
@@ -107,6 +108,7 @@ public:
             route.source = parameters.sources[i];
             route.depth = routeDepth;
             route.bipolar = provider.isBipolar;
+            route.signalIsOffset = provider.signalIsOffset;
             controlsAreStatic = controlsAreStatic && ! routed
                 && ! baseSmoothers[i].isSmoothing() && ! route.blend.isSmoothing();
         }
@@ -215,7 +217,7 @@ private:
         juce::SmoothedValue<float> blend;
         float anchor = 0.0f, lastValue = 0.0f, depth = 0.0f;
         int source = -1;
-        bool routed = false, bipolar = true;
+        bool routed = false, bipolar = true, signalIsOffset = false;
     };
     std::array<Route, controlCount> routes;
     std::array<juce::SmoothedValue<float>, controlCount> baseSmoothers;

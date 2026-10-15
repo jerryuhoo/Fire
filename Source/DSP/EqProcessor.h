@@ -76,7 +76,8 @@ public:
                 && (route.routed != routed
                     || (routed && (route.source != parameters.sources[control]
                                    || ! juce::exactlyEqual(route.depth, depth)
-                                   || route.bipolar != provider.isBipolar))))
+                                   || route.bipolar != provider.isBipolar
+                                   || route.signalIsOffset != provider.signalIsOffset))))
             {
                 route.anchor = node.values[control];
                 route.blend.setCurrentAndTargetValue(0.0f);
@@ -92,6 +93,7 @@ public:
             route.source = parameters.sources[control];
             route.depth = depth;
             route.bipolar = provider.isBipolar;
+            route.signalIsOffset = provider.signalIsOffset;
         }
         if (wasDormant && node.enabled)
         {
@@ -239,7 +241,7 @@ private:
         juce::SmoothedValue<float> blend;
         float anchor = 0.0f, depth = 0.0f;
         int source = -1;
-        bool routed = false, bipolar = true, initialised = false;
+        bool routed = false, bipolar = true, initialised = false, signalIsOffset = false;
     };
     struct Node
     {

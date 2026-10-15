@@ -29,7 +29,7 @@
 class LfoManager
 {
 public:
-    static constexpr int maximumModulationRoutings = 128;
+    static constexpr int maximumModulationRoutings = fire::mod_sources::maximumRoutings;
 
     enum class AssignmentResult
     {
@@ -143,6 +143,7 @@ public:
         int sourceLfoIndex = -1;
         float depth = 0.0f;
         bool isBipolar = true;
+        bool signalIsOffset = false;
     };
 
     /** Looks up the active route, or the candidate during a two-phase capture.
@@ -289,6 +290,27 @@ private:
         float depth = 0.0f;
         bool isBipolar = true;
         float normalisedBaseValue = 0.0f;
+        bool customRange = false;
+        float rangeStart = 0.0f, rangeEnd = 1.0f;
+        int curve = 0, depthMacro = -1;
+        int targetSlot = -1;
+        ModulationRouting mapping() const noexcept;
+        bool sameMapping(const RuntimeRouting&) const noexcept;
+    };
+    struct RuntimeTarget
+    {
+        juce::RangedAudioParameter* parameter = nullptr;
+        int firstRoute = -1, routeCount = 0;
+        bool aggregate = false;
+        std::uint64_t configuration = 0;
+    };
+    struct AggregateTransition
+    {
+        juce::RangedAudioParameter* parameter = nullptr;
+        std::uint64_t configuration = 0;
+        float lastOffset = 0.0f, anchor = 0.0f;
+        int remaining = 0;
+        bool initialised = false;
     };
 
     struct RuntimeModulatedValue
@@ -315,7 +337,12 @@ private:
                      juce::int64 playheadSampleOffset);
     bool captureRuntimeRoutings(
         std::array<RuntimeRouting, maximumModulationRoutings>& destination,
-        size_t& destinationCount) const;
+        size_t& destinationCount,
+        std::array<RuntimeTarget, maximumModulationRoutings>& targets,
+        std::array<int, maximumModulationRoutings>& activeSlots,
+        size_t& activeCount) const;
+    void commitRuntimeTargets() noexcept;
+    void renderAggregateSignals(int samples, const AudioThreadParameterSnapshot&) noexcept;
     bool refreshRuntimeStateIfAvailable();
     void updatePublishedRoutingState() noexcept;
     void publishVisualState(const AudioThreadParameterSnapshot* parameters) noexcept;
@@ -359,7 +386,15 @@ private:
     // Fixed-capacity, audio-thread-owned snapshots avoid per-block allocation and UI lock waits.
     std::array<RuntimeRouting, maximumModulationRoutings> runtimeRoutings {};
     std::array<RuntimeRouting, maximumModulationRoutings> candidateRuntimeRoutings {};
+    std::array<RuntimeTarget, maximumModulationRoutings> runtimeTargets {}, candidateRuntimeTargets {};
+    // Dense lookup lists point into stable target slots. Removing an earlier
+    // target must not renumber a surviving aggregate signal channel.
+    std::array<int, maximumModulationRoutings> runtimeActiveTargetSlots {}, candidateActiveTargetSlots {};
+    size_t runtimeActiveTargetCount = 0, candidateActiveTargetCount = 0;
+    std::array<AggregateTransition, maximumModulationRoutings> aggregateTransitions {};
+    int aggregateTransitionSamples = 882;
     std::array<RuntimeModulatedValue, maximumModulationRoutings> modulatedValues {};
+    friend struct MultiSourceModulationTestAccess;
     size_t runtimeRoutingCount = 0;
     size_t candidateRuntimeRoutingCount = 0;
     size_t modulatedValueCount = 0;

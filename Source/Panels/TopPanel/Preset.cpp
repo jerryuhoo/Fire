@@ -13,6 +13,7 @@
 #include "../../PluginProcessor.h"
 #include "../../Utility/FactoryPresets.h"
 #include "../../Utility/StrictNumberParser.h"
+#include "../../Utility/ModulationStateValidation.h"
 #include "../../Utility/LfoBankParameters.h"
 #include "../../Utility/DriveCompensationParameters.h"
 #include <algorithm>
@@ -133,7 +134,7 @@ bool readSupportedPresetFormatVersion(const juce::XmlElement& xml,
     version = 0;
     return ! xml.hasAttribute("presetFormatVersion")
         || (readStrictIntegerAttribute(xml, "presetFormatVersion", version)
-            && version >= 0 && version <= 2);
+            && version >= 0 && version <= fire::modulation_state::presetFormatVersion);
 }
 
 bool isStrictNumberInRange(const juce::XmlElement& xml,
@@ -207,9 +208,10 @@ bool isValidLfoState(const juce::XmlElement& lfoState, bool legacyBank) noexcept
 
 bool isValidRoutingState(const juce::XmlElement& routingState,
                          const juce::AudioProcessor& processor,
-                         bool legacyBank, bool auxiliarySources = false) noexcept
+                         bool legacyBank, bool auxiliarySources = false, bool advancedMapping = false) noexcept
 {
     if (! routingState.hasTagName("MODULATION_STATE")
+        || ! fire::modulation_state::hasSchema(routingState, advancedMapping)
         || routingState.getNumChildElements()
                > LfoManager::maximumModulationRoutings)
         return false;
@@ -219,12 +221,18 @@ bool isValidRoutingState(const juce::XmlElement& routingState,
     {
         int source = -1;
         if (! routing->hasTagName("ROUTING")
-            || ! readStrictIntegerAttribute(*routing, "source", source)
+            || !(advancedMapping ? fire::modulation_state::readStrictIntegerAttribute(*routing, "source", source)
+                                 : readStrictIntegerAttribute(*routing, "source", source))
             || ! juce::isPositiveAndBelow(source, auxiliarySources ? fire::mod_sources::sourceCount : legacyBank ? fire::lfo_bank::defaultCount
                                                              : fire::lfo_bank::capacity)
             || ! isStrictNumberInRange(*routing, "depth", -1.0, 1.0)
             || routing->getNumChildElements() != 0)
             return false;
+
+        if (advancedMapping && (!routing->hasAttribute("target")
+            || !fire::modulation_state::hasStrictBooleanAttribute(*routing, "bipolar")
+            || !fire::modulation_state::hasStrictBooleanAttribute(*routing, "bypassed")
+            || !fire::modulation_state::hasValidMapping(*routing))) return false;
 
         const auto target = routing->getStringAttribute("target");
         if (fire::mod_sources::isParameterID(target)) return false;
@@ -240,7 +248,7 @@ bool isValidRoutingState(const juce::XmlElement& routingState,
                 break;
             }
 
-        if (! isKnownTarget || seenTargets.contains(target))
+        if (! isKnownTarget || (!advancedMapping && seenTargets.contains(target)))
             return false;
         seenTargets.add(target);
     }
@@ -412,7 +420,7 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         else if (child->hasTagName("MODULATION_STATE") && ! hasRoutingState)
         {
             hasRoutingState = true;
-            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank, !legacyWithoutAuxiliary))
+            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank, !legacyWithoutAuxiliary, formatVersion >= 3))
                 return false;
         }
         else
@@ -473,15 +481,22 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     if (!validateParameterFamily(xml, processor, legacyWithoutAuxiliary, "modulationSourcesSchemaVersion",
                                   fire::mod_sources::isParameterID)) return false;
     // Unversioned and v1 files predate complete model snapshots. Preserve
-    // their historical default/migration behaviour. A v2 document is an
-    // explicit complete snapshot, so accepting a sparse or truncated one
+    // their historical default/migration behaviour. Version 2 and later are
+    // explicit complete snapshots, so accepting a sparse or truncated one
     // would silently reset every omitted parameter, LFO, and routing.
     int formatVersion = 0;
     if (! readSupportedPresetFormatVersion(xml, formatVersion))
         return false;
 
     if (formatVersion < 2)
+    {
+        // Keep sparse historical presets and their first-target-wins migration,
+        // but never interpret a new mapping schema under an old format marker.
+        for (const auto* child : xml.getChildIterator())
+            if (child->hasTagName("MODULATION_STATE")
+                && !fire::modulation_state::hasSchema(*child, false)) return false;
         return true;
+    }
 
     int parameterCount = 0;
     std::map<juce::String, juce::String> attributes;
@@ -541,7 +556,7 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         else if (child->hasTagName("MODULATION_STATE") && ! hasRoutingState)
         {
             hasRoutingState = true;
-            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank, !legacyWithoutAuxiliary))
+            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank, !legacyWithoutAuxiliary, formatVersion >= 3))
                 return false;
         }
         else
@@ -565,7 +580,7 @@ void writeSerializablePresetSnapshotToXml(
 {
     xml.deleteAllChildElements();
     fire::macro_names::write(xml, snapshot.macroNames);
-    xml.setAttribute("presetFormatVersion", 2);
+    xml.setAttribute("presetFormatVersion", fire::modulation_state::presetFormatVersion);
     xml.setAttribute("ottSchemaVersion", 1);
     xml.setAttribute("insertEffectsSchemaVersion", 1);
     xml.setAttribute("modulationEffectsSchemaVersion", fire::modulation_fx::schemaVersion);
@@ -610,6 +625,7 @@ void writeSerializablePresetSnapshotToXml(
     }
 
     auto* modMatrixState = xml.createNewChildElement("MODULATION_STATE");
+    modMatrixState->setAttribute("schemaVersion", fire::modulation_state::schemaVersion);
     for (const auto& routing : snapshot.routings)
     {
         if (! routing.targetParameterID.isEmpty())
@@ -813,6 +829,7 @@ namespace state
         }
 
         juce::Array<ModulationRouting> routingsToLoad;
+        const bool advancedMapping = xml.getIntAttribute("presetFormatVersion", 0) >= 3;
         if (auto* modMatrixState = xml.getChildByName("MODULATION_STATE"))
         {
             for (auto* routingXml : modMatrixState->getChildIterator())
@@ -822,7 +839,8 @@ namespace state
                            >= LfoManager::maximumModulationRoutings)
                     continue;
 
-                auto routing = ModulationRouting::readFromXml(*routingXml);
+                auto routing = advancedMapping ? ModulationRouting::readFromXml(*routingXml)
+                                               : fire::modulation_state::readLegacy(*routingXml);
                 // Legacy snapshots had exactly four source identities. New
                 // snapshots keep all fixed slots and never retarget a missing source.
                 const bool extendedBank = xml.hasAttribute("lfoBankSchemaVersion")
@@ -841,7 +859,7 @@ namespace state
                         break;
                     }
 
-                if (! targetAlreadyUsed
+                if ((advancedMapping || !targetAlreadyUsed)
                     && routing.targetParameterID.isNotEmpty()
                     && !fire::mod_sources::isParameterID(routing.targetParameterID)
                     && fireProc.treeState.getParameter(routing.targetParameterID) != nullptr)
@@ -1766,7 +1784,7 @@ namespace state
         presetXmlSingle.removeAllAttributes(); // Clear all first.
         presetXmlSingle.deleteAllChildElements();
         presetXmlSingle.setAttribute("presetName", presetName); // Set preset name.
-        presetXmlSingle.setAttribute("presetFormatVersion", 2);
+        presetXmlSingle.setAttribute("presetFormatVersion", fire::modulation_state::presetFormatVersion);
         presetXmlSingle.setAttribute("pluginVersion", VERSION);
         saveStateToXml(pluginProcessor, presetXmlSingle);
 

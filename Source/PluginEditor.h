@@ -334,7 +334,7 @@ private:
     void applyModulationSnapshot();
     std::vector<ModulatableSlider*> allModulatableSliders;
     juce::Array<ModulationRouting> modulationRoutingSnapshot;
-    std::vector<int> modulationRoutingIndexBySlider;
+    std::vector<juce::Array<ModulationRouting>> modulationRoutesBySlider;
     int modulationSnapshotFramesRemaining = 0;
     std::uint64_t consumedModulationUiRevision = 0;
     std::uint64_t captureUpdateCheckSession();

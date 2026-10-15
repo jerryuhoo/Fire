@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Blue Wings Music"
               aaxIdentifier="com.bluewingsmusic.Fire" bundleIdentifier="com.bluewingsmusic.Fire"
-              version="2.0.1" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
+              version="2.1.0" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="23" defines="JUCE_MODAL_LOOPS_PERMITTED=1"
               pluginManufacturerCode="Wing" pluginCode="Fire" useAppConfig="0"
@@ -121,6 +121,8 @@
         <FILE id="factoryPreset01" name="FactoryPresets.h" compile="0" resource="0" file="Source/Utility/FactoryPresets.h"/>
         <FILE id="analogDriveScene01" name="AnalogDrivePresets.h" compile="0" resource="0" file="Source/Utility/AnalogDrivePresets.h"/>
         <FILE id="modSourceParams01" name="ModulationSources.h" compile="0" resource="0" file="Source/Utility/ModulationSources.h"/>
+        <FILE id="modStateValidation01" name="ModulationStateValidation.h" compile="0" resource="0" file="Source/Utility/ModulationStateValidation.h"/>
+        <FILE id="modSummary01" name="ModulationSummary.h" compile="0" resource="0" file="Source/Utility/ModulationSummary.h"/>
       </GROUP>
       <GROUP id="{A397A229-19FD-F110-6940-6CC5C037D4D0}" name="GUI">
         <FILE id="fireMacroBar" name="MacroBar.h" compile="0" resource="0" file="Source/GUI/MacroBar.h"/>

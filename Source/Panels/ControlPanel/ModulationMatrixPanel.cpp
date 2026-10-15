@@ -50,11 +50,7 @@ MatrixColumns matrixColumns(juce::Rectangle<int> bounds)
 bool haveSameRoutingState(const ModulationRouting& lhs,
                           const ModulationRouting& rhs) noexcept
 {
-    return lhs.sourceLfoIndex == rhs.sourceLfoIndex
-        && lhs.targetParameterID == rhs.targetParameterID
-        && juce::exactlyEqual(lhs.depth, rhs.depth)
-        && lhs.isBipolar == rhs.isBipolar
-        && lhs.isBypassed == rhs.isBypassed;
+    return lhs.hasSameState(rhs);
 }
 // A separate, owned look-and-feel keeps the transient window safe if a routing
 // or its editor disappears. All selections still pass through the row's edit epoch.
@@ -1366,6 +1362,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     amountSlider.setValue(routing.depth, juce::dontSendNotification);
     amountSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     amountSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 50, 24);
+    amountSlider.updateText();
     amountSlider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
     amountSlider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     amountSlider.setColour(juce::Slider::textBoxTextColourId, fire::ui::paletteFor(*this).textPrimary);
@@ -1487,6 +1484,56 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     configureRoutingMenu(sourceMenu);
     configureRoutingMenu(destinationMenu);
 
+    const char* mappingNames[] {"FROM", "TO", "CURVE", "DEPTH VIA"};
+    for(size_t i=0;i<mappingLabels.size();++i)
+    {
+        auto& label=mappingLabels[i];addAndMakeVisible(label);
+        label.setText(mappingNames[i],juce::dontSendNotification);
+        label.setJustificationType(juce::Justification::centredLeft);
+        label.setFont(fire::ui::labelFont(9));label.setColour(juce::Label::textColourId,fire::ui::paletteFor(*this).textMuted);
+        label.setInterceptsMouseClicks(false,false);
+    }
+    for(auto* control:{&rangeStartSlider,&rangeEndSlider})
+    {
+        const bool start=control==&rangeStartSlider;
+        addAndMakeVisible(*control);control->setComponentID(start?"matrix_range_start":"matrix_range_end");
+        control->setTitle(routingName+(start?" range start":" range end"));
+        control->setTooltip("Signed offset from the destination's base knob position, in percent of its normalised range. Depth scales both endpoints. Editing From or To enables a custom range; Bi/Uni restores its default range.");
+        control->setRange(-1.0,1.0,.001);
+        control->textFromValueFunction=[](double value)
+        {
+            const auto tenths = juce::roundToInt(value * 1000.0);
+            return (tenths > 0 ? "+" : "") + juce::String(tenths / 10.0, 1) + "%";
+        };
+        control->valueFromTextFunction=[](const juce::String& text) {return text.getDoubleValue()*.01;};
+        control->setValue(start?routing.minimumOffset():routing.maximumOffset(),juce::dontSendNotification);
+        control->setSliderStyle(juce::Slider::LinearHorizontal);control->setTextBoxStyle(juce::Slider::TextBoxRight,false,58,24);
+        control->updateText();
+        control->setColour(juce::Slider::textBoxBackgroundColourId,juce::Colours::transparentBlack);
+        control->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
+        control->setColour(juce::Slider::textBoxTextColourId,fire::ui::paletteFor(*this).textPrimary);
+        control->setColour(juce::Slider::trackColourId,sourceColour);control->setScrollWheelEnabled(false);
+        control->onPointerDispatchComplete=[this](bool rebuild,bool notify) {completeAmountPointerDispatch(rebuild,notify);};
+        control->addListener(this);
+    }
+    addAndMakeVisible(curveMenu);curveMenu.setComponentID("matrix_curve");curveMenu.setTitle(routingName+" response curve");
+    curveMenu.setTooltip("Curve applied to the source before interpolation between From and To.");
+    const juce::StringArray curves{"Linear","Ease in","Ease out","S curve"};
+    curveMenu.addItemList(curves,1);curveMenu.setSelectedId(routing.curve+1,juce::dontSendNotification);
+    addAndMakeVisible(depthMacroMenu);depthMacroMenu.setComponentID("matrix_depth_macro");depthMacroMenu.setTitle(routingName+" depth macro");
+    depthMacroMenu.setTooltip("Fixed uses the full Depth value. A macro scales the route from zero to full Depth; it does not replace the modulation source.");
+    depthMacroMenu.addItem("Fixed",1);
+    for(int macro=0;macro<fire::mod_sources::macroCount;++macro)
+        depthMacroMenu.addItem("M"+juce::String(macro+1)+" · "+processor.getMacroDisplayName(macro),macro+2);
+    depthMacroMenu.setSelectedId(routing.depthMacro+2,juce::dontSendNotification);
+    for(auto* menu:{&curveMenu,&depthMacroMenu})
+    {
+        menu->setColour(juce::ComboBox::backgroundColourId,fire::ui::paletteFor(*this).surface0);
+        menu->setColour(juce::ComboBox::outlineColourId,fire::ui::paletteFor(*this).hairline);
+        menu->setColour(juce::ComboBox::textColourId,fire::ui::paletteFor(*this).textPrimary);
+        configureRoutingMenu(*menu);menu->addListener(this);
+    }
+
     // REMOVE BUTTON
     addAndMakeVisible(removeButton);
     removeButton.setTitle("Remove modulation routing " + routingNumber);
@@ -1504,6 +1551,8 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     bipolarButton.setExplicitFocusOrder(4);
     bypassButton.setExplicitFocusOrder(5);
     removeButton.setExplicitFocusOrder(6);
+    rangeStartSlider.setExplicitFocusOrder(7);rangeEndSlider.setExplicitFocusOrder(8);
+    curveMenu.setExplicitFocusOrder(9);depthMacroMenu.setExplicitFocusOrder(10);
     updateVisualState();
 }
 
@@ -1603,7 +1652,11 @@ void ModulationMatrixRow::paint(juce::Graphics& g)
     g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
     g.setColour(accent.withAlpha(bypassed ? 0.22f : 0.85f));
     g.fillRoundedRectangle(3.0f, 12.0f, 2.0f, juce::jmax(0.0f, getHeight() - 24.0f), 1.0f);
-    const auto arrow = matrixColumns(getLocalBounds()).arrow.toFloat();
+    if(targetHighlighted)
+    {g.setColour(fire::ui::paletteFor(*this).accent.withAlpha(.65f));g.drawRoundedRectangle(bounds.reduced(1),7,1);}
+    if(getHeight()>=96)
+    {g.setColour(fire::ui::paletteFor(*this).hairline.withAlpha(.45f));g.drawHorizontalLine(49,12.0f,getWidth()-12.0f);}
+    const auto arrow = matrixColumns(getLocalBounds().withHeight(juce::jmin(48,getHeight()))).arrow.toFloat();
     const auto centre = arrow.getCentre();
     juce::Path direction;
     direction.startNewSubPath(centre.x - 4.0f, centre.y);
@@ -1619,7 +1672,8 @@ ModulationMatrixRow::~ModulationMatrixRow()
 {
     dismissTransientInteractions();
     sourceMenu.removeListener(this);
-    amountSlider.removeListener(this);
+    amountSlider.removeListener(this);rangeStartSlider.removeListener(this);rangeEndSlider.removeListener(this);
+    curveMenu.removeListener(this);depthMacroMenu.removeListener(this);
     bipolarButton.removeListener(this);
     bypassButton.removeListener(this);
     destinationMenu.removeListener(this);
@@ -1629,13 +1683,26 @@ ModulationMatrixRow::~ModulationMatrixRow()
 
 void ModulationMatrixRow::resized()
 {
-    const auto columns = matrixColumns(getLocalBounds());
+    const auto columns = matrixColumns(getLocalBounds().withHeight(juce::jmin(48,getHeight())));
     sourceMenu.setBounds(columns.source);
     destinationMenu.setBounds(columns.destination);
     amountSlider.setBounds(columns.amount);
     bipolarButton.setBounds(columns.polarity);
     bypassButton.setBounds(columns.enabled);
     removeButton.setBounds(columns.remove);
+    const bool showMapping=getHeight()>=96;
+    auto area=getLocalBounds().reduced(12,0).withY(54).withHeight(38);
+    const int cellWidth=(area.getWidth()-24)/4;
+    const std::array<juce::Component*,4> controls{&rangeStartSlider,&rangeEndSlider,&curveMenu,&depthMacroMenu};
+    const juce::Component::SafePointer<ModulationMatrixRow> safe(this);
+    for(size_t i=0;i<controls.size();++i)
+    {
+        auto cell=area.removeFromLeft(i+1==controls.size()?area.getWidth():cellWidth);
+        mappingLabels[i].setBounds(cell.removeFromTop(12));controls[i]->setBounds(cell);
+        mappingLabels[i].setVisible(showMapping);if(!safe) return;
+        controls[i]->setVisible(showMapping);if(!safe) return;
+        area.removeFromLeft(8);
+    }
 }
 
 void ModulationMatrixRow::updateVisualState()
@@ -1645,7 +1712,9 @@ void ModulationMatrixRow::updateVisualState()
     for (auto* control : { static_cast<juce::Component*>(&sourceMenu),
                           static_cast<juce::Component*>(&destinationMenu),
                           static_cast<juce::Component*>(&amountSlider),
-                          static_cast<juce::Component*>(&bipolarButton) })
+                          static_cast<juce::Component*>(&bipolarButton),
+                          static_cast<juce::Component*>(&rangeStartSlider),static_cast<juce::Component*>(&rangeEndSlider),
+                          static_cast<juce::Component*>(&curveMenu),static_cast<juce::Component*>(&depthMacroMenu) })
     {
         control->setAlpha(alpha);
         if (! safeThis) return;
@@ -1682,8 +1751,11 @@ void ModulationMatrixRow::dismissTransientInteractions() noexcept
     if (safeThis == nullptr)
         return;
     amountSlider.dismissTransientInteraction();
-    if (safeThis == nullptr)
-        return;
+    if (safeThis == nullptr) return;
+    rangeStartSlider.dismissTransientInteraction();if(safeThis==nullptr) return;
+    rangeEndSlider.dismissTransientInteraction();if(safeThis==nullptr) return;
+    curveMenu.dismissTransientInteraction();if(safeThis==nullptr) return;
+    depthMacroMenu.dismissTransientInteraction();if(safeThis==nullptr) return;
     bipolarButton.dismissPointerGesture();
     if (safeThis == nullptr)
         return;
@@ -1723,7 +1795,7 @@ void ModulationMatrixRow::buttonClicked(juce::Button* button)
 
         auto replacementRouting = expectedRouting;
         if (button == &bipolarButton)
-            replacementRouting.isBipolar = bipolarButton.getToggleState();
+        {replacementRouting.isBipolar = bipolarButton.getToggleState();replacementRouting.customRange=false;}
         else
             replacementRouting.isBypassed = ! bypassButton.getToggleState();
 
@@ -1741,6 +1813,8 @@ void ModulationMatrixRow::buttonClicked(juce::Button* button)
 
         editSession->revision = result.revision;
         expectedRouting = result.routing;
+        rangeStartSlider.setValue(expectedRouting.minimumOffset(),juce::dontSendNotification);if(!safeThis) return;
+        rangeEndSlider.setValue(expectedRouting.maximumOffset(),juce::dontSendNotification);if(!safeThis) return;
         if (result.changed)
         {
             auto& processorToNotify = processor;
@@ -1769,11 +1843,12 @@ void ModulationMatrixRow::buttonClicked(juce::Button* button)
 
 void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
 {
-    if (slider == &amountSlider)
+    if (slider == &amountSlider || slider == &rangeStartSlider || slider == &rangeEndSlider)
     {
+        auto& editingSlider=*static_cast<PrimaryButtonSlider*>(slider);
         if (isParentRebuildPending())
         {
-            if (amountSlider.deferPointerDispatchCompletion(true, false))
+            if (editingSlider.deferPointerDispatchCompletion(true, false))
                 return;
 
             requestParentRebuild();
@@ -1783,7 +1858,7 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
         auto editSession = routingEditSession;
         if (editSession == nullptr)
         {
-            if (amountSlider.deferPointerDispatchCompletion(true, false))
+            if (editingSlider.deferPointerDispatchCompletion(true, false))
                 return;
 
             requestParentRebuild();
@@ -1791,7 +1866,15 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
         }
 
         auto replacementRouting = expectedRouting;
-        replacementRouting.depth = static_cast<float>(amountSlider.getValue());
+        if(slider==&amountSlider) replacementRouting.depth=static_cast<float>(amountSlider.getValue());
+        else
+        {
+            replacementRouting.rangeStart=expectedRouting.minimumOffset();
+            replacementRouting.rangeEnd=expectedRouting.maximumOffset();
+            replacementRouting.customRange=true;
+            if(slider==&rangeStartSlider) replacementRouting.rangeStart=static_cast<float>(rangeStartSlider.getValue());
+            else replacementRouting.rangeEnd=static_cast<float>(rangeEndSlider.getValue());
+        }
         auto& manager = processor.getLfoManager();
         const auto result = manager.updateModulationRoutingIfRevisionMatches(
             index,
@@ -1800,7 +1883,7 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
             replacementRouting);
         if (! result.accepted)
         {
-            if (amountSlider.deferPointerDispatchCompletion(true, false))
+            if (editingSlider.deferPointerDispatchCompletion(true, false))
                 return;
 
             requestParentRebuild();
@@ -1811,7 +1894,7 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
         expectedRouting = result.routing;
         if (result.changed)
         {
-            if (amountSlider.deferPointerDispatchCompletion(false, true))
+            if (editingSlider.deferPointerDispatchCompletion(false, true))
                 return;
 
             auto& processorToNotify = processor;
@@ -1824,7 +1907,7 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
 void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
 {
     auto* routingMenu = dynamic_cast<ModulationMatrixRoutingComboBox*>(comboBox);
-    if (routingMenu == &sourceMenu || routingMenu == &destinationMenu)
+    if (routingMenu == &sourceMenu || routingMenu == &destinationMenu || routingMenu == &curveMenu || routingMenu == &depthMacroMenu)
         commitComboBoxSelection(*routingMenu,
                                 routingMenu->getSelectedId(),
                                 captureComboBoxEditContext());
@@ -1857,6 +1940,20 @@ void ModulationMatrixRow::commitComboBoxSelection(
     if (! isComboBoxEditContextCurrent(context))
     {
         requestParentRebuild();
+        return;
+    }
+
+    if(&comboBox==&curveMenu || &comboBox==&depthMacroMenu)
+    {
+        auto replacement=context.expectedRouting;
+        if(&comboBox==&curveMenu)
+        {if(selectedId<1 || selectedId>4) return;replacement.curve=selectedId-1;}
+        else
+        {if(selectedId<1 || selectedId>fire::mod_sources::macroCount+1) return;replacement.depthMacro=selectedId-2;}
+        const auto result=processor.getLfoManager().updateModulationRoutingIfRevisionMatches(index,context.revision,context.expectedRouting,replacement);
+        if(!result.accepted) {requestParentRebuild();return;}
+        routingEditSession->revision=result.revision;expectedRouting=result.routing;
+        if(result.changed) processor.lfoDataHasChanged();
         return;
     }
 
@@ -1914,7 +2011,7 @@ void ModulationMatrixRow::commitComboBoxSelection(
         return;
     }
 
-    // Source/destination edits may clear another row. Invalidate all rows
+    // Source/destination edits change the row's visible identity. Invalidate all rows
     // before the host can synchronously destroy or re-enter the editor.
     requestParentRebuild();
     if (result.changed)
@@ -2049,7 +2146,7 @@ void ModulationMatrixPanel::paint(juce::Graphics& g)
     g.drawText("Modulation", heading.removeFromTop(28), juce::Justification::centredLeft);
     g.setFont(fire::ui::bodyFont(11.5f));
     g.setColour(fire::ui::paletteFor(*this).textMuted);
-    g.drawText("Choose source, destination and depth.", heading.removeFromTop(20), juce::Justification::centredLeft);
+    g.drawText("Layer sources; shape each route's range and response.", heading.removeFromTop(20), juce::Justification::centredLeft);
     g.setFont(fire::ui::labelFont(9.5f));
     g.drawText(juce::String(static_cast<int>(rows.size())) + (rows.size() == 1 ? " routing" : " routings")
                + "  /  " + juce::String(activeRouteCount) + " active",
@@ -2279,7 +2376,26 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
     emptyDescription.setVisible(rows.empty());
     if (! safePanel) return;
     resized();
+    if(safePanel && focusedTarget.isNotEmpty()) focusTarget(focusedTarget);
     if (safePanel) repaint();
+}
+
+void ModulationMatrixPanel::focusTarget(const juce::String& parameterID)
+{
+    focusedTarget=parameterID;
+    const juce::Component::SafePointer<ModulationMatrixPanel> safe(this);
+    ModulationMatrixRow* first=nullptr;
+    for(auto& row:rows)
+    {
+        const bool match=parameterID.isNotEmpty() && row->getTargetParameterID()==parameterID;
+        row->setTargetHighlight(match);
+        if(match && first==nullptr) first=row.get();
+    }
+    if(first!=nullptr)
+    {
+        viewport.setViewPosition(0,first->getY());
+        if(safe && first->isShowing()) first->focusDestination();
+    }
 }
 
 void ModulationMatrixPanel::requestUiRebuild()

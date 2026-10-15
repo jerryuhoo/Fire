@@ -21,11 +21,7 @@ namespace
 bool haveSameModulationRoutingState(const ModulationRouting& lhs,
                                     const ModulationRouting& rhs) noexcept
 {
-    return lhs.sourceLfoIndex == rhs.sourceLfoIndex
-        && lhs.targetParameterID == rhs.targetParameterID
-        && juce::exactlyEqual(lhs.depth, rhs.depth)
-        && lhs.isBipolar == rhs.isBipolar
-        && lhs.isBypassed == rhs.isBypassed;
+    return lhs.hasSameState(rhs);
 }
 } // namespace
 
@@ -91,7 +87,9 @@ void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
     // Keep the prepared capacity. Smaller blocks no longer resize this buffer on the audio thread.
     const auto safeMaximumBlockSize = static_cast<int>(std::min<uint64_t>(
         spec.maximumBlockSize, static_cast<uint64_t>(std::numeric_limits<int>::max())));
-    lfoOutputBuffer.setSize(fire::mod_sources::sourceCount, juce::jmax(1, safeMaximumBlockSize), false, true, false);
+    lfoOutputBuffer.setSize(fire::mod_sources::signalCount, juce::jmax(1, safeMaximumBlockSize), false, true, false);
+    aggregateTransitionSamples = juce::jmax(1, juce::roundToInt(preparedSampleRate * .020));
+    aggregateTransitions = {};
     auxiliary.prepare(preparedSampleRate);
     publishVisualState(nullptr);
 }
@@ -99,6 +97,7 @@ void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
 void LfoManager::reset()
 {
     auxiliary.reset();
+    aggregateTransitions = {};
     for (auto& level : auxiliaryLevels) level.store(0, std::memory_order_relaxed);
     for (auto& engine : lfoEngines)
     {
@@ -303,7 +302,7 @@ void LfoManager::renderBlock(
     }
 
     auxiliary.setParameters(parameterSnapshot.auxiliary);
-    std::array<float, fire::mod_sources::sourceCount> firstLfoValues {};
+    std::array<float, fire::mod_sources::signalCount> firstLfoValues {};
     const int channelsToCopy = juce::jmin(outputBuffer.getNumChannels(),
                                           lfoOutputBuffer.getNumChannels());
     int sampleOffset = 0;
@@ -335,88 +334,67 @@ void LfoManager::renderBlock(
             }
         }
 
-        if (sampleOffset == 0)
-            for (size_t channel = 0; channel < firstLfoValues.size(); ++channel)
-                firstLfoValues[channel] = lfoOutputBuffer.getSample(
-                    static_cast<int>(channel), 0);
+        renderAggregateSignals(samplesInRange, parameterSnapshot);
 
-        for (int channel = 0; channel < channelsToCopy; ++channel)
-            outputBuffer.copyFrom(channel,
-                                  sampleOffset,
-                                  lfoOutputBuffer,
-                                  channel,
-                                  0,
-                                  samplesInRange);
+        if (sampleOffset == 0)
+        {
+            for (int channel = 0; channel < fire::mod_sources::sourceCount; ++channel)
+                firstLfoValues[static_cast<size_t>(channel)] = lfoOutputBuffer.getSample(channel, 0);
+            for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
+            {
+                const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+                if (! runtimeTargets[slot].aggregate) continue;
+                const auto channel = fire::mod_sources::firstAggregateSignal + static_cast<int>(slot);
+                firstLfoValues[static_cast<size_t>(channel)] = lfoOutputBuffer.getSample(channel, 0);
+            }
+        }
+
+        for (int channel = 0; channel < juce::jmin(channelsToCopy, fire::mod_sources::sourceCount); ++channel)
+            outputBuffer.copyFrom(channel, sampleOffset, lfoOutputBuffer, channel, 0, samplesInRange);
+        for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
+        {
+            const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+            const int channel = fire::mod_sources::firstAggregateSignal + static_cast<int>(slot);
+            if (runtimeTargets[slot].aggregate && channel < channelsToCopy)
+                outputBuffer.copyFrom(channel, sampleOffset, lfoOutputBuffer, channel, 0, samplesInRange);
+        }
 
         sampleOffset += samplesInRange;
     }
 
     publishVisualState(&parameterSnapshot);
 
-    // 4. Iterate through all modulation routings to calculate final parameter values.
-    for (size_t routingIndex = 0; routingIndex < runtimeRoutingCount; ++routingIndex)
+    // Standalone callers may supply only the 21 physical source channels.
+    // The first-sample representative still uses the internal aggregate bank.
+    for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
     {
-        const auto& routing = runtimeRoutings[routingIndex];
-        if (routing.parameter == nullptr || ! fire::mod_sources::validSource(routing.sourceLfoIndex)
-            || (fire::lfo_bank::validIndex(routing.sourceLfoIndex)
-                && ! parameterSnapshot.lfos[static_cast<size_t>(routing.sourceLfoIndex)].present))
-            continue;
-
-        // Use the first sample of the LFO output as the representative value for the whole block.
-        float lfoValue = firstLfoValues[
-            static_cast<size_t>(routing.sourceLfoIndex)];
-        if (! std::isfinite(lfoValue))
-            continue;
-
-        // The snapshot overload must not revisit APVTS. The legacy overload
-        // retains its live-base behaviour for standalone callers and tests.
-        const float rawBaseValue = readLiveRoutingBaseValues
-                                       ? routing.parameter->getValue()
-                                       : routing.normalisedBaseValue;
-        const float normalizedBaseValue = std::isfinite(rawBaseValue)
-                                              ? juce::jlimit(0.0f, 1.0f, rawBaseValue)
-                                              : routing.parameter->getDefaultValue();
-
-        // For bipolar mode, the effective modulation depth should be halved to match
-        // the perceived range of unipolar mode.
-        float effectiveDepth = routing.depth;
-
-        // Apply bipolar (-1 to 1) or unipolar (0 to 1) mapping to the LFO signal.
-        if (routing.isBipolar)
+        const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+        const auto& target = runtimeTargets[slot];
+        if (target.parameter == nullptr || target.firstRoute < 0) continue;
+        const auto& routing = runtimeRoutings[static_cast<size_t>(target.firstRoute)];
+        const float rawBaseValue = readLiveRoutingBaseValues ? routing.parameter->getValue()
+                                                            : routing.normalisedBaseValue;
+        const float base = std::isfinite(rawBaseValue) ? juce::jlimit(0.0f, 1.0f, rawBaseValue)
+                                                       : routing.parameter->getDefaultValue();
+        float amount = 0.0f;
+        if (target.aggregate)
+            amount = firstLfoValues[static_cast<size_t>(fire::mod_sources::firstAggregateSignal) + slot];
+        else
         {
-            lfoValue = lfoValue * 2.0f - 1.0f; // Map LFO from [0, 1] to [-1, 1]
-            effectiveDepth *= 0.5f; // Halve the depth for bipolar
+            if (fire::lfo_bank::validIndex(routing.sourceLfoIndex)
+                && ! parameterSnapshot.lfos[static_cast<size_t>(routing.sourceLfoIndex)].present) continue;
+            // Preserve the original single-source arithmetic and its order.
+            float value = firstLfoValues[static_cast<size_t>(routing.sourceLfoIndex)];
+            if (! std::isfinite(value)) continue;
+            float depth = routing.depth;
+            if (routing.isBipolar) { value = value * 2.0f - 1.0f; depth *= .5f; }
+            amount = value * depth;
         }
-
-        // The modulation amount is now a simple multiplication in the normalized space.
-        // The depth parameter scales the LFO output directly.
-        const float normalizedModulationAmount = lfoValue * effectiveDepth;
-
-        // If this parameter hasn't been touched yet in this block, initialize it with its base normalized value.
-        size_t valueIndex = 0;
-        while (valueIndex < modulatedValueCount
-               && modulatedValues[valueIndex].parameter != routing.parameter)
-            ++valueIndex;
-
-        if (valueIndex == modulatedValueCount)
-        {
-            if (modulatedValueCount >= modulatedValues.size())
-                continue;
-
-            modulatedValues[valueIndex] = { routing.parameter, normalizedBaseValue };
-            ++modulatedValueCount;
-        }
-
-        // Add the normalized modulation amount. This allows multiple LFOs to target the same parameter.
-        modulatedValues[valueIndex].normalisedValue += normalizedModulationAmount;
+        const auto value = base + amount;
+        modulatedValues[modulatedValueCount++] = { target.parameter,
+            std::isfinite(value) ? juce::jlimit(0.0f, 1.0f, value) : 0.0f };
     }
 
-    // 5. Final pass: clamp all calculated NORMALIZED values to the valid [0, 1] range.
-    for (size_t i = 0; i < modulatedValueCount; ++i)
-    {
-        auto& value = modulatedValues[i].normalisedValue;
-        value = std::isfinite(value) ? juce::jlimit(0.0f, 1.0f, value) : 0.0f;
-    }
 }
 
 float LfoManager::getModulatedValue(const juce::String& parameterID) const
@@ -457,20 +435,23 @@ bool LfoManager::getAudioThreadRoutingInfo(const juce::RangedAudioParameter* par
     // complete callback candidate without changing the currently audible
     // routes. Both arrays are fixed audio-thread storage; no UI container or
     // lock is touched by this lookup.
-    const auto& routings = runtimeStateCaptureInProgress
-                               ? candidateRuntimeRoutings
-                               : runtimeRoutings;
-    const auto routingCount = runtimeStateCaptureInProgress
-                                  ? candidateRuntimeRoutingCount
-                                  : runtimeRoutingCount;
-    for (size_t i = 0; i < routingCount; ++i)
+    const auto& targets = runtimeStateCaptureInProgress ? candidateRuntimeTargets : runtimeTargets;
+    const auto& routings = runtimeStateCaptureInProgress ? candidateRuntimeRoutings : runtimeRoutings;
+    const auto& activeSlots = runtimeStateCaptureInProgress ? candidateActiveTargetSlots : runtimeActiveTargetSlots;
+    const auto count = runtimeStateCaptureInProgress ? candidateActiveTargetCount : runtimeActiveTargetCount;
+    for (size_t index = 0; index < count; ++index)
     {
-        const auto& routing = routings[i];
-        if (routing.parameter == parameter)
+        const auto slot = static_cast<size_t>(activeSlots[index]);
+        const auto& target = targets[slot];
+        if (target.parameter != parameter || target.firstRoute < 0) continue;
+        if (target.aggregate)
+            result = { fire::mod_sources::firstAggregateSignal + static_cast<int>(slot), 1.0f, false, true };
+        else
         {
-            result = { routing.sourceLfoIndex, routing.depth, routing.isBipolar };
-            return true;
+            const auto& routing = routings[static_cast<size_t>(target.firstRoute)];
+            result = { routing.sourceLfoIndex, routing.depth, routing.isBipolar, false };
         }
+        return true;
     }
 
     return false;
@@ -505,7 +486,8 @@ bool LfoManager::beginAudioThreadStateCapture(
 
     candidateHasPublishedRouting = captureRuntimeRoutings(
         candidateRuntimeRoutings,
-        candidateRuntimeRoutingCount);
+        candidateRuntimeRoutingCount,
+        candidateRuntimeTargets, candidateActiveTargetSlots, candidateActiveTargetCount);
     runtimeStateCaptureInProgress = true;
     return true;
 }
@@ -522,6 +504,7 @@ bool LfoManager::finishAudioThreadStateCapture(bool commitCandidate) noexcept
     {
         runtimeRoutings = candidateRuntimeRoutings;
         runtimeRoutingCount = candidateRuntimeRoutingCount;
+        commitRuntimeTargets();
         hasPublishedRouting.store(candidateHasPublishedRouting,
                                   std::memory_order_relaxed);
         for (auto& engine : lfoEngines)
@@ -548,9 +531,128 @@ void LfoManager::abortAudioThreadStateCapture() noexcept
 // Private Helper Functions
 // =============================================================================
 
+ModulationRouting LfoManager::RuntimeRouting::mapping() const noexcept
+{
+    // Empty target string: the audio recipe owns only scalar configuration;
+    // this temporary never acquires or releases UI-owned text storage.
+    ModulationRouting result;
+    result.sourceLfoIndex = sourceLfoIndex;
+    result.depth = depth;
+    result.isBipolar = isBipolar;
+    result.customRange = customRange;
+    result.rangeStart = rangeStart;
+    result.rangeEnd = rangeEnd;
+    result.curve = curve;
+    result.depthMacro = depthMacro;
+    return result;
+}
+
+bool LfoManager::RuntimeRouting::sameMapping(const RuntimeRouting& other) const noexcept
+{
+    return sourceLfoIndex == other.sourceLfoIndex && depth == other.depth
+        && isBipolar == other.isBipolar && customRange == other.customRange
+        && rangeStart == other.rangeStart && rangeEnd == other.rangeEnd
+        && curve == other.curve && depthMacro == other.depthMacro;
+}
+
+void LfoManager::commitRuntimeTargets() noexcept
+{
+    for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
+    {
+        const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+        if (candidateRuntimeTargets[slot].parameter != runtimeTargets[slot].parameter)
+            aggregateTransitions[slot] = {};
+    }
+    for (size_t index = 0; index < candidateActiveTargetCount; ++index)
+    {
+        const auto slot = static_cast<size_t>(candidateActiveTargetSlots[index]);
+        const auto& target = candidateRuntimeTargets[slot];
+        auto& transition = aggregateTransitions[slot];
+        if (transition.parameter != target.parameter)
+        {
+            transition = {};
+            transition.parameter = target.parameter;
+        }
+        if (target.parameter == nullptr) continue;
+        if (transition.configuration != target.configuration && transition.initialised && target.aggregate)
+        {
+            transition.anchor = transition.lastOffset;
+            transition.remaining = aggregateTransitionSamples;
+        }
+        if (! target.aggregate) transition.remaining = 0;
+        transition.configuration = target.configuration;
+    }
+    runtimeTargets = candidateRuntimeTargets;
+    runtimeActiveTargetCount = candidateActiveTargetCount;
+    std::copy_n(candidateActiveTargetSlots.begin(), runtimeActiveTargetCount, runtimeActiveTargetSlots.begin());
+}
+
+void LfoManager::renderAggregateSignals(int samples, const AudioThreadParameterSnapshot& parameters) noexcept
+{
+    if (samples <= 0) return;
+    for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
+    {
+        const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+        if (runtimeTargets[slot].aggregate)
+            juce::FloatVectorOperations::clear(lfoOutputBuffer.getWritePointer(
+                fire::mod_sources::firstAggregateSignal + static_cast<int>(slot)), samples);
+    }
+
+    for (size_t index = 0; index < runtimeRoutingCount; ++index)
+    {
+        const auto& routing = runtimeRoutings[index];
+        if (routing.targetSlot < 0) continue;
+        if (fire::lfo_bank::validIndex(routing.sourceLfoIndex)
+            && ! parameters.lfos[static_cast<size_t>(routing.sourceLfoIndex)].present) continue;
+        const auto slot = static_cast<size_t>(routing.targetSlot);
+        const auto mapping = routing.mapping();
+        const auto* signal = lfoOutputBuffer.getReadPointer(routing.sourceLfoIndex);
+        const auto* macro = routing.depthMacro < 0 ? nullptr : lfoOutputBuffer.getReadPointer(
+            fire::mod_sources::firstMacro + routing.depthMacro);
+        if (! runtimeTargets[slot].aggregate)
+        {
+            auto& transition = aggregateTransitions[slot];
+            transition.lastOffset = mapping.offset(signal[samples - 1], macro ? macro[samples - 1] : 1.0f);
+            transition.initialised = true;
+            continue;
+        }
+        auto* destination = lfoOutputBuffer.getWritePointer(
+            fire::mod_sources::firstAggregateSignal + routing.targetSlot);
+        for (int sample = 0; sample < samples; ++sample)
+            destination[sample] += mapping.offset(signal[sample], macro ? macro[sample] : 1.0f);
+    }
+    for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
+    {
+        const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+        if (! runtimeTargets[slot].aggregate) continue;
+        auto& transition = aggregateTransitions[slot];
+        auto* signal = lfoOutputBuffer.getWritePointer(fire::mod_sources::firstAggregateSignal + static_cast<int>(slot));
+        for (int sample = 0; sample < samples; ++sample)
+        {
+            // Sum every contributor before clipping. Cancellation therefore
+            // works even when an individual contributor saturates the target.
+            const auto offset = juce::jlimit(-1.0f, 1.0f, signal[sample]);
+            float value = offset;
+            if (transition.initialised && transition.remaining > 0)
+            {
+                const auto blend = 1.0f - static_cast<float>(transition.remaining)
+                                            / static_cast<float>(aggregateTransitionSamples);
+                value = transition.anchor + blend * (offset - transition.anchor);
+                --transition.remaining;
+            }
+            transition.initialised = true;
+            transition.lastOffset = value;
+            signal[sample] = value;
+        }
+    }
+}
+
 bool LfoManager::captureRuntimeRoutings(
     std::array<RuntimeRouting, maximumModulationRoutings>& destination,
-    size_t& destinationCount) const
+    size_t& destinationCount,
+    std::array<RuntimeTarget, maximumModulationRoutings>& targets,
+    std::array<int, maximumModulationRoutings>& activeSlots,
+    size_t& activeCount) const
 {
     destinationCount = 0;
     bool hasAnyRouting = false;
@@ -587,10 +689,68 @@ bool LfoManager::captureRuntimeRoutings(
             routing.sourceLfoIndex,
             depth,
             routing.isBipolar,
-            normalisedBaseValue
+            normalisedBaseValue,
+            routing.customRange,
+            std::isfinite(routing.rangeStart) ? juce::jlimit(-1.0f, 1.0f, routing.rangeStart) : 0.0f,
+            std::isfinite(routing.rangeEnd) ? juce::jlimit(-1.0f, 1.0f, routing.rangeEnd) : 1.0f,
+            juce::jlimit(0, 3, routing.curve),
+            juce::jlimit(-1, fire::mod_sources::macroCount - 1, routing.depthMacro),
+            -1
         };
     }
 
+    targets = {};
+    activeCount = 0;
+    // Reserve every surviving target's old slot before allocating new ones;
+    // adding/removing a row for another target never changes its channel ID.
+    for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
+    {
+        const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+        for (size_t route = 0; route < destinationCount; ++route)
+            if (runtimeTargets[slot].parameter == destination[route].parameter)
+            {
+                targets[slot].parameter = destination[route].parameter;
+                activeSlots[activeCount++] = static_cast<int>(slot);
+                break;
+            }
+    }
+    for (size_t route = 0; route < destinationCount; ++route)
+    {
+        auto& routing = destination[route];
+        size_t index = 0;
+        while (index < activeCount && targets[static_cast<size_t>(activeSlots[index])].parameter != routing.parameter) ++index;
+        size_t slot = index < activeCount ? static_cast<size_t>(activeSlots[index]) : 0;
+        if (index == activeCount)
+        {
+            while (slot < targets.size() && targets[slot].parameter != nullptr) ++slot;
+            jassert(slot < targets.size());
+            if (slot == targets.size()) continue;
+            activeSlots[activeCount++] = static_cast<int>(slot);
+        }
+        auto& target = targets[slot];
+        target.parameter = routing.parameter;
+        routing.targetSlot = static_cast<int>(slot);
+        if (target.firstRoute < 0) target.firstRoute = static_cast<int>(route);
+        ++target.routeCount;
+        target.aggregate = target.routeCount > 1 || target.aggregate
+            || routing.customRange || routing.curve != 0 || routing.depthMacro >= 0;
+    }
+    for (size_t index = 0; index < activeCount; ++index)
+    {
+        const auto slot = static_cast<size_t>(activeSlots[index]);
+        auto& target = targets[slot];
+        if (target.parameter == nullptr) continue;
+        const auto& previous = runtimeTargets[slot];
+        bool equal = target.parameter == previous.parameter && target.routeCount == previous.routeCount;
+        size_t oldRoute = 0;
+        for (size_t route = 0; equal && route < destinationCount; ++route)
+        {
+            if (destination[route].targetSlot != static_cast<int>(slot)) continue;
+            while (oldRoute < runtimeRoutingCount && runtimeRoutings[oldRoute].targetSlot != static_cast<int>(slot)) ++oldRoute;
+            equal = oldRoute < runtimeRoutingCount && destination[route].sameMapping(runtimeRoutings[oldRoute++]);
+        }
+        target.configuration = equal ? previous.configuration : previous.configuration + 1;
+    }
     return hasAnyRouting;
 }
 
@@ -600,8 +760,12 @@ bool LfoManager::refreshRuntimeStateIfAvailable()
     if (! lock.isLocked())
         return false;
 
-    const bool hasAnyRouting = captureRuntimeRoutings(runtimeRoutings,
-                                                       runtimeRoutingCount);
+    const bool hasAnyRouting = captureRuntimeRoutings(candidateRuntimeRoutings,
+                                                       candidateRuntimeRoutingCount, candidateRuntimeTargets,
+                                                       candidateActiveTargetSlots, candidateActiveTargetCount);
+    runtimeRoutings = candidateRuntimeRoutings;
+    runtimeRoutingCount = candidateRuntimeRoutingCount;
+    commitRuntimeTargets();
     hasPublishedRouting.store(hasAnyRouting, std::memory_order_relaxed);
 
     for (size_t i = 0; i < lfoEngines.size(); ++i)
@@ -1034,19 +1198,6 @@ LfoManager::assignModulationRoutingIfRevisionMatches(
         return result;
 
     result.accepted = true;
-    if (targetParameterID.isNotEmpty())
-    {
-        for (int i = 0; i < modulationRoutings.size(); ++i)
-        {
-            auto& candidate = modulationRoutings.getReference(i);
-            if (i != routingIndex
-                && candidate.targetParameterID == targetParameterID)
-            {
-                candidate.targetParameterID.clear();
-                result.changed = true;
-            }
-        }
-    }
 
     if (currentRouting.sourceLfoIndex != safeSourceIndex)
     {
@@ -1239,28 +1390,16 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
 
     const juce::ScopedLock sl(dataAccessLock);
     if (! isModulationSourcePresent(sourceLfoIndex)) return AssignmentResult::invalidRequest;
-    // 1. First, check if the target parameter is already being modulated.
-    //    If so, just update its LFO source.
-    for (auto& routing : modulationRoutings)
-    {
-        if (routing.targetParameterID == targetParameterID)
-        {
-            if (routing.sourceLfoIndex != sourceLfoIndex)
-            {
-                routing.sourceLfoIndex = sourceLfoIndex;
-                if (fire::mod_sources::isAuxiliary(sourceLfoIndex)) routing.isBipolar = false;
-                advanceModulationRoutingRevisionLocked();
-                return AssignmentResult::changed;
-            }
+    for (const auto& routing : modulationRoutings)
+        if (routing.targetParameterID == targetParameterID && routing.sourceLfoIndex == sourceLfoIndex)
             return AssignmentResult::unchanged;
-        }
-    }
 
     // 2. If the target is not modulated, find the first available empty slot.
     for (auto& routing : modulationRoutings)
     {
         if (routing.targetParameterID.isEmpty())
         {
+            routing = {};
             routing.sourceLfoIndex = sourceLfoIndex;
             if (fire::mod_sources::isAuxiliary(sourceLfoIndex)) routing.isBipolar = false;
             routing.targetParameterID = targetParameterID;
@@ -1293,75 +1432,45 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
 
 bool LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
 {
-    if (targetParameterID.isEmpty())
-        return false;
-
-    const juce::ScopedLock sl(dataAccessLock);
+    if (targetParameterID.isEmpty()) return false;
+    const juce::ScopedLock lock(dataAccessLock);
+    bool changed = false;
     for (auto& routing : modulationRoutings)
-    {
-        if (routing.targetParameterID == targetParameterID)
-        {
-            const auto previousRouting = routing;
-            // Unbind by clearing the target ID
-            routing.targetParameterID = juce::String();
-
-            // (Optional) Reset other parameters to their default values to maintain a clean state
-            routing.depth = 0.5f;
-            routing.isBipolar = true;
-            routing.isBypassed = false;
-            if (! haveSameModulationRoutingState(routing, previousRouting))
-                advanceModulationRoutingRevisionLocked();
-            return true; // Exit after finding and clearing
-        }
-    }
-
-    return false;
+        if (routing.targetParameterID == targetParameterID) { routing = {}; changed = true; }
+    if (changed) advanceModulationRoutingRevisionLocked();
+    return changed;
 }
 
 bool LfoManager::invertModulationDepth(const juce::String& targetParameterID)
 {
-    if (targetParameterID.isEmpty())
-        return false;
-
-    const juce::ScopedLock sl(dataAccessLock);
+    if (targetParameterID.isEmpty()) return false;
+    const juce::ScopedLock lock(dataAccessLock);
+    bool changed = false;
     for (auto& routing : modulationRoutings)
-    {
         if (routing.targetParameterID == targetParameterID)
         {
-            const float newDepth = std::isfinite(routing.depth)
-                                       ? juce::jlimit(-1.0f, 1.0f,
-                                                      -routing.depth)
-                                       : -0.5f;
-            if (! juce::exactlyEqual(routing.depth, newDepth))
-            {
-                routing.depth = newDepth;
-                advanceModulationRoutingRevisionLocked();
-                return true;
-            }
-            return false;
+            const auto depth = std::isfinite(routing.depth) ? juce::jlimit(-1.0f, 1.0f, -routing.depth) : -.5f;
+            if (! juce::exactlyEqual(routing.depth, depth)) { routing.depth = depth; changed = true; }
         }
-    }
-
-    return false;
+    if (changed) advanceModulationRoutingRevisionLocked();
+    return changed;
 }
 
 bool LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
 {
-    if (targetParameterID.isEmpty())
-        return false;
-
-    const juce::ScopedLock sl(dataAccessLock);
-    for (auto& routing : modulationRoutings)
-    {
+    if (targetParameterID.isEmpty()) return false;
+    const juce::ScopedLock lock(dataAccessLock);
+    bool found = false, anyActive = false;
+    for (const auto& routing : modulationRoutings)
         if (routing.targetParameterID == targetParameterID)
-        {
-            routing.isBypassed = ! routing.isBypassed;
-            advanceModulationRoutingRevisionLocked();
-            return true; // Assuming one routing per target for now
-        }
-    }
-
-    return false;
+        { found = true; anyActive = anyActive || ! routing.isBypassed; }
+    if (! found) return false;
+    // A partially enabled target bypasses all; an entirely bypassed target
+    // enables all. One user action publishes one coherent routing revision.
+    for (auto& routing : modulationRoutings)
+        if (routing.targetParameterID == targetParameterID) routing.isBypassed = anyActive;
+    advanceModulationRoutingRevisionLocked();
+    return true;
 }
 
 std::uint64_t LfoManager::setLfoData(int index, const LfoData& newData)

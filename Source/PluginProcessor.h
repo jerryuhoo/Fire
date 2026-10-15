@@ -9,6 +9,7 @@
 */
 
 #pragma once
+#include "Utility/ModulationSummary.h"
 #include "DSP/InsertRack.h"
 #include "DSP/LoudnessMatchState.h"
 #include "DSP/DriveCompensation.h"
@@ -129,6 +130,7 @@ struct OutputGainTransitionState
         int sourceIndex = -1;
         float modulationDepth = 0.0f;
         bool isBipolar = true;
+        bool signalIsOffset = false;
         bool isLinked = false;
     };
 
@@ -166,6 +168,7 @@ struct CompressorRecipeTransitionState
         int sourceIndex = -1;
         float modulationDepth = 0.0f;
         bool isBipolar = true;
+        bool signalIsOffset = false;
     };
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
@@ -190,6 +193,7 @@ struct ShapeControlRecipeTransitionState
         int sourceIndex = -1;
         float modulationDepth = 0.0f;
         bool isBipolar = true;
+        bool signalIsOffset = false;
     };
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
@@ -215,6 +219,7 @@ struct DriveControlTransitionState
         int sourceIndex = -1;
         float modulationDepth = 0.0f;
         bool isBipolar = true;
+        bool signalIsOffset = false;
         bool isExtremeModeOn = false;
     };
 
@@ -492,15 +497,7 @@ public:
 
     std::vector<LfoData> getLfoData() const { return lfoManager->getLfoDataCopy(); }
 
-    struct ModulationInfo
-    {
-        bool isModulated = false;
-        int sourceLfoIndex = 0; // Will be 1-based for the UI
-        float depth = 0.0f;
-        float currentValue = 0.0f; // The current LFO output, bipolar [-1, 1]
-        bool isBipolar = true;
-        bool isBypassed = false;
-    };
+    using ModulationInfo = fire::ui::ModulationSummary;
 
     // New public method for the editor to call
     ModulationInfo getModulationInfoForParameter(const juce::String& parameterID) const;

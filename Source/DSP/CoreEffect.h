@@ -19,6 +19,7 @@ public:
         int source = -1;
         bool bipolar = true;
         const float* signal = nullptr;
+        bool signalIsOffset = false;
     };
     struct EqNode
     {

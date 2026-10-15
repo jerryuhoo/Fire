@@ -383,6 +383,19 @@ struct StateComponentSessionBoundaryTestAccess
 
 namespace
 {
+void makeLegacyPreset(juce::XmlElement& preset, int version)
+{
+    if (version < 0) preset.removeAttribute("presetFormatVersion");
+    else preset.setAttribute("presetFormatVersion", version);
+    if (auto* routes = preset.getChildByName("MODULATION_STATE"))
+    {
+        routes->removeAttribute("schemaVersion");
+        for (auto* route : routes->getChildIterator())
+            for (const auto* attribute : {"customRange", "rangeStart", "rangeEnd", "curve", "depthMacro"})
+                route->removeAttribute(attribute);
+    }
+}
+
 class ScopedTemporaryDirectory
 {
 public:
@@ -3023,7 +3036,7 @@ TEST_CASE("Versioned presets reject incomplete snapshots atomically",
 
     juce::XmlElement completePreset { "WINGSFIRE" };
     state::saveStateToXml(processor, completePreset);
-    REQUIRE(completePreset.getIntAttribute("presetFormatVersion") == 2);
+    REQUIRE(completePreset.getIntAttribute("presetFormatVersion") == 3);
 
     std::vector<std::unique_ptr<juce::XmlElement>> invalidPresets;
 
@@ -3048,12 +3061,13 @@ TEST_CASE("Versioned presets reject incomplete snapshots atomically",
     invalidPresets.push_back(std::move(missingRoutingState));
 
     auto duplicateRouting = std::make_unique<juce::XmlElement>(completePreset);
+    makeLegacyPreset(*duplicateRouting, 2); // Historical complete snapshots reject repeated targets.
     if (auto* routingState = duplicateRouting->getChildByName("MODULATION_STATE"))
         appendRouting(*routingState, 0, driveID, 0.25f);
     invalidPresets.push_back(std::move(duplicateRouting));
 
     auto unsupportedFutureVersion = std::make_unique<juce::XmlElement>(completePreset);
-    unsupportedFutureVersion->setAttribute("presetFormatVersion", 3);
+    unsupportedFutureVersion->setAttribute("presetFormatVersion", 4);
     invalidPresets.push_back(std::move(unsupportedFutureVersion));
 
     for (const auto& invalidPreset : invalidPresets)
@@ -4040,7 +4054,7 @@ TEST_CASE("Legacy preset equivalence compares effective LFO and routing defaults
     setPlainParameter(processor, driveID, 34.0f);
     juce::XmlElement legacyPreset { "WINGSFIRE" };
     state::saveStateToXml(processor, legacyPreset);
-    legacyPreset.removeAttribute("presetFormatVersion");
+    makeLegacyPreset(legacyPreset, -1);
     if (auto* lfoState = legacyPreset.getChildByName("LFO_STATE"))
         legacyPreset.removeChildElement(lfoState, true);
     if (auto* routingState = legacyPreset.getChildByName("MODULATION_STATE"))
@@ -4071,7 +4085,7 @@ TEST_CASE("Legacy preset equivalence compares effective LFO and routing defaults
     // clean against the promoted value.
     juce::XmlElement legacySmoothnessPreset { "WINGSFIRE" };
     state::saveStateToXml(processor, legacySmoothnessPreset);
-    legacySmoothnessPreset.removeAttribute("presetFormatVersion");
+    makeLegacyPreset(legacySmoothnessPreset, -1);
     const auto smoothnessID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 0);
     legacySmoothnessPreset.removeAttribute(smoothnessID);
     auto* legacyLfoState = legacySmoothnessPreset.getChildByName("LFO_STATE");
@@ -4245,7 +4259,7 @@ TEST_CASE("State loaders enforce one modulation routing per target",
         FireAudioProcessor processor;
         juce::XmlElement preset { "WINGSFIRE" };
         state::saveStateToXml(processor, preset);
-        preset.removeAttribute("presetFormatVersion");
+        makeLegacyPreset(preset, -1);
         auto* routingState = preset.getChildByName("MODULATION_STATE");
         REQUIRE(routingState != nullptr);
         appendRouting(*routingState, 1, targetID, 0.25f);

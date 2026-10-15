@@ -58,6 +58,7 @@ void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
                 provider.baseValue = c.value;
                 provider.modulationDepth = c.depth;
                 provider.isBipolar = c.bipolar;
+                provider.signalIsOffset = c.signalIsOffset;
                 provider.lfoSignal = c.signal ? c.signal + offset : nullptr;
                 provider.range = i == 0 ? juce::NormalisableRange<float>{20, 20000, 0, 0.3f}
                     : i == 1 ? juce::NormalisableRange<float>{-24, 24}

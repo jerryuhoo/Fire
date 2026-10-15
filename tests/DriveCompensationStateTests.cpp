@@ -58,6 +58,20 @@ void stripFamily(juce::XmlElement& xml)
     xml.removeAttribute(marker);
     for (const auto& id : comp::parameterIDs()) xml.removeAttribute(id);
 }
+void stripAdvancedRoutingSchema(juce::XmlElement& xml)
+{
+    // A real pre-v3 preset predates both the routing schema marker and the
+    // advanced mapping attributes; lowering only its outer version produces
+    // an invalid mixed-generation document rather than a legacy fixture.
+    if (auto* routes = xml.getChildByName("MODULATION_STATE"))
+    {
+        routes->removeAttribute("schemaVersion");
+        for (auto* route : routes->getChildIterator())
+            for (const auto* field : {"customRange", "rangeStart", "rangeEnd", "curve", "depthMacro"})
+                route->removeAttribute(field);
+    }
+}
+
 void setModes(FireAudioProcessor& processor, float value)
 {
     for (int band = 0; band < 4; ++band) setPlain(processor, comp::parameterID(band), value);
@@ -171,6 +185,7 @@ TEST_CASE("Absent Drive compensation families retain legacy Link on active and a
         auto candidate = legacyPreset;
         if (version < 0) candidate.removeAttribute("presetFormatVersion");
         else candidate.setAttribute("presetFormatVersion", version);
+        stripAdvancedRoutingSchema(candidate);
         setModes(restored, 1.0f);
         REQUIRE(state::loadStateFromXml(candidate, restored));
         checkSoundSettings(restored, 0, true);

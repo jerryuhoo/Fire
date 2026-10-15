@@ -6,6 +6,19 @@
 
 namespace
 {
+void makeLegacyPreset(juce::XmlElement& preset, int version)
+{
+    if (version < 0) preset.removeAttribute("presetFormatVersion");
+    else preset.setAttribute("presetFormatVersion", version);
+    if (auto* routes = preset.getChildByName("MODULATION_STATE"))
+    {
+        routes->removeAttribute("schemaVersion");
+        for (auto* route : routes->getChildIterator())
+            for (const auto* attribute : {"customRange", "rangeStart", "rangeEnd", "curve", "depthMacro"})
+                route->removeAttribute(attribute);
+    }
+}
+
 void setPlain(FireAudioProcessor& processor, const juce::String& id, float value)
 {
     auto* parameter = processor.treeState.getParameter(id);
@@ -42,7 +55,7 @@ TEST_CASE("Invalid alternate preset versions fall back to the complete restored 
           "[state][host][ab][version][corrupt][ott][insertfx][module-order][regression]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
-    for (const auto* invalidVersion : { "3", "-1", "1.5", "2oops" })
+    for (const auto* invalidVersion : { "4", "-1", "1.5", "2oops" })
     {
         CAPTURE(invalidVersion);
         FireAudioProcessor source;
@@ -103,7 +116,7 @@ TEST_CASE("Supported alternate preset versions preserve modern modules across A-
           "[state][host][ab][version][legacy][ott][insertfx][module-order][regression]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
-    for (const auto version : { -1, 0, 1, 2 })
+    for (const auto version : { -1, 0, 1, 2, 3 })
     {
         CAPTURE(version);
         FireAudioProcessor source;
@@ -118,10 +131,8 @@ TEST_CASE("Supported alternate preset versions preserve modern modules across A-
         auto xml = hostXml(source);
         auto* alternate = xml->getChildByName("AB_STATE");
         REQUIRE(alternate != nullptr);
-        if (version < 0)
-            alternate->removeAttribute("presetFormatVersion");
-        else
-            alternate->setAttribute("presetFormatVersion", version);
+        if (version < 3) makeLegacyPreset(*alternate, version);
+        else alternate->setAttribute("presetFormatVersion", version);
         alternate->setAttribute("currentSideIsA", false);
 
         FireAudioProcessor restored;

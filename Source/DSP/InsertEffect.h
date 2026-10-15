@@ -576,7 +576,7 @@ private:
         juce::SmoothedValue<float> blend;
         float anchor = 0.0f, depth = 0.0f;
         int source = -1;
-        bool initialised = false, routed = false, bipolar = true;
+        bool initialised = false, routed = false, bipolar = true, signalIsOffset = false;
     };
     void updateControlTargets(const Parameters& parameters,
                               const std::array<int, controlCount>* sourceIndices,
@@ -597,7 +597,8 @@ private:
             if (route.initialised && (route.routed != routed
                 || (routed && (route.source != source
                     || ! juce::exactlyEqual(route.depth, depth)
-                    || route.bipolar != provider.isBipolar))))
+                    || route.bipolar != provider.isBipolar
+                                   || route.signalIsOffset != provider.signalIsOffset))))
             {
                 route.anchor = lastValues[i];
                 route.blend.setCurrentAndTargetValue(0.0f);
@@ -608,6 +609,7 @@ private:
             route.source = source;
             route.depth = depth;
             route.bipolar = provider.isBipolar;
+            route.signalIsOffset = provider.signalIsOffset;
         }
         if (currentType == Type::granular)
             for (size_t i = 0; i < cloudsBases.size(); ++i)
@@ -620,7 +622,8 @@ private:
                 const auto depth = std::isfinite(provider.modulationDepth)
                     ? juce::jlimit(-1.0f, 1.0f, provider.modulationDepth) : 0.0f;
                 if (route.initialised && (route.routed != routed || (routed && (route.source != source
-                    || ! juce::exactlyEqual(route.depth, depth) || route.bipolar != provider.isBipolar))))
+                    || ! juce::exactlyEqual(route.depth, depth) || route.bipolar != provider.isBipolar
+                                   || route.signalIsOffset != provider.signalIsOffset))))
                 {
                     route.anchor = lastCloudsValues[i];
                     route.blend.setCurrentAndTargetValue(0.0f);
@@ -628,6 +631,7 @@ private:
                 }
                 route.initialised = true; route.routed = routed; route.source = source;
                 route.depth = depth; route.bipolar = provider.isBipolar;
+                route.signalIsOffset = provider.signalIsOffset;
             }
     }
     void resetMemory(bool preserveFrozen = true) noexcept

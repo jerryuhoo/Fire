@@ -1852,7 +1852,9 @@ private:
         const auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
         const auto centre = bounds.getCentre();
         const auto hasValidSource = isValidModulationSourceNumber(slider.lfoSource);
-        const auto bankAccent = lineInk(modulationSourceColourForSource(slider.lfoSource), currentSkin);
+        const bool multipleSources=slider.modulationRouteCount>1;
+        const auto bankAccent = multipleSources ? skinPalette(currentSkin).accent
+            : lineInk(modulationSourceColourForSource(slider.lfoSource), currentSkin);
         const auto modulationAccent = slider.isBypassed
                                           ? bankAccent.interpolatedWith(
                                                 colours::disabled, 0.68f)
@@ -1865,13 +1867,20 @@ private:
                           juce::jmax(1.0f, 1.5f * scale));
         }
 
-        if (slider.isModulated && std::abs(slider.lfoAmount) > 0.0001
+        const bool hasRange=slider.usesModulationSummary
+            ? std::abs(slider.modulationOffsetMaximum-slider.modulationOffsetMinimum)>.0001
+                || std::abs(slider.modulationOffsetCurrent)>.0001
+            : std::abs(slider.lfoAmount)>.0001;
+        if (slider.isModulated && hasRange
             && slider.isEnabled() && radius > 1.0f)
         {
             const auto base = slider.valueToProportionOfLength(slider.getValue());
             const auto depth = std::abs(slider.lfoAmount);
-            auto low = slider.isBipolar ? base - depth * 0.5 : base + juce::jmin(0.0, slider.lfoAmount);
-            auto high = slider.isBipolar ? base + depth * 0.5 : base + juce::jmax(0.0, slider.lfoAmount);
+            auto low = slider.usesModulationSummary ? base+slider.modulationOffsetMinimum
+                : slider.isBipolar ? base-depth*.5 : base+juce::jmin(0.0,slider.lfoAmount);
+            auto high = slider.usesModulationSummary ? base+slider.modulationOffsetMaximum
+                : slider.isBipolar ? base+depth*.5 : base+juce::jmax(0.0,slider.lfoAmount);
+            if(low>high) std::swap(low,high);
             low = juce::jlimit(0.0, 1.0, low);
             high = juce::jlimit(0.0, 1.0, high);
             // Follow the pressed dial's inner disc, keeping both the range
@@ -1901,7 +1910,8 @@ private:
             if (! isDrive && ! slider.isBypassed)
             {
                 const auto signal = slider.isBipolar ? slider.lfoValue * 0.5 : slider.lfoValue;
-                const auto current = juce::jlimit(0.0, 1.0, base + signal * slider.lfoAmount);
+                const auto current = juce::jlimit(0.0,1.0,base+(slider.usesModulationSummary
+                    ? slider.modulationOffsetCurrent : signal*slider.lfoAmount));
                 const auto angle = startAngle + static_cast<float>(current) * (endAngle - startAngle);
                 const juce::Point<float> point {
                     centre.x + modRadius * std::sin(angle),
@@ -1953,7 +1963,7 @@ private:
             handle = handle.expanded(handle.getWidth() * 0.08f * hover);
             const auto accent = modulationAccent;
             const auto useDarkLabel = slider.isEnabled() && ! slider.isBypassed
-                                      && hasValidSource;
+                                      && (hasValidSource || multipleSources);
             const auto labelColour = useDarkLabel ? themeColour(colours::canvas)
                                                    : themeColour(colours::textPrimary);
 
@@ -1983,7 +1993,8 @@ private:
                                                             ? 0.96f
                                                             : 0.72f));
             g.setFont(fire::ui::labelFont(juce::jmax(7.0f, handle.getHeight() * 0.48f)));
-            g.drawText(hasValidSource ? fire::mod_sources::badge(slider.lfoSource - 1) : "?",
+            g.drawText(multipleSources ? juce::String(slider.modulationRouteCount)
+                         : hasValidSource ? fire::mod_sources::badge(slider.lfoSource-1) : "?",
                        handle,
                        juce::Justification::centred);
         }

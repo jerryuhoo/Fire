@@ -139,7 +139,8 @@ public:
             routed,
             routed ? sourceIndex : -1,
             routed ? sanitiseDepth(provider.modulationDepth) : 0.0f,
-            routed ? provider.isBipolar : true
+            routed ? provider.isBipolar : true,
+            routed && provider.signalIsOffset
         };
 
         if (! initialised)
@@ -256,6 +257,7 @@ private:
         int sourceIndex = -1;
         float modulationDepth = 0.0f;
         bool isBipolar = true;
+        bool signalIsOffset = false;
     };
 
     static constexpr double legacyRampSeconds = 0.05;
@@ -284,7 +286,8 @@ private:
         return lhs.sourceIndex == rhs.sourceIndex
                && juce::exactlyEqual(lhs.modulationDepth,
                                      rhs.modulationDepth)
-               && lhs.isBipolar == rhs.isBipolar;
+               && lhs.isBipolar == rhs.isBipolar
+               && lhs.signalIsOffset == rhs.signalIsOffset;
     }
 
     void mixLegacyBlock(juce::dsp::AudioBlock<float> wetSamples) noexcept

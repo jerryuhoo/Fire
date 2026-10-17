@@ -447,6 +447,9 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ### 2.1.0 (in development)
 
+- Add module copy, duplicate and cross-chain paste, plus portable `.firechain`
+  files. Optional routing uses the destination's existing modulation sources;
+  incompatible conversions are rejected before any sound is changed.
 - Add four independent envelope detectors, external sidechain input, selectable
   input bands, detection filters and momentary listening. Historical Envelope
   and Macro IDs remain unchanged; new detector parameters append after them.
@@ -728,6 +731,43 @@ continuous reel animation and signal-driven tube illumination.
 
 Use **CHAIN → +** in either **Master Lab** or **Band Lab** to select a DSP module. Both workspaces share Drive, Shape, Compressor, OTT, Stereo, EQ, Lo-Fi, Chorus, Flanger, Phaser, Delay, Reverb, Granular and Chord Resonator. Every row, including the initial modules, can be bypassed, moved or removed with its **−** button. Removed modules can be added again, and each chain supports up to eight additional independent instances. Master Analysis is a removable display page. The module rail keeps five fixed-height rows visible and scrolls as more effects are added. The selected module scrolls into view automatically.
 
+**Copy modules and reuse chains.** Right-click a module, or focus its row and
+press **Shift+F10**, to choose **Copy settings**, **Copy with routing**,
+**Duplicate settings**, or **Paste … after**. Duplicate inserts a settings-only
+copy immediately after the source. To paste into an empty chain, use the copied
+module item at the bottom of **+**. Module and chain clipboards are separate and
+can be used between Band and Master chains and between Fire instances of the
+same plug-in format in one process.
+
+The **…** button beside **+** opens the chain tools. **Copy chain settings** and
+**Copy chain with routing** capture the current audio modules in order.
+**Paste chain** replaces only the destination chain; it keeps the other bands,
+Master, crossover points, Output/Mix controls, and global modulation sources.
+An empty copied chain clears the destination audio modules. Master Analysis is
+a display page and is excluded from the copy. Duplicate, paste and chain
+replacement each form one Undo step.
+
+**Save chain preset…** stores a settings-only `.firechain` file; choose
+**Save chain preset with routing…** to include its mappings. These files live in
+**Chains** inside the preset folder and are separate from whole-plugin `.fire`
+presets. **Load chain preset — replace…** loads a file into the current chain.
+Module settings include model choices, EQ points and frozen granular audio.
+
+**With routing** copies the module's destination mappings, including route
+ranges, response curves and macro depth assignments. Routing uses the
+**destination instance's current LFOs, envelopes and macros**; their shapes,
+detector configuration, names and values are not overwritten. For a complete
+sound with its source definitions, use a whole-plugin preset.
+
+Pasting checks that the complete chain fits into compatible slots before
+changing anything. It can reuse the original core slots and up to eight insert
+slots. When a conversion cannot preserve the module's settings and routing, it
+reports the reason and leaves the destination unchanged. In particular,
+original Master Lo-Fi uses a different engine and stays in its original Master
+slot; a Drive using **Legacy Link** needs a compatible original Drive slot or
+must first be changed to **Drive Comp**. Different parameter ranges or steps may
+also require the same module representation, or a settings-only copy.
+
 | Effect | Controls |
 | --- | --- |
 | Chorus | Rate, Depth, Delay, Feedback, Width, Mix. |
@@ -779,7 +819,7 @@ indices do not move; they cannot select another engine.
 
 **Lo-Fi** is available in both workspaces, including multiple instances. Rate, Bits, Jitter and Mix sit above Tape, Wow and Flutter. Tape adds saturation and a softer high-frequency response; Wow introduces slow pitch drift and Flutter adds faster pitch variation. Zero Jitter/Tape/Wow/Flutter preserves the previous insert processing.
 
-Built-in modules and insert effects run in the same freely reorderable list, before the chain's Output/Mix controls. Drag any module, including Drive, Shape, Compressor, Stereo, OTT, Master EQ and Lo-Fi, to change its processing position. Analysis is a movable display page and does not process audio. Older presets retain their original audio order (OTT before Stereo, and Master Lo-Fi before EQ); the list now displays that order. Drive and Shape retain their legacy combined processing when adjacent in that order, and run as separate stages when moved apart. Hover any module to reveal its **−** remove button, or drag its name/body to reorder it. A floating preview and insertion line indicate the destination; holding near the list edges scrolls to offscreen effects. The new order is committed once on release. Escape, dropping outside the list or changing workspace/band cancels the drag. Removing the selected effect selects its nearest remaining neighbour. The power button bypasses each effect, and the context menu also provides move/remove actions. Reordering retains that slot's parameters and LFO assignments. New effect values fade in while editing; the waveform shows the selected band's output or the master output.
+Built-in modules and insert effects run in the same freely reorderable list, before the chain's Output/Mix controls. Drag any module, including Drive, Shape, Compressor, Stereo, OTT, Master EQ and Lo-Fi, to change its processing position. Analysis is a movable display page and does not process audio. Older presets retain their original audio order (OTT before Stereo, and Master Lo-Fi before EQ); the list now displays that order. Drive and Shape retain their legacy combined processing when adjacent in that order, and run as separate stages when moved apart. Hover any module to reveal its **−** remove button, or drag its name/body to reorder it. A floating preview and insertion line indicate the destination; holding near the list edges scrolls to offscreen effects. The new order is committed once on release. Escape, dropping outside the list or changing workspace/band cancels the drag. Removing the selected effect selects its nearest remaining neighbour. The power button bypasses each effect, and the context menu provides copy/duplicate/paste as well as move/remove actions. Reordering retains that slot's parameters and LFO assignments. New effect values fade in while editing; the waveform shows the selected band's output or the master output.
 
 Every insert retains its six normalized host controls with effect-specific labels and units in Fire's UI; Clouds adds a separately versioned set of controls. LFO modulation, presets, host state, A/B comparisons and band copying include the new controls. New host parameters are appended with a newer AU version hint, and older projects load empty insert racks with Tape/Wow/Flutter at zero. Empty slots prepare only lightweight timing state. Effect buffers are prepared on demand outside the audio callback; generic host type automation requests a background preparation worker, and the slot smoothly stays dry until its engine is ready. Previously used effect families are retained for quick switching. The plug-in reserves a fixed delay budget for independently insertable Shape stages. In legacy-only recipes the unused budget is placed at the output, preserving the original DSP/sample clocks and Lo-Fi sound; when independent Shapes are present, the rack uses that budget to align its slots. Independently added Shape uses this budget for its HQ oversampler and aligned module Mix; other modules use a pure delay. The host receives one fixed PDC value across HQ automation and module insertion/removal (83 samples, about 1.7 ms at 48 kHz). Band Mix, Global Mix and host bypass retain aligned dry paths. Delay, pitch modulation, granular playback and reverb additionally create their intended time offsets and tails in the wet signal. Tail reporting reserves conservative bounds so hosts do not cut long echoes prematurely; a frozen Clouds buffer or maximum feedback reports an infinite tail.
 

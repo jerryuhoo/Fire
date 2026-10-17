@@ -2,11 +2,15 @@
 #include "../PluginProcessor.h"
 #include "LookAndFeel.h"
 #include "ModuleDragButton.h"
+#include "ChainClipboardUI.h"
+#include <optional>
 #include "../Panels/SpectrogramPanel/CloseButton.h"
 
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct SkinNavigationMotionTestAccess;
 #endif
+
+struct ChainClipboardUiTestAccess;
 
 namespace fire::ui
 {
@@ -41,7 +45,16 @@ class EffectRackNavigation final : public juce::Component
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct ::SkinNavigationMotionTestAccess;
 #endif
+    friend struct ::ChainClipboardUiTestAccess;
 public:
+    enum MenuAction
+    {
+        moveUp = 1, moveDown = 2, removeEffect = 3,
+        copySettings = 10, copyWithRouting = 11, duplicateSettings = 12, pasteAfter = 13,
+        pasteCopiedModule = 200,
+        copyChainSettings = 301, copyChainWithRouting = 302, pasteChain = 303,
+        saveChainSettings = 304, saveChainWithRouting = 305, loadChain = 306
+    };
     struct Row { juce::TextButton* button; juce::ToggleButton* power; };
     EffectRackNavigation(FireAudioProcessor& p, int initialScope) : processor(p), content(*this)
     {
@@ -58,6 +71,8 @@ public:
         addButton.setColour(juce::TextButton::buttonColourId, paletteFor(*this).raised);
         addButton.setColour(juce::TextButton::textColourOffId, paletteFor(*this).textSecondary);
         addButton.onClick = [this] { showAddMenu(); };
+        addAndMakeVisible(chainButton);
+        chainButton.onClick = [this] { showChainMenu(); };
         for (int slot = 0; slot < effects::slotCount; ++slot)
         {
             auto& button = insertButtons[static_cast<size_t>(slot)];
@@ -121,6 +136,7 @@ public:
         scope = nextScope; selectedSlot = -1;
         cachedTypes.fill(-1); cachedModuleOrder.fill(-2); cachedPresence.fill(-1);
         addButton.setComponentID(scope == 0 ? "addMasterEffect" : "addBandEffect");
+        chainButton.setComponentID(scope == 0 ? "masterChainTools" : "bandChainTools");
         for (int slot = 0; slot < effects::slotCount; ++slot)
         {
             const auto i = static_cast<size_t>(slot);
@@ -189,7 +205,7 @@ public:
             {
                 insertButtons[i].setButtonText(type == effects::Type::chordResonator ? "Resonator" : effects::name(type));
                 insertButtons[i].setTitle(effects::name(type));
-                insertButtons[i].setTooltip(juce::String(effects::name(type)) + ". Drag to reorder. Hover to remove.");
+                insertButtons[i].setTooltip(juce::String(effects::name(type)) + ". Drag to reorder. Right-click or Shift+F10 for copy, duplicate and paste. " + chainRoutingNote);
                 powerButtons[i].setColour(juce::ToggleButton::tickColourId, effectColour(type));
                 powerButtons[i].setColour(juce::ToggleButton::tickDisabledColourId, colours::disabled);
                 powerButtons[i].setTooltip("Enable or bypass " + juce::String(effects::name(type)) + " in this chain");
@@ -212,7 +228,7 @@ public:
             const auto description = "Remove " + builtins[node].button->getButtonText()
                 + (scope == 0 ? " from Master" : " from Band " + juce::String(scope));
             remove.setTitle(description); remove.setTooltip(description); remove.setDescription(description); remove.setHelpText(description);
-            builtins[node].button->setTooltip(builtins[node].button->getButtonText() + ". Drag to reorder. Hover to remove.");
+            builtins[node].button->setTooltip(builtins[node].button->getButtonText() + ". Drag to reorder. Right-click or Shift+F10 for copy, duplicate and paste. " + chainRoutingNote);
         }
         if (! changed && ! selectionRemoved) return;
         cancelRowInteractions();
@@ -236,6 +252,7 @@ public:
         const auto title = area.removeFromTop(juce::jmin(area.getHeight(), juce::roundToInt(22.0f * scale)));
         const auto side = juce::jmin(title.getHeight(), juce::roundToInt(21.0f * scale));
         addButton.setBounds(title.getRight() - side, title.getY() - juce::roundToInt(3.0f * scale), side, side);
+        chainButton.setBounds(addButton.getX() - side - juce::roundToInt(5.0f * scale), addButton.getY(), side, side);
         viewport.setScrollBarThickness(juce::jmax(3, juce::roundToInt(4.0f * scale)));
         viewport.setBounds(area);
         layoutRows();
@@ -295,6 +312,11 @@ public:
         if (! safe) return;
         addButton.dismissPointerGesture();
         if (! safe) return;
+        chainButton.dismissPointerGesture();
+        if (! safe) return;
+        dismissChainFiles();
+        resultAlert.close();
+        if (! safe) return;
         for (auto& button : insertButtons) {button.dismissPointerGesture(); if (! safe) return;}
         for (auto& button : powerButtons) {button.dismissPointerGesture(); if (! safe) return;}
     }
@@ -350,20 +372,34 @@ public:
             menu.addItem(restore ? builtinMenuItemID(legacy) : static_cast<int>(type), effects::name(type), restore || room);
         }
         if (scope == 0 && !processor.isModulePresent(scope, 2)) menu.addItem(builtinMenuItemID(2), "Analysis");
+        if (const auto copied = chain::getClipboard(chain::ClipboardKind::module))
+        {
+            menu.addSeparator();
+            menu.addItem(pasteCopiedModule, "Paste " + copiedModuleName(copied));
+        }
         return menu;
     }
 
     std::function<void(int)> createAddMenuResultHandler()
     {
+        ++toolMenuGeneration;
         const auto epoch = generation;
         const auto request = ++addMenuGeneration;
         const auto originalScope = scope;
+        const auto stateRevision = processor.getChainEditRevision();
+        const auto copied = chain::getClipboard(chain::ClipboardKind::module);
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
-        return [safe, epoch, request, originalScope](int result)
+        return [safe, epoch, request, originalScope, stateRevision, copied](int result)
         {
             if (! safe || safe->generation != epoch || safe->addMenuGeneration != request
-                || safe->scope != originalScope || ! safe->isShowing() || ! safe->isEnabled()) return;
+                || safe->scope != originalScope || ! safe->isShowing() || ! safe->isEnabled()
+                || safe->processor.getChainEditRevision() != stateRevision) return;
             ++safe->addMenuGeneration; // Menu completion is a one-shot action.
+            if (result == pasteCopiedModule)
+            {
+                if (copied) safe->pasteModule(-1, copied);
+                return;
+            }
             if (result >= builtinMenuItemID(0) && result <= builtinMenuItemID(4))
             {
                 safe->activateBuiltin(result - builtinMenuItemID(0));
@@ -391,7 +427,309 @@ public:
                               .withStandardItemHeight(juce::roundToInt(29.0f * scale)),
             createAddMenuResultHandler());
     }
+    juce::PopupMenu createModuleMenu(int node)
+    {
+        juce::PopupMenu menu;
+        const auto row = rowForNode(node);
+        const bool realModule = processor.isModulePresent(scope, node)
+            && !(scope == 0 && node == 2);
+        menu.addItem(copySettings, "Copy settings", realModule);
+        menu.addItem(copyWithRouting, "Copy with routing", realModule);
+        menu.addItem(duplicateSettings, "Duplicate settings", realModule);
+        const auto copied = chain::getClipboard(chain::ClipboardKind::module);
+        menu.addItem(pasteAfter, copied ? "Paste " + copiedModuleName(copied) + " after" : "Paste after", copied != nullptr);
+        menu.addSeparator();
+        menu.addItem(moveUp, "Move up", row.button != nullptr && !visibleRows.empty() && visibleRows.front().button != row.button);
+        menu.addItem(moveDown, "Move down", row.button != nullptr && !visibleRows.empty() && visibleRows.back().button != row.button);
+        menu.addSeparator();
+        menu.addItem(removeEffect, "Remove effect", processor.isModulePresent(scope, node));
+        menu.addSectionHeader("Routing uses destination sources");
+        return menu;
+    }
+
+    std::function<void(int)> createModuleMenuResultHandler(int node)
+    {
+        ++addMenuGeneration;
+        const auto epoch = generation;
+        const auto request = ++toolMenuGeneration;
+        const auto stateRevision = processor.getChainEditRevision();
+        const auto originalScope = scope;
+        const auto copied = chain::getClipboard(chain::ClipboardKind::module);
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        return [safe, epoch, request, stateRevision, originalScope, node, copied](int result)
+        {
+            if (!safe || safe->generation != epoch || safe->toolMenuGeneration != request
+                || safe->scope != originalScope || !safe->isShowing() || !safe->isEnabled()
+                || safe->processor.getChainEditRevision() != stateRevision
+                || !safe->processor.isModulePresent(originalScope, node)) return;
+            ++safe->toolMenuGeneration;
+            if (result == copySettings || result == copyWithRouting || result == duplicateSettings)
+            {
+                chain::Snapshot snapshot;
+                auto status = safe->processor.captureModuleSnapshot(originalScope, node, result == copyWithRouting, snapshot);
+                if (!safe) return;
+                if (status.failed()) { safe->showChainResult(status); return; }
+                if (result == duplicateSettings)
+                {
+                    safe->pasteModule(node, std::make_shared<const chain::Snapshot>(std::move(snapshot)));
+                    return;
+                }
+                safe->showChainResult(chain::setClipboard(chain::ClipboardKind::module, snapshot));
+                return;
+            }
+            if (result == pasteAfter) { if (copied) safe->pasteModule(node, copied); return; }
+            if (result == removeEffect) safe->processor.removeModule(originalScope, node);
+            else if (result == moveUp || result == moveDown)
+                safe->processor.moveModuleBy(originalScope, node, result == moveUp ? -1 : 1);
+            if (safe && safe->scope == originalScope) safe->refresh();
+        };
+    }
+
+    juce::PopupMenu createChainMenu() const
+    {
+        juce::PopupMenu menu;
+        menu.addItem(copyChainSettings, "Copy chain settings");
+        menu.addItem(copyChainWithRouting, "Copy chain with routing");
+        const auto copied = chain::getClipboard(chain::ClipboardKind::chain);
+        menu.addItem(pasteChain, copied
+            ? "Paste chain — replace with " + juce::String(static_cast<int>(copied->modules.size())) + " modules"
+            : "Paste chain — replace current", copied != nullptr);
+        menu.addSeparator();
+        menu.addItem(saveChainSettings, "Save chain preset...");
+        menu.addItem(saveChainWithRouting, "Save chain preset with routing...");
+        menu.addItem(loadChain, "Load chain preset — replace...");
+        menu.addSectionHeader("Routing uses destination sources");
+        return menu;
+    }
+
+    std::function<void(int)> createChainMenuResultHandler()
+    {
+        ++addMenuGeneration;
+        const auto epoch = generation;
+        const auto request = ++toolMenuGeneration;
+        const auto stateRevision = processor.getChainEditRevision();
+        const auto originalScope = scope;
+        const auto copied = chain::getClipboard(chain::ClipboardKind::chain);
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        return [safe, epoch, request, stateRevision, originalScope, copied](int result)
+        {
+            if (!safe || safe->generation != epoch || safe->toolMenuGeneration != request
+                || safe->scope != originalScope || !safe->isShowing() || !safe->isEnabled()
+                || safe->processor.getChainEditRevision() != stateRevision) return;
+            ++safe->toolMenuGeneration;
+            if (result == copyChainSettings || result == copyChainWithRouting)
+            {
+                chain::Snapshot snapshot;
+                auto status = safe->processor.captureChainSnapshot(originalScope, result == copyChainWithRouting, snapshot);
+                if (!safe) return;
+                if (status.wasOk()) status = chain::setClipboard(chain::ClipboardKind::chain, snapshot);
+                if (safe) safe->showChainResult(status);
+            }
+            else if (result == pasteChain) { if (copied) safe->replaceChain(copied); }
+            else if (result == saveChainSettings || result == saveChainWithRouting)
+                safe->chooseChainFile(true, result == saveChainWithRouting);
+            else if (result == loadChain) safe->chooseChainFile(false, false);
+        };
+    }
+
+    bool keyPressed(const juce::KeyPress& key) override
+    {
+        if (!key.isKeyCode(juce::KeyPress::F10Key) || !key.getModifiers().isShiftDown()) return false;
+        for (auto row : visibleRows)
+            if (row.button->hasKeyboardFocus(true) || (row.power && row.power->hasKeyboardFocus(true)))
+            {
+                showModuleMenu(nodeForButton(row.button));
+                return true;
+            }
+        if (chainButton.hasKeyboardFocus(true)) { showChainMenu(); return true; }
+        return false;
+    }
+
+    void showChainMenu()
+    {
+        if (!isShowing() || !isEnabled() || chainFileActive) return;
+        auto menu = createChainMenu();
+        menu.showMenuAsync(prepareContextMenu(menu, chainButton, chainButton.getScreenBounds().getBottomLeft())
+            .withMinimumWidth(juce::roundToInt(280.0f * scale))
+            .withStandardItemHeight(juce::roundToInt(29.0f * scale)), createChainMenuResultHandler());
+    }
 private:
+    struct ChainFileContext
+    {
+        std::uint64_t epoch = 0, request = 0, stateRevision = 0;
+        int scope = -1;
+        bool saving = false;
+        std::shared_ptr<const chain::Snapshot> snapshot;
+    };
+    void showChainResult(const juce::Result& result)
+    {
+        lastChainResult = result.getErrorMessage();
+        if (result.wasOk()) return;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        if (suppressResultAlertsForTesting) return;
+#endif
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        resultAlert.close();
+        if (!safe || !safe->isShowing()) return;
+        auto alert = juce::AlertWindow::showScopedAsync(juce::MessageBoxOptions()
+            .withIconType(juce::MessageBoxIconType::WarningIcon)
+            .withTitle("Chain tools").withMessage(result.getErrorMessage())
+            .withButton("OK").withAssociatedComponent(this).withParentComponent(getTopLevelComponent()), {});
+        if (safe && safe->isShowing()) safe->resultAlert = std::move(alert);
+    }
+    void pasteModule(int afterNode, const std::shared_ptr<const chain::Snapshot>& snapshot)
+    {
+        if (!snapshot) return;
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        const int destination = scope;
+        int added = -1;
+        const auto status = processor.pasteModuleSnapshot(destination, afterNode, *snapshot, added);
+        if (!safe || safe->scope != destination) return;
+        safe->showChainResult(status);
+        if (!safe || status.failed()) return;
+        safe->refresh();
+        if (safe && safe->scope == destination) safe->selectNode(added);
+    }
+    void replaceChain(const std::shared_ptr<const chain::Snapshot>& snapshot)
+    {
+        if (!snapshot) return;
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        const int destination = scope;
+        const auto status = processor.pasteChainSnapshot(destination, *snapshot);
+        if (!safe || safe->scope != destination) return;
+        safe->showChainResult(status);
+        if (!safe || status.failed()) return;
+        safe->refresh();
+        if (!safe || safe->scope != destination) return;
+        for (const auto node : safe->processor.getModuleOrder(destination))
+            if (safe->processor.isModulePresent(destination, node))
+            { safe->selectNode(node); return; }
+    }
+    void dismissChainFiles()
+    {
+        ++chainFileGeneration;
+        chainFileActive = false;
+        chainFileChooser.reset();
+        overwriteAlert.close();
+    }
+    bool isChainFileCurrent(const ChainFileContext& context) const
+    {
+        return chainFileActive && chainFileGeneration == context.request
+            && generation == context.epoch && scope == context.scope
+            && processor.getChainEditRevision() == context.stateRevision
+            && isShowing() && isEnabled();
+    }
+    std::optional<ChainFileContext> prepareChainFile(bool saving, bool includeRouting)
+    {
+        if (chainFileActive || !isShowing() || !isEnabled()) return std::nullopt;
+        ++addMenuGeneration;
+        ++toolMenuGeneration;
+        ChainFileContext context;
+        context.epoch = generation;
+        context.request = ++chainFileGeneration;
+        context.stateRevision = processor.getChainEditRevision();
+        context.scope = scope;
+        context.saving = saving;
+        if (saving)
+        {
+            chain::Snapshot snapshot;
+            const auto status = processor.captureChainSnapshot(scope, includeRouting, snapshot);
+            if (status.failed()) { showChainResult(status); return std::nullopt; }
+            context.snapshot = std::make_shared<const chain::Snapshot>(std::move(snapshot));
+        }
+        chainFileActive = true;
+        return context;
+    }
+    void chooseChainFile(bool saving, bool includeRouting)
+    {
+        const auto request = prepareChainFile(saving, includeRouting);
+        if (!request) return;
+        const auto directory = processor.statePresets.getFile().getChildFile("Chains");
+        if (directory.createDirectory().failed())
+        {
+            dismissChainFiles();
+            showChainResult(juce::Result::fail("The chain preset folder could not be created."));
+            return;
+        }
+        auto chooser = std::make_shared<juce::FileChooser>(saving ? "Save chain preset" : "Load and replace chain",
+            saving ? directory.getChildFile("Untitled.firechain") : directory, "*.firechain", true, false, this);
+        chainFileChooser = chooser;
+        auto completion = createChainFileResultHandler(*request, chooser);
+        chooser->launchAsync((saving ? juce::FileBrowserComponent::saveMode : juce::FileBrowserComponent::openMode)
+            | juce::FileBrowserComponent::canSelectFiles,
+            [completion = std::move(completion)](const juce::FileChooser& completed) { completion(completed.getResult()); });
+    }
+    std::function<void(const juce::File&)> createChainFileResultHandler(
+        ChainFileContext context, std::weak_ptr<juce::FileChooser> expectedChooser)
+    {
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        return [safe, context = std::move(context), expectedChooser = std::move(expectedChooser)](const juce::File& chosen)
+        {
+            auto keepAlive = expectedChooser.lock();
+            if (!keepAlive) return;
+            const juce::ScopeGuard deferRelease {[keepAlive] { juce::MessageManager::callAsync([keepAlive] {}); }};
+            if (!safe || safe->chainFileChooser != keepAlive || !safe->isChainFileCurrent(context))
+            {
+                // Consume only this stale request; a newer chooser owns its own lifetime.
+                if (safe && safe->chainFileGeneration == context.request) safe->dismissChainFiles();
+                return;
+            }
+            safe->chainFileChooser.reset();
+            safe->handleChainFile(context, chosen);
+        };
+    }
+    void handleChainFile(const ChainFileContext& context, const juce::File& chosen)
+    {
+        if (!isChainFileCurrent(context)) return;
+        if (chosen == juce::File()) { dismissChainFiles(); return; }
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        if (context.saving)
+        {
+            const auto finalPath = chosen.hasFileExtension("firechain") ? chosen
+                : juce::File(chosen.getFullPathName() + ".firechain");
+            if (finalPath.existsAsFile())
+            {
+                auto alert = juce::AlertWindow::showScopedAsync(juce::MessageBoxOptions()
+                    .withIconType(juce::MessageBoxIconType::WarningIcon)
+                    .withTitle("Replace chain preset?")
+                    .withMessage("\"" + finalPath.getFileName() + "\" already exists. Replace its contents?")
+                    .withButton("Replace").withButton("Cancel")
+                    .withAssociatedComponent(this).withParentComponent(getTopLevelComponent()),
+                    [safe, context, finalPath](int result)
+                    {
+                        if (!safe) return;
+                        if (!safe->isChainFileCurrent(context))
+                        {
+                            if (safe->chainFileGeneration == context.request) safe->dismissChainFiles();
+                            return;
+                        }
+                        if (result == 1) safe->writeChainFile(context, finalPath);
+                        else safe->dismissChainFiles();
+                    });
+                if (safe && safe->isChainFileCurrent(context)) safe->overwriteAlert = std::move(alert);
+                return;
+            }
+            writeChainFile(context, finalPath);
+            return;
+        }
+        chain::Snapshot snapshot;
+        const auto status = chain::read(chosen, snapshot);
+        if (!safe || !safe->isChainFileCurrent(context)) return;
+        safe->dismissChainFiles();
+        if (!safe) return;
+        if (status.failed()) { safe->showChainResult(status); return; }
+        safe->replaceChain(std::make_shared<const chain::Snapshot>(std::move(snapshot)));
+    }
+    void writeChainFile(const ChainFileContext& context, const juce::File& file)
+    {
+        if (!isChainFileCurrent(context) || !context.snapshot) return;
+        const auto snapshot = context.snapshot;
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        dismissChainFiles();
+        if (!safe) return;
+        const auto status = chain::write(file, *snapshot);
+        if (safe) safe->showChainResult(status);
+    }
     bool isAddableBuiltin(int node) const noexcept
     {
         const int count = scope == 0 ? 3 : 5;
@@ -667,21 +1005,11 @@ private:
         if (! isShowing() || ! isEnabled() || ! row.button || ! row.button->isShowing()
             || nodeForButton(row.button) != node) return;
         if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr) return;
-        juce::PopupMenu menu;
-        const bool canMoveUp = ! visibleRows.empty() && visibleRows.front().button != row.button;
-        const bool canMoveDown = ! visibleRows.empty() && visibleRows.back().button != row.button;
-        menu.addItem(1, "Move up", canMoveUp); menu.addItem(2, "Move down", canMoveDown);
-        menu.addSeparator(); menu.addItem(3, "Remove effect");
-        const auto epoch = generation;
-        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        auto menu = createModuleMenu(node);
+        auto completion = createModuleMenuResultHandler(node);
         menu.showMenuAsync(prepareContextMenu(menu, *row.button, juce::Desktop::getMousePosition())
-                              .withMinimumWidth(juce::roundToInt(170.0f * scale))
-                              .withStandardItemHeight(juce::roundToInt(29.0f * scale)), [safe, epoch, node](int result) {
-            if (! safe || safe->generation != epoch || ! safe->isShowing() || ! safe->isEnabled()) return;
-            if (result == 3) safe->processor.removeModule(safe->scope, node);
-            else if (result == 1 || result == 2) safe->processor.moveModuleBy(safe->scope, node, result == 1 ? -1 : 1);
-            if (safe) safe->refresh();
-        });
+                              .withMinimumWidth(juce::roundToInt(240.0f * scale))
+                              .withStandardItemHeight(juce::roundToInt(29.0f * scale)), std::move(completion));
     }
     void lookAndFeelChanged() override
     {
@@ -699,6 +1027,7 @@ private:
     juce::Viewport viewport;
     Content content;
     PrimaryTextButton addButton;
+    ChainMenuButton chainButton;
     std::array<ModuleDragButton, effects::slotCount> insertButtons;
     std::array<PrimaryToggleButton, effects::slotCount> powerButtons;
     std::array<CloseButton, effects::slotCount> removeButtons;
@@ -712,7 +1041,15 @@ private:
     int scope = -1, selectedSlot = -1, rowPitch = 1;
     bool selectionInitialised = false;
     float scale = 1;
-    std::uint64_t generation = 0, addMenuGeneration = 0;
+    std::uint64_t generation = 0, addMenuGeneration = 0, toolMenuGeneration = 0;
+    std::shared_ptr<juce::FileChooser> chainFileChooser;
+    juce::ScopedMessageBox resultAlert, overwriteAlert;
+    std::uint64_t chainFileGeneration = 0;
+    bool chainFileActive = false;
+    juce::String lastChainResult;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    bool suppressResultAlertsForTesting = false;
+#endif
     int hoveredNode = -1, dragNode = -1, dragTarget = -1, dropBeforeNode = -1;
     std::uint64_t dragGeneration = 0;
     juce::Point<float> dragViewPoint;

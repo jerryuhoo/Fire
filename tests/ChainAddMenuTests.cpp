@@ -127,8 +127,12 @@ TEST_CASE("Band and Master share one complete module catalog and allow repeated 
     juce::ScopedJuceInitialiser_GUI gui;
     Fixture band(1), master(0);
     juce::StringArray bandNames, masterNames;
-    for (const auto& item : items(band.navigation->createAddMenu())) bandNames.add(item.text);
-    for (const auto& item : items(master.navigation->createAddMenu())) masterNames.add(item.text);
+    // The process-wide clipboard can add Paste after another editor has copied
+    // a module. That action is separate from the shared DSP catalog.
+    for (const auto& item : items(band.navigation->createAddMenu()))
+        if (item.itemID != Rack::pasteCopiedModule) bandNames.add(item.text);
+    for (const auto& item : items(master.navigation->createAddMenu()))
+        if (item.itemID != Rack::pasteCopiedModule) masterNames.add(item.text);
     CHECK(bandNames == masterNames);
     CHECK(bandNames == juce::StringArray{"Drive", "Shape", "Compressor", "OTT", "Stereo", "EQ", "Lo-Fi",
         "Chorus", "Flanger", "Phaser", "Delay", "Reverb", "Granular", "Chord Resonator"});

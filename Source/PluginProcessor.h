@@ -10,6 +10,7 @@
 
 #pragma once
 #include "Utility/ModulationSummary.h"
+#include "Utility/ChainSnapshot.h"
 #include "DSP/InsertRack.h"
 #include "DSP/LoudnessMatchState.h"
 #include "DSP/DriveCompensation.h"
@@ -502,6 +503,13 @@ public:
     int getEnvelopeAuditionIndex() const noexcept;
 
     using ModulationInfo = fire::ui::ModulationSummary;
+
+    juce::Result captureModuleSnapshot(int scope, int node, bool includeRouting, fire::chain::Snapshot&) const;
+    juce::Result captureChainSnapshot(int scope, bool includeRouting, fire::chain::Snapshot&) const;
+    juce::Result pasteModuleSnapshot(int scope, int afterNode, const fire::chain::Snapshot&, int& newNode);
+    juce::Result pasteChainSnapshot(int scope, const fire::chain::Snapshot&);
+    std::uint64_t getChainEditRevision() const noexcept
+    { return multibandTopologyResetGeneration.load(std::memory_order_acquire); }
 
     // New public method for the editor to call
     ModulationInfo getModulationInfoForParameter(const juce::String& parameterID) const;

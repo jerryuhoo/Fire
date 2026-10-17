@@ -18,6 +18,7 @@
 #include "LfoEngine.h"
 #include "ModulationRouting.h"
 #include "AuxiliaryModulation.h"
+#include "EnvelopeDetectors.h"
 #include "../Utility/LfoBankParameters.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include <array>
@@ -73,6 +74,9 @@ public:
 
         std::array<Parameters, fire::lfo_bank::capacity> lfos {};
         fire::dsp::AuxiliaryModulation::Parameters auxiliary = fire::mod_sources::defaults;
+        fire::envelope_params::Bank envelopes {};
+        int envelopeBandCount = 1;
+        std::array<float, 3> envelopeCrossovers {200, 2000, 6000};
         AudioThreadParameterSnapshot()
         {
             for (int index = 0; index < fire::lfo_bank::defaultCount; ++index)
@@ -246,6 +250,12 @@ public:
     bool isModulationSourcePresent(int index) const noexcept
     { return fire::mod_sources::isAuxiliary(index) || isLfoPresent(index); }
     void setAudioInput(const juce::AudioBuffer<float>* input) noexcept { audioInput = input; }
+    void setExternalAudioInput(const juce::AudioBuffer<float>* input, int offset = 0) noexcept
+    { externalAudioInput = input; externalAudioInputOffset = juce::jmax(0, offset); }
+    // Caller-owned prepared output, valid only during render. Unlike the
+    // envelope level, this carries the actual filtered stereo detector audio.
+    void setEnvelopeAuditionOutput(juce::AudioBuffer<float>* target, int envelopeIndex) noexcept
+    { envelopeAuditionOutput = target; auditionEnvelopeIndex = envelopeIndex; }
     struct VisualState
     {
         float phase = -1.0f;
@@ -363,9 +373,17 @@ private:
     EngineBank& lfoEngines = *engineStorage;
     std::array<LfoParameterPointers, fire::lfo_bank::capacity> lfoParameters;
     std::array<std::atomic<float>*, fire::mod_sources::parameterCount> auxiliaryParameters{};
+    std::array<std::array<std::atomic<float>*, fire::envelope_params::fieldCount>, fire::envelope_params::count> envelopeParameters{};
+    std::atomic<float>* envelopeBandCountParameter = nullptr;
+    std::array<std::atomic<float>*, 3> envelopeCrossoverParameters {};
     fire::dsp::AuxiliaryModulation auxiliary;
+    fire::dsp::EnvelopeDetectors envelopeDetectors;
     const juce::AudioBuffer<float>* audioInput = nullptr;
-    std::array<std::atomic<float>, 5> auxiliaryLevels{};
+    const juce::AudioBuffer<float>* externalAudioInput = nullptr;
+    int externalAudioInputOffset = 0;
+    juce::AudioBuffer<float>* envelopeAuditionOutput = nullptr;
+    int auditionEnvelopeIndex = -1;
+    std::array<std::atomic<float>, fire::mod_sources::sourceCount - fire::mod_sources::envelope> auxiliaryLevels{};
     std::array<juce::String, fire::lfo_bank::capacity> smoothnessParameterIDs;
     std::vector<LfoData> lfoData;
     std::array<std::uint64_t, fire::lfo_bank::capacity> lfoDataRevisions {};

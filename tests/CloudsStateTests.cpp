@@ -1,3 +1,4 @@
+#include "LegacyEnvelopeFixture.h"
 #include <PluginProcessor.h>
 #include <Panels/TopPanel/Preset.h>
 #include <Utility/CloudsParameters.h>
@@ -52,6 +53,7 @@ void restoreHost(FireAudioProcessor& processor, const juce::XmlElement& xml)
 
 void stripClouds(juce::XmlElement& xml)
 {
+    fire::test::stripEnvelopePresetFamily(xml);
     xml.removeAttribute("cloudsSchemaVersion");
     for (const auto& id : clouds::parameterIDs()) xml.removeAttribute(id);
 }
@@ -169,6 +171,8 @@ TEST_CASE("Clouds appends a separate parameter family without changing original 
         for (int slot = 0; slot < 8; ++slot) checkParameter(fire::analog_params::driveID(scope, slot), 13);
     for (int scope = 0; scope < 5; ++scope)
         for (int slot = 0; slot < 8; ++slot) checkParameter(fire::reverb_params::parameterID(scope, slot), 14);
+    CHECK(index == 4634); // Every pre-envelope-bank parameter retains its index.
+    for (const auto& id : fire::envelope_params::parameterIDs()) checkParameter(id, 15);
     CHECK(index == parameters.size());
     CHECK_FALSE(clouds::isParameterID("masterFx1CloudsBogus"));
     CHECK_FALSE(clouds::isParameterID("bandFx9CloudsEngine1"));
@@ -214,6 +218,7 @@ TEST_CASE("Legacy Granular presets and host AB snapshots migrate once to Clouds"
     CHECK(restored.isCurrentStateEquivalentToPreset(migrated));
 
     auto host = hostState(source);
+    fire::test::stripEnvelopeHostFamily(host);
     host.setAttribute("cloudsSchemaVersion", 1);
     auto* parameters = host.getChildByName("PARAMETERS");
     REQUIRE(parameters != nullptr);
@@ -647,6 +652,7 @@ TEST_CASE("Host Legacy Granular conversion invalidates matching only when a soun
                 parameters->removeChildElement(parameters->getChildElement(child), true);
         host.setAttribute("savedParameterCount", parameters->getNumChildElements());
         stripClouds(*alternate);
+        fire::test::stripEnvelopeHostFamily(host);
     }
 
     restoreHost(restored, host);

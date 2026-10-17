@@ -16,6 +16,7 @@
 #include "Utility/EditHistory.h"
 #include "Utility/FrozenAudioState.h"
 #include "Utility/ModulationStateValidation.h"
+#include "Utility/EnvelopeStateValidation.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -122,7 +123,7 @@ Slope getSlopeParameterValue(const std::atomic<float>* parameter) noexcept
 constexpr int minimumProcessingBlockCapacity = 8192;
 constexpr double safePeakHoldSeconds = 0.05;
 constexpr double safePeakReleaseSeconds = 0.05;
-constexpr int hostStateFormatVersion = 2;
+constexpr int hostStateFormatVersion = 3;
 constexpr int oldestWrappedHostParameterCount = 19;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 std::atomic<HostBypassDenormalStateHook>
@@ -2999,6 +3000,7 @@ FireAudioProcessor::FireAudioProcessor()
 #if ! JucePlugin_IsMidiEffect
 #if ! JucePlugin_IsSynth
                          .withInput("Input", juce::AudioChannelSet::stereo(), true)
+                         .withInput("Sidechain", juce::AudioChannelSet::stereo(), false)
 #endif
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true)
 #endif
@@ -3926,6 +3928,13 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     mWetBuffer.clear();
     hostBypassWetBuffer.setSize(outputChannels, maximumBlockSize);
     hostBypassWetBuffer.clear();
+    envelopeAuditionBuffer.setSize(2,maximumBlockSize); envelopeAuditionBuffer.clear();
+    auto auditionSpec=spec; auditionSpec.numChannels=2;
+    envelopeAuditionDelay.setMaximumDelayInSamples(juce::jmax(1,juce::roundToInt(std::ceil(graphHqLatency))+2));
+    envelopeAuditionDelay.prepare(auditionSpec); envelopeAuditionDelay.setDelay(static_cast<float>(juce::roundToInt(graphHqLatency)));
+    envelopeAuditionMix.reset(safeSampleRate,.01); envelopeAuditionMix.setCurrentAndTargetValue(0);
+    renderedEnvelopeAudition=-1;
+
     lfoOutputBuffer.setSize(fire::mod_sources::signalCount, maximumBlockSize);
     lfoOutputBuffer.clear();
     lofiDryBuffer.setSize(outputChannels, maximumBlockSize);
@@ -5213,6 +5222,8 @@ void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
 
 void FireAudioProcessor::performReset()
 {
+    envelopeAuditionDelay.reset(); envelopeAuditionMix.setCurrentAndTargetValue(0); renderedEnvelopeAudition=-1;
+
     loudnessMatch.suspendMeasurement();
     loudnessReferenceWasActive = false;
     spectrumProcessor.reset();
@@ -5345,14 +5356,36 @@ bool FireAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) cons
         return false;
 #endif
 
+    if (layouts.inputBuses.size() > 2 || layouts.outputBuses.size() != 1) return false;
+    if (layouts.inputBuses.size() == 2)
+    {
+        const auto sidechain=layouts.inputBuses[1];
+        if (!sidechain.isDisabled() && sidechain != juce::AudioChannelSet::mono()
+            && sidechain != juce::AudioChannelSet::stereo()) return false;
+    }
     return true;
 #endif
 }
 #endif
 
-void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
+void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& hostBuffer,
                                               juce::MidiBuffer& midiMessages)
 {
+    const int mainChannels=juce::jmin(hostBuffer.getNumChannels(),getMainBusNumOutputChannels());
+    juce::AudioBuffer<float> buffer(hostBuffer.getArrayOfWritePointers(),mainChannels,hostBuffer.getNumSamples());
+    juce::AudioBuffer<float> sidechain;
+    externalModulationInput=nullptr;
+    if (const auto* bus=getBus(true,1); bus && bus->isEnabled())
+    {
+        const int start=getMainBusNumInputChannels(), count=bus->getNumberOfChannels();
+        if (count>0 && start+count<=hostBuffer.getNumChannels())
+        {
+            sidechain.setDataToReferTo(hostBuffer.getArrayOfWritePointers()+start,count,hostBuffer.getNumSamples());
+            externalModulationInput=&sidechain;
+        }
+    }
+    const juce::ScopeGuard clearSidechain{[this] {externalModulationInput=nullptr;}};
+
     // The audible bypass path runs meters and the latency-matching Thiran delay
     // before processWetBlock() establishes its own denormal guard for the hidden
     // wet render. Protect the complete callback so subnormal tails cannot cause
@@ -5464,8 +5497,23 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
     publishMeterValues(false);
 }
 
-void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
+void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& hostBuffer, juce::MidiBuffer& midiMessages)
 {
+    const int mainChannels=juce::jmin(hostBuffer.getNumChannels(),getMainBusNumOutputChannels());
+    juce::AudioBuffer<float> buffer(hostBuffer.getArrayOfWritePointers(),mainChannels,hostBuffer.getNumSamples());
+    juce::AudioBuffer<float> sidechain;
+    externalModulationInput=nullptr;
+    if (const auto* bus=getBus(true,1); bus && bus->isEnabled())
+    {
+        const int start=getMainBusNumInputChannels(), count=bus->getNumberOfChannels();
+        if (count>0 && start+count<=hostBuffer.getNumChannels())
+        {
+            sidechain.setDataToReferTo(hostBuffer.getArrayOfWritePointers()+start,count,hostBuffer.getNumSamples());
+            externalModulationInput=&sidechain;
+        }
+    }
+    const juce::ScopeGuard clearSidechain{[this] {externalModulationInput=nullptr;}};
+
     if (buffer.getNumChannels() > 0 && buffer.getNumSamples() > 0)
         audioActivitySequence.fetch_add(1, std::memory_order_relaxed);
     isBypassed.store(false, std::memory_order_release);
@@ -5488,7 +5536,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     // global meter packet while streaming all stateful DSP and analysis in
     // allocation-free non-owning ranges.
     const int numChannels = buffer.getNumChannels();
-    const int totalNumInputChannels = getTotalNumInputChannels();
+    const int totalNumInputChannels = getMainBusNumInputChannels();
     for (int channel = juce::jlimit(0,
                                    numChannels,
                                    totalNumInputChannels);
@@ -5535,7 +5583,7 @@ void FireAudioProcessor::processWetBlock(
 {
     juce::ignoreUnused(midiMessages);
     juce::ScopedNoDenormals noDenormals;
-    const int totalNumInputChannels = getTotalNumInputChannels();
+    const int totalNumInputChannels = getMainBusNumInputChannels();
     const int numBufferChannels = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
     jassert(numSamples <= juce::jmax(1, preparedProcessingBlockCapacity));
@@ -5596,7 +5644,27 @@ void FireAudioProcessor::processWetBlock(
     lfoCaptureNeedsAbort = false;
 
     lfoManager->setAudioInput(&buffer);
-    const juce::ScopeGuard clearModulationInput{[this] { lfoManager->setAudioInput(nullptr); }};
+    lfoManager->setExternalAudioInput(externalModulationInput,playheadSampleOffset);
+    const int auditionRequested=hostBypassShadow?-1:getEnvelopeAuditionIndex();
+    if (hostBypassShadow)
+    { envelopeAuditionMix.setCurrentAndTargetValue(0); renderedEnvelopeAudition=-1; }
+    if (renderedEnvelopeAudition!=auditionRequested)
+    {
+        envelopeAuditionMix.setTargetValue(0);
+        if (envelopeAuditionMix.getCurrentValue()<=0)
+        {
+            renderedEnvelopeAudition=auditionRequested; envelopeAuditionDelay.reset();
+            envelopeAuditionWarmup=juce::jmax(0,juce::roundToInt(totalLatency.load(std::memory_order_relaxed)));
+        }
+    }
+    envelopeAuditionMix.setTargetValue(renderedEnvelopeAudition>=0 && renderedEnvelopeAudition==auditionRequested
+        && envelopeAuditionWarmup==0?1.0f:0.0f);
+    envelopeAuditionBuffer.setSize(2,numSamples,false,false,true); envelopeAuditionBuffer.clear();
+    lfoManager->setEnvelopeAuditionOutput(&envelopeAuditionBuffer,renderedEnvelopeAudition);
+    const juce::ScopeGuard clearModulationInput{[this] {
+        lfoManager->setAudioInput(nullptr); lfoManager->setExternalAudioInput(nullptr);
+        lfoManager->setEnvelopeAuditionOutput(nullptr,-1);
+    }};
     lfoManager->processBlock(
         lfoOutputBuffer,
         static_cast<float>(sampleRate),
@@ -5703,6 +5771,8 @@ void FireAudioProcessor::processWetBlock(
     loudnessMatch.process(loudnessReference, buffer, matchFrame,
         capturedStableCallbackState && ! topologyTransitionActive && ! startTopologyTransition
         && ! hqTransitionNeedsService && ! hasPendingTopologyChange());
+
+    processEnvelopeAudition(buffer);
 
     for (int bandIndex = 0; bandIndex < numBands; ++bandIndex)
     {
@@ -5860,6 +5930,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("resonatorSchemaVersion", fire::resonator_params::schemaVersion);
     xmlState.setAttribute("driveCompSchemaVersion", fire::drive_comp::schemaVersion);
     xmlState.setAttribute("modulationSourcesSchemaVersion", fire::mod_sources::schemaVersion);
+    xmlState.setAttribute(fire::envelope_state::marker,fire::envelope_params::schemaVersion);
     xmlState.setAttribute("moduleOrderSchemaVersion", 1);
     xmlState.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xmlState.setAttribute("eqSchemaVersion", 1);
@@ -5988,6 +6059,9 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         incomingParameterIDSet.insert(parameterID);
     }
 
+    bool legacyEnvelopeFamily=false;
+    if (!fire::envelope_state::validateHost(*xmlState,*this,
+            xmlState->getIntAttribute("stateFormatVersion",0)>=3,legacyEnvelopeFamily)) return;
     const bool hasStateFormatVersion =
         xmlState->hasAttribute("stateFormatVersion");
     int ottParameterCount = 0;
@@ -6095,7 +6169,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     }
     int moduleOrderCount = 0;
     int auxiliaryCount = 0;
-    for (const auto& id : incomingParameterIDs) if (fire::mod_sources::isParameterID(id)) ++auxiliaryCount;
+    for (const auto& id : incomingParameterIDs) if (fire::mod_sources::isLegacyParameterID(id)) ++auxiliaryCount;
     const bool hasAuxiliaryState = xmlState->hasAttribute("modulationSourcesSchemaVersion") || auxiliaryCount > 0;
     if (hasAuxiliaryState)
     {
@@ -6176,7 +6250,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                                               "MODULATION_STATE") != 1
             || ! isValidVersionedHostLfoState(*versionedLfoState, lfoCountInState)
             || ! isValidVersionedHostRoutingState(*versionedRoutingState,
-                                                  treeState, hasAuxiliaryState ? fire::mod_sources::sourceCount : lfoCountInState, incomingFormatVersion >= 2)
+                                                  treeState, hasAuxiliaryState ? (legacyEnvelopeFamily?fire::mod_sources::legacySourceCount:fire::mod_sources::sourceCount) : lfoCountInState, incomingFormatVersion >= 2)
             || xmlState->getChildByName("AB_STATE") == nullptr)
         {
             return;
@@ -6419,6 +6493,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 
             auto routing = advancedMapping ? ModulationRouting::readFromXml(*routingXml)
                 : fire::modulation_state::readLegacy(*routingXml);
+            if (legacyEnvelopeFamily && routing.sourceLfoIndex>=fire::mod_sources::legacySourceCount) continue;
             if (!hasAuxiliaryState) routing.sourceLfoIndex = juce::jmin(routing.sourceLfoIndex, fire::lfo_bank::capacity - 1);
             if (routing.targetParameterID.isEmpty()
                 || treeState.getParameter(routing.targetParameterID) == nullptr
@@ -7651,6 +7726,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
         for (int slot = 0; slot < fire::effects::slotCount; ++slot)
             parameters.push_back(std::make_unique<PChoice>(juce::ParameterID{fire::reverb_params::parameterID(scope, slot), 14},
                 (scope == 0 ? juce::String("Master") : "Band " + juce::String(scope)) + " FX " + juce::String(slot + 1) + " Reverb Model", reverbs, 0));
+    for (int envelope = 0; envelope < fire::envelope_params::count; ++envelope)
+        for (int field = 0; field < fire::envelope_params::fieldCount; ++field)
+        {
+            using namespace fire::envelope_params;
+            if (!isAppended(envelope,field)) continue;
+            const juce::ParameterID id{parameterID(envelope,field),15};
+            const auto name = "Envelope " + juce::String(envelope+1) + " " + labels[static_cast<size_t>(field)];
+            if (field == source) parameters.push_back(std::make_unique<PChoice>(id,name,sourceNames(),0));
+            else if (field == highPassEnabled || field == lowPassEnabled)
+                parameters.push_back(std::make_unique<PBool>(id,name,false));
+            else
+            {
+                const auto i=static_cast<size_t>(field);
+                const auto interval=field==sensitivity?.1f:field==attack||field==release?.1f:0.0f;
+                const auto skew=field==sensitivity?1.0f:.35f;
+                parameters.push_back(std::make_unique<PFloat>(id,name,
+                    juce::NormalisableRange<float>{minimums[i],maximums[i],interval,skew},defaults[i]));
+            }
+        }
     return { parameters.begin(), parameters.end() };
 }
 
@@ -7976,6 +8070,9 @@ void FireAudioProcessor::prepareAudioCallbackParameterSnapshot(
     snapshot.loudnessMatch = loudnessMatch.capture(stateAB.isCurrentA() ? 0 : 1);
     snapshot.lfoParameters =
         lfoManager->captureAudioThreadParameterSnapshot();
+    snapshot.lfoParameters.envelopeBandCount=juce::jlimit(1,4,juce::roundToInt(loadCachedParameter(numBandsParameter)));
+    snapshot.lfoParameters.envelopeCrossovers=getEffectiveCrossoverFrequencies(snapshot.lfoParameters.envelopeBandCount-1);
+
 
     const auto prepareModulatedParameter =
         [this] (const CachedParameter& parameter,
@@ -9730,6 +9827,49 @@ void FireAudioProcessor::applyGlobalMix(
         mixProvider.baseValue,
         hasSampleAccurateModulation ? mixSnapshot.lfoSourceIndex : -1,
         true);
+}
+
+std::uint64_t FireAudioProcessor::beginEnvelopeAudition(int index) noexcept
+{
+    if (!juce::isPositiveAndBelow(index,fire::envelope_params::count)) return 0;
+    const auto token=envelopeAuditionCounter.fetch_add(1,std::memory_order_relaxed)+1;
+    envelopeAuditionRequest.store((token<<3)|static_cast<std::uint64_t>(index+1),std::memory_order_release);
+    return token;
+}
+void FireAudioProcessor::endEnvelopeAudition(std::uint64_t token) noexcept
+{
+    auto request=envelopeAuditionRequest.load(std::memory_order_acquire);
+    if (token!=0 && (request>>3)==token)
+        envelopeAuditionRequest.compare_exchange_strong(request,0,std::memory_order_acq_rel);
+}
+int FireAudioProcessor::getEnvelopeAuditionIndex() const noexcept
+{ return static_cast<int>(envelopeAuditionRequest.load(std::memory_order_acquire)&7u)-1; }
+void FireAudioProcessor::processEnvelopeAudition(juce::AudioBuffer<float>& buffer)
+{
+    if (renderedEnvelopeAudition<0 && envelopeAuditionMix.getCurrentValue()<=0) return;
+    const bool current=renderedEnvelopeAudition>=0 && renderedEnvelopeAudition==getEnvelopeAuditionIndex();
+    const auto latency=totalLatency.load(std::memory_order_relaxed);
+    envelopeAuditionDelay.setDelay(activeHqMode?latency:static_cast<float>(juce::roundToInt(latency)));
+    for (int sample=0;sample<buffer.getNumSamples();++sample)
+    {
+        float monitor[2];
+        for (int channel=0;channel<2;++channel)
+        {
+            const auto raw=envelopeAuditionBuffer.getSample(channel,sample);
+            envelopeAuditionDelay.pushSample(channel,std::isfinite(raw)?juce::jlimit(-32.0f,32.0f,raw):0.0f);
+            monitor[channel]=envelopeAuditionDelay.popSample(channel);
+        }
+        const auto mix=envelopeAuditionMix.getNextValue();
+        if (envelopeAuditionWarmup>0 && --envelopeAuditionWarmup==0 && current)
+            envelopeAuditionMix.setTargetValue(1);
+        for (int channel=0;channel<buffer.getNumChannels();++channel)
+        {
+            const double listen=buffer.getNumChannels()==1?(double(monitor[0])+double(monitor[1]))*.5:monitor[channel];
+            const auto dry=buffer.getSample(channel,sample);
+            const double value=(std::isfinite(dry)?double(dry):0.0)*(1.0-mix)+listen*mix;
+            buffer.setSample(channel,sample,std::isfinite(value)?static_cast<float>(value):0.0f);
+        }
+    }
 }
 
 FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParameter(const juce::String& parameterID) const

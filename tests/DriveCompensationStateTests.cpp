@@ -1,3 +1,4 @@
+#include "LegacyEnvelopeFixture.h"
 #include <PluginEditor.h>
 #include <Utility/DriveCompensationParameters.h>
 #include <catch2/catch_approx.hpp>
@@ -55,6 +56,7 @@ void removeHostParameter(juce::XmlElement& xml, const juce::String& id)
 }
 void stripFamily(juce::XmlElement& xml)
 {
+    fire::test::stripEnvelopePresetFamily(xml);
     xml.removeAttribute(marker);
     for (const auto& id : comp::parameterIDs()) xml.removeAttribute(id);
 }
@@ -116,7 +118,7 @@ TEST_CASE("Modern Drive compensation is appended while Link keeps its historical
           "[drive-comp][state][parameters][compatibility]")
 {
     FireAudioProcessor processor;
-    REQUIRE(processor.getParameters().size() == 1047 + fire::core_modules::parameterCount + fire::analog_params::parameterCount + fire::reverb_params::parameterCount);
+    REQUIRE(processor.getParameters().size() == 1047 + fire::core_modules::parameterCount + fire::analog_params::parameterCount + fire::reverb_params::parameterCount + fire::envelope_params::parameterCount);
     auto* previousLast = processor.treeState.getParameter("bandFx8Resonator4");
     REQUIRE(previousLast != nullptr);
     CHECK(previousLast->getParameterIndex() == 1035);
@@ -174,6 +176,7 @@ TEST_CASE("Absent Drive compensation families retain legacy Link on active and a
     source.stateAB.copyAB(false); source.stateAB.toggleAB();
     configure(source, 1);
     auto legacyHost = host(source);
+    fire::test::stripEnvelopeHostFamily(legacyHost);
     legacyHost.removeAttribute(marker);
     for (const auto& id : comp::parameterIDs()) removeHostParameter(legacyHost, id);
     auto* ab = legacyHost.getChildByName("AB_STATE"); REQUIRE(ab != nullptr);

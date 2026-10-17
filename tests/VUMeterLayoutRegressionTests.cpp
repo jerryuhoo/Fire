@@ -204,9 +204,10 @@ void setChannelLayout(FireAudioProcessor& processor, int channelCount)
     const auto channelSet = channelCount == 1
                                 ? juce::AudioChannelSet::mono()
                                 : juce::AudioChannelSet::stereo();
-    juce::AudioProcessor::BusesLayout layout;
-    layout.inputBuses.add(channelSet);
-    layout.outputBuses.add(channelSet);
+    auto layout = processor.getBusesLayout();
+    layout.inputBuses.set(0, channelSet);
+    layout.inputBuses.set(1, juce::AudioChannelSet::disabled());
+    layout.outputBuses.set(0, channelSet);
     REQUIRE(processor.setBusesLayout(layout));
 }
 

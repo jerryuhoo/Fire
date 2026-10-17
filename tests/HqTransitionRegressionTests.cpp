@@ -65,12 +65,13 @@ juce::String bandParameter(const juce::String& baseID)
 void setLayout(FireAudioProcessor& processor, int numChannels)
 {
     REQUIRE((numChannels == 1 || numChannels == 2));
-    juce::AudioProcessor::BusesLayout layout;
+    auto layout = processor.getBusesLayout();
     const auto channelSet = numChannels == 1
                                 ? juce::AudioChannelSet::mono()
                                 : juce::AudioChannelSet::stereo();
-    layout.inputBuses.add(channelSet);
-    layout.outputBuses.add(channelSet);
+    layout.inputBuses.set(0, channelSet);
+    layout.inputBuses.set(1, juce::AudioChannelSet::disabled());
+    layout.outputBuses.set(0, channelSet);
     REQUIRE(processor.setBusesLayout(layout));
 }
 

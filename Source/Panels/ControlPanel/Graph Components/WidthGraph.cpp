@@ -85,7 +85,7 @@ void WidthGraph::timerCallback()
             repaint(getGraphPlotBounds().getSmallestIntegerContainer());
         return;
     }
-    const bool nextMonoChannel = processor.getTotalNumInputChannels() != 2;
+    const bool nextMonoChannel = processor.getMainBusNumInputChannels() != 2;
     if (! processor.copyHistorySnapshot(historyScratch)
         || historyScratch.sourceToken != historySourceToken
         || processor.getHistorySourceToken() != historySourceToken)

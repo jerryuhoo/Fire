@@ -123,6 +123,9 @@
         <FILE id="modSourceParams01" name="ModulationSources.h" compile="0" resource="0" file="Source/Utility/ModulationSources.h"/>
         <FILE id="modStateValidation01" name="ModulationStateValidation.h" compile="0" resource="0" file="Source/Utility/ModulationStateValidation.h"/>
         <FILE id="modSummary01" name="ModulationSummary.h" compile="0" resource="0" file="Source/Utility/ModulationSummary.h"/>
+        <FILE id="envParams21" name="EnvelopeParameters.h" compile="0" resource="0" file="Source/Utility/EnvelopeParameters.h"/>
+        <FILE id="envState21" name="EnvelopeStateValidation.h" compile="0" resource="0" file="Source/Utility/EnvelopeStateValidation.h"/>
+        <FILE id="envDsp21" name="EnvelopeDetectors.h" compile="0" resource="0" file="Source/DSP/EnvelopeDetectors.h"/>
       </GROUP>
       <GROUP id="{A397A229-19FD-F110-6940-6CC5C037D4D0}" name="GUI">
         <FILE id="fireMacroBar" name="MacroBar.h" compile="0" resource="0" file="Source/GUI/MacroBar.h"/>

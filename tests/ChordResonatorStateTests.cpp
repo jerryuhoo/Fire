@@ -1,3 +1,4 @@
+#include "LegacyEnvelopeFixture.h"
 #include <PluginProcessor.h>
 #include <Panels/TopPanel/Preset.h>
 #include <Utility/ResonatorParameters.h>
@@ -70,6 +71,7 @@ void removeHostParameter(juce::XmlElement& xml, const juce::String& id)
 
 void stripResonatorPreset(juce::XmlElement& xml)
 {
+    fire::test::stripEnvelopePresetFamily(xml);
     xml.removeAttribute(marker);
     for (const auto& id : resonator::parameterIDs()) xml.removeAttribute(id);
 }
@@ -205,7 +207,7 @@ TEST_CASE("Chord Resonator appends an independent boolean family and preserves p
     const juce::StringArray modulationNames {"Standard", "Flanger", "Phaser"};
     constexpr std::array oldTypes {fx::Type::none, fx::Type::chorus, fx::Type::delay,
                                   fx::Type::reverb, fx::Type::granular, fx::Type::lofi};
-    REQUIRE(processor.getParameters().size() == 1047 + fire::core_modules::parameterCount + fire::analog_params::parameterCount + fire::reverb_params::parameterCount);
+    REQUIRE(processor.getParameters().size() == 1047 + fire::core_modules::parameterCount + fire::analog_params::parameterCount + fire::reverb_params::parameterCount + fire::envelope_params::parameterCount);
     for (int scope = 0; scope < 5; ++scope)
         for (int slot = 0; slot < 8; ++slot)
         {
@@ -288,6 +290,7 @@ TEST_CASE("A wholly absent Resonator family preserves legacy and modulation inse
     auto savedPreset = preset(source);
     stripResonatorPreset(savedPreset);
     auto savedHost = hostState(source);
+    fire::test::stripEnvelopeHostFamily(savedHost);
     savedHost.removeAttribute(marker);
     for (const auto& id : resonator::parameterIDs()) removeHostParameter(savedHost, id);
     auto* ab = savedHost.getChildByName("AB_STATE"); REQUIRE(ab != nullptr);

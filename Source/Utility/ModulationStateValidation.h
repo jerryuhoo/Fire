@@ -7,7 +7,7 @@
 namespace fire::modulation_state
 {
 inline constexpr int schemaVersion = 2;
-inline constexpr int presetFormatVersion = 3;
+inline constexpr int presetFormatVersion = 4;
 
 inline bool readStrictIntegerAttribute(const juce::XmlElement& xml, const char* name, int& result) noexcept
 {

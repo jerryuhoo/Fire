@@ -356,8 +356,8 @@ bool VUPanel::refreshReadoutText()
         return channelCount > 1 ? juce::jmax(left, right) : left;
     };
 
-    const auto inputChannelCount = processor.getTotalNumInputChannels();
-    const auto outputChannelCount = processor.getTotalNumOutputChannels();
+    const auto inputChannelCount = processor.getMainBusNumInputChannels();
+    const auto outputChannelCount = processor.getMainBusNumOutputChannels();
 
     bool changed = updateText(inputPeakText, inputPeakTenths,
                               loudestVisibleChannel(

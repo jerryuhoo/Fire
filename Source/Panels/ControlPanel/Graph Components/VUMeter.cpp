@@ -40,7 +40,7 @@ void VUMeter::paint(juce::Graphics& g)
     const auto displayScale = juce::jmax(
         0.25f,
         g.getInternalContext().getPhysicalPixelScaleFactor());
-    const auto channelCount = mProcessor->getTotalNumInputChannels();
+    const auto channelCount = mProcessor->getMainBusNumInputChannels();
     const auto skin = fire::ui::skinFor(*this);
     const auto lineSkin = fire::ui::isLineSkin(skin);
     const auto& palette = fire::ui::skinPalette(skin);
@@ -124,7 +124,7 @@ void VUMeter::paint(juce::Graphics& g)
 
 void VUMeter::resized()
 {
-    updateMeterBounds(mProcessor->getTotalNumInputChannels());
+    updateMeterBounds(mProcessor->getMainBusNumInputChannels());
 
     backgroundCache = {};
     backgroundCacheBounds = {};
@@ -319,7 +319,7 @@ void VUMeter::rebuildBackgroundCache(float displayScale)
     displayScale = juce::jmax(0.25f, displayScale);
     backgroundCacheBounds = getLocalBounds();
     backgroundCacheScale = displayScale;
-    cachedChannelCount = mProcessor->getTotalNumInputChannels();
+    cachedChannelCount = mProcessor->getMainBusNumInputChannels();
     cachedIsInput = mIsInput;
     cachedSkin = fire::ui::skinFor(*this);
     backgroundCache = juce::Image(

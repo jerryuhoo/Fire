@@ -497,6 +497,10 @@ public:
 
     std::vector<LfoData> getLfoData() const { return lfoManager->getLfoDataCopy(); }
 
+    std::uint64_t beginEnvelopeAudition(int envelopeIndex) noexcept;
+    void endEnvelopeAudition(std::uint64_t token) noexcept;
+    int getEnvelopeAuditionIndex() const noexcept;
+
     using ModulationInfo = fire::ui::ModulationSummary;
 
     // New public method for the editor to call
@@ -1169,6 +1173,15 @@ private:
     // wet audio buffer
     juce::AudioBuffer<float> mWetBuffer;
     juce::AudioBuffer<float> hostBypassWetBuffer;
+    const juce::AudioBuffer<float>* externalModulationInput = nullptr;
+    juce::AudioBuffer<float> envelopeAuditionBuffer;
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran> envelopeAuditionDelay;
+    juce::SmoothedValue<float> envelopeAuditionMix;
+    std::atomic<std::uint64_t> envelopeAuditionRequest {0}, envelopeAuditionCounter {0};
+    int renderedEnvelopeAudition = -1;
+    int envelopeAuditionWarmup = 0;
+    void processEnvelopeAudition(juce::AudioBuffer<float>&);
+
     juce::AudioBuffer<float> lfoOutputBuffer;
     juce::AudioBuffer<float> lofiDryBuffer;
     juce::AudioBuffer<float> globalMixAlignedDryBuffer;

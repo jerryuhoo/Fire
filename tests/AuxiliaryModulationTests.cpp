@@ -1,3 +1,4 @@
+#include "LegacyEnvelopeFixture.h"
 #include <PluginProcessor.h>
 #include <GUI/ModulationSourceControls.h>
 #include <Panels/ControlPanel/ModulationMatrixPanel.h>
@@ -66,7 +67,7 @@ TEST_CASE("Macro smoothing advances in samples and reaches its target without a 
 TEST_CASE("New source parameters append after historical indices and macros drive several targets", "[aux-mod][state][parameters]")
 {
     FireAudioProcessor processor;
-    REQUIRE(processor.getParameters().size() == 1047 + fire::core_modules::parameterCount + fire::analog_params::parameterCount + fire::reverb_params::parameterCount);
+    REQUIRE(processor.getParameters().size() == 1047 + fire::core_modules::parameterCount + fire::analog_params::parameterCount + fire::reverb_params::parameterCount + fire::envelope_params::parameterCount);
     CHECK(processor.treeState.getParameter("driveCompModern4")->getParameterIndex() == 1039);
     for (size_t index = 0; index < sources::ids.size(); ++index)
     {
@@ -120,6 +121,7 @@ TEST_CASE("A project predating auxiliary sources opens with neutral macros", "[a
         parameters->removeChildElement(child, true);
         xml->getChildByName("AB_STATE")->removeAttribute(id);
     }
+    fire::test::stripEnvelopeHostFamily(*xml);
     xml->removeAttribute("modulationSourcesSchemaVersion");
     xml->getChildByName("AB_STATE")->removeAttribute("modulationSourcesSchemaVersion");
     xml->setAttribute("savedParameterCount", parameters->getNumChildElements());

@@ -43,6 +43,13 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
 
     for (size_t index = 0; index < auxiliaryParameters.size(); ++index)
         auxiliaryParameters[index] = treeState.getRawParameterValue(fire::mod_sources::ids[index]);
+    for (int envelope = 0; envelope < fire::envelope_params::count; ++envelope)
+        for (int field = 0; field < fire::envelope_params::fieldCount; ++field)
+            envelopeParameters[static_cast<size_t>(envelope)][static_cast<size_t>(field)] =
+                treeState.getRawParameterValue(fire::envelope_params::parameterID(envelope, field));
+    envelopeBandCountParameter = treeState.getRawParameterValue(NUM_BANDS_ID);
+    for (size_t index = 0; index < envelopeCrossoverParameters.size(); ++index)
+        envelopeCrossoverParameters[index] = treeState.getRawParameterValue(juce::String(FREQ_ID) + juce::String(index + 1));
     for (int i = 0; i < fire::lfo_bank::defaultCount; ++i)
         modulationRoutings.add({});
 
@@ -91,12 +98,15 @@ void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
     aggregateTransitionSamples = juce::jmax(1, juce::roundToInt(preparedSampleRate * .020));
     aggregateTransitions = {};
     auxiliary.prepare(preparedSampleRate);
+    envelopeDetectors.prepare(preparedSampleRate);
+    for (auto& level : auxiliaryLevels) level.store(0, std::memory_order_relaxed);
     publishVisualState(nullptr);
 }
 
 void LfoManager::reset()
 {
     auxiliary.reset();
+    envelopeDetectors.reset();
     aggregateTransitions = {};
     for (auto& level : auxiliaryLevels) level.store(0, std::memory_order_relaxed);
     for (auto& engine : lfoEngines)
@@ -233,6 +243,23 @@ LfoManager::captureAudioThreadParameterSnapshot() const noexcept
 
     for (size_t index = 0; index < auxiliaryParameters.size(); ++index)
         snapshot.auxiliary[index] = loadParameter(auxiliaryParameters[index], fire::mod_sources::defaults[index]);
+    for (size_t index = 0; index < snapshot.envelopes.size(); ++index)
+    {
+        namespace ep = fire::envelope_params;
+        const auto load = [&](int field) { return loadParameter(envelopeParameters[index][static_cast<size_t>(field)], ep::defaults[static_cast<size_t>(field)]); };
+        auto& destination = snapshot.envelopes[index];
+        destination.source = juce::roundToInt(juce::jlimit(0.0f, 5.0f, load(ep::source)));
+        destination.highPassEnabled = load(ep::highPassEnabled) > .5f;
+        destination.lowPassEnabled = load(ep::lowPassEnabled) > .5f;
+        destination.highPassFrequency = load(ep::highPassFrequency);
+        destination.lowPassFrequency = load(ep::lowPassFrequency);
+        destination.attack = index == 0 ? snapshot.auxiliary[0] : load(ep::attack);
+        destination.release = index == 0 ? snapshot.auxiliary[1] : load(ep::release);
+        destination.sensitivity = index == 0 ? snapshot.auxiliary[2] : load(ep::sensitivity);
+    }
+    snapshot.envelopeBandCount = juce::roundToInt(juce::jlimit(1.0f, 4.0f, loadParameter(envelopeBandCountParameter, 1)));
+    for (size_t index = 0; index < snapshot.envelopeCrossovers.size(); ++index)
+        snapshot.envelopeCrossovers[index] = loadParameter(envelopeCrossoverParameters[index], snapshot.envelopeCrossovers[index]);
     return snapshot;
 }
 
@@ -302,6 +329,14 @@ void LfoManager::renderBlock(
     }
 
     auxiliary.setParameters(parameterSnapshot.auxiliary);
+    auto envelopeConfiguration = parameterSnapshot.envelopes;
+    // Preserve the public pre-bank snapshot contract and ENV 1 arithmetic.
+    // These three legacy parameter IDs remain its timing/sensitivity authority.
+    envelopeConfiguration[0].attack = parameterSnapshot.auxiliary[0];
+    envelopeConfiguration[0].release = parameterSnapshot.auxiliary[1];
+    envelopeConfiguration[0].sensitivity = parameterSnapshot.auxiliary[2];
+    envelopeDetectors.setParameters(envelopeConfiguration, parameterSnapshot.envelopeBandCount,
+                                   parameterSnapshot.envelopeCrossovers);
     std::array<float, fire::mod_sources::signalCount> firstLfoValues {};
     const int channelsToCopy = juce::jmin(outputBuffer.getNumChannels(),
                                           lfoOutputBuffer.getNumChannels());
@@ -323,14 +358,39 @@ void LfoManager::renderBlock(
         for (int sample = 0; sample < samplesInRange; ++sample)
         {
             const auto inputSample = sampleOffset + sample;
-            const bool available = audioInput && audioInput->getNumChannels() > 0 && inputSample < audioInput->getNumSamples();
-            const bool stereo = available && audioInput->getNumChannels() > 1;
-            const auto values = auxiliary.next(available ? audioInput->getSample(0, inputSample) : 0,
-                stereo ? audioInput->getSample(1, inputSample) : 0, stereo);
+            const auto read = [](const juce::AudioBuffer<float>* input, juce::int64 position)
+            {
+                fire::dsp::EnvelopeDetectors::StereoFrame frame;
+                if (input == nullptr || input->getNumChannels() == 0 || position < 0 || position >= input->getNumSamples()) return frame;
+                frame.stereo = input->getNumChannels() > 1;
+                frame.left = input->getSample(0, static_cast<int>(position));
+                frame.right = frame.stereo ? input->getSample(1, static_cast<int>(position)) : frame.left;
+                return frame;
+            };
+            const auto detectors = envelopeDetectors.next(read(audioInput, inputSample),
+                read(externalAudioInput, static_cast<juce::int64>(externalAudioInputOffset) + inputSample));
+            const auto& envelope1 = detectors.filtered[0];
+            const auto values = auxiliary.next(envelope1.left, envelope1.right, envelope1.stereo);
             for (size_t index = 0; index < values.size(); ++index)
             {
                 lfoOutputBuffer.setSample(fire::mod_sources::envelope + static_cast<int>(index), sample, values[index]);
                 if (sample + 1 == samplesInRange) auxiliaryLevels[index].store(values[index], std::memory_order_relaxed);
+            }
+            for (int envelope = 1; envelope < fire::envelope_params::count; ++envelope)
+            {
+                const auto source = fire::mod_sources::envelopeSource(envelope);
+                const auto value = detectors.levels[static_cast<size_t>(envelope)];
+                lfoOutputBuffer.setSample(source, sample, value);
+                if (sample + 1 == samplesInRange)
+                    auxiliaryLevels[static_cast<size_t>(source - fire::mod_sources::envelope)].store(value, std::memory_order_relaxed);
+            }
+            if (envelopeAuditionOutput != nullptr && inputSample < envelopeAuditionOutput->getNumSamples())
+            {
+                const auto frame = juce::isPositiveAndBelow(auditionEnvelopeIndex, fire::envelope_params::count)
+                    ? detectors.filtered[static_cast<size_t>(auditionEnvelopeIndex)]
+                    : fire::dsp::EnvelopeDetectors::StereoFrame{};
+                for (int channel = 0; channel < envelopeAuditionOutput->getNumChannels(); ++channel)
+                    envelopeAuditionOutput->setSample(channel, inputSample, channel == 0 ? frame.left : frame.right);
             }
         }
 
@@ -364,7 +424,7 @@ void LfoManager::renderBlock(
 
     publishVisualState(&parameterSnapshot);
 
-    // Standalone callers may supply only the 21 physical source channels.
+    // Standalone callers may supply only the physical source channels.
     // The first-sample representative still uses the internal aggregate bank.
     for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
     {

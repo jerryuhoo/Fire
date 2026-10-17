@@ -180,8 +180,15 @@ const clap_output_events_t discardOutput { nullptr,
 void checkAudio(Plugin& plugin)
 {
     const auto* ports = static_cast<const clap_plugin_audio_ports_t*>(plugin.api->get_extension(plugin.api, CLAP_EXT_AUDIO_PORTS));
-    require(ports && ports->count(plugin.api, true) == 1 && ports->count(plugin.api, false) == 1,
-            "expected one main input and output bus");
+    require(ports && ports->count(plugin.api, true) >= 1 && ports->count(plugin.api, true) <= 2
+            && ports->count(plugin.api, false) == 1, "expected main buses and optional sidechain");
+    const auto inputPortCount = ports->count(plugin.api, true);
+    if (inputPortCount == 2)
+    {
+        clap_audio_port_info_t sidechain {};
+        require(ports->get(plugin.api,1,true,&sidechain) && sidechain.channel_count == 2
+                && (sidechain.flags & CLAP_AUDIO_PORT_IS_MAIN) == 0, "invalid sidechain port");
+    }
     clap_audio_port_info_t inputInfo {}, outputInfo {};
     require(ports->get(plugin.api, 0, true, &inputInfo) && ports->get(plugin.api, 0, false, &outputInfo)
         && inputInfo.channel_count == 2 && outputInfo.channel_count == 2, "expected stereo main buses");
@@ -191,11 +198,13 @@ void checkAudio(Plugin& plugin)
         {
             require(plugin.api->activate(plugin.api, rate, block, block), "CLAP activation failed");
             plugin.active = true;
-            std::array<std::vector<float>, 4> buffers;
+            std::array<std::vector<float>, 6> buffers;
             for (auto& b : buffers) b.resize(block);
             float* inputChannels[] {buffers[0].data(), buffers[1].data()};
             float* outputChannels[] {buffers[2].data(), buffers[3].data()};
-            clap_audio_buffer_t input { inputChannels, nullptr, 2, 0, 0 };
+            float* sidechainChannels[] {buffers[4].data(),buffers[5].data()};
+            clap_audio_buffer_t inputs[] {{ inputChannels, nullptr, 2, 0, 0 },
+                                         { sidechainChannels, nullptr, 2, 0, 0 }};
             clap_audio_buffer_t output { outputChannels, nullptr, 2, 0, 0 };
             double energy = 0;
             plugin.host.audioThread = true;
@@ -209,14 +218,18 @@ void checkAudio(Plugin& plugin)
                     buffers[0][i] = static_cast<float>(0.12 * std::sin(t * 440.0 * 6.283185307179586));
                     buffers[1][i] = static_cast<float>(0.10 * std::sin(t * 701.0 * 6.283185307179586));
                     buffers[2][i] = buffers[3][i] = 0;
+                    buffers[4][i] = .03f; buffers[5][i] = -.03f;
                 }
                 clap_process_t process {};
                 process.steady_time = iteration * block;
                 process.frames_count = block;
-                process.audio_inputs = &input; process.audio_inputs_count = 1;
+                process.audio_inputs = inputs; process.audio_inputs_count = inputPortCount;
                 process.audio_outputs = &output; process.audio_outputs_count = 1;
                 process.in_events = &emptyInput; process.out_events = &discardOutput;
                 require(plugin.api->process(plugin.api, &process) != CLAP_PROCESS_ERROR, "CLAP process failed");
+                if (inputPortCount == 2)
+                    for (uint32_t i=0;i<block;++i)
+                        require(buffers[4][i] == .03f && buffers[5][i] == -.03f, "sidechain input was overwritten");
                 for (const auto channel : {2, 3})
                     for (const auto sample : buffers[channel])
                     {

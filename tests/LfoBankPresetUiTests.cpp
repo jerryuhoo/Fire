@@ -220,7 +220,25 @@ TEST_CASE("Matrix sources expose present slots and reject removed recreated menu
     show(panel);
     auto* combo = findWithID<ModulationMatrixRoutingComboBox>(panel, "matrix_source");
     REQUIRE(combo != nullptr);
-    CHECK(combo->getNumItems() == 20);
+    const int remainingLfos = fire::lfo_bank::capacity - 1;
+    CHECK(combo->getNumItems() == remainingLfos + fire::mod_sources::macroCount
+                                   + fire::envelope_params::count);
+    for (int envelope = 0; envelope < fire::envelope_params::count; ++envelope)
+    {
+        const int source = fire::mod_sources::envelopeSource(envelope);
+        const int item = combo->indexOfItemId(source + 1);
+        REQUIRE(item >= 0);
+        CHECK(combo->getItemText(item) == (envelope == 0 ? juce::String("Envelope")
+                                                       : "Envelope " + juce::String(envelope + 1)));
+        CHECK_FALSE(fire::mod_sources::isMacro(source));
+    }
+    for (int macro = 0; macro < fire::mod_sources::macroCount; ++macro)
+    {
+        const int source = fire::mod_sources::firstMacro + macro;
+        const int item = combo->indexOfItemId(source + 1);
+        REQUIRE(item >= 0);
+        CHECK(combo->getItemText(item) == "Macro " + juce::String(macro + 1));
+    }
     CHECK(combo->indexOfItemId(2) == -1);
     CHECK(combo->indexOfItemId(16) >= 0);
     auto stale = LfoBankUiTestAccess::sourceHandler(*combo);

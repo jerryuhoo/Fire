@@ -42,6 +42,7 @@ private:
     friend struct ContextAwareComboBoxTestAccess;
     friend struct GraphViewSelectorTestAccess;
     friend struct ChordResonatorUiTestAccess;
+    friend struct EnvelopeControlsTestAccess;
 
     bool keyPressed(const juce::KeyPress& key) override;
     void mouseDown(const juce::MouseEvent& event) override;

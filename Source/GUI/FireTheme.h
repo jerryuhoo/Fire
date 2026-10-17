@@ -124,8 +124,14 @@ inline bool isValidModulationSourceNumber(int source) noexcept
 { return source > 0 && source <= fire::mod_sources::sourceCount; }
 inline juce::Colour modulationSourceColour(int index) noexcept
 {
-    if (index == fire::mod_sources::envelope) return colours::flame;
-    if (index >= fire::mod_sources::firstMacro && index < fire::mod_sources::sourceCount)
+    const auto envelopeIndex = fire::mod_sources::envelopeIndex(index);
+    if (envelopeIndex >= 0)
+    {
+        static const std::array<juce::Colour, fire::envelope_params::count> envelopeColours {
+            colours::flame, colours::filter, colours::delay, colours::positive };
+        return envelopeColours[static_cast<size_t>(envelopeIndex)];
+    }
+    if (fire::mod_sources::isMacro(index))
         return lfoBankColours[static_cast<size_t>(index - fire::mod_sources::firstMacro + 4)];
     return lfoBankColour(index);
 }

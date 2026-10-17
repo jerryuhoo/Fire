@@ -348,11 +348,20 @@ The main LFO display allows you to create complex modulation shapes. It has two 
 
 #### Modulation Matrix
 
-- **Envelope / Macros**: Open these controls from the matrix header. Envelope
-  follows the raw plug-in input's linked stereo energy, with Attack, Release and
-  Sensitivity controls and a live level display. Opposite-polarity stereo input
-  does not cancel the detector. Choose **Envelope** as a routing source to make
-  Drive, filters, effects or Mix react to the incoming performance.
+- **Envelope / Macros**: Open these controls from the matrix header. Choose
+  ENV 1–4, each with independent Attack, Release and Sensitivity. The detector
+  can listen to the main input, an external sidechain, or one of four input
+  frequency bands. Band detection uses independent 24 dB/oct filters at the
+  current crossover boundaries, before effects, solo and output gains; an
+  inactive band or disconnected sidechain supplies silence. Stereo energy
+  detection remains sensitive to opposite-polarity input.
+  High-pass and low-pass detector filters have explicit power switches and
+  start bypassed, preserving existing Envelope sounds. Hold **Listen** (or
+  Space/Return while focused) to hear the selected filtered detector signal;
+  releasing, hiding or closing the window ends listening. Listening is a local
+  preview and is not saved in presets, undo history or DAW automation.
+  To use an external source, route another track to Fire's Sidechain input in
+  your DAW and choose External sidechain in this panel.
 - **Macro 1–4**: Four automatable 0–100% controls can each drive several
   destinations. Choose a macro in each matrix row, then set its depth and
   polarity. Their values ramp over 20 ms. Factory scenes preassign them to
@@ -393,8 +402,8 @@ standard −50%…+50% or 0%…100% range. Curve offers Linear, Ease in, Ease ou
 S curve. Depth via Macro multiplies that route's Depth by the selected macro.
 A multi-route or custom-mapping knob badge opens its routes in the matrix;
 its range and moving marker show their combined result. Existing single-source
-presets keep their original mapping. New mapping presets use format 3 and
-require Fire 2.1 or later.
+presets keep their original mapping. New detector presets use format 4 and
+require Fire 2.1 or later; formats 0–3 remain readable.
 
 Assigned knobs use a translucent source-coloured range band. A bright outlined
 dot shows the current modulated value, while the neutral inner notch marks the
@@ -437,6 +446,10 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 ## 6. Update Notes
 
 ### 2.1.0 (in development)
+
+- Add four independent envelope detectors, external sidechain input, selectable
+  input bands, detection filters and momentary listening. Historical Envelope
+  and Macro IDs remain unchanged; new detector parameters append after them.
 
 - Add multi-source modulation, per-route offset ranges, response curves and
   macro-controlled depth, with combined knob feedback and expanded matrix rows.

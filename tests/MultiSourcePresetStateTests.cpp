@@ -78,13 +78,13 @@ juce::String soundSnapshot(FireAudioProcessor& processor)
 }
 }
 
-TEST_CASE("Preset v3 retains every source and advanced mapping on a shared target", "[preset][multi-source][mapping][state]")
+TEST_CASE("Current preset format retains every source and advanced mapping on a shared target", "[preset][multi-source][mapping][state]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor source;
     const auto routes = mappings();
     const auto preset = presetWithRoutes(source, routes);
-    REQUIRE(preset->getIntAttribute("presetFormatVersion") == 3);
+    REQUIRE(preset->getIntAttribute("presetFormatVersion") == 4);
     REQUIRE(preset->getChildByName("MODULATION_STATE")->getIntAttribute("schemaVersion") == 2);
     REQUIRE(state::canLoadStateFromXml(*preset, source));
     FireAudioProcessor restored;
@@ -205,7 +205,7 @@ TEST_CASE("AB snapshots roundtrip multiple source mappings and reject damaged ad
     const auto savedA = hostSnapshot(processor);
     const auto* alternate = savedA->getChildByName("AB_STATE");
     REQUIRE(alternate != nullptr);
-    REQUIRE(alternate->getIntAttribute("presetFormatVersion") == 3);
+    REQUIRE(alternate->getIntAttribute("presetFormatVersion") == 4);
     REQUIRE(alternate->getChildByName("MODULATION_STATE") != nullptr);
     REQUIRE(alternate->getChildByName("MODULATION_STATE")->getIntAttribute("schemaVersion") == 2);
     REQUIRE(state::loadStateFromXml(*presetB, processor));

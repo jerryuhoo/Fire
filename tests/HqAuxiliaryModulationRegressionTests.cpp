@@ -96,6 +96,12 @@ Comparison compareSource(Target target, int source, bool hq, bool split, bool tr
     controls[2] = 12;
     for (int macro = 0; macro < sources::macroCount; ++macro) controls[static_cast<size_t>(3 + macro)] = 0.15f;
     generator.setParameters(controls);
+    fire::dsp::EnvelopeDetectors extraEnvelopes;
+    extraEnvelopes.prepare(sampleRate);
+    fire::envelope_params::Bank envelopeControls;
+    for (auto& envelope : envelopeControls)
+    { envelope.attack = controls[0]; envelope.release = controls[1]; envelope.sensitivity = controls[2]; }
+    extraEnvelopes.setParameters(envelopeControls, 1, {200, 2000, 6000});
 
     // All channels come from the real auxiliary generator. Copy only the
     // selected signal into LFO 1: identical audio must not depend on source ID.
@@ -130,7 +136,15 @@ Comparison compareSource(Target target, int source, bool hq, bool split, bool tr
             const auto values = generator.next(left, right, true);
             for (size_t index = 0; index < values.size(); ++index)
                 bank.setSample(sources::envelope + static_cast<int>(index), sample, values[index]);
-            bank.setSample(0, sample, values[static_cast<size_t>(source - sources::envelope)]);
+            if (source < sources::legacySourceCount)
+                bank.setSample(0, sample, values[static_cast<size_t>(source - sources::envelope)]);
+            else
+            {
+                const auto envelopes = extraEnvelopes.next({left, right, true}, {});
+                const auto value = envelopes.levels[static_cast<size_t>(sources::envelopeIndex(source))];
+                bank.setSample(source, sample, value);
+                bank.setSample(0, sample, value);
+            }
         }
         expected.makeCopyOf(actual); dry.makeCopyOf(actual);
         reference->process(expected, parameters(target, 0, useHq, separate), bank);
@@ -179,7 +193,7 @@ TEST_CASE("HQ distortion receives Envelope and every Macro just like an equivale
           "[aux-mod][hq-aux][dsp][hq][routing]")
 {
     for (auto target : targets)
-        for (int source = sources::envelope; source < sources::sourceCount; ++source)
+        for (int source = sources::envelope; source < sources::legacySourceCount; ++source)
             for (bool hq : {false, true})
                 for (bool split : {false, true})
                 {
@@ -196,8 +210,24 @@ TEST_CASE("Auxiliary distortion routes survive live HQ changes and module reorde
           "[aux-mod][hq-aux][dsp][hq][module-order][internal-chunk]")
 {
     for (auto target : targets)
-        for (int source = sources::envelope; source < sources::sourceCount; ++source)
+        for (int source = sources::envelope; source < sources::legacySourceCount; ++source)
         {
+            CAPTURE(static_cast<int>(target), source);
+            const auto result = compareSource(target, source, false, false, true);
+            CHECK(result.finite);
+            REQUIRE(result.referenceEffect > 1.0e-4f);
+            CHECK(result.auxiliaryEffect > 1.0e-4f);
+            CHECK(result.error < 2.0e-6f);
+        }
+}
+
+TEST_CASE("Additional envelope identities reach HQ distortion across live quality and module order changes",
+          "[envelope-bank][hq-aux][dsp][hq][module-order][internal-chunk]")
+{
+    for (auto target : targets)
+        for (int envelope = 1; envelope < fire::envelope_params::count; ++envelope)
+        {
+            const auto source = sources::envelopeSource(envelope);
             CAPTURE(static_cast<int>(target), source);
             const auto result = compareSource(target, source, false, false, true);
             CHECK(result.finite);

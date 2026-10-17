@@ -951,9 +951,10 @@ TEST_CASE("Processor accepts zero, mono, and larger-than-prepared blocks", "[pro
     FireAudioProcessor processor;
     juce::MidiBuffer midi;
 
-    juce::AudioProcessor::BusesLayout monoLayout;
-    monoLayout.inputBuses.add(juce::AudioChannelSet::mono());
-    monoLayout.outputBuses.add(juce::AudioChannelSet::mono());
+    auto monoLayout = processor.getBusesLayout();
+    monoLayout.inputBuses.set(0, juce::AudioChannelSet::mono());
+    monoLayout.inputBuses.set(1, juce::AudioChannelSet::disabled());
+    monoLayout.outputBuses.set(0, juce::AudioChannelSet::mono());
     REQUIRE(processor.setBusesLayout(monoLayout));
     processor.prepareToPlay(32000.0, 16);
 

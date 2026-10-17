@@ -1327,7 +1327,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
         if (processor.isModulationSourcePresent(sourceIndex))
             sourceMenu.getRootMenu()->addColouredItem(
                 sourceIndex + 1,
-                sourceIndex >= fire::mod_sources::firstMacro
+                fire::mod_sources::isMacro(sourceIndex)
                     && processor.getMacroDisplayName(sourceIndex-fire::mod_sources::firstMacro) != fire::mod_sources::name(sourceIndex)
                         ? fire::mod_sources::name(sourceIndex)+" · "+processor.getMacroDisplayName(sourceIndex-fire::mod_sources::firstMacro)
                         : fire::mod_sources::name(sourceIndex),
@@ -2255,7 +2255,7 @@ void ModulationMatrixPanel::buttonClicked(juce::Button* button)
         options.content.setOwned(new fire::ui::ModulationSourceControls(processor));
         fire::ui::setSkin(*options.content, fire::ui::skinFor(*this));
         options.content->sendLookAndFeelChange();
-        options.dialogTitle = "Envelope and Macros";
+        options.dialogTitle = "Envelopes and Macros";
         options.dialogBackgroundColour = fire::ui::paletteFor(*this).canvas;
         options.escapeKeyTriggersCloseButton = true;
         options.useNativeTitleBar = true; options.resizable = false;

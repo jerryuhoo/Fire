@@ -4,6 +4,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <array>
+#include "LegacyChannelModeFixture.h"
 
 namespace
 {
@@ -64,6 +65,7 @@ void requireDefaultEnvelopeFamily(FireAudioProcessor& processor)
 }
 void stripEnvelopePreset(juce::XmlElement& xml, int version = 3)
 {
+    fire::test::stripChannelModePresetFamily(xml);
     xml.removeAttribute(fire::envelope_state::marker);
     for (const auto& id : env::parameterIDs()) xml.removeAttribute(id);
     if (version < 0) xml.removeAttribute("presetFormatVersion");
@@ -79,6 +81,7 @@ void stripEnvelopePreset(juce::XmlElement& xml, int version = 3)
 }
 void stripEnvelopeHost(juce::XmlElement& xml)
 {
+    fire::test::stripChannelModeHostFamily(xml);
     xml.removeAttribute(fire::envelope_state::marker); xml.setAttribute("stateFormatVersion", 2);
     auto* parameters = xml.getChildByName("PARAMETERS"); REQUIRE(parameters != nullptr);
     for (int index = parameters->getNumChildElements(); --index >= 0;)
@@ -103,7 +106,7 @@ TEST_CASE("Envelope bank settings and fixed source identities roundtrip presets 
     FireAudioProcessor processor;
     configureEnvelopes(processor, 0);
     auto first = envelopePreset(processor);
-    CHECK(first.getIntAttribute("presetFormatVersion") == 4);
+    CHECK(first.getIntAttribute("presetFormatVersion") == 5);
     CHECK(first.getIntAttribute(fire::envelope_state::marker) == 1);
     for (int source : {16, 17, 20, 21, 22, 23}) addEnvelopeRouting(first, source);
     REQUIRE(state::loadStateFromXml(first, processor));

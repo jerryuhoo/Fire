@@ -20,6 +20,14 @@ TEST_CASE("Factory library offers 236 complete scenes in eleven collections with
     FireAudioProcessor processor;
     CHECK(fire::factory::presetCount == 236);
     REQUIRE(processor.statePresets.getNumFactoryPresets() == fire::factory::presetCount);
+    // Generating the library must use default Stereo rather than inheriting
+    // the currently auditioned chain modes, and must not change that sound.
+    for (int scope = 0; scope < fire::channel_mode::parameterCount; ++scope)
+    {
+        auto* parameter = processor.treeState.getParameter(fire::channel_mode::parameterID(scope));
+        REQUIRE(parameter);
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(1 + scope % 2)));
+    }
     juce::MemoryBlock before, after;
     processor.getStateInformation(before);
     juce::StringArray keys, categories;
@@ -30,6 +38,13 @@ TEST_CASE("Factory library offers 236 complete scenes in eleven collections with
         auto presets = fire::factory::create(processor, index); REQUIRE(presets.size() == 1);
         const auto& preset = *presets.front();
         CHECK(state::canLoadStateFromXml(preset, processor));
+        CHECK(preset.getIntAttribute("channelModeSchemaVersion") == fire::channel_mode::schemaVersion);
+        for (int scope = 0; scope < fire::channel_mode::parameterCount; ++scope)
+        {
+            const auto id = fire::channel_mode::parameterID(scope);
+            REQUIRE(preset.hasAttribute(id));
+            CHECK(preset.getDoubleAttribute(id) == 0.0);
+        }
         CHECK(preset.getStringAttribute("presetDescription").isNotEmpty());
         CHECK(preset.getStringAttribute("presetKey").startsWith("@factory/"));
         keys.add(preset.getStringAttribute("presetKey"));

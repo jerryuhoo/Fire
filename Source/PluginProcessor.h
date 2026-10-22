@@ -11,6 +11,8 @@
 #pragma once
 #include "Utility/ModulationSummary.h"
 #include "Utility/ChainSnapshot.h"
+#include "Utility/ChannelModeParameters.h"
+#include "DSP/ChannelModeProcessor.h"
 #include "DSP/InsertRack.h"
 #include "DSP/LoudnessMatchState.h"
 #include "DSP/DriveCompensation.h"
@@ -57,6 +59,7 @@ namespace fire::state { class EditHistory; }
 //==============================================================================
 struct BandProcessingParameters
 {
+    int channelMode = 0;
     // Main process parameters
     bool isBandEnabled { true };
     int mode { 0 };
@@ -373,6 +376,7 @@ private:
     juce::AudioBuffer<float> safePeakEnvelopeBuffer;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran>
         sharedBandDryDelay { 2048 };
+    fire::dsp::ChannelModeProcessor channelModeProcessor;
     float safePeakEnvelope = 0.0f;
     float safePeakReleaseCoefficient = 0.0f;
     int safePeakHoldSamples = 1;
@@ -862,6 +866,7 @@ private:
         std::uint32_t publicationSequence = 0;
         std::uint32_t dspResetSequence = 0;
         bool independentShapeBudget = false;
+        int masterChannelMode = 0;
         int numBands = 1;
     };
 
@@ -956,6 +961,7 @@ private:
     std::unique_ptr<fire::effects::RackPreparationWorker> insertPreparationWorker;
     void synchroniseInsertPreparation() noexcept;
     std::array<std::array<CachedParameter, fire::module_order::capacity>, fire::effects::scopeCount> moduleOrderParameters;
+    std::array<CachedParameter, fire::effects::scopeCount> channelModeParameters {};
     std::array<std::array<CachedParameter, 5>, fire::effects::scopeCount> modulePresenceParameters;
     std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> shapeModelParameters;
     std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> analogDriveParameters;
@@ -964,6 +970,7 @@ private:
     fire::module_order::Transition masterOrderTransition;
     juce::AudioBuffer<float> masterOrderDry;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> masterOrderDryDelay{256};
+    fire::dsp::ChannelModeProcessor masterChannelModeProcessor;
     fire::dsp::LoudnessMatchState loudnessMatch;
     juce::AudioBuffer<float> loudnessReference;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran> loudnessReferenceDelay;

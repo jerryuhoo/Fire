@@ -57,7 +57,7 @@ TEST_CASE("Invalid alternate preset versions fall back to the complete restored 
           "[state][host][ab][version][corrupt][ott][insertfx][module-order][regression]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
-    for (const auto* invalidVersion : { "5", "-1", "1.5", "2oops" })
+    for (const auto* invalidVersion : { "6", "-1", "1.5", "2oops" })
     {
         CAPTURE(invalidVersion);
         FireAudioProcessor source;
@@ -118,7 +118,7 @@ TEST_CASE("Supported alternate preset versions preserve modern modules across A-
           "[state][host][ab][version][legacy][ott][insertfx][module-order][regression]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
-    for (const auto version : { -1, 0, 1, 2, 3, 4 })
+    for (const auto version : { -1, 0, 1, 2, 3, 4, 5 })
     {
         CAPTURE(version);
         FireAudioProcessor source;
@@ -137,6 +137,7 @@ TEST_CASE("Supported alternate preset versions preserve modern modules across A-
         else
         {
             if (version == 3) fire::test::stripEnvelopePresetFamily(*alternate);
+            if (version == 4) fire::test::stripChannelModePresetFamily(*alternate);
             alternate->setAttribute("presetFormatVersion", version);
         }
         alternate->setAttribute("currentSideIsA", false);

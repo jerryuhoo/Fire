@@ -15,6 +15,7 @@
 #include "../../Utility/StrictNumberParser.h"
 #include "../../Utility/ModulationStateValidation.h"
 #include "../../Utility/EnvelopeStateValidation.h"
+#include "../../Utility/ChannelModeStateValidation.h"
 #include "../../Utility/LfoBankParameters.h"
 #include "../../Utility/DriveCompensationParameters.h"
 #include <algorithm>
@@ -239,7 +240,8 @@ bool isValidRoutingState(const juce::XmlElement& routingState,
             || !fire::modulation_state::hasValidMapping(*routing))) return false;
 
         const auto target = routing->getStringAttribute("target");
-        if (fire::mod_sources::isParameterID(target) || fire::envelope_params::isParameterID(target)) return false;
+        if (fire::mod_sources::isParameterID(target) || fire::envelope_params::isParameterID(target)
+            || fire::channel_mode::isParameterID(target)) return false;
         if (target.isEmpty())
             continue; // Empty preallocated routing slots are part of Init.
 
@@ -325,6 +327,9 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
     bool legacyWithoutEnvelopes = false;
     if (!fire::envelope_state::validatePreset(snapshot, processor, formatVersion >= 4, legacyWithoutEnvelopes))
         return false;
+    bool legacyWithoutChannelMode = false;
+    if (!fire::channel_mode_state::validate(snapshot, processor, formatVersion >= 5, false, legacyWithoutChannelMode))
+        return false;
 
     bool legacyWithoutOtt = false;
     if (! validateParameterFamily(snapshot, processor, legacyWithoutOtt))
@@ -399,6 +404,7 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
             continue;
         if (legacyWithoutAuxiliary && fire::mod_sources::isLegacyParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutEnvelopes && fire::envelope_params::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutChannelMode && fire::channel_mode::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutReverbModels && fire::reverb_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutAnalogShapes && fire::analog_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutCoreModules && fire::core_modules::isParameterID(parameterWithID->paramID)) continue;
@@ -501,6 +507,9 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     bool legacyWithoutEnvelopes = false;
     if (!fire::envelope_state::validatePreset(xml, processor, formatVersion >= 4, legacyWithoutEnvelopes))
         return false;
+    bool legacyWithoutChannelMode = false;
+    if (!fire::channel_mode_state::validate(xml, processor, formatVersion >= 5, false, legacyWithoutChannelMode))
+        return false;
 
     if (formatVersion < 2)
     {
@@ -512,7 +521,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
                 if (!fire::modulation_state::hasSchema(*child, false)) return false;
                 for (const auto* route : child->getChildIterator())
                     if (route->getIntAttribute("source", -1) >= fire::mod_sources::firstMacro + fire::mod_sources::macroCount
-                        || fire::envelope_params::isParameterID(route->getStringAttribute("target"))) return false;
+                        || fire::envelope_params::isParameterID(route->getStringAttribute("target"))
+                        || fire::channel_mode::isParameterID(route->getStringAttribute("target"))) return false;
             }
         return true;
     }
@@ -546,6 +556,7 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
             continue;
         if (legacyWithoutAuxiliary && fire::mod_sources::isLegacyParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutEnvelopes && fire::envelope_params::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutChannelMode && fire::channel_mode::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutReverbModels && fire::reverb_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutAnalogShapes && fire::analog_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutCoreModules && fire::core_modules::isParameterID(parameterWithID->paramID)) continue;
@@ -609,6 +620,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("driveCompSchemaVersion", fire::drive_comp::schemaVersion);
     xml.setAttribute("modulationSourcesSchemaVersion", fire::mod_sources::schemaVersion);
     xml.setAttribute(fire::envelope_state::marker, fire::envelope_params::schemaVersion);
+    xml.setAttribute(fire::channel_mode_state::marker, fire::channel_mode::schemaVersion);
     xml.setAttribute("moduleOrderSchemaVersion", 1);
     xml.setAttribute("eqSchemaVersion", 1);
     xml.setAttribute("coreModulesSchemaVersion", fire::core_modules::schemaVersion);
@@ -889,6 +901,7 @@ namespace state
                     && routing.targetParameterID.isNotEmpty()
                     && !fire::mod_sources::isParameterID(routing.targetParameterID)
                     && !fire::envelope_params::isParameterID(routing.targetParameterID)
+                    && !fire::channel_mode::isParameterID(routing.targetParameterID)
                     && fireProc.treeState.getParameter(routing.targetParameterID) != nullptr)
                     routingsToLoad.add(std::move(routing));
             }

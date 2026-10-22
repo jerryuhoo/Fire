@@ -35,6 +35,8 @@ juce::Result validateRoute(const ModulationRouting& route, const Module& module)
 }
 juce::Result validateSnapshot(const Snapshot& snapshot)
 {
+    if (!channel_mode::valid(snapshot.channelMode))
+        return fail("The chain contains an invalid channel mode.");
     if (snapshot.modules.size() > maximumModules)
         return fail("A chain may contain at most 13 modules.");
     int routeCount = 0;
@@ -76,6 +78,7 @@ std::unique_ptr<juce::XmlElement> encode(const Snapshot& snapshot)
     auto xml = std::make_unique<juce::XmlElement>("FIRE_CHAIN");
     xml->setAttribute("schemaVersion", schemaVersion);
     xml->setAttribute("includesRouting", snapshot.includesRouting);
+    xml->setAttribute("channelMode", snapshot.channelMode);
     for (const auto& module : snapshot.modules)
     {
         auto* item = xml->createNewChildElement("MODULE");
@@ -107,12 +110,17 @@ juce::Result decode(const juce::XmlElement& xml, Snapshot& destination)
 {
     int version = 0;
     if (!xml.hasTagName("FIRE_CHAIN")
-        || !hasOnlyAttributes(xml, {"schemaVersion", "includesRouting"})
         || !modulation_state::readStrictIntegerAttribute(xml, "schemaVersion", version)
-        || version != schemaVersion || !strictBool(xml, "includesRouting")
+        || (version != 1 && version != schemaVersion)
+        || !(version == 1 ? hasOnlyAttributes(xml, {"schemaVersion", "includesRouting"})
+                          : hasOnlyAttributes(xml, {"schemaVersion", "includesRouting", "channelMode"}))
+        || !strictBool(xml, "includesRouting")
         || xml.getNumChildElements() > maximumModules)
         return fail("This is not a supported Fire chain file.");
     Snapshot snapshot;
+    if (version >= 2 && (!modulation_state::readStrictIntegerAttribute(xml, "channelMode", snapshot.channelMode)
+                        || !channel_mode::valid(snapshot.channelMode)))
+        return fail("The chain contains an invalid channel mode.");
     snapshot.includesRouting = xml.getBoolAttribute("includesRouting");
     int routeCount = 0;
     for (const auto* item : xml.getChildIterator())

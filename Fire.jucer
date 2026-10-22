@@ -123,6 +123,7 @@
         <FILE id="modSourceParams01" name="ModulationSources.h" compile="0" resource="0" file="Source/Utility/ModulationSources.h"/>
         <FILE id="modStateValidation01" name="ModulationStateValidation.h" compile="0" resource="0" file="Source/Utility/ModulationStateValidation.h"/>
         <FILE id="modSummary01" name="ModulationSummary.h" compile="0" resource="0" file="Source/Utility/ModulationSummary.h"/>
+        <FILE id="channelModeDSP21" name="ChannelModeProcessor.h" compile="0" resource="0" file="Source/DSP/ChannelModeProcessor.h"/>
         <FILE id="chainSnapshot21" name="ChainSnapshot.h" compile="0" resource="0" file="Source/Utility/ChainSnapshot.h"/>
         <FILE id="chainCodecHeader21" name="ChainSnapshotCodec.h" compile="0" resource="0" file="Source/Utility/ChainSnapshotCodec.h"/>
         <FILE id="chainCodecSource21" name="ChainSnapshotCodec.cpp" compile="1" resource="0" file="Source/Utility/ChainSnapshotCodec.cpp"/>
@@ -130,6 +131,8 @@
         <FILE id="moduleMappingSource21" name="ModuleSnapshotMapping.cpp" compile="1" resource="0" file="Source/Utility/ModuleSnapshotMapping.cpp"/>
         <FILE id="chainOperations21" name="ChainOperations.cpp" compile="1" resource="0" file="Source/Utility/ChainOperations.cpp"/>
         <FILE id="envParams21" name="EnvelopeParameters.h" compile="0" resource="0" file="Source/Utility/EnvelopeParameters.h"/>
+        <FILE id="channelModeParams21" name="ChannelModeParameters.h" compile="0" resource="0" file="Source/Utility/ChannelModeParameters.h"/>
+        <FILE id="channelModeState21" name="ChannelModeStateValidation.h" compile="0" resource="0" file="Source/Utility/ChannelModeStateValidation.h"/>
         <FILE id="envState21" name="EnvelopeStateValidation.h" compile="0" resource="0" file="Source/Utility/EnvelopeStateValidation.h"/>
         <FILE id="envDsp21" name="EnvelopeDetectors.h" compile="0" resource="0" file="Source/DSP/EnvelopeDetectors.h"/>
       </GROUP>

@@ -345,11 +345,17 @@ TEST_CASE("Editor assigns high LFO sources and deletion cancels armed one shot c
     CHECK(target->onClickInAssignMode == nullptr);
     REQUIRE(processor.addLfo() == 15);
     queuedAssign(target->getParamID());
-    CHECK(processor.getLfoManager().getModulationRoutingsCopy().isEmpty());
+    // Clearing an assignment keeps an empty matrix row for editing. Stale
+    // callbacks must create no assigned route, irrespective of that row.
+    const auto afterDeletion = processor.getLfoManager().getModulationRoutingsCopy();
+    CHECK(std::all_of(afterDeletion.begin(), afterDeletion.end(),
+                      [](const auto& route) { return route.targetParameterID.isEmpty(); }));
     panel.onAssignButtonClicked(15);
     REQUIRE(LfoBankUiTestAccess::assigning(*editor));
     queuedAssign(target->getParamID());
-    CHECK(processor.getLfoManager().getModulationRoutingsCopy().isEmpty());
+    const auto afterRearming = processor.getLfoManager().getModulationRoutingsCopy();
+    CHECK(std::all_of(afterRearming.begin(), afterRearming.end(),
+                      [](const auto& route) { return route.targetParameterID.isEmpty(); }));
     CHECK(LfoBankUiTestAccess::assigning(*editor));
     auto freshAssign = target->onClickInAssignMode;
     REQUIRE(freshAssign != nullptr);

@@ -1,6 +1,7 @@
 #pragma once
 #include "../PluginProcessor.h"
 #include "AnalogDrivePresets.h"
+#include "ChannelModeParameters.h"
 #include <array>
 #include <vector>
 
@@ -126,6 +127,9 @@ inline std::vector<std::unique_ptr<juce::XmlElement>> create(FireAudioProcessor&
     for (const auto* marker : {"ottSchemaVersion", "insertEffectsSchemaVersion", "modulationEffectsSchemaVersion", "resonatorSchemaVersion", "driveCompSchemaVersion",
         "modulationSourcesSchemaVersion", "moduleOrderSchemaVersion", "eqSchemaVersion", "lfoBankSchemaVersion", "coreModulesSchemaVersion", "analogShapesSchemaVersion", "reverbModelsSchemaVersion"}) defaults.setAttribute(marker, 1);
     defaults.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
+    // Factory scenes retain the legacy routing interpretation of format 2,
+    // but every newly included parameter family still needs its own marker.
+    defaults.setAttribute("channelModeSchemaVersion", fire::channel_mode::schemaVersion);
     defaults.setAttribute("pluginVersion", VERSION);
     for (auto* parameter : processor.getParameters())
         if (auto* identified = dynamic_cast<juce::AudioProcessorParameterWithID*>(parameter))

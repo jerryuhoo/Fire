@@ -3,6 +3,8 @@
 #include "LookAndFeel.h"
 #include "ModuleDragButton.h"
 #include "ChainClipboardUI.h"
+#include "ContextAwareComboBox.h"
+#include "../Utility/ChannelModeParameters.h"
 #include <optional>
 #include "../Panels/SpectrogramPanel/CloseButton.h"
 
@@ -11,6 +13,7 @@ struct SkinNavigationMotionTestAccess;
 #endif
 
 struct ChainClipboardUiTestAccess;
+struct ChainChannelModeUiTestAccess;
 
 namespace fire::ui
 {
@@ -46,6 +49,7 @@ class EffectRackNavigation final : public juce::Component
     friend struct ::SkinNavigationMotionTestAccess;
 #endif
     friend struct ::ChainClipboardUiTestAccess;
+    friend struct ::ChainChannelModeUiTestAccess;
 public:
     enum MenuAction
     {
@@ -73,6 +77,15 @@ public:
         addButton.onClick = [this] { showAddMenu(); };
         addAndMakeVisible(chainButton);
         chainButton.onClick = [this] { showChainMenu(); };
+        addAndMakeVisible(channelMode);
+        channelMode.addItem("Stereo", 1);
+        channelMode.addItem("Mid", 2);
+        channelMode.addItem("Side", 3);
+        channelMode.setEditableText(false);
+        channelMode.setTooltip("Processing channel for this entire effect chain. Stereo processes both channels. "
+            "Mid processes the centre; Side processes the stereo difference, preserving the other component. "
+            "Side passes mono input through. This does not change the spectrum display.");
+        applyChannelColours();
         for (int slot = 0; slot < effects::slotCount; ++slot)
         {
             auto& button = insertButtons[static_cast<size_t>(slot)];
@@ -134,6 +147,18 @@ public:
         dismiss();
         if (! safe) return;
         scope = nextScope; selectedSlot = -1;
+        channelAttachment.reset();
+        const auto channelID = channel_mode::parameterID(scope);
+        channelMode.setComponentID(channelID);
+        channelMode.setTitle((scope == 0 ? "Master" : "Band " + juce::String(scope)) + " processing channel");
+        channelMode.setDescription("Choose Stereo, Mid (centre) or Side (stereo difference) processing for this chain");
+        channelMode.setHelpText(channelMode.getTooltip());
+        channelMode.configurePopupSession(
+            [safe] { return safe ? safe->generation + safe->processor.getChainEditRevision() : 0; },
+            [safe, nextScope] { return safe && safe->scope == nextScope && safe->isShowing() && safe->isEnabled(); },
+            processor.treeState.getParameter(channelID));
+        channelAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+            processor.treeState, channelID, channelMode);
         cachedTypes.fill(-1); cachedModuleOrder.fill(-2); cachedPresence.fill(-1);
         addButton.setComponentID(scope == 0 ? "addMasterEffect" : "addBandEffect");
         chainButton.setComponentID(scope == 0 ? "masterChainTools" : "bandChainTools");
@@ -253,6 +278,11 @@ public:
         const auto side = juce::jmin(title.getHeight(), juce::roundToInt(21.0f * scale));
         addButton.setBounds(title.getRight() - side, title.getY() - juce::roundToInt(3.0f * scale), side, side);
         chainButton.setBounds(addButton.getX() - side - juce::roundToInt(5.0f * scale), addButton.getY(), side, side);
+        // Audio routing lives in the existing header, keeping all module rails
+        // aligned with the Mod Forge bank and preserving their five-row pitch.
+        const auto modeWidth = juce::roundToInt(70.0f * scale);
+        channelMode.setBounds(chainButton.getX() - juce::roundToInt(4.0f * scale) - modeWidth,
+                              addButton.getY(), modeWidth, side);
         viewport.setScrollBarThickness(juce::jmax(3, juce::roundToInt(4.0f * scale)));
         viewport.setBounds(area);
         layoutRows();
@@ -313,6 +343,8 @@ public:
         addButton.dismissPointerGesture();
         if (! safe) return;
         chainButton.dismissPointerGesture();
+        if (! safe) return;
+        channelMode.dismissTransientInteraction();
         if (! safe) return;
         dismissChainFiles();
         resultAlert.close();
@@ -1013,6 +1045,7 @@ private:
     }
     void lookAndFeelChanged() override
     {
+        applyChannelColours();
         // Switching back from a compact skin must also restore the classic
         // five-row geometry without requiring the host to resize its window.
         layoutRows();
@@ -1023,11 +1056,22 @@ private:
     }
     void visibilityChanged() override { if (! isShowing()) dismiss(); }
     void enablementChanged() override { if (! isEnabled()) dismiss(); }
+    void applyChannelColours()
+    {
+        const auto& palette = paletteFor(*this);
+        channelMode.setColour(juce::ComboBox::backgroundColourId, palette.surface0);
+        channelMode.setColour(juce::ComboBox::textColourId, palette.textPrimary);
+        channelMode.setColour(juce::ComboBox::outlineColourId, palette.hairline);
+        channelMode.setColour(juce::ComboBox::arrowColourId, palette.textSecondary);
+        channelMode.setColour(juce::ComboBox::focusedOutlineColourId, palette.accent);
+    }
     FireAudioProcessor& processor;
     juce::Viewport viewport;
     Content content;
     PrimaryTextButton addButton;
     ChainMenuButton chainButton;
+    ContextAwareComboBox channelMode;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> channelAttachment;
     std::array<ModuleDragButton, effects::slotCount> insertButtons;
     std::array<PrimaryToggleButton, effects::slotCount> powerButtons;
     std::array<CloseButton, effects::slotCount> removeButtons;

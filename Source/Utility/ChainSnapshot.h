@@ -1,6 +1,7 @@
 #pragma once
 #include "../DSP/InsertEffect.h"
 #include "../DSP/ModulationRouting.h"
+#include "ChannelModeParameters.h"
 #include <map>
 #include <memory>
 #include <vector>
@@ -22,6 +23,7 @@ struct Snapshot
 {
     std::vector<Module> modules;
     bool includesRouting = false;
+    int channelMode = channel_mode::stereo; // Used only when replacing an entire chain.
 };
 enum class ClipboardKind { module, chain };
 }

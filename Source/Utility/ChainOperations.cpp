@@ -57,6 +57,7 @@ juce::Result planPlacements(const FireAudioProcessor& processor,int scope,const 
                            bool replace,std::vector<Placement>& placements)
 {
     if(!juce::isPositiveAndBelow(scope,effects::scopeCount)) return juce::Result::fail("Invalid destination chain.");
+    if(!channel_mode::valid(snapshot.channelMode)) return juce::Result::fail("Invalid chain channel mode.");
     if(snapshot.modules.size()>chain::maximumModules) return juce::Result::fail("This chain has too many modules.");
     std::vector<int> candidates;
     for(int node:module_order::defaults(scope))
@@ -128,6 +129,7 @@ juce::Result FireAudioProcessor::captureChainSnapshot(int scope,bool routes,fire
     const juce::ScopedLock lock(multibandTopologyWriterLock);
     const auto state=captureSerializablePresetStateSnapshot();
     fire::chain::Snapshot next;next.includesRouting=routes;
+    next.channelMode=juce::roundToInt(snapshotValue(state.parameterState,fire::channel_mode::parameterID(scope),0));
     for(int node:snapshotOrder(state,scope))
     {
         if((scope==0&&node==2) || !snapshotModulePresent(state.parameterState,scope,node))continue;
@@ -212,6 +214,7 @@ juce::Result FireAudioProcessor::pasteChainSnapshot(int scope,const fire::chain:
         }
     }
     state.frozenAudio[static_cast<size_t>(scope)]={};
+    write(fire::channel_mode::parameterID(scope),static_cast<float>(snapshot.channelMode)/2.0f);
     for(size_t index=0;index<placements.size();++index)
     {
         const auto& p=placements[index];for(const auto& [id,value]:p.values)write(id,value);

@@ -1500,10 +1500,12 @@ TEST_CASE("State round-trip preserves LFO data and upgrades legacy shape state",
     // Simulate an older state written before the per-band shape enable
     // parameters existed. Loading must enable Shape to preserve the old sound.
     auto legacyParameterState = source.treeState.copyState();
-    // This fixture also predates the extended bank, whose presence would
-    // correctly require a complete sixteen-shape LFO_STATE section.
+    // This fixture also predates the extended bank (which requires a complete
+    // sixteen-shape section) and the explicitly versioned channel-mode family.
     for (int child = legacyParameterState.getNumChildren(); --child >= 0;)
         if (fire::lfo_bank::isAppendedParameterID(
+                legacyParameterState.getChild(child).getProperty("id").toString())
+            || fire::channel_mode::isParameterID(
                 legacyParameterState.getChild(child).getProperty("id").toString()))
             legacyParameterState.removeChild(child, nullptr);
     for (int band = 0; band < 4; ++band)

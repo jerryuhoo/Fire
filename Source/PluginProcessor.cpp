@@ -17,6 +17,7 @@
 #include "Utility/FrozenAudioState.h"
 #include "Utility/ModulationStateValidation.h"
 #include "Utility/EnvelopeStateValidation.h"
+#include "Utility/ChannelModeStateValidation.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -123,7 +124,7 @@ Slope getSlopeParameterValue(const std::atomic<float>* parameter) noexcept
 constexpr int minimumProcessingBlockCapacity = 8192;
 constexpr double safePeakHoldSeconds = 0.05;
 constexpr double safePeakReleaseSeconds = 0.05;
-constexpr int hostStateFormatVersion = 3;
+constexpr int hostStateFormatVersion = 4;
 constexpr int oldestWrappedHostParameterCount = 19;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 std::atomic<HostBypassDenormalStateHook>
@@ -320,7 +321,7 @@ bool isValidVersionedHostRoutingState(
         // semantic routing and may repeat, but all populated targets must be
         // known and unique.
         const auto target = routing->getStringAttribute("target");
-        if (fire::mod_sources::isParameterID(target)) return false;
+        if (fire::mod_sources::isParameterID(target) || fire::channel_mode::isParameterID(target)) return false;
         if (target.isEmpty())
             continue;
         if (parameterState.getParameter(target) == nullptr
@@ -1354,6 +1355,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec, bool withInserts
     compressorMixer.prepare(mixerSpec);
     widthMixer.prepare(mixerSpec);
     sharedBandDryDelay.prepare(spec);
+    channelModeProcessor.prepare(spec, 2048);
 
     // The DC filter needs its coefficients to be calculated.
     dcFilter.prepare(spec);
@@ -1459,6 +1461,7 @@ void BandProcessor::reset()
     compressorMixer.reset();
     widthMixer.reset();
     sharedBandDryDelay.reset();
+    channelModeProcessor.reset();
     dcFilter.reset();
     bandEnableMixSmoother.setCurrentAndTargetValue(1.0f);
     dcFilterMixSmoother.setCurrentAndTargetValue(0.0f);
@@ -1642,6 +1645,11 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                                  float inputPeak,
                                  bool updateReductionMeter)
 {
+    const bool channelHQ = params.isHQ && oversampling != nullptr;
+    channelModeProcessor.begin(buffer, params.channelMode,
+        static_cast<float>(inserts.getProcessingBudget())
+        + (channelHQ ? oversampling->getLatencyInSamples() : 0.0f));
+    if (params.channelMode != 0) inputPeak = buffer.getMagnitude(0, buffer.getNumSamples());
     // 1. Preparation
     dryBuffer.makeCopyOf(buffer, true);
     auto block = juce::dsp::AudioBlock<float>(buffer);
@@ -1772,6 +1780,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                             true);
 
     processBandEnable(buffer, params.isBandEnabled);
+    channelModeProcessor.end(buffer);
 }
 
 void BandProcessor::processDriveShapeStage(juce::AudioBuffer<float>& buffer,
@@ -2939,6 +2948,7 @@ void FireAudioProcessor::initialiseParameterCache()
                 moduleOrderParameters[static_cast<size_t>(scope)][static_cast<size_t>(node)] = cacheParameter(fire::module_order::parameterID(scope, node));
     for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
     {
+        channelModeParameters[static_cast<size_t>(scope)] = cacheParameter(fire::channel_mode::parameterID(scope));
         for (int node = 0; node < (scope == 0 ? 3 : 5); ++node)
             modulePresenceParameters[static_cast<size_t>(scope)][static_cast<size_t>(node)] = cacheParameter(fire::core_modules::presenceID(scope, node));
         for (int slot = 0; slot < fire::effects::slotCount; ++slot)
@@ -4123,6 +4133,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     masterOrderDry.setSize(static_cast<int>(spec.numChannels), static_cast<int>(spec.maximumBlockSize));
     masterOrderDryDelay.prepare(spec);
     masterOrderDryDelay.setDelay(static_cast<float>(masterInserts.getReservedLatency()));
+    masterChannelModeProcessor.prepare(spec, masterInserts.getReservedLatency());
     masterTape.prepare(safeSampleRate);
     for (size_t i = 0; i < tapeSmoothers.size(); ++i)
     {
@@ -5088,6 +5099,7 @@ bool FireAudioProcessor::tryCaptureMultibandTopologySnapshot(
     auto& candidate = audioCallbackWorkspace->candidateTopology;
     candidate.publicationSequence = sequenceBefore;
     candidate.dspResetSequence = multibandDspResetSequence.load(std::memory_order_relaxed);
+    candidate.masterChannelMode = juce::jlimit(0, 2, juce::roundToInt(loadCachedParameter(channelModeParameters[0])));
     candidate.numBands = juce::jlimit(
         1,
         4,
@@ -5195,6 +5207,8 @@ void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
             & ~std::uint32_t { 1 };
         activeMultibandTopologySnapshot.dspResetSequence =
             multibandDspResetSequence.load(std::memory_order_relaxed);
+        activeMultibandTopologySnapshot.masterChannelMode = juce::jlimit(0, 2,
+            juce::roundToInt(loadCachedParameter(channelModeParameters[0])));
         activeMultibandTopologySnapshotInitialised = true;
     }
 
@@ -5294,6 +5308,7 @@ void FireAudioProcessor::performReset()
     lofiMixer.reset();
     masterInserts.reset(true);
     masterOrderDryDelay.reset();
+    masterChannelModeProcessor.reset();
     unusedInsertReserveDelay.reset();
     masterOrderTransition.reset();
     masterTape.reset();
@@ -5931,6 +5946,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("driveCompSchemaVersion", fire::drive_comp::schemaVersion);
     xmlState.setAttribute("modulationSourcesSchemaVersion", fire::mod_sources::schemaVersion);
     xmlState.setAttribute(fire::envelope_state::marker,fire::envelope_params::schemaVersion);
+    xmlState.setAttribute(fire::channel_mode_state::marker,fire::channel_mode::schemaVersion);
     xmlState.setAttribute("moduleOrderSchemaVersion", 1);
     xmlState.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xmlState.setAttribute("eqSchemaVersion", 1);
@@ -6062,6 +6078,9 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     bool legacyEnvelopeFamily=false;
     if (!fire::envelope_state::validateHost(*xmlState,*this,
             xmlState->getIntAttribute("stateFormatVersion",0)>=3,legacyEnvelopeFamily)) return;
+    bool legacyChannelModeFamily=false;
+    if (!fire::channel_mode_state::validate(*xmlState,*this,
+            xmlState->getIntAttribute("stateFormatVersion",0)>=4,true,legacyChannelModeFamily)) return;
     const bool hasStateFormatVersion =
         xmlState->hasAttribute("stateFormatVersion");
     int ottParameterCount = 0;
@@ -6499,6 +6518,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 || treeState.getParameter(routing.targetParameterID) == nullptr
                 || fire::mod_sources::isParameterID(routing.targetParameterID)
                 || migratedCloudsRoutingTargets.contains(routing.targetParameterID)
+                || fire::channel_mode::isParameterID(routing.targetParameterID)
                 || (!advancedMapping && loadedRoutingTargets.contains(routing.targetParameterID)))
                 continue;
 
@@ -7745,6 +7765,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
                     juce::NormalisableRange<float>{minimums[i],maximums[i],interval,skew},defaults[i]));
             }
         }
+    // Append after the v2.1 Envelope bank; never reorder existing host IDs.
+    for (int scope = 0; scope < fire::channel_mode::parameterCount; ++scope)
+        parameters.push_back(std::make_unique<PChoice>(
+            juce::ParameterID{fire::channel_mode::parameterID(scope),16},
+            scope == 0 ? juce::String("Master Channel Mode") : "Band " + juce::String(scope) + " Channel Mode",
+            fire::channel_mode::names(),fire::channel_mode::stereo));
     return { parameters.begin(), parameters.end() };
 }
 
@@ -7973,6 +7999,8 @@ void FireAudioProcessor::prepareHqCallbackContext(
         params.ott.enabled = isModulePresent(i + 1, 4) && loadCachedParameter(parameters.ottEnabled) > 0.5f;
         prepareInsertParameters(i + 1, params.inserts);
         params.moduleOrder = getModuleOrder(i + 1);
+        params.channelMode = juce::jlimit(0, 2,
+            juce::roundToInt(loadCachedParameter(channelModeParameters[static_cast<size_t>(i + 1)])));
         params.isWidthEnabled = isModulePresent(i + 1, 3) && loadCachedParameter(parameters.widthEnabled) > 0.5f;
         params.isSafeModeOn = loadCachedParameter(parameters.safe) > 0.5f;
         params.isExtremeModeOn = loadCachedParameter(parameters.extreme) > 0.5f;
@@ -8618,6 +8646,8 @@ void FireAudioProcessor::processMultiBandRange(
 
 void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate, bool highQuality)
 {
+    masterChannelModeProcessor.begin(buffer, activeMultibandTopologySnapshot.masterChannelMode,
+                                    static_cast<float>(masterInserts.getProcessingBudget()));
     masterOrderDry.makeCopyOf(buffer, true);
     masterOrderDryDelay.setDelay(static_cast<float>(masterInserts.getProcessingBudget()));
     auto alignedOrderDry = juce::dsp::AudioBlock<float>(masterOrderDry);
@@ -8634,6 +8664,7 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     }
     masterOrderTransition.apply(block, masterOrderDry);
     applyMasterOutput(buffer, lfoOutputs);
+    masterChannelModeProcessor.end(buffer);
 }
 
 void FireAudioProcessor::applyMasterFilter(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate)
@@ -9092,9 +9123,16 @@ bool FireAudioProcessor::sameTopologyIdentity(
     const MultibandTopologySnapshot& first,
     const MultibandTopologySnapshot& second) noexcept
 {
-    return first.numBands == second.numBands
-        && first.dspResetSequence == second.dspResetSequence
-        && first.independentShapeBudget == second.independentShapeBudget;
+    if (first.numBands != second.numBands
+        || first.dspResetSequence != second.dspResetSequence
+        || first.independentShapeBudget != second.independentShapeBudget
+        || first.masterChannelMode != second.masterChannelMode) return false;
+    // Automation of a dormant band must not interrupt the audible chains.
+    // Enabling that band already changes numBands and takes the safe bridge.
+    for (int band = 0; band < first.numBands; ++band)
+        if (first.callbackContext.bandParameters[static_cast<size_t>(band)].channelMode
+            != second.callbackContext.bandParameters[static_cast<size_t>(band)].channelMode) return false;
+    return true;
 }
 
 bool FireAudioProcessor::hasIndependentShape(const MultibandTopologySnapshot& topology,
@@ -9243,6 +9281,8 @@ bool FireAudioProcessor::commitPendingTopologySnapshot() noexcept
 
     const bool insertBudgetChanged = activeMultibandTopologySnapshot.independentShapeBudget
         != pendingMultibandTopologySnapshot.independentShapeBudget;
+    const bool masterModeChanged = activeMultibandTopologySnapshot.masterChannelMode
+        != pendingMultibandTopologySnapshot.masterChannelMode;
     activeMultibandTopologySnapshot = pendingMultibandTopologySnapshot;
     applyInsertLatencyBudget();
     numBands = activeMultibandTopologySnapshot.numBands;
@@ -9250,11 +9290,22 @@ bool FireAudioProcessor::commitPendingTopologySnapshot() noexcept
 
     resetMultibandProcessingState(
         &activeMultibandTopologySnapshot.callbackContext);
-    if (insertBudgetChanged)
+    if (insertBudgetChanged || masterModeChanged)
     {
         masterInserts.reset(true);
         masterOrderDryDelay.reset();
+        masterChannelModeProcessor.reset();
         unusedInsertReserveDelay.reset();
+    }
+    if (masterModeChanged)
+    {
+        leftChain.reset(); rightChain.reset(); eqProcessor.reset();
+        lowCutSlopeTransition.leftStandby.reset(); lowCutSlopeTransition.rightStandby.reset();
+        highCutSlopeTransition.leftStandby.reset(); highCutSlopeTransition.rightStandby.reset();
+        globalFilterCacheValid = false;
+        globalFilterMixer.reset(); globalFilterMixerPrimed = false;
+        lofiMixer.reset(); masterTape.reset(); resetDownsamplingState();
+        masterOrderTransition.reset(); gainProcessorGlobal.reset(); globalOutputGainTransition.reset();
     }
     snapCrossoverSmoothers(
         activeMultibandTopologySnapshot.crossoverFrequencies);

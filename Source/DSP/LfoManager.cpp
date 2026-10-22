@@ -12,6 +12,7 @@
 
 #include "LfoManager.h"
 #include "../GUI/InterfaceDefines.h"
+#include "../Utility/ChannelModeParameters.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -719,7 +720,8 @@ bool LfoManager::captureRuntimeRoutings(
 
     for (const auto& routing : modulationRoutings)
     {
-        if (routing.targetParameterID.isEmpty() || ! isModulationSourcePresent(routing.sourceLfoIndex))
+        if (routing.targetParameterID.isEmpty() || fire::channel_mode::isParameterID(routing.targetParameterID)
+            || ! isModulationSourcePresent(routing.sourceLfoIndex))
             continue;
 
         hasAnyRouting = true;
@@ -1199,6 +1201,7 @@ LfoManager::updateModulationRoutingIfRevisionMatches(
     const ModulationRouting& replacementRouting)
 {
     auto safeReplacement = replacementRouting;
+    if (fire::channel_mode::isParameterID(safeReplacement.targetParameterID)) return {};
     safeReplacement.sanitise();
     if (safeReplacement.sourceLfoIndex != expectedRouting.sourceLfoIndex
         || safeReplacement.targetParameterID
@@ -1243,7 +1246,8 @@ LfoManager::assignModulationRoutingIfRevisionMatches(
         return {};
 
     const int safeSourceIndex = juce::jlimit(0, fire::mod_sources::sourceCount - 1, sourceLfoIndex);
-    if (fire::mod_sources::isParameterID(targetParameterID)) return {};
+    if (fire::mod_sources::isParameterID(targetParameterID)
+        || fire::channel_mode::isParameterID(targetParameterID)) return {};
     const juce::ScopedLock lock(dataAccessLock);
     if (targetParameterID.isNotEmpty() && ! isModulationSourcePresent(safeSourceIndex)) return {};
     ModulationRoutingEditResult result;
@@ -1442,7 +1446,8 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
     const juce::String& targetParameterID)
 {
     if (! fire::mod_sources::validSource(sourceLfoIndex) || targetParameterID.isEmpty()
-        || fire::mod_sources::isParameterID(targetParameterID))
+        || fire::mod_sources::isParameterID(targetParameterID)
+        || fire::channel_mode::isParameterID(targetParameterID))
     {
         jassertfalse;
         return AssignmentResult::invalidRequest;

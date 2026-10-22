@@ -447,6 +447,8 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ### 2.1.0 (in development)
 
+- Add independent Stereo, Mid and Side processing for every Band and Master
+  chain, with channel modes saved in presets, projects, A/B and chain files.
 - Add module copy, duplicate and cross-chain paste, plus portable `.firechain`
   files. Optional routing uses the destination's existing modulation sources;
   incompatible conversions are rejected before any sound is changed.
@@ -746,6 +748,20 @@ Master, crossover points, Output/Mix controls, and global modulation sources.
 An empty copied chain clears the destination audio modules. Master Analysis is
 a display page and is excluded from the copy. Duplicate, paste and chain
 replacement each form one Undo step.
+
+Each Band and Master chain has a **Stereo / Mid / Side** selector. Stereo runs
+the full stereo signal through its modules. Mid processes the centre signal;
+Side processes the difference between left and right, retaining the other
+component. This is an audio-processing choice, independent of the spectrum
+analyser's display mode. Band Output, Mix and Enable, and Master Output, act
+on the selected component. Stereo effect outputs are averaged back into that
+component, so it cannot spill into the untouched component. On a mono input
+Mid behaves like Stereo and Side passes the input through with the same
+latency. The choice is host-automatable (not an LFO modulation target) and is saved
+with whole-plugin presets, projects and A/B snapshots. Chain copy/save also
+captures it; replacing a chain restores it in the same Undo step. Copying or
+duplicating a single module leaves the destination chain's mode unchanged.
+Older presets, projects and version 1 chain files open in Stereo.
 
 **Save chain preset…** stores a settings-only `.firechain` file; choose
 **Save chain preset with routing…** to include its mappings. These files live in

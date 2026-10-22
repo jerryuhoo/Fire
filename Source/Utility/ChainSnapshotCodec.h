@@ -3,7 +3,7 @@
 
 namespace fire::chain
 {
-inline constexpr int schemaVersion = 1;
+inline constexpr int schemaVersion = 2;
 inline constexpr int maximumModules = 13;
 inline constexpr int maximumRoutes = 128;
 inline constexpr juce::int64 maximumFileBytes = 10 * 1024 * 1024;

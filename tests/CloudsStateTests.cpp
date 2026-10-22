@@ -173,6 +173,9 @@ TEST_CASE("Clouds appends a separate parameter family without changing original 
         for (int slot = 0; slot < 8; ++slot) checkParameter(fire::reverb_params::parameterID(scope, slot), 14);
     CHECK(index == 4634); // Every pre-envelope-bank parameter retains its index.
     for (const auto& id : fire::envelope_params::parameterIDs()) checkParameter(id, 15);
+    CHECK(index == 4663); // The four-envelope v2.1 contract remains fixed.
+    for (int scope = 0; scope < fire::channel_mode::parameterCount; ++scope)
+        checkParameter(fire::channel_mode::parameterID(scope), 16);
     CHECK(index == parameters.size());
     CHECK_FALSE(clouds::isParameterID("masterFx1CloudsBogus"));
     CHECK_FALSE(clouds::isParameterID("bandFx9CloudsEngine1"));

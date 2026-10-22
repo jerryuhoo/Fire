@@ -1,5 +1,6 @@
 #pragma once
 #include <Utility/EnvelopeParameters.h>
+#include "LegacyChannelModeFixture.h"
 #include <juce_core/juce_core.h>
 
 namespace fire::test
@@ -8,6 +9,7 @@ namespace fire::test
 // settings that did not exist in its original parameter contract.
 inline void stripEnvelopePresetFamily(juce::XmlElement& xml)
 {
+    stripChannelModePresetFamily(xml);
     xml.removeAttribute("envelopeSchemaVersion");
     for (const auto& id : envelope_params::parameterIDs()) xml.removeAttribute(id);
     if (xml.getIntAttribute("presetFormatVersion", 0) >= 4)
@@ -15,6 +17,7 @@ inline void stripEnvelopePresetFamily(juce::XmlElement& xml)
 }
 inline void stripEnvelopeHostFamily(juce::XmlElement& xml)
 {
+    stripChannelModeHostFamily(xml);
     xml.removeAttribute("envelopeSchemaVersion");
     if (xml.getIntAttribute("stateFormatVersion", 0) >= 3)
         xml.setAttribute("stateFormatVersion", 2);

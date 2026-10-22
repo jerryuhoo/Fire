@@ -295,6 +295,31 @@ float LfoEngine::process()
     return unipolarOutput;
 }
 
+float LfoEngine::processAtPhase(float lookupPhase) noexcept
+{
+    phase = std::isfinite(lookupPhase) ? juce::jlimit(0.0f, 1.0f, lookupPhase) : 0;
+    phaseCorrection = phaseCorrectionStep = 0;
+    phaseCorrectionRemaining = 0;
+    phaseDelta = 0;
+    const auto result = process();
+    // process() wraps its accumulator, but a completed OneShot must expose
+    // the actual endpoint rather than a misleading phase-zero UI cursor.
+    phase = lastRenderedPhase;
+    publishedPhase.store(phase, std::memory_order_relaxed);
+    return result;
+}
+
+void LfoEngine::publishExternalSample(float lookupPhase, float output) noexcept
+{
+    phase = lastRenderedPhase = juce::jlimit(0.0f, 1.0f, lookupPhase);
+    lastOutput = juce::jlimit(0.0f, 1.0f, output);
+    phaseCorrection = phaseCorrectionStep = 0;
+    phaseCorrectionRemaining = 0;
+    hasProcessedSample = true;
+    publishedPhase.store(phase, std::memory_order_relaxed);
+    publishedOutput.store(lastOutput, std::memory_order_relaxed);
+}
+
 // Call this from your processor before each block to set the LFO speed.
 // The processor is responsible for calculating the correct delta for Hz or BPM sync.
 void LfoEngine::setPhaseDelta(float newPhaseDelta)

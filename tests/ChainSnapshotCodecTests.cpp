@@ -136,7 +136,7 @@ TEST_CASE("Chain codec validates every source and advanced route field", "[chain
     const auto reject = [&](const juce::XmlElement& xml)
     { CHECK(chain::decode(xml, destination).failed()); requireSame(destination, source); };
     const std::array<std::pair<const char*, const char*>, 15> cases {{
-        {"source", "24"}, {"source", "-1"}, {"source", "1e0"}, {"source", "1.5"},
+        {"source", "28"}, {"source", "-1"}, {"source", "1e0"}, {"source", "1.5"},
         {"target", "macro1"}, {"target", "drive1"}, {"depth", "nan"}, {"depth", "1.01"},
         {"bipolar", "true"}, {"bypassed", "2"}, {"customRange", "true"},
         {"rangeStart", "-1.01"}, {"rangeEnd", "inf"}, {"curve", "4"}, {"depthMacro", "4"} }};

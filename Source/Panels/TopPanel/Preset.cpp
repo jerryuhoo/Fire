@@ -16,6 +16,7 @@
 #include "../../Utility/ModulationStateValidation.h"
 #include "../../Utility/EnvelopeStateValidation.h"
 #include "../../Utility/ChannelModeStateValidation.h"
+#include "../../Utility/MidiStateValidation.h"
 #include "../../Utility/LfoBankParameters.h"
 #include "../../Utility/DriveCompensationParameters.h"
 #include <algorithm>
@@ -211,7 +212,7 @@ bool isValidLfoState(const juce::XmlElement& lfoState, bool legacyBank) noexcept
 bool isValidRoutingState(const juce::XmlElement& routingState,
                          const juce::AudioProcessor& processor,
                          bool legacyBank, bool auxiliarySources = false, bool advancedMapping = false,
-                         bool expandedEnvelopes = false) noexcept
+                         bool expandedEnvelopes = false, bool midiSources = false) noexcept
 {
     if (! routingState.hasTagName("MODULATION_STATE")
         || ! fire::modulation_state::hasSchema(routingState, advancedMapping)
@@ -226,7 +227,8 @@ bool isValidRoutingState(const juce::XmlElement& routingState,
         if (! routing->hasTagName("ROUTING")
             || !(advancedMapping ? fire::modulation_state::readStrictIntegerAttribute(*routing, "source", source)
                                  : readStrictIntegerAttribute(*routing, "source", source))
-            || ! juce::isPositiveAndBelow(source, auxiliarySources ? (expandedEnvelopes ? fire::mod_sources::sourceCount
+            || ! juce::isPositiveAndBelow(source, auxiliarySources ? (midiSources ? fire::mod_sources::sourceCount
+                                                      : expandedEnvelopes ? fire::mod_sources::envelopeSourceCount
                                                         : fire::mod_sources::firstMacro + fire::mod_sources::macroCount)
                                                      : legacyBank ? fire::lfo_bank::defaultCount
                                                              : fire::lfo_bank::capacity)
@@ -330,6 +332,9 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
     bool legacyWithoutChannelMode = false;
     if (!fire::channel_mode_state::validate(snapshot, processor, formatVersion >= 5, false, legacyWithoutChannelMode))
         return false;
+    bool legacyWithoutMidi=false,legacyWithoutPlayback=false;
+    if (!fire::midi_state::validateFamily(snapshot,processor,formatVersion>=6,false,false,legacyWithoutMidi)
+        || !fire::midi_state::validateFamily(snapshot,processor,formatVersion>=6,false,true,legacyWithoutPlayback)) return false;
 
     bool legacyWithoutOtt = false;
     if (! validateParameterFamily(snapshot, processor, legacyWithoutOtt))
@@ -405,6 +410,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (legacyWithoutAuxiliary && fire::mod_sources::isLegacyParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutEnvelopes && fire::envelope_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutChannelMode && fire::channel_mode::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutMidi && fire::midi_mod::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutPlayback && fire::lfo_playback::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutReverbModels && fire::reverb_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutAnalogShapes && fire::analog_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutCoreModules && fire::core_modules::isParameterID(parameterWithID->paramID)) continue;
@@ -436,7 +443,7 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         {
             hasRoutingState = true;
             if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank, !legacyWithoutAuxiliary, formatVersion >= 3,
-                                      formatVersion >= 4 && !legacyWithoutEnvelopes))
+                                      formatVersion >= 4 && !legacyWithoutEnvelopes, !legacyWithoutMidi))
                 return false;
         }
         else
@@ -510,6 +517,9 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
     bool legacyWithoutChannelMode = false;
     if (!fire::channel_mode_state::validate(xml, processor, formatVersion >= 5, false, legacyWithoutChannelMode))
         return false;
+    bool legacyWithoutMidi=false,legacyWithoutPlayback=false;
+    if (!fire::midi_state::validateFamily(xml,processor,formatVersion>=6,false,false,legacyWithoutMidi)
+        || !fire::midi_state::validateFamily(xml,processor,formatVersion>=6,false,true,legacyWithoutPlayback)) return false;
 
     if (formatVersion < 2)
     {
@@ -521,7 +531,7 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
                 if (!fire::modulation_state::hasSchema(*child, false)) return false;
                 for (const auto* route : child->getChildIterator())
                     if (route->getIntAttribute("source", -1) >= fire::mod_sources::firstMacro + fire::mod_sources::macroCount
-                        || fire::envelope_params::isParameterID(route->getStringAttribute("target"))
+                        || fire::mod_sources::isParameterID(route->getStringAttribute("target"))
                         || fire::channel_mode::isParameterID(route->getStringAttribute("target"))) return false;
             }
         return true;
@@ -557,6 +567,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         if (legacyWithoutAuxiliary && fire::mod_sources::isLegacyParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutEnvelopes && fire::envelope_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutChannelMode && fire::channel_mode::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutMidi && fire::midi_mod::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutPlayback && fire::lfo_playback::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutReverbModels && fire::reverb_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutAnalogShapes && fire::analog_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutCoreModules && fire::core_modules::isParameterID(parameterWithID->paramID)) continue;
@@ -588,7 +600,7 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         {
             hasRoutingState = true;
             if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank, !legacyWithoutAuxiliary, formatVersion >= 3,
-                                      formatVersion >= 4 && !legacyWithoutEnvelopes))
+                                      formatVersion >= 4 && !legacyWithoutEnvelopes, !legacyWithoutMidi))
                 return false;
         }
         else
@@ -621,6 +633,8 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute("modulationSourcesSchemaVersion", fire::mod_sources::schemaVersion);
     xml.setAttribute(fire::envelope_state::marker, fire::envelope_params::schemaVersion);
     xml.setAttribute(fire::channel_mode_state::marker, fire::channel_mode::schemaVersion);
+    xml.setAttribute(fire::midi_state::ccMarker,fire::midi_mod::schemaVersion);
+    xml.setAttribute(fire::midi_state::playbackMarker,fire::lfo_playback::schemaVersion);
     xml.setAttribute("moduleOrderSchemaVersion", 1);
     xml.setAttribute("eqSchemaVersion", 1);
     xml.setAttribute("coreModulesSchemaVersion", fire::core_modules::schemaVersion);
@@ -883,7 +897,9 @@ namespace state
                 const bool auxiliarySources = xml.hasAttribute("modulationSourcesSchemaVersion") || xml.hasAttribute("macro1");
                 const bool expandedEnvelopes = xml.getIntAttribute("presetFormatVersion", 0) >= 4
                     && xml.hasAttribute(fire::envelope_state::marker);
-                const int sourceLimit = auxiliarySources ? (expandedEnvelopes ? fire::mod_sources::sourceCount
+                const bool midiSources=xml.hasAttribute(fire::midi_state::ccMarker);
+                const int sourceLimit = auxiliarySources ? (midiSources ? fire::mod_sources::sourceCount
+                    : expandedEnvelopes ? fire::mod_sources::envelopeSourceCount
                     : fire::mod_sources::firstMacro + fire::mod_sources::macroCount)
                     : extendedBank ? fire::lfo_bank::capacity : fire::lfo_bank::defaultCount;
                 routing.sourceLfoIndex = juce::jlimit(0, sourceLimit - 1, routing.sourceLfoIndex);

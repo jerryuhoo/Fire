@@ -133,6 +133,8 @@ inline juce::Colour modulationSourceColour(int index) noexcept
     }
     if (fire::mod_sources::isMacro(index))
         return lfoBankColours[static_cast<size_t>(index - fire::mod_sources::firstMacro + 4)];
+    if (fire::mod_sources::isMidiCC(index))
+        return lfoBankColours[static_cast<size_t>(index - fire::mod_sources::firstMidiCC + 8)];
     return lfoBankColour(index);
 }
 inline juce::Colour modulationSourceColourForSource(int source) noexcept

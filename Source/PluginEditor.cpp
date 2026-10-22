@@ -368,6 +368,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
         {
             ModulatableSlider::LfoSourceMenuState state;
             state.presentMask = 0;
+            state.macroNames = processor.getMacroDisplayNames();
             state.revision = processor.getLfoManager().getModulationRoutingStateSnapshot().revision;
             for (int index = 0; index < fire::lfo_bank::capacity; ++index)
                 if (processor.isLfoPresent(index))
@@ -377,7 +378,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
         slider->onLfoAssignmentRequested = [this](int lfoIndex,
                                                    const juce::String& targetParameterID)
         {
-            if (! processor.isLfoPresent(lfoIndex)
+            if (! processor.isModulationSourcePresent(lfoIndex)
                 || targetParameterID.isEmpty())
                 return;
 
@@ -392,9 +393,12 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                 processor.assignLfoToTarget(lfoIndex, targetParameterID);
             if (safeThis != nullptr)
             {
-                showLfoAssignmentResult(safeThis->lfoPanel,
-                                        lfoIndex,
-                                        result);
+                if (fire::lfo_bank::validIndex(lfoIndex))
+                    showLfoAssignmentResult(safeThis->lfoPanel, lfoIndex, result);
+                else if (result == LfoManager::AssignmentResult::capacityReached)
+                    safeThis->lfoPanel.showAssignCapacityReached();
+                else
+                    safeThis->lfoPanel.clearAssignFeedback();
                 if (result == LfoManager::AssignmentResult::changed)
                 {
                     safeThis->modulationSnapshotFramesRemaining = 0;

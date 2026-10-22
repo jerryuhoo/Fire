@@ -505,6 +505,13 @@ public:
     std::uint64_t beginEnvelopeAudition(int envelopeIndex) noexcept;
     void endEnvelopeAudition(std::uint64_t token) noexcept;
     int getEnvelopeAuditionIndex() const noexcept;
+    std::uint32_t getLfoSlotGeneration(int index) const noexcept;
+    bool triggerLfo(int index, std::uint32_t expectedGeneration) noexcept;
+    std::uint64_t beginMidiLearn(int slot);
+    void endMidiLearn(std::uint64_t token) noexcept;
+    bool isMidiLearnActive(std::uint64_t token) const noexcept;
+    bool applyMidiLearn(std::uint64_t token);
+    float getMidiCCValue(int slot) const noexcept;
 
     using ModulationInfo = fire::ui::ModulationSummary;
 
@@ -962,6 +969,7 @@ private:
     void synchroniseInsertPreparation() noexcept;
     std::array<std::array<CachedParameter, fire::module_order::capacity>, fire::effects::scopeCount> moduleOrderParameters;
     std::array<CachedParameter, fire::effects::scopeCount> channelModeParameters {};
+    std::atomic<std::uint64_t> midiLearnStartRevision { 0 };
     std::array<std::array<CachedParameter, 5>, fire::effects::scopeCount> modulePresenceParameters;
     std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> shapeModelParameters;
     std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> analogDriveParameters;

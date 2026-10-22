@@ -70,6 +70,10 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_CONFIGURATION_TYPES)
 endif ()
 option(FIRE_INSTALL_PLUGINS "Copy compiled plug-ins to the user's plug-in folders" ${FIRE_INSTALL_PLUGINS_DEFAULT})
 juce_add_plugin("${PROJECT_NAME}"
+    NEEDS_MIDI_INPUT TRUE
+    # Keep the published AU component identity while enabling MIDI for hosts
+    # which deliver it to audio effects (VST3/CLAP always expose the input).
+    AU_MAIN_TYPE kAudioUnitType_Effect
     # Icons for the standalone app
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/packaging/icon.png"
 

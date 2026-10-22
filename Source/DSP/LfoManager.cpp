@@ -36,6 +36,9 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
     // Stable slots retain their shape and timing identity across deletions.
     lfoData.resize(fire::lfo_bank::capacity);
     for (auto& generation : slotGenerations) generation.store(0u, std::memory_order_relaxed);
+    // Initialise identifier tables off the audio thread.
+    juce::ignoreUnused(fire::midi_mod::parameterIDs(), fire::lfo_playback::parameterIDs(),
+                      fire::channel_mode::parameterIDs());
     for (auto& phase : visualPhases) phase.store(-1.0f, std::memory_order_relaxed);
     // Define the string representations for synced LFO rates
     lfoRateSyncDivisions = {
@@ -48,6 +51,15 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
         for (int field = 0; field < fire::envelope_params::fieldCount; ++field)
             envelopeParameters[static_cast<size_t>(envelope)][static_cast<size_t>(field)] =
                 treeState.getRawParameterValue(fire::envelope_params::parameterID(envelope, field));
+    for (int slot = 0; slot < fire::midi_mod::count; ++slot)
+        for (int field = 0; field < fire::midi_mod::fieldCount; ++field)
+        {
+            auto& id = midiParameterIDs[static_cast<size_t>(slot)][static_cast<size_t>(field)];
+            id = fire::midi_mod::parameterID(slot, field);
+            midiParameters[static_cast<size_t>(slot)][static_cast<size_t>(field)] =
+                treeState.getRawParameterValue(id);
+            treeState.addParameterListener(id, this);
+        }
     envelopeBandCountParameter = treeState.getRawParameterValue(NUM_BANDS_ID);
     for (size_t index = 0; index < envelopeCrossoverParameters.size(); ++index)
         envelopeCrossoverParameters[index] = treeState.getRawParameterValue(juce::String(FREQ_ID) + juce::String(index + 1));
@@ -69,6 +81,10 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
             treeState.getRawParameterValue(fire::lfo_bank::presentParameterID(i))
         };
 
+        for (int field = 0; field < fire::lfo_playback::fieldCount; ++field)
+            lfoParameters[lfoIndex].playback[static_cast<size_t>(field)] =
+                treeState.getRawParameterValue(fire::lfo_playback::parameterID(i, field));
+
         if (const auto* smoothness = lfoParameters[lfoIndex].smoothness)
         {
             const float value = smoothness->load(std::memory_order_relaxed);
@@ -81,6 +97,25 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
         lfoEngines[lfoIndex].stageShape(lfoData[lfoIndex]);
         lfoEngines[lfoIndex].publishStagedShape();
     }
+}
+
+LfoManager::~LfoManager()
+{
+    for (const auto& slot : midiParameterIDs)
+        for (const auto& id : slot) treeState.removeParameterListener(id, this);
+}
+
+void LfoManager::parameterChanged(const juce::String& id, float)
+{
+    // Configuration can change away and back between two audio callbacks.
+    // Track those edits at their source, rather than comparing only snapshots.
+    for (size_t slot = 0; slot < midiParameterIDs.size(); ++slot)
+        for (const auto& parameter : midiParameterIDs[slot])
+            if (parameter == id)
+            {
+                midiConfigurationGenerations[slot].fetch_add(1u, std::memory_order_acq_rel);
+                return;
+            }
 }
 
 void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
@@ -99,6 +134,18 @@ void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
     aggregateTransitionSamples = juce::jmax(1, juce::roundToInt(preparedSampleRate * .020));
     aggregateTransitions = {};
     auxiliary.prepare(preparedSampleRate);
+    for (auto& value : midiValues) { value.reset(preparedSampleRate, .005); value.setCurrentAndTargetValue(0); }
+    activeMidiConfig = {};
+    appliedMidiGeneration = midiStateGeneration.load(std::memory_order_acquire);
+    for (auto& initial : midiInitialValues) initial.store(0, std::memory_order_release);
+    midiLearnOwner.store(0, std::memory_order_release);
+    midiLearnRequest.store(0, std::memory_order_release);
+    midiLearnResult.store(0, std::memory_order_release);
+    for (auto& clock : performanceClocks) clock.reset();
+    advancedPlaybackActive.fill(false);
+    manualCounts.fill(0);
+    for (size_t i = 0; i < manualRequests.size(); ++i)
+        consumedManualRequests[i] = manualRequests[i].load(std::memory_order_acquire);
     envelopeDetectors.prepare(preparedSampleRate);
     for (auto& level : auxiliaryLevels) level.store(0, std::memory_order_relaxed);
     publishVisualState(nullptr);
@@ -107,6 +154,15 @@ void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
 void LfoManager::reset()
 {
     auxiliary.reset();
+    for (auto& value : midiValues) value.setCurrentAndTargetValue(0);
+    activeMidiConfig = {};
+    appliedMidiGeneration = midiStateGeneration.load(std::memory_order_acquire);
+    // A deferred DSP reset can run on the first callback after the user arms
+    // Learn or presses Trigger. These message-thread requests belong to the
+    // current configuration, so preserve them until that callback consumes
+    // them. prepare() and complete state replacement invalidate ownership.
+    for (auto& clock : performanceClocks) clock.reset();
+    advancedPlaybackActive.fill(false); manualCounts.fill(0);
     envelopeDetectors.reset();
     aggregateTransitions = {};
     for (auto& level : auxiliaryLevels) level.store(0, std::memory_order_relaxed);
@@ -203,6 +259,7 @@ void LfoManager::resetLfoSlot(int index)
     lfoEngines[slot].stageShape(lfoData[slot]);
     ++lfoDataRevisions[slot];
     slotGenerations[slot].fetch_add(1u, std::memory_order_relaxed);
+    performanceGenerations[slot].fetch_add(1u, std::memory_order_release);
     // Slot deletion/reuse invalidates popups even when no routes existed.
     advanceModulationRoutingRevisionLocked();
 }
@@ -240,8 +297,20 @@ LfoManager::captureAudioThreadParameterSnapshot() const noexcept
         destination.present = loadParameter(source.present,
             fire::lfo_bank::defaultPresent(static_cast<int>(index)) ? 1.0f : 0.0f) > 0.5f;
         destination.generation = slotGenerations[index].load(std::memory_order_relaxed);
+        destination.performanceGeneration = performanceGenerations[index].load(std::memory_order_acquire);
+        const auto loadPlayback = [&](int field) { return juce::roundToInt(juce::jlimit(
+            static_cast<float>(fire::lfo_playback::minimums[static_cast<size_t>(field)]),
+            static_cast<float>(fire::lfo_playback::maximums[static_cast<size_t>(field)]),
+            loadParameter(source.playback[static_cast<size_t>(field)], static_cast<float>(fire::lfo_playback::defaults[static_cast<size_t>(field)])))); };
+        destination.playback = {loadPlayback(0), loadPlayback(1), loadPlayback(2), loadPlayback(3), loadPlayback(4)};
     }
 
+    for (size_t index = 0; index < snapshot.midiCC.size(); ++index)
+    {
+        snapshot.midiCC[index].number = juce::roundToInt(juce::jlimit(-1.0f, 127.0f, loadParameter(midiParameters[index][0], -1)));
+        snapshot.midiCC[index].channel = juce::roundToInt(juce::jlimit(0.0f, 16.0f, loadParameter(midiParameters[index][1], 0)));
+    }
+    snapshot.midiGeneration = midiStateGeneration.load(std::memory_order_acquire);
     for (size_t index = 0; index < auxiliaryParameters.size(); ++index)
         snapshot.auxiliary[index] = loadParameter(auxiliaryParameters[index], fire::mod_sources::defaults[index]);
     for (size_t index = 0; index < snapshot.envelopes.size(); ++index)
@@ -329,6 +398,21 @@ void LfoManager::renderBlock(
         return;
     }
 
+    if (playheadSampleOffset == 0)
+        for (size_t index = 0; index < manualRequests.size(); ++index)
+        {
+            const auto request = manualRequests[index].load(std::memory_order_acquire);
+            const auto generation = static_cast<std::uint32_t>(request >> 32);
+            const auto prior = consumedManualRequests[index];
+            const bool matches = generation == parameterSnapshot.lfos[index].performanceGeneration
+                && parameterSnapshot.lfos[index].present;
+            manualCounts[index] = matches
+                ? static_cast<std::uint32_t>(request) - (static_cast<std::uint32_t>(prior >> 32) == generation ? static_cast<std::uint32_t>(prior) : 0u) : 0;
+            // A request may target a newly published slot while this callback
+            // still renders the last coherent snapshot. Keep it pending until
+            // that matching generation becomes audible.
+            if (matches) consumedManualRequests[index] = request;
+        }
     auxiliary.setParameters(parameterSnapshot.auxiliary);
     auto envelopeConfiguration = parameterSnapshot.envelopes;
     // Preserve the public pre-bank snapshot contract and ENV 1 arithmetic.
@@ -354,7 +438,9 @@ void LfoManager::renderBlock(
                           playHead,
                           samplesInRange,
                           parameterSnapshot,
-                          playheadSampleOffset + sampleOffset);
+                          playheadSampleOffset + sampleOffset,
+                          midiBaseOffset + sampleOffset);
+        renderMidiCC(samplesInRange, midiBaseOffset + sampleOffset, parameterSnapshot.midiCC, parameterSnapshot.midiGeneration);
 
         for (int sample = 0; sample < samplesInRange; ++sample)
         {
@@ -720,7 +806,7 @@ bool LfoManager::captureRuntimeRoutings(
 
     for (const auto& routing : modulationRoutings)
     {
-        if (routing.targetParameterID.isEmpty() || fire::channel_mode::isParameterID(routing.targetParameterID)
+        if (routing.targetParameterID.isEmpty() || (fire::channel_mode::isParameterID(routing.targetParameterID) || fire::lfo_playback::isParameterID(routing.targetParameterID) || fire::midi_mod::isParameterID(routing.targetParameterID))
             || ! isModulationSourcePresent(routing.sourceLfoIndex))
             continue;
 
@@ -856,7 +942,8 @@ void LfoManager::generateLfoOutput(
     juce::AudioPlayHead* playHead,
     int numSamples,
     const AudioThreadParameterSnapshot& parameterSnapshot,
-    juce::int64 playheadSampleOffset)
+    juce::int64 playheadSampleOffset,
+    int midiRangeOffset)
 {
     const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
                                       ? sampleRate
@@ -927,6 +1014,8 @@ void LfoManager::generateLfoOutput(
                 lfoEngines[lfoIndex].setPhaseWithCorrection(0.0f);
             else
                 lfoEngines[lfoIndex].reset();
+            performanceClocks[lfoIndex].reset();
+            advancedPlaybackActive[lfoIndex] = false;
             appliedPhaseOffsets[lfoIndex] = 0.0f;
             phaseOffsetInitialised[lfoIndex] = false;
             timingSignatureInitialised[lfoIndex] = false;
@@ -937,6 +1026,11 @@ void LfoManager::generateLfoOutput(
                 lfoOutputBuffer.clear(i, 0, lfoOutputBuffer.getNumSamples());
         }
         if (! parameters.present) continue;
+        if (parameters.performanceGeneration != appliedPerformanceGenerations[lfoIndex])
+        {
+            performanceClocks[lfoIndex].reset();
+            appliedPerformanceGenerations[lfoIndex] = parameters.performanceGeneration;
+        }
         const float syncMode = std::isfinite(parameters.syncMode)
                                    ? parameters.syncMode
                                    : 1.0f;
@@ -981,6 +1075,70 @@ void LfoManager::generateLfoOutput(
         }
 
         auto& engine = lfoEngines[lfoIndex];
+        const auto& performance = parameters.playback;
+        const bool advanced = performance.playMode != fire::lfo_playback::loop
+            || performance.waveMode != fire::lfo_playback::shape;
+        if (advanced)
+        {
+            namespace fp = fire::lfo_performance;
+            auto& clock = performanceClocks[lfoIndex];
+            if (!advancedPlaybackActive[lfoIndex]) clock.reset();
+            advancedPlaybackActive[lfoIndex] = true;
+            clock.configure({static_cast<fp::Playback>(performance.playMode), static_cast<fp::Wave>(performance.waveMode),
+                static_cast<std::uint16_t>(performance.seed), phaseOffset});
+            clock.trigger(manualCounts[lfoIndex]);
+            manualCounts[lfoIndex] = 0;
+            std::optional<double> absoluteCycles;
+            if (performance.playMode == fire::lfo_playback::loop && transportIsPlaying && positionInfo)
+            {
+                if (isInSyncMode && syncCycleLengthInBeats > 0)
+                {
+                    if (const auto ppq = positionInfo->getPpqPosition(); ppq && std::isfinite(*ppq))
+                        absoluteCycles = (*ppq + timelineOffsetSeconds * currentBpm / 60.0) / syncCycleLengthInBeats;
+                }
+                else if (!isInSyncMode)
+                {
+                    if (const auto seconds = positionInfo->getTimeInSeconds(); seconds && std::isfinite(*seconds))
+                        absoluteCycles = (*seconds + timelineOffsetSeconds) * freqInHz;
+                }
+            }
+            const double increment = isInSyncMode
+                ? (syncCycleLengthInBeats > 0 ? currentBpm / (60.0 * safeSampleRate * syncCycleLengthInBeats) : 0)
+                : static_cast<double>(freqInHz) / safeSampleRate;
+            const auto& events = midiInput != nullptr ? *midiInput : emptyMidiInput;
+            auto event = events.findNextSamplePosition(midiRangeOffset);
+            const auto end = events.cend();
+            auto* writer = lfoOutputBuffer.getWritePointer(i);
+            for (int sample = 0; sample < numSamples; ++sample)
+            {
+                const auto absoluteSample = static_cast<juce::int64>(midiRangeOffset) + sample;
+                while (event != end && (*event).samplePosition <= absoluteSample)
+                {
+                    const auto metadata = *event; ++event;
+                    if (performance.playMode == fire::lfo_playback::loop
+                        || metadata.samplePosition < midiRangeOffset || metadata.numBytes != 3) continue;
+                    const auto* bytes = metadata.data;
+                    if ((bytes[0] & 0xf0u) == 0x90u && bytes[1] <= 127 && bytes[2] > 0 && bytes[2] <= 127
+                        && (performance.triggerNote < 0 || performance.triggerNote == bytes[1])
+                        && (performance.triggerChannel == 0 || performance.triggerChannel == (bytes[0] & 15) + 1))
+                        clock.trigger();
+                }
+                const auto frame = clock.next(increment, absoluteCycles
+                    ? std::optional<double>{*absoluteCycles + static_cast<double>(sample) * increment} : std::nullopt);
+                if (performance.waveMode == fire::lfo_playback::shape) writer[sample] = engine.processAtPhase(frame.shapePhase);
+                else { writer[sample] = frame.randomValue; engine.publishExternalSample(frame.shapePhase, frame.randomValue); }
+            }
+            continue;
+        }
+        manualCounts[lfoIndex] = 0;
+        if (advancedPlaybackActive[lfoIndex])
+        {
+            advancedPlaybackActive[lfoIndex] = false;
+            timingSignatureInitialised[lfoIndex] = false;
+            phaseOffsetInitialised[lfoIndex] = false;
+            usedAbsoluteTimelineLastBlock[lfoIndex] = false;
+            engine.setPhase(0);
+        }
         const bool phaseChanged = phaseOffsetInitialised[lfoIndex]
                                   && std::abs(phaseOffset
                                               - appliedPhaseOffsets[lfoIndex])
@@ -1085,6 +1243,141 @@ void LfoManager::generateLfoOutput(
         for (int sample = 0; sample < numSamples; ++sample)
             writer[sample] = engine.process();
     }
+}
+
+std::uint32_t LfoManager::getLfoSlotGeneration(int index) const noexcept
+{
+    return fire::lfo_bank::validIndex(index) ? performanceGenerations[static_cast<size_t>(index)].load(std::memory_order_acquire) : 0;
+}
+
+bool LfoManager::requestLfoTrigger(int index, std::uint32_t expectedGeneration) noexcept
+{
+    if (!isLfoPresent(index) || getLfoSlotGeneration(index) != expectedGeneration) return false;
+    const auto slot = static_cast<size_t>(index);
+    const auto* mode = lfoParameters[slot].playback[0];
+    if (mode == nullptr || mode->load(std::memory_order_relaxed) < .5f) return false;
+    auto previous = manualRequests[slot].load(std::memory_order_acquire);
+    for (;;)
+    {
+        const auto count = static_cast<std::uint32_t>(previous >> 32) == expectedGeneration
+            ? static_cast<std::uint32_t>(previous) + 1u : 1u;
+        const auto request = (static_cast<std::uint64_t>(expectedGeneration) << 32) | count;
+        if (manualRequests[slot].compare_exchange_weak(previous, request, std::memory_order_acq_rel)) return true;
+    }
+}
+
+std::uint64_t LfoManager::beginMidiLearn(int slot) noexcept
+{
+    if (!fire::midi_mod::validSlot(slot)) return 0;
+    constexpr auto mask = (std::uint64_t{1} << 42) - 1;
+    auto token = (midiLearnCounter.fetch_add(1, std::memory_order_relaxed) + 1u) & mask;
+    if (token == 0) token = (midiLearnCounter.fetch_add(1, std::memory_order_relaxed) + 1u) & mask;
+    midiLearnOwner.store(token, std::memory_order_release);
+    midiLearnResult.store(0, std::memory_order_release);
+    midiLearnRequest.store((token << 3) | static_cast<std::uint64_t>(slot + 1), std::memory_order_release);
+    return token;
+}
+
+void LfoManager::cancelMidiLearn(std::uint64_t token) noexcept
+{
+    if (token == 0) return;
+    auto owner = token;
+    midiLearnOwner.compare_exchange_strong(owner, 0, std::memory_order_acq_rel);
+    auto request = midiLearnRequest.load(std::memory_order_acquire);
+    while ((request >> 3) == token)
+        if (midiLearnRequest.compare_exchange_weak(request, 0, std::memory_order_acq_rel)) break;
+    auto result = midiLearnResult.load(std::memory_order_acquire);
+    while ((result >> 22) == token)
+        if (midiLearnResult.compare_exchange_weak(result, 0, std::memory_order_acq_rel)) break;
+}
+
+std::optional<LfoManager::MidiLearnResult> LfoManager::pollMidiLearn(std::uint64_t token) noexcept
+{
+    if (!isMidiLearnActive(token)) return {};
+    auto result = midiLearnResult.load(std::memory_order_acquire);
+    if ((result >> 22) != token || !midiLearnResult.compare_exchange_strong(result, 0, std::memory_order_acq_rel)) return {};
+    return MidiLearnResult {static_cast<int>(result & 7u) - 1, static_cast<int>((result >> 3) & 127u),
+        static_cast<int>((result >> 10) & 31u), static_cast<float>((result >> 15) & 127u) / 127.0f};
+}
+
+float LfoManager::getMidiCCValue(int slot) const noexcept
+{
+    return fire::midi_mod::validSlot(slot)
+        ? auxiliaryLevels[static_cast<size_t>(fire::mod_sources::firstMidiCC + slot - fire::mod_sources::envelope)].load(std::memory_order_relaxed) : 0;
+}
+
+void LfoManager::stageMidiCCInitialValue(int slot, int number, int channel, float value) noexcept
+{
+    if (!fire::midi_mod::validSlot(slot) || number < 0 || number > 127 || channel < 0 || channel > 16) return;
+    const auto index = static_cast<size_t>(slot);
+    const auto revision = midiConfigurationGenerations[index].load(std::memory_order_acquire);
+    const auto safe = std::isfinite(value) ? juce::jlimit(0.0f, 1.0f, value) : 0;
+    // Learned controller values have precisely seven bits. Use the freed
+    // payload space to bind a full configuration revision into one atomic word.
+    auto packet = (static_cast<std::uint64_t>(revision) << 32) | (std::uint64_t{1} << 19)
+        | static_cast<std::uint64_t>(number) | (static_cast<std::uint64_t>(channel) << 7)
+        | (static_cast<std::uint64_t>(juce::roundToInt(safe * 127)) << 12);
+    midiInitialValues[index].store(packet, std::memory_order_release);
+    if (midiConfigurationGenerations[index].load(std::memory_order_acquire) != revision)
+        midiInitialValues[index].compare_exchange_strong(packet, 0, std::memory_order_acq_rel);
+}
+
+void LfoManager::renderMidiCC(int samples, int midiRangeOffset, const fire::midi_mod::Bank& configuration, std::uint32_t generation) noexcept
+{
+    if (generation != appliedMidiGeneration)
+    {
+        for (auto& value : midiValues) value.setCurrentAndTargetValue(0);
+        appliedMidiGeneration = generation;
+    }
+    for (size_t slot = 0; slot < midiValues.size(); ++slot)
+    {
+        const auto& config = configuration[slot];
+        auto& active = activeMidiConfig[slot];
+        if (config.number != active.number || config.channel != active.channel)
+        { midiValues[slot].setCurrentAndTargetValue(0); active = config; }
+        auto initial = midiInitialValues[slot].load(std::memory_order_acquire);
+        if (initial != 0 && static_cast<std::uint32_t>(initial >> 32)
+            != midiConfigurationGenerations[slot].load(std::memory_order_acquire))
+        {
+            midiInitialValues[slot].compare_exchange_strong(initial, 0, std::memory_order_acq_rel);
+            continue;
+        }
+        if (initial != 0 && static_cast<int>(initial & 127u) == config.number
+            && static_cast<int>((initial >> 7) & 31u) == config.channel
+            && midiInitialValues[slot].compare_exchange_strong(initial, 0, std::memory_order_acq_rel))
+            midiValues[slot].setTargetValue(static_cast<float>((initial >> 12) & 127u) / 127.0f);
+    }
+    const auto& events = midiInput != nullptr ? *midiInput : emptyMidiInput;
+    auto event = events.findNextSamplePosition(midiRangeOffset);
+    const auto end = events.cend();
+    for (int sample = 0; sample < samples; ++sample)
+    {
+        const auto absoluteSample = static_cast<juce::int64>(midiRangeOffset) + sample;
+        while (event != end && (*event).samplePosition <= absoluteSample)
+        {
+            const auto metadata = *event; ++event;
+            if (metadata.samplePosition < midiRangeOffset || metadata.numBytes != 3) continue;
+            const auto* bytes = metadata.data;
+            if ((bytes[0] & 0xf0u) != 0xb0u || bytes[1] > 127 || bytes[2] > 127) continue;
+            const int channel = (bytes[0] & 15) + 1, number = bytes[1];
+            const auto value = static_cast<float>(bytes[2]) / 127.0f;
+            auto learn = midiLearnRequest.load(std::memory_order_acquire);
+            if (learn != 0 && midiLearnRequest.compare_exchange_strong(learn, 0, std::memory_order_acq_rel))
+                midiLearnResult.store(((learn >> 3) << 22) | (learn & 7u)
+                    | (static_cast<std::uint64_t>(number) << 3) | (static_cast<std::uint64_t>(channel) << 10)
+                    | (static_cast<std::uint64_t>(bytes[2]) << 15), std::memory_order_release);
+            for (size_t slot = 0; slot < midiValues.size(); ++slot)
+                if (configuration[slot].number == number
+                    && (configuration[slot].channel == 0 || configuration[slot].channel == channel))
+                    midiValues[slot].setTargetValue(value);
+        }
+        for (size_t slot = 0; slot < midiValues.size(); ++slot)
+            lfoOutputBuffer.setSample(fire::mod_sources::firstMidiCC + static_cast<int>(slot), sample,
+                configuration[slot].number < 0 ? 0 : midiValues[slot].getNextValue());
+    }
+    for (size_t slot = 0; slot < midiValues.size(); ++slot)
+        auxiliaryLevels[static_cast<size_t>(fire::mod_sources::firstMidiCC - fire::mod_sources::envelope) + slot]
+            .store(configuration[slot].number < 0 ? 0 : midiValues[slot].getCurrentValue(), std::memory_order_relaxed);
 }
 
 float LfoManager::getSyncCycleLengthInQuarterNotes(int index,
@@ -1201,7 +1494,7 @@ LfoManager::updateModulationRoutingIfRevisionMatches(
     const ModulationRouting& replacementRouting)
 {
     auto safeReplacement = replacementRouting;
-    if (fire::channel_mode::isParameterID(safeReplacement.targetParameterID)) return {};
+    if ((fire::channel_mode::isParameterID(safeReplacement.targetParameterID) || fire::lfo_playback::isParameterID(safeReplacement.targetParameterID) || fire::midi_mod::isParameterID(safeReplacement.targetParameterID))) return {};
     safeReplacement.sanitise();
     if (safeReplacement.sourceLfoIndex != expectedRouting.sourceLfoIndex
         || safeReplacement.targetParameterID
@@ -1247,7 +1540,7 @@ LfoManager::assignModulationRoutingIfRevisionMatches(
 
     const int safeSourceIndex = juce::jlimit(0, fire::mod_sources::sourceCount - 1, sourceLfoIndex);
     if (fire::mod_sources::isParameterID(targetParameterID)
-        || fire::channel_mode::isParameterID(targetParameterID)) return {};
+        || (fire::channel_mode::isParameterID(targetParameterID) || fire::lfo_playback::isParameterID(targetParameterID) || fire::midi_mod::isParameterID(targetParameterID))) return {};
     const juce::ScopedLock lock(dataAccessLock);
     if (targetParameterID.isNotEmpty() && ! isModulationSourcePresent(safeSourceIndex)) return {};
     ModulationRoutingEditResult result;
@@ -1447,7 +1740,7 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
 {
     if (! fire::mod_sources::validSource(sourceLfoIndex) || targetParameterID.isEmpty()
         || fire::mod_sources::isParameterID(targetParameterID)
-        || fire::channel_mode::isParameterID(targetParameterID))
+        || (fire::channel_mode::isParameterID(targetParameterID) || fire::lfo_playback::isParameterID(targetParameterID) || fire::midi_mod::isParameterID(targetParameterID)))
     {
         jassertfalse;
         return AssignmentResult::invalidRequest;
@@ -1619,6 +1912,9 @@ bool LfoManager::replaceLfoDataAndRoutings(
 {
     if (newRoutings.size() > maximumModulationRoutings)
         return false;
+    for (const auto& routing : newRoutings)
+        if (fire::lfo_playback::isParameterID(routing.targetParameterID)
+            || fire::midi_mod::isParameterID(routing.targetParameterID)) return false;
 
     auto safeLfoData = newLfoData;
     for (size_t i = 0; i < safeLfoData.size(); ++i)
@@ -1649,9 +1945,15 @@ bool LfoManager::replaceLfoDataAndRoutings(
             // replacement so a delayed menu cannot write the previous state
             // back over it.
             ++lfoDataRevisions[i];
+            performanceGenerations[i].fetch_add(1u, std::memory_order_release);
         }
 
         modulationRoutings = std::move(newRoutings);
+        midiStateGeneration.fetch_add(1u, std::memory_order_release);
+        midiLearnOwner.store(0, std::memory_order_release);
+        midiLearnRequest.store(0, std::memory_order_release);
+        midiLearnResult.store(0, std::memory_order_release);
+        for (auto& initial : midiInitialValues) initial.store(0, std::memory_order_release);
         // A complete state replacement is a new routing identity even when
         // every serialised field is byte-for-byte identical.
         advanceModulationRoutingRevisionLocked();

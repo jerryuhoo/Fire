@@ -1,10 +1,12 @@
 #pragma once
 #include <Utility/ChannelModeParameters.h>
+#include "LegacyMidiFixture.h"
 
 namespace fire::test
 {
 inline void stripChannelModePresetFamily(juce::XmlElement& xml)
 {
+    stripMidiPresetFamily(xml);
     xml.removeAttribute("channelModeSchemaVersion");
     for (int scope = 0; scope < channel_mode::parameterCount; ++scope)
         xml.removeAttribute(channel_mode::parameterID(scope));
@@ -12,6 +14,7 @@ inline void stripChannelModePresetFamily(juce::XmlElement& xml)
 }
 inline void stripChannelModeHostFamily(juce::XmlElement& xml)
 {
+    stripMidiHostFamily(xml);
     xml.removeAttribute("channelModeSchemaVersion");
     if (xml.getIntAttribute("stateFormatVersion",0) >= 4) xml.setAttribute("stateFormatVersion",3);
     if (auto* parameters = xml.getChildByName("PARAMETERS"))

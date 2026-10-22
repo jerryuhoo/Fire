@@ -48,6 +48,9 @@ public:
 
     /** Processes one sample of the LFO. Returns a unipolar [0, 1] signal. */
     float process();
+    /** Advanced playback lookup; explicit triggers do not inherit seek correction. */
+    float processAtPhase(float lookupPhase) noexcept;
+    void publishExternalSample(float lookupPhase, float output) noexcept;
 
     // Directly sets the LFO's current phase.
     void setPhase(float newPhase);

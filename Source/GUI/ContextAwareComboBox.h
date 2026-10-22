@@ -44,6 +44,7 @@ private:
     friend struct ChordResonatorUiTestAccess;
     friend struct EnvelopeControlsTestAccess;
     friend struct ChainChannelModeUiTestAccess;
+    friend struct PerformanceControlsTestAccess;
 
     bool keyPressed(const juce::KeyPress& key) override;
     void mouseDown(const juce::MouseEvent& event) override;

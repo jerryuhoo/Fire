@@ -39,6 +39,14 @@ TEST_CASE("Factory library offers 236 complete scenes in eleven collections with
         const auto& preset = *presets.front();
         CHECK(state::canLoadStateFromXml(preset, processor));
         CHECK(preset.getIntAttribute("channelModeSchemaVersion") == fire::channel_mode::schemaVersion);
+        CHECK(preset.getIntAttribute("midiModulationSchemaVersion") == fire::midi_mod::schemaVersion);
+        CHECK(preset.getIntAttribute("lfoPlaybackSchemaVersion") == fire::lfo_playback::schemaVersion);
+        for(const auto* ids:{&fire::midi_mod::parameterIDs(),&fire::lfo_playback::parameterIDs()})
+            for(const auto& id:*ids)
+            {
+                REQUIRE(preset.hasAttribute(id));
+                CHECK(static_cast<float>(preset.getDoubleAttribute(id)) == processor.treeState.getParameter(id)->getDefaultValue());
+            }
         for (int scope = 0; scope < fire::channel_mode::parameterCount; ++scope)
         {
             const auto id = fire::channel_mode::parameterID(scope);

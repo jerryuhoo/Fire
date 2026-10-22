@@ -222,7 +222,16 @@ TEST_CASE("Matrix sources expose present slots and reject removed recreated menu
     REQUIRE(combo != nullptr);
     const int remainingLfos = fire::lfo_bank::capacity - 1;
     CHECK(combo->getNumItems() == remainingLfos + fire::mod_sources::macroCount
-                                   + fire::envelope_params::count);
+                                   + fire::envelope_params::count + fire::mod_sources::midiCCCount);
+    for (int cc = 0; cc < fire::mod_sources::midiCCCount; ++cc)
+    {
+        const int source = fire::mod_sources::firstMidiCC + cc;
+        CHECK(source == 24 + cc);
+        const int item = combo->indexOfItemId(source + 1);
+        REQUIRE(item >= 0);
+        CHECK(combo->getItemText(item) == "MIDI CC " + juce::String(cc + 1));
+        CHECK(fire::ui::modulationSourceColour(source) != fire::ui::colours::disabled);
+    }
     for (int envelope = 0; envelope < fire::envelope_params::count; ++envelope)
     {
         const int source = fire::mod_sources::envelopeSource(envelope);
@@ -280,7 +289,7 @@ TEST_CASE("Slider assignment menus preserve sparse source IDs and guard asynchro
     for (juce::PopupMenu::MenuItemIterator it(menu); it.next();)
         if (it.getItem().itemID > 0)
             ids.add(it.getItem().itemID);
-    REQUIRE(ids.size() == 2);
+    REQUIRE(ids.size() == 2 + fire::mod_sources::sourceCount - fire::lfo_bank::capacity);
     CHECK(ids[0] == 1);
     CHECK(ids[1] == 16);
     int assignments = 0;
@@ -365,4 +374,54 @@ TEST_CASE("Editor assigns high LFO sources and deletion cancels armed one shot c
     CHECK(routes[0].sourceLfoIndex == 15);
     panel.onCurrentLfoChanged(-1);
     CHECK_FALSE(LfoBankUiTestAccess::assigning(*editor));
+}
+
+TEST_CASE("Knob menus assign MIDI CC sources and show single and combined modulation badges", "[performance-ui][midi][modulatable-slider][ui]")
+{
+    FireAudioProcessor processor;
+    clearRoutesForUiFixture(processor);
+    processor.hasUpdateCheckBeenPerformed = true;
+    FireAudioProcessorEditor editor(processor); editor.stopTimer();
+    const auto& sliders = LfoBankUiTestAccess::sliders(editor);
+    REQUIRE_FALSE(sliders.empty());
+    auto& slider = *sliders.front();
+    const auto sources = slider.getLfoSourceMenuState();
+    const auto menu = LfoBankUiTestAccess::assignmentMenu(slider, sources);
+    for (int cc = 0; cc < fire::mod_sources::midiCCCount; ++cc)
+    {
+        const int source = fire::mod_sources::firstMidiCC + cc;
+        bool found = false;
+        for (juce::PopupMenu::MenuItemIterator item(menu); item.next();)
+            if (item.getItem().itemID == source + 1)
+            {
+                CHECK(item.getItem().text == "MIDI CC " + juce::String(cc + 1));
+                CHECK(item.getItem().isEnabled);
+                found = true;
+            }
+        CHECK(found);
+        CHECK(fire::mod_sources::badge(source) == "CC" + juce::String(cc + 1));
+    }
+    auto select = LfoBankUiTestAccess::assignmentHandler(slider);
+    select(fire::mod_sources::firstMidiCC + 1);
+    CHECK(slider.isModulated);
+    CHECK(slider.lfoSource == fire::mod_sources::firstMidiCC + 1);
+    CHECK(slider.modulationRouteCount == 1);
+    CHECK_FALSE(slider.usesModulationSummary);
+    auto routes = processor.getLfoManager().getModulationRoutingsCopy();
+    REQUIRE(routes.size() == 1);
+    CHECK(routes[0].sourceLfoIndex == fire::mod_sources::firstMidiCC);
+    select = LfoBankUiTestAccess::assignmentHandler(slider);
+    select(fire::mod_sources::firstMidiCC + 4);
+    CHECK(slider.modulationRouteCount == 2);
+    CHECK(slider.usesModulationSummary);
+    routes = processor.getLfoManager().getModulationRoutingsCopy();
+    REQUIRE(routes.size() == 2);
+    CHECK(routes[1].sourceLfoIndex == fire::mod_sources::firstMidiCC + 3);
+    CHECK(slider.getModulationHandleVisualBounds().getWidth() > 0);
+    for (auto skin : fire::ui::skins)
+    {
+        fire::ui::setSkin(editor, skin); editor.sendLookAndFeelChange();
+        const auto image = slider.createComponentSnapshot(slider.getLocalBounds());
+        CHECK(image.isValid());
+    }
 }

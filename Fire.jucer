@@ -3,7 +3,7 @@
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Blue Wings Music"
               aaxIdentifier="com.bluewingsmusic.Fire" bundleIdentifier="com.bluewingsmusic.Fire"
               version="2.1.0" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
-              jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
+              jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion" pluginCharacteristicsValue="pluginWantsMidiIn"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="23" defines="JUCE_MODAL_LOOPS_PERMITTED=1"
               pluginManufacturerCode="Wing" pluginCode="Fire" useAppConfig="0"
               companyWebsite="www.bluewingsmusic.com" companyName="Blue Wings Music"
@@ -123,6 +123,10 @@
         <FILE id="modSourceParams01" name="ModulationSources.h" compile="0" resource="0" file="Source/Utility/ModulationSources.h"/>
         <FILE id="modStateValidation01" name="ModulationStateValidation.h" compile="0" resource="0" file="Source/Utility/ModulationStateValidation.h"/>
         <FILE id="modSummary01" name="ModulationSummary.h" compile="0" resource="0" file="Source/Utility/ModulationSummary.h"/>
+        <FILE id="lfoPerformanceClock21" name="LfoPerformanceClock.h" compile="0" resource="0" file="Source/DSP/LfoPerformanceClock.h"/>
+        <FILE id="performanceUiHelpers21" name="PerformanceControlHelpers.h" compile="0" resource="0" file="Source/GUI/PerformanceControlHelpers.h"/>
+        <FILE id="lfoPlaybackUi21" name="LfoPlaybackControls.h" compile="0" resource="0" file="Source/GUI/LfoPlaybackControls.h"/>
+        <FILE id="midiUi21" name="MidiControls.h" compile="0" resource="0" file="Source/GUI/MidiControls.h"/>
         <FILE id="channelModeDSP21" name="ChannelModeProcessor.h" compile="0" resource="0" file="Source/DSP/ChannelModeProcessor.h"/>
         <FILE id="chainSnapshot21" name="ChainSnapshot.h" compile="0" resource="0" file="Source/Utility/ChainSnapshot.h"/>
         <FILE id="chainCodecHeader21" name="ChainSnapshotCodec.h" compile="0" resource="0" file="Source/Utility/ChainSnapshotCodec.h"/>
@@ -133,6 +137,10 @@
         <FILE id="envParams21" name="EnvelopeParameters.h" compile="0" resource="0" file="Source/Utility/EnvelopeParameters.h"/>
         <FILE id="channelModeParams21" name="ChannelModeParameters.h" compile="0" resource="0" file="Source/Utility/ChannelModeParameters.h"/>
         <FILE id="channelModeState21" name="ChannelModeStateValidation.h" compile="0" resource="0" file="Source/Utility/ChannelModeStateValidation.h"/>
+        <FILE id="midiModParams21" name="MidiModulationParameters.h" compile="0" resource="0" file="Source/Utility/MidiModulationParameters.h"/>
+        <FILE id="lfoPlaybackParams21" name="LfoPlaybackParameters.h" compile="0" resource="0" file="Source/Utility/LfoPlaybackParameters.h"/>
+        <FILE id="midiState21" name="MidiStateValidation.h" compile="0" resource="0" file="Source/Utility/MidiStateValidation.h"/>
+        <FILE id="midiActions21" name="MidiControlActions.cpp" compile="1" resource="0" file="Source/Utility/MidiControlActions.cpp"/>
         <FILE id="envState21" name="EnvelopeStateValidation.h" compile="0" resource="0" file="Source/Utility/EnvelopeStateValidation.h"/>
         <FILE id="envDsp21" name="EnvelopeDetectors.h" compile="0" resource="0" file="Source/DSP/EnvelopeDetectors.h"/>
       </GROUP>

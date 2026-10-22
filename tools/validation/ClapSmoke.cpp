@@ -177,6 +177,87 @@ const clap_input_events_t emptyInput { nullptr,
 const clap_output_events_t discardOutput { nullptr,
     [](const clap_output_events_t*, const clap_event_header_t*) { return true; } };
 
+// This fixture edits only the XML returned through the public CLAP state ABI.
+// No Fire or JUCE implementation is linked into this host.
+void checkMidi(const clap_plugin_factory_t* factory, const char* id)
+{
+    Plugin reference, driven;
+    reference.create(factory, id); driven.create(factory, id);
+    const auto* notes = static_cast<const clap_plugin_note_ports_t*>(driven.api->get_extension(driven.api, CLAP_EXT_NOTE_PORTS));
+    clap_note_port_info_t notePort {};
+    require(notes && notes->count(driven.api, true) > 0 && notes->get(driven.api,0,true,&notePort)
+        && (notePort.supported_dialects & CLAP_NOTE_DIALECT_MIDI) != 0, "CLAP MIDI input port missing");
+    const auto* audioPorts = static_cast<const clap_plugin_audio_ports_t*>(reference.api->get_extension(reference.api, CLAP_EXT_AUDIO_PORTS));
+    require(audioPorts != nullptr, "CLAP audio ports missing");
+    const auto inputPortCount = audioPorts->count(reference.api, true);
+    require(inputPortCount >= 1 && inputPortCount <= 2, "invalid MIDI fixture audio ports");
+    const auto* state = static_cast<const clap_plugin_state_t*>(reference.api->get_extension(reference.api, CLAP_EXT_STATE));
+    MemoryStream fixture;
+    require(state && state->save(reference.api,&fixture.output) && fixture.bytes.size()>9, "MIDI fixture state unavailable");
+    std::string xml(reinterpret_cast<const char*>(fixture.bytes.data()+8),fixture.bytes.size()-9);
+    require(xml.find("<state") != std::string::npos, "unexpected state encoding for MIDI fixture");
+    const auto set = [&](const std::string& parameter, const std::string& value)
+    {
+        const auto at=xml.find("id=\""+parameter+"\"");
+        require(at!=std::string::npos,"MIDI fixture parameter missing");
+        const auto begin=xml.rfind("<PARAM ",at), end=xml.find('>',at);
+        require(begin!=std::string::npos && end!=std::string::npos,"invalid MIDI fixture parameter");
+        const auto position=xml.find("value=\"",begin);
+        require(position<end,"MIDI fixture parameter value missing");
+        const auto finish=xml.find('"',position+7);
+        require(finish<end,"invalid MIDI fixture value");
+        xml.replace(position+7,finish-position-7,value);
+    };
+    set("midiCC1Number","1"); set("midiCC1Channel","0"); set("output","-12");
+    const auto begin=xml.find("<MODULATION_STATE"), openingEnd=xml.find('>',begin);
+    require(begin!=std::string::npos && openingEnd!=std::string::npos,"MIDI routing section missing");
+    const auto finish=xml[openingEnd-1]=='/' ? openingEnd+1 : xml.find("</MODULATION_STATE>",openingEnd)+19;
+    require(finish>begin && finish<=xml.size(),"invalid MIDI routing section");
+    xml.replace(begin,finish-begin,
+        R"(<MODULATION_STATE schemaVersion="2"><ROUTING source="24" target="output" depth="0.1" bipolar="0" bypassed="0" customRange="0" rangeStart="0" rangeEnd="1" curve="0" depthMacro="-1"/></MODULATION_STATE>)");
+    fixture.bytes.resize(xml.size()+9);
+    const auto length=static_cast<uint32_t>(xml.size());
+    for(int i=0;i<4;++i) fixture.bytes[static_cast<size_t>(4+i)]=static_cast<uint8_t>(length>>(8*i));
+    std::memcpy(fixture.bytes.data()+8,xml.data(),xml.size()); fixture.bytes.back()=0;
+    for(auto* plugin : {&reference,&driven})
+    {
+        const auto* loader=static_cast<const clap_plugin_state_t*>(plugin->api->get_extension(plugin->api,CLAP_EXT_STATE));
+        fixture.offset=0; require(loader && loader->load(plugin->api,&fixture.input),"MIDI fixture load failed");
+        plugin->host.dispatch(plugin->api);
+        require(plugin->api->activate(plugin->api,48000,256,256),"MIDI activation failed"); plugin->active=true;
+        plugin->host.audioThread=true; require(plugin->api->start_processing(plugin->api),"MIDI processing failed"); plugin->processing=true;
+    }
+    clap_event_midi_t cc {};
+    cc.header={sizeof(cc),17,CLAP_CORE_EVENT_SPACE_ID,CLAP_EVENT_MIDI,0};
+    cc.port_index=0; cc.data[0]=0xb0; cc.data[1]=1; cc.data[2]=127;
+    const clap_input_events_t inputEvents {&cc,
+        [](const clap_input_events_t*)->uint32_t{return 1;},
+        [](const clap_input_events_t* list,uint32_t index)->const clap_event_header_t*
+        {return index==0?&static_cast<const clap_event_midi_t*>(list->ctx)->header:nullptr;} };
+    double energies[2]{};
+    for(int which=0;which<2;++which)
+    {
+        auto& plugin=which==0?reference:driven;
+        std::array<std::array<float,256>,6> data{};
+        float* in[]{data[0].data(),data[1].data()}, *out[]{data[2].data(),data[3].data()}, *aux[]{data[4].data(),data[5].data()};
+        clap_audio_buffer_t inputs[]{{in,nullptr,2,0,0},{aux,nullptr,2,0,0}}, output{out,nullptr,2,0,0};
+        for(int block=0;block<80;++block)
+        {
+            for(int i=0;i<256;++i) data[0][i]=data[1][i]=.1f*std::sin((block*256+i)*.04f);
+            clap_process_t process{}; process.frames_count=256; process.steady_time=block*256;
+            process.audio_inputs=inputs; process.audio_inputs_count=inputPortCount;
+            process.audio_outputs=&output; process.audio_outputs_count=1;
+            process.in_events=which==1 && block==0?&inputEvents:&emptyInput; process.out_events=&discardOutput;
+            require(plugin.api->process(plugin.api,&process)!=CLAP_PROCESS_ERROR,"MIDI process error");
+            for(int channel=2;channel<4;++channel) for(float value:data[static_cast<size_t>(channel)])
+            { require(std::isfinite(value),"MIDI output not finite"); if(block>=40) energies[which]+=value*value; }
+        }
+        plugin.api->stop_processing(plugin.api); plugin.processing=false; plugin.host.audioThread=false;
+        plugin.api->deactivate(plugin.api); plugin.active=false; plugin.host.dispatch(plugin.api);
+    }
+    require(energies[0]>1e-6 && energies[1]>energies[0]*1.2,"CLAP MIDI CC did not reach the modulation/audio path");
+}
+
 void checkAudio(Plugin& plugin)
 {
     const auto* ports = static_cast<const clap_plugin_audio_ports_t*>(plugin.api->get_extension(plugin.api, CLAP_EXT_AUDIO_PORTS));
@@ -320,8 +401,9 @@ int main(int argc, char** argv)
                     "CLAP state roundtrip changed a parameter");
         }
         checkAudio(restored);
+        checkMidi(factory, descriptor->id);
         std::cout << "CLAP " << descriptor->version << ": fresh-instance state roundtrip, " << count
-                  << " parameters, finite stereo audio at 44.1/48/96 kHz and 64/512 samples passed\n";
+                  << " parameters, MIDI CC audio response, finite stereo audio at 44.1/48/96 kHz and 64/512 samples passed\n";
         return 0;
     }
     catch (const std::exception& error)

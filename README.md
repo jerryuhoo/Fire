@@ -447,6 +447,9 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ### 2.1.0 (in development)
 
+- Add four MIDI CC modulation sources, note-triggered and one-shot LFOs, and
+  seeded Random Hold / Random Glide modulation. Existing source IDs and
+  automation parameter indices remain unchanged.
 - Add independent Stereo, Mid and Side processing for every Band and Master
   chain, with channel modes saved in presets, projects, A/B and chain files.
 - Add module copy, duplicate and cross-chain paste, plus portable `.firechain`
@@ -762,6 +765,27 @@ with whole-plugin presets, projects and A/B snapshots. Chain copy/save also
 captures it; replacing a chain restores it in the same Undo step. Copying or
 duplicating a single module leaves the destination chain's mode unchanged.
 Older presets, projects and version 1 chain files open in Stereo.
+
+**MIDI modulation and triggered LFOs.** Four **MIDI CC** sources can receive a
+controller number on a specific MIDI channel or **Omni**; **Off** disables the
+slot. Use Learn to bind an incoming controller, then assign that source in the
+modulation matrix like an Envelope or LFO. The existing mapping ranges, curves
+and multi-source routing also apply to CC input. The source configuration is
+saved with the sound; incoming controller positions are live performance data.
+
+An LFO's **Loop** mode preserves its existing free-running or host-synchronised
+behaviour. **Retrigger** restarts its cycle on a matching note; **One-shot** runs
+one cycle and holds its final value. Choose a note and channel, or Any note and
+Omni, and use **Trigger** to fire it manually. **Shape** uses the drawn curve;
+**Random Hold** and **Random Glide** use a saved **Seed** for repeatable random
+motion. Drawing a new curve does not change these playback settings.
+
+MIDI configurations, playback choices and seeds are saved in presets, projects
+and A/B snapshots. Old sounds open with MIDI CC slots Off and LFOs in Loop /
+Shape. Copying a chain's routes uses the destination's current MIDI source
+configuration. A host must route MIDI into Fire to use external controllers;
+the existing AU component identity is retained, so MIDI delivery in AU depends
+on the host. Use VST3 or CLAP in hosts that do not send MIDI to an AU effect.
 
 **Save chain preset…** stores a settings-only `.firechain` file; choose
 **Save chain preset with routing…** to include its mappings. These files live in

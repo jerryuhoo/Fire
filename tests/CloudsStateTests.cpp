@@ -176,6 +176,9 @@ TEST_CASE("Clouds appends a separate parameter family without changing original 
     CHECK(index == 4663); // The four-envelope v2.1 contract remains fixed.
     for (int scope = 0; scope < fire::channel_mode::parameterCount; ++scope)
         checkParameter(fire::channel_mode::parameterID(scope), 16);
+    CHECK(index == 4668);
+    for (const auto& id : fire::midi_mod::parameterIDs()) checkParameter(id,17);
+    for (const auto& id : fire::lfo_playback::parameterIDs()) checkParameter(id,17);
     CHECK(index == parameters.size());
     CHECK_FALSE(clouds::isParameterID("masterFx1CloudsBogus"));
     CHECK_FALSE(clouds::isParameterID("bandFx9CloudsEngine1"));

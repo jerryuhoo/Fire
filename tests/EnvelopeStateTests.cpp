@@ -106,7 +106,7 @@ TEST_CASE("Envelope bank settings and fixed source identities roundtrip presets 
     FireAudioProcessor processor;
     configureEnvelopes(processor, 0);
     auto first = envelopePreset(processor);
-    CHECK(first.getIntAttribute("presetFormatVersion") == 5);
+    CHECK(first.getIntAttribute("presetFormatVersion") == 6);
     CHECK(first.getIntAttribute(fire::envelope_state::marker) == 1);
     for (int source : {16, 17, 20, 21, 22, 23}) addEnvelopeRouting(first, source);
     REQUIRE(state::loadStateFromXml(first, processor));
@@ -198,7 +198,7 @@ TEST_CASE("Envelope preset schema validation is complete finite discrete and ato
             CAPTURE(version, source);
             auto oldRoute = valid; stripEnvelopePreset(oldRoute, version); addEnvelopeRouting(oldRoute, source); reject(oldRoute);
         }
-    auto unknownRoute = valid; addEnvelopeRouting(unknownRoute, 24); reject(unknownRoute);
+    auto unknownRoute = valid; addEnvelopeRouting(unknownRoute, 28); reject(unknownRoute);
     auto badTarget = valid; addEnvelopeRouting(badTarget, 23);
     badTarget.getChildByName("MODULATION_STATE")->getFirstChildElement()->setAttribute("target", env::parameterID(1, env::attack));
     reject(badTarget);

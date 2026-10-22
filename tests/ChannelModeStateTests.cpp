@@ -41,7 +41,7 @@ TEST_CASE("Channel modes retain stable appended IDs and survive preset project a
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
-    REQUIRE(processor.getParameters().size()==4668);
+    REQUIRE(processor.getParameters().size()==4756);
     for(int scope=0;scope<5;++scope)
     {
         auto* p=processor.treeState.getParameter(cm::parameterID(scope));REQUIRE(p);
@@ -50,11 +50,11 @@ TEST_CASE("Channel modes retain stable appended IDs and survive preset project a
     }
     modeConfigure(processor,1);
     const auto first=modePreset(processor);
-    CHECK(first.getIntAttribute("presetFormatVersion")==5);
+    CHECK(first.getIntAttribute("presetFormatVersion")==6);
     CHECK(first.getIntAttribute(fire::channel_mode_state::marker)==1);
     processor.stateAB.copyAB(false);processor.stateAB.toggleAB();modeConfigure(processor,2);
     const auto second=modePreset(processor),host=modeHost(processor);
-    CHECK(host.getIntAttribute("stateFormatVersion")==4);
+    CHECK(host.getIntAttribute("stateFormatVersion")==5);
     FireAudioProcessor restored;
     REQUIRE(state::loadStateFromXml(second,restored));modeCheck(restored,2);
     modeRestoreHost(restored,host);modeCheck(restored,2);

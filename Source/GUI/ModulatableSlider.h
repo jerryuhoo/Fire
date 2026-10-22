@@ -12,6 +12,7 @@
 
 #include "GuardedSliderAccessibility.h"
 #include "../Utility/LfoBankParameters.h"
+#include "../Utility/ModulationSources.h"
 #include "InterfaceDefines.h"
 #include "PrimaryButton.h"
 #include "juce_gui_basics/juce_gui_basics.h"
@@ -121,10 +122,12 @@ public:
     {
         std::uint32_t presentMask = (1u << fire::lfo_bank::defaultCount) - 1u;
         std::uint64_t revision = 0;
+        std::array<juce::String, fire::mod_sources::macroCount> macroNames {};
 
         bool contains(int index) const noexcept
         {
-            return fire::lfo_bank::validIndex(index) && (presentMask & (1u << index)) != 0;
+            return fire::mod_sources::isAuxiliary(index)
+                || (fire::lfo_bank::validIndex(index) && (presentMask & (1u << index)) != 0);
         }
     };
     // Capture stable slot identities and a routing revision when opening a menu.

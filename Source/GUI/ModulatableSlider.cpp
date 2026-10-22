@@ -1051,12 +1051,20 @@ juce::PopupMenu ModulatableSlider::createLfoAssignmentMenu(const LfoSourceMenuSt
         menu.addItem(1002,"Clear all modulation");menu.addSeparator();
     }
     menu.addSectionHeader("Add modulation source");
-    for (int lfoIndex = 0; lfoIndex < fire::lfo_bank::capacity; ++lfoIndex)
+    for (int lfoIndex = 0; lfoIndex < fire::mod_sources::sourceCount; ++lfoIndex)
         if (state.contains(lfoIndex))
+        {
+            auto name = fire::mod_sources::name(lfoIndex);
+            if (fire::mod_sources::isMacro(lfoIndex))
+            {
+                const auto custom = state.macroNames[static_cast<size_t>(lfoIndex - fire::mod_sources::firstMacro)];
+                if (custom.isNotEmpty() && custom != name) name += " · " + custom;
+            }
             menu.addColouredItem(lfoIndex + 1,
-                                 "LFO " + juce::String(lfoIndex + 1),
-                                 fire::ui::lfoBankColour(lfoIndex), true,
+                                 name,
+                                 fire::ui::modulationSourceColour(lfoIndex), true,
                                  isModulated && lfoSource == lfoIndex + 1);
+        }
     if (state.presentMask == 0)
         menu.addItem(0, "Add an LFO in Mod Forge", false);
     return menu;

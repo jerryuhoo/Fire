@@ -18,6 +18,7 @@
 #include "Utility/ModulationStateValidation.h"
 #include "Utility/EnvelopeStateValidation.h"
 #include "Utility/ChannelModeStateValidation.h"
+#include "Utility/MidiStateValidation.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -124,7 +125,7 @@ Slope getSlopeParameterValue(const std::atomic<float>* parameter) noexcept
 constexpr int minimumProcessingBlockCapacity = 8192;
 constexpr double safePeakHoldSeconds = 0.05;
 constexpr double safePeakReleaseSeconds = 0.05;
-constexpr int hostStateFormatVersion = 4;
+constexpr int hostStateFormatVersion = 5;
 constexpr int oldestWrappedHostParameterCount = 19;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 std::atomic<HostBypassDenormalStateHook>
@@ -5596,7 +5597,6 @@ void FireAudioProcessor::processWetBlock(
     int playheadSampleOffset,
     bool publishMeterPacket)
 {
-    juce::ignoreUnused(midiMessages);
     juce::ScopedNoDenormals noDenormals;
     const int totalNumInputChannels = getMainBusNumInputChannels();
     const int numBufferChannels = buffer.getNumChannels();
@@ -5659,6 +5659,7 @@ void FireAudioProcessor::processWetBlock(
     lfoCaptureNeedsAbort = false;
 
     lfoManager->setAudioInput(&buffer);
+    lfoManager->setMidiInput(&midiMessages, playheadSampleOffset);
     lfoManager->setExternalAudioInput(externalModulationInput,playheadSampleOffset);
     const int auditionRequested=hostBypassShadow?-1:getEnvelopeAuditionIndex();
     if (hostBypassShadow)
@@ -5678,6 +5679,7 @@ void FireAudioProcessor::processWetBlock(
     lfoManager->setEnvelopeAuditionOutput(&envelopeAuditionBuffer,renderedEnvelopeAudition);
     const juce::ScopeGuard clearModulationInput{[this] {
         lfoManager->setAudioInput(nullptr); lfoManager->setExternalAudioInput(nullptr);
+        lfoManager->setMidiInput(nullptr);
         lfoManager->setEnvelopeAuditionOutput(nullptr,-1);
     }};
     lfoManager->processBlock(
@@ -5947,6 +5949,8 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("modulationSourcesSchemaVersion", fire::mod_sources::schemaVersion);
     xmlState.setAttribute(fire::envelope_state::marker,fire::envelope_params::schemaVersion);
     xmlState.setAttribute(fire::channel_mode_state::marker,fire::channel_mode::schemaVersion);
+    xmlState.setAttribute(fire::midi_state::ccMarker,fire::midi_mod::schemaVersion);
+    xmlState.setAttribute(fire::midi_state::playbackMarker,fire::lfo_playback::schemaVersion);
     xmlState.setAttribute("moduleOrderSchemaVersion", 1);
     xmlState.setAttribute("cloudsSchemaVersion", fire::clouds_params::schemaVersion);
     xmlState.setAttribute("eqSchemaVersion", 1);
@@ -6081,6 +6085,11 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     bool legacyChannelModeFamily=false;
     if (!fire::channel_mode_state::validate(*xmlState,*this,
             xmlState->getIntAttribute("stateFormatVersion",0)>=4,true,legacyChannelModeFamily)) return;
+    bool legacyMidiFamily=false,legacyPlaybackFamily=false;
+    if (!fire::midi_state::validateFamily(*xmlState,*this,
+            xmlState->getIntAttribute("stateFormatVersion",0)>=5,true,false,legacyMidiFamily)
+        || !fire::midi_state::validateFamily(*xmlState,*this,
+            xmlState->getIntAttribute("stateFormatVersion",0)>=5,true,true,legacyPlaybackFamily)) return;
     const bool hasStateFormatVersion =
         xmlState->hasAttribute("stateFormatVersion");
     int ottParameterCount = 0;
@@ -6269,7 +6278,8 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                                               "MODULATION_STATE") != 1
             || ! isValidVersionedHostLfoState(*versionedLfoState, lfoCountInState)
             || ! isValidVersionedHostRoutingState(*versionedRoutingState,
-                                                  treeState, hasAuxiliaryState ? (legacyEnvelopeFamily?fire::mod_sources::legacySourceCount:fire::mod_sources::sourceCount) : lfoCountInState, incomingFormatVersion >= 2)
+                                                  treeState, hasAuxiliaryState ? (legacyEnvelopeFamily?fire::mod_sources::legacySourceCount:
+                                                      legacyMidiFamily?fire::mod_sources::envelopeSourceCount:fire::mod_sources::sourceCount) : lfoCountInState, incomingFormatVersion >= 2)
             || xmlState->getChildByName("AB_STATE") == nullptr)
         {
             return;
@@ -6513,6 +6523,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             auto routing = advancedMapping ? ModulationRouting::readFromXml(*routingXml)
                 : fire::modulation_state::readLegacy(*routingXml);
             if (legacyEnvelopeFamily && routing.sourceLfoIndex>=fire::mod_sources::legacySourceCount) continue;
+            if (legacyMidiFamily && fire::mod_sources::isMidiCC(routing.sourceLfoIndex)) continue;
             if (!hasAuxiliaryState) routing.sourceLfoIndex = juce::jmin(routing.sourceLfoIndex, fire::lfo_bank::capacity - 1);
             if (routing.targetParameterID.isEmpty()
                 || treeState.getParameter(routing.targetParameterID) == nullptr
@@ -7771,6 +7782,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
             juce::ParameterID{fire::channel_mode::parameterID(scope),16},
             scope == 0 ? juce::String("Master Channel Mode") : "Band " + juce::String(scope) + " Channel Mode",
             fire::channel_mode::names(),fire::channel_mode::stereo));
+    // MIDI CC source configurations, followed by each LFO's playback controls.
+    for (int slot = 0; slot < fire::midi_mod::count; ++slot)
+        for (int field = 0; field < fire::midi_mod::fieldCount; ++field)
+        {
+            using namespace fire::midi_mod;
+            const auto i=static_cast<size_t>(field);
+            parameters.push_back(std::make_unique<PInt>(juce::ParameterID{parameterID(slot,field),versionHint},
+                "MIDI CC " + juce::String(slot+1) + " " + labels[i],minimums[i],maximums[i],defaults[i]));
+        }
+    for (int slot = 0; slot < fire::lfo_playback::count; ++slot)
+        for (int field = 0; field < fire::lfo_playback::fieldCount; ++field)
+        {
+            using namespace fire::lfo_playback;
+            const auto i=static_cast<size_t>(field);
+            const juce::ParameterID id{parameterID(slot,field),versionHint};
+            const auto name="LFO " + juce::String(slot+1) + " " + labels[i];
+            if (field==playMode || field==waveMode)
+                parameters.push_back(std::make_unique<PChoice>(id,name,field==playMode?playModeNames():waveModeNames(),defaults[i]));
+            else parameters.push_back(std::make_unique<PInt>(id,name,minimums[i],maximums[i],defaults[i]));
+        }
     return { parameters.begin(), parameters.end() };
 }
 
@@ -10101,6 +10132,13 @@ int FireAudioProcessor::addLfo()
         // Invalidate old menus/editor contexts before the first synchronous
         // parameter notification can re-enter the UI for this reused slot.
         lfoManager->resetLfoSlot(slot);
+        for (int field = 0; field < fire::lfo_playback::fieldCount; ++field)
+            if (auto* parameter = treeState.getParameter(fire::lfo_playback::parameterID(slot, field)))
+            {
+                parameter->beginChangeGesture();
+                parameter->setValueNotifyingHost(parameter->getDefaultValue());
+                parameter->endChangeGesture();
+            }
         for (int field = 0; field < fire::lfo_bank::timingFieldCount; ++field)
             if (auto* parameter = treeState.getParameter(fire::lfo_bank::parameterID(
                     slot, static_cast<fire::lfo_bank::Field>(field))))
@@ -10128,6 +10166,13 @@ bool FireAudioProcessor::removeLfo(int index)
         const juce::ScopeGuard publish { [this] { finishMainStateEdit(false); } };
         if (! isLfoPresent(index)) return false;
         lfoManager->resetLfoSlot(index);
+        for (int field = 0; field < fire::lfo_playback::fieldCount; ++field)
+            if (auto* parameter = treeState.getParameter(fire::lfo_playback::parameterID(index, field)))
+            {
+                parameter->beginChangeGesture();
+                parameter->setValueNotifyingHost(parameter->getDefaultValue());
+                parameter->endChangeGesture();
+            }
         if (auto* present = treeState.getParameter(fire::lfo_bank::presentParameterID(index)))
         {
             present->beginChangeGesture();

@@ -411,6 +411,7 @@ private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct SkinNavigationMotionTestAccess;
     friend struct LfoPanelDialogTestAccess;
+    friend struct PerformanceControlsTestAccess;
     friend struct LfoFlowTestAccess;
     friend struct LfoPanelBrushTestAccess;
 #endif
@@ -437,6 +438,9 @@ private:
     void updateFlowPresentation(float deltaSeconds);
     void updateToolbarAppearance();
     void updateAssignLabelVisibility();
+    void showPerformanceDialog(bool midi);
+    void dismissPerformanceDialogs(bool includeMidi);
+    void updatePlaybackSummary();
 
     FireAudioProcessor& processor;
 
@@ -489,6 +493,9 @@ private:
 
     PrimaryTextButton matrixButton { "Matrix" };
     PrimaryTextButton syncButton;
+    PrimaryTextButton playbackSettingsButton { "Playback" }, midiControlsButton { "MIDI" };
+    juce::Component::SafePointer<juce::DialogWindow> playbackDialog, midiDialog;
+    int presentedWaveMode = -1, presentedPlayMode = -1;
 
     PrimarySlider rateSlider;
     juce::Label rateLabel;

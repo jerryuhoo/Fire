@@ -3099,6 +3099,7 @@ FireAudioProcessor::FireAudioProcessor()
                 const auto size = getSavedEditorSize();
                 other->setAttribute("editorWidth", size.width);
                 other->setAttribute("editorHeight", size.height);
+                fire::preset_locks::writePreferences(*other, getPresetParameterLocks());
             }
             juce::MemoryBlock restored;
             copyXmlToBinary(*xml, restored);
@@ -4187,7 +4188,8 @@ FireAudioProcessor::captureSerializableMainStateSnapshot() const
         stateAB.captureSerializableStateSnapshot(),
         loudnessMatch.settings(),
         std::move(frozenAudio),
-        getMacroDisplayNames()
+        getMacroDisplayNames(),
+        getPresetParameterLocks()
     };
 }
 
@@ -5986,6 +5988,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     currentStateXml->setAttribute("currentPresetKey", mainState.currentPresetKey);
     currentStateXml->setAttribute("editorWidth", mainState.editorWidth);
     currentStateXml->setAttribute("editorHeight", mainState.editorHeight);
+    fire::preset_locks::writePreferences(*currentStateXml, mainState.presetLocks);
     currentStateXml->setAttribute("loudnessMatchVersion", 1);
     currentStateXml->setAttribute("loudnessMatchEnabled", mainState.loudnessMatch.enabled);
     currentStateXml->setAttribute("loudnessMatchReadyA", mainState.loudnessMatch.ready[0]);
@@ -6539,6 +6542,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     }
 
     const auto* xmlCurrentState = xmlState->getChildByName("otherState");
+    const auto restoredPresetLocks = fire::preset_locks::readPreferences(xmlCurrentState, *this);
     fire::dsp::LoudnessMatchState::Settings restoredLoudnessMatch;
     if (! readLoudnessMatchSettings(xmlCurrentState, restoredLoudnessMatch))
         return;
@@ -6570,6 +6574,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             requestMultibandTopologyReset();
         } };
         treeState.replaceState(treeToLoad);
+        { const juce::ScopedLock lock(presetLocksMutex); presetParameterLocks = restoredPresetLocks; }
         restoreMacroDisplayNames(restoredMacroNames);
         restoreFrozenAudio(frozenAudio);
         if (xmlCurrentState != nullptr)

@@ -219,6 +219,23 @@ PrimaryTextButton* findHeaderButton(juce::Component& editor,
     return match != buttons.end() ? *match : nullptr;
 }
 
+void exposePresetLockAction(FireAudioProcessor& processor, juce::Component& editor)
+{
+    REQUIRE(processor.setPresetParameterLocked("drive1", true));
+    bool refreshed = false;
+    const auto refresh = [&](auto&& self, juce::Component& parent) -> void
+    {
+        if (auto* header = dynamic_cast<state::StateComponent*>(&parent))
+        { header->updatePresetLockIndicator(); refreshed = true; }
+        for (auto* child : parent.getChildren()) self(self, *child);
+    };
+    refresh(refresh, editor);
+    REQUIRE(refreshed);
+    auto* button = findHeaderButton(editor, "header_preset_locks", "1");
+    REQUIRE(button != nullptr);
+    REQUIRE(button->isShowing());
+}
+
 class DeleteEditorOnStateNotification final
     : public juce::AudioProcessorListener
 {
@@ -1070,10 +1087,11 @@ TEST_CASE("Editor header and preset actions use primary-only buttons",
     auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
     editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
     editor->setVisible(true);
+    exposePresetLockAction(processor, *editor);
 
     std::vector<PrimaryTextButton*> buttons;
     collectHeaderButtons(*editor, buttons);
-    REQUIRE(buttons.size() == 12);
+    REQUIRE(buttons.size() == 13);
 
     std::map<juce::String, int> componentIdCounts;
     for (const auto* button : buttons)
@@ -1088,6 +1106,7 @@ TEST_CASE("Editor header and preset actions use primary-only buttons",
     CHECK(componentIdCounts["header_next"] == 1);
     CHECK(componentIdCounts["header_menu"] == 1);
     CHECK(componentIdCounts["header_preset_browser"] == 1);
+    CHECK(componentIdCounts["header_preset_locks"] == 1);
 
     auto* zoom = dynamic_cast<PrimaryTextButton*>(editor->findChildWithID("zoom"));
     REQUIRE(zoom != nullptr);
@@ -1152,6 +1171,8 @@ TEST_CASE("Editor header and preset actions use primary-only buttons",
                            "- Init -",
                            "Browse presets",
                            "Open the full-page sound library");
+    checkButtonDescription("header_preset_locks", "1", "Manage 1 preset parameter locks",
+                           "Keep selected base values when loading presets. Manual edits, automation and the new preset's modulation still work. Click to manage or unlock all.");
 
     const auto leftButton = juce::ModifierKeys {
         juce::ModifierKeys::leftButtonModifier
@@ -1173,6 +1194,22 @@ TEST_CASE("Editor header and preset actions use primary-only buttons",
         CHECK(clickCount == 0);
         button->onClick = nullptr;
     }
+    auto* lockAction = findHeaderButton(*editor, "header_preset_locks", "1");
+    REQUIRE(lockAction != nullptr);
+    int lockCommands = 0;
+    lockAction->onClick = [&] { ++lockCommands; };
+    for (const auto modifiers : rejectedPointerModifiers())
+    {
+        performPointerGesture(*lockAction, modifiers);
+        CHECK(lockCommands == 0);
+    }
+    CHECK(lockAction->keyPressed(juce::KeyPress {juce::KeyPress::returnKey}));
+    CHECK(lockCommands == 1);
+    CHECK(lockAction->keyPressed(juce::KeyPress {juce::KeyPress::spaceKey}));
+    CHECK(lockCommands == 2);
+    performPointerGesture(*lockAction, leftButton);
+    CHECK(lockCommands == 3);
+    lockAction->onClick = nullptr;
 }
 
 TEST_CASE("Overlapping workspace hover press and focus keep a valid opacity",
@@ -1219,10 +1256,11 @@ TEST_CASE("Editor peer detachment discards every header pointer gesture",
     editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
     editor->setVisible(true);
     REQUIRE(editor->isShowing());
+    exposePresetLockAction(processor, *editor);
 
     std::vector<PrimaryTextButton*> buttons;
     collectHeaderButtons(*editor, buttons);
-    REQUIRE(buttons.size() == 12);
+    REQUIRE(buttons.size() == 13);
     const auto leftButton = juce::ModifierKeys {
         juce::ModifierKeys::leftButtonModifier
     };

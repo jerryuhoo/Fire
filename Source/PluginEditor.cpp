@@ -364,16 +364,26 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
             safe->lfoPanel.openModulationMatrixForTarget(id);
         };
 
-        slider->getLfoSourceMenuState = [this]
+        slider->getLfoSourceMenuState = [this, slider]
         {
             ModulatableSlider::LfoSourceMenuState state;
             state.presentMask = 0;
             state.macroNames = processor.getMacroDisplayNames();
+            const auto lockable = processor.getLockableParameters();
+            const auto parameter = slider->getParamID();
+            state.presetLockAvailable = std::any_of(lockable.begin(), lockable.end(), [&](const auto& entry) { return entry.id == parameter; });
+            state.presetLockEnabled = processor.isPresetParameterLocked(parameter);
             state.revision = processor.getLfoManager().getModulationRoutingStateSnapshot().revision;
             for (int index = 0; index < fire::lfo_bank::capacity; ++index)
                 if (processor.isLfoPresent(index))
                     state.presentMask |= 1u << index;
             return state;
+        };
+        slider->onPresetLockChanged = [safe = juce::Component::SafePointer<FireAudioProcessorEditor>(this)](const juce::String& id, bool locked)
+        {
+            if (!safe) return;
+            safe->processor.setPresetParameterLocked(id, locked);
+            if (safe) safe->applyModulationSnapshot();
         };
         slider->onLfoAssignmentRequested = [this](int lfoIndex,
                                                    const juce::String& targetParameterID)
@@ -3121,6 +3131,7 @@ void FireAudioProcessorEditor::refreshModulationSnapshot()
 
 void FireAudioProcessorEditor::applyModulationSnapshot()
 {
+    const auto presetLocks = processor.getPresetParameterLocks();
     std::array<float, fire::mod_sources::sourceCount> values {};
     std::array<bool, fire::mod_sources::sourceCount> present {};
     for (int index = 0; index < fire::mod_sources::sourceCount; ++index)
@@ -3133,7 +3144,8 @@ void FireAudioProcessorEditor::applyModulationSnapshot()
         auto* slider = allModulatableSliders[index];
         if (!slider || slider->getParamID().isEmpty() || index >= modulationRoutesBySlider.size()) continue;
         const auto info = fire::ui::summariseModulation(modulationRoutesBySlider[index], slider->getParamID(), values, present);
-        const bool changed = slider->isModulated != info.isModulated || slider->lfoSource != info.sourceLfoIndex
+        const bool locked = presetLocks.contains(slider->getParamID());
+        const bool changed = slider->isPresetLocked != locked || slider->isModulated != info.isModulated || slider->lfoSource != info.sourceLfoIndex
             || std::abs(slider->lfoAmount - info.depth) > 1.0e-6 || std::abs(slider->lfoValue - info.currentValue) > 1.0e-4
             || slider->isBipolar != info.isBipolar || slider->isBypassed != info.isBypassed
             || slider->modulationRouteCount != info.routeCount || slider->usesModulationSummary != info.usesMappedDisplay
@@ -3141,6 +3153,7 @@ void FireAudioProcessorEditor::applyModulationSnapshot()
             || std::abs(slider->modulationOffsetMaximum - info.maximumOffset) > 1.0e-6
             || std::abs(slider->modulationOffsetCurrent - info.currentOffset) > 1.0e-4;
         slider->isModulated = info.isModulated;
+        slider->isPresetLocked = locked;
         slider->lfoSource = info.sourceLfoIndex;
         slider->lfoAmount = info.depth; slider->lfoValue = info.currentValue;
         slider->isBipolar = info.isBipolar; slider->isBypassed = info.isBypassed;

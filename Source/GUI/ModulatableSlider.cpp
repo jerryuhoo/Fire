@@ -9,6 +9,7 @@
 */
 
 #include "ModulatableSlider.h"
+#include "PresetLockGlyph.h"
 #include "LookAndFeel.h"
 #include "OttVisuals.h"
 #include <cmath>
@@ -263,6 +264,13 @@ juce::Rectangle<int> ModulatableSlider::getValueDisplayBounds() const
 
 void ModulatableSlider::paintOverChildren(juce::Graphics& g)
 {
+    if (isPresetLocked)
+    {
+        const float size = 10.0f * getUiScale();
+        const auto valueArea = getValueDisplayBounds().toFloat();
+        fire::ui::drawPresetLock(g, {2.0f * getUiScale(), juce::jmax(0.f, valueArea.getY() - size - 3.f), size, size},
+                                 fire::ui::paletteFor(*this).textSecondary);
+    }
     if (getTextBoxPosition() != juce::Slider::NoTextBox)
         return;
 
@@ -1067,6 +1075,11 @@ juce::PopupMenu ModulatableSlider::createLfoAssignmentMenu(const LfoSourceMenuSt
         }
     if (state.presentMask == 0)
         menu.addItem(0, "Add an LFO in Mod Forge", false);
+    if (state.presetLockAvailable)
+    {
+        menu.addSeparator();
+        menu.addItem(1003, "Keep value when loading presets", true, state.presetLockEnabled);
+    }
     return menu;
 }
 
@@ -1091,7 +1104,7 @@ std::function<void(int)> ModulatableSlider::createLfoAssignmentMenuResultHandler
             return;
 
         ++safeThis->contextMenuRevision;
-        const bool management=result==1001 || result==1002;
+        const bool management=result==1001 || result==1002 || result==1003;
         if ((!management && !sourceState.contains(result-1)) || frozenTargetParameterID.isEmpty()) return;
 
         auto currentStateProvider = safeThis->getLfoSourceMenuState;
@@ -1101,6 +1114,13 @@ std::function<void(int)> ModulatableSlider::createLfoAssignmentMenuResultHandler
             || (!management && !currentState.contains(result-1))) return;
         if(management)
         {
+            if (result == 1003)
+            {
+                if (!sourceState.presetLockAvailable) return;
+                auto callback = safeThis->onPresetLockChanged;
+                if (callback) callback(frozenTargetParameterID, !sourceState.presetLockEnabled);
+                return;
+            }
             safeThis->executeModulationMenuCommand(result==1001?ModulationMenuCommand::editModulation:ModulationMenuCommand::clearModulation,frozenTargetParameterID);
             return;
         }

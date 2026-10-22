@@ -2,6 +2,7 @@
 
 #include "PrimaryButton.h"
 #include "FireTheme.h"
+#include "PresetMetadataControls.h"
 #include "../Panels/TopPanel/Preset.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -9,6 +10,7 @@ namespace fire::ui
 {
 class PresetBrowserPanel final : public juce::Component
 {
+    friend struct ::PresetExperienceUiTestAccess;
     struct Palette {juce::Colour base, accent;};
     static Palette palette(const juce::String& category)
     {
@@ -41,7 +43,7 @@ class PresetBrowserPanel final : public juce::Component
         return {skinPalette(Skin::vintage).surface0.interpolatedWith(tones.base,.42f),
                 tones.accent.interpolatedWith(skinPalette(Skin::vintage).textPrimary,.12f)};
     }
-    enum class Icon {star, remove, restore, back};
+    enum class Icon {star, remove, restore, back, edit};
     class ActionButton final : public PrimaryTextButton
     {
     public:
@@ -97,6 +99,15 @@ class PresetBrowserPanel final : public juce::Component
                 g.drawLine(centre.x-r, centre.y-r*.70f, centre.x+r, centre.y-r*.70f, 1.2f*scale);
                 g.drawLine(centre.x-r*.35f, centre.y-r, centre.x+r*.35f, centre.y-r, 1.2f*scale);
                 for (float x : {-.25f, .25f}) g.drawLine(centre.x+r*x, centre.y-r*.16f, centre.x+r*x, centre.y+r*.63f, scale);
+            }
+            else if (icon == Icon::edit)
+            {
+                path.startNewSubPath(centre.x-r*.8f,centre.y+r*.8f);
+                path.lineTo(centre.x-r*.55f,centre.y+r*.05f);
+                path.lineTo(centre.x+r*.45f,centre.y-r*.95f);
+                path.lineTo(centre.x+r*.95f,centre.y-r*.45f);
+                path.lineTo(centre.x-r*.05f,centre.y+r*.55f);path.closeSubPath();
+                g.strokePath(path,juce::PathStrokeType(1.2f*scale,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
             }
             else
             {
@@ -266,6 +277,10 @@ public:
         locateButton.setComponentID("preset_locate_current");
         locateButton.setTooltip("Show the playing preset in its collection, clearing the search");
         locateButton.onClick=[safe=juce::Component::SafePointer<PresetBrowserPanel>(this)] {if(safe) safe->locateCurrentPreset();};
+        addAndMakeVisible(editDetails); editDetails.icon=Icon::edit;
+        editDetails.setComponentID("preset_edit_details");editDetails.setTitle("Edit selected preset tags and description");
+        editDetails.setTooltip("Edit tags and description. Factory sounds use your personal notes.");
+        editDetails.onClick=[safe=juce::Component::SafePointer<PresetBrowserPanel>(this)] {if(safe) safe->showMetadataEditor();};
         addAndMakeVisible(search); search.setLookAndFeel(&searchLook);
         search.setTextToShowWhenEmpty("Search sounds, colour or space...",paletteFor(*this).textMuted);
         search.setColour(juce::TextEditor::backgroundColourId,juce::Colour(0xff141a22));
@@ -281,7 +296,9 @@ public:
         sidebar.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId,paletteFor(*this).textMuted.withAlpha(.2f)); addAndMakeVisible(sidebar);
     }
     ~PresetBrowserPanel() override
-    {search.setLookAndFeel(nullptr); viewport.setViewedComponent(nullptr,false); sidebar.setViewedComponent(nullptr,false);}
+    {dismissMetadataEditor();search.setLookAndFeel(nullptr); viewport.setViewedComponent(nullptr,false); sidebar.setViewedComponent(nullptr,false);}
+    void visibilityChanged() override {if(!isShowing()) dismissMetadataEditor();}
+    void enablementChanged() override {if(!isEnabled()) dismissMetadataEditor();}
     std::function<void(const juce::String&)> onPresetSelected;
     std::function<void()> onClose, onLibraryChanged;
     void open()
@@ -301,11 +318,15 @@ public:
         selectedKey=current; rememberRecent(current);
         for(auto& row:rows) {row->selected=row->entry.key==selectedKey; row->repaint();}
         locateButton.setEnabled(hasCurrentLibraryEntry());
+        editDetails.setEnabled(hasCurrentLibraryEntry());
         refreshRecentCount(); repaint(footer.toNearestInt());
     }
     void lookAndFeelChanged() override
     {
         const auto& tones = paletteFor(*this);
+        editDetails.accent=tones.accent;
+        if(auto dialog=metadataDialog) if(auto* body=dialog->getContentComponent())
+        {setSkin(*body,skinFor(*this));body->sendLookAndFeelChange();}
         search.setColour(juce::TextEditor::backgroundColourId,isLineSkin(*this) ? tones.surface1 : isVintage(*this)?tones.surface0:juce::Colour(0xff141a22));
         search.setColour(juce::TextEditor::textColourId,tones.textPrimary);
         search.applyColourToAllText(tones.textPrimary);
@@ -358,6 +379,8 @@ public:
         {categoryButtons[i]->scale=scale; categoryButtons[i]->setBounds(0,static_cast<int>(i)*pitch,categoriesContent.getWidth(),pitch-juce::roundToInt(3*scale));}
         footer=area.removeFromBottom(69*scale);
         locateButton.setBounds(footer.withTrimmedTop(14*scale).removeFromRight(115*scale).withHeight(30*scale).toNearestInt());
+        editDetails.scale=scale;
+        editDetails.setBounds(juce::roundToInt(locateButton.getX()-37*scale),locateButton.getY(),juce::roundToInt(30*scale),locateButton.getHeight());
         area.removeFromBottom(15*scale); listTitle=area.removeFromTop(27*scale);
         viewport.setBounds(area.toNearestInt()); viewport.setScrollBarThickness(juce::roundToInt(4*scale));
         const int height=juce::roundToInt(60*scale);
@@ -406,11 +429,14 @@ public:
         g.setColour(isLineSkin(*this) ? paletteFor(*this).hairline : theme.accent.withAlpha(.18f)); g.drawLine(footer.getX(),footer.getY(),footer.getRight(),footer.getY(),1);
         const ::state::StatePresets::BrowserEntry* selected=nullptr;
         for(const auto& entry:entries) if(entry.key==selectedKey && !entry.removed) {selected=&entry;break;}
-        auto detail=footer.withTrimmedTop(10*scale).withTrimmedRight(130*scale); g.setColour(theme.accent); g.setFont(isLineSkin(*this) ? portfolioFont(12*scale, true) : labelFont(12*scale));
+        auto detail=footer.withTrimmedTop(10*scale).withTrimmedRight(170*scale); g.setColour(theme.accent); g.setFont(isLineSkin(*this) ? portfolioFont(12*scale, true) : labelFont(12*scale));
         g.drawText(message.isNotEmpty()?message:selected?selected->name:"Click a preset to audition",detail.removeFromTop(20*scale),juce::Justification::centredLeft);
         g.setColour(paletteFor(*this).textSecondary); g.setFont(isLineSkin(*this) ? portfolioFont(10.5f*scale) : bodyFont(10.5f*scale));
+        const bool showTags=message.isEmpty() && selected && !selected->tags.isEmpty();
+        auto tagsArea=showTags?detail.removeFromBottom(16*scale):juce::Rectangle<float>{};
         g.drawFittedText(message.isNotEmpty()?"Browse Favourites or restore removed sounds from Recycle Bin on the left.":selected?selected->description:
-            category=="Recycle Bin"?"Restore a sound to its original collection. Your current sound keeps playing.":"Single-click to audition. Double-click or Escape returns to the reactor.",detail.toNearestInt(),juce::Justification::centredLeft,2);
+            category=="Recycle Bin"?"Restore a sound to its original collection. Your current sound keeps playing.":"Single-click to audition. Double-click or Escape returns to the reactor.",detail.toNearestInt(),juce::Justification::centredLeft,showTags?1:2);
+        if(showTags) {g.setColour(theme.accent);g.setFont(bodyFont(9.5f*scale));g.drawText(selected->tags.joinIntoString(" / "),tagsArea,juce::Justification::centredLeft);}
         if(rows.empty()) {g.setColour(paletteFor(*this).textSecondary);g.setFont(bodyFont(15*scale));g.drawText(category=="Recent"?"Your recently auditioned sounds appear here":category=="Favourites"?"Star a sound to add it here":category=="Recycle Bin"?"Your recycle bin is empty":"No sounds match this search",viewport.getBounds().toFloat(),juce::Justification::centred);}
     }
     bool keyPressed(const juce::KeyPress& key) override
@@ -455,6 +481,7 @@ private:
         if(std::find(names.begin(),names.end(),category)==names.end()) category="All Sounds";
         rebuildRows(false);refreshCategorySelection();resized();sidebar.setViewPosition(position);
         locateButton.setEnabled(hasCurrentLibraryEntry());
+        editDetails.setEnabled(hasCurrentLibraryEntry());
     }
     void performAction(const juce::String& key,bool favourite,bool value=false)
     {
@@ -478,7 +505,7 @@ private:
         for(const auto& entry:visibleEntries)
         {
             if(!matchesCategory(entry,category)) continue;
-            if(query.isNotEmpty() && !(entry.name+" "+entry.description+" "+entry.category).containsIgnoreCase(query)) continue;
+            if(query.isNotEmpty() && !(entry.name+" "+entry.description+" "+entry.category+" "+entry.tags.joinIntoString(" ")).containsIgnoreCase(query)) continue;
             auto row=std::make_unique<Row>();row->entry=entry;row->selected=entry.key==selectedKey;
             row->setTitle(entry.removed?"Archived preset "+entry.name:"Load preset "+entry.name);row->setTooltip(entry.description);row->setComponentID("presetSound:"+entry.key);
             row->favourite.setToggleState(entry.favourite,juce::dontSendNotification);row->favourite.setEnabled(!entry.removed);
@@ -529,12 +556,38 @@ private:
         for(const auto& entry:entries) if(entry.key==selectedKey && !entry.removed)
         {category=entry.factory?entry.category:"User";search.setText({},false);message.clear();rebuildRows();refreshCategorySelection();revealCurrentRow();break;}
     }
+    void showMetadataEditor()
+    {
+        if(!isShowing() || !isEnabled()) return;
+        if(metadataDialog) {metadataDialog->toFront(true);return;}
+        const auto entry=std::find_if(entries.begin(),entries.end(),[this](const auto& item) {return item.key==selectedKey && !item.removed;});
+        if(entry==entries.end()) return;
+        const juce::Component::SafePointer<PresetBrowserPanel> safe(this);
+        auto controls=std::make_unique<PresetMetadataControls>(presets,entry->key,entry->name);
+        controls->onSaved=[safe] {if(safe) safe->refreshLibrary();};
+        controls->onClose=[safe] {if(safe) safe->dismissMetadataEditor();};
+        setSkin(*controls,skinFor(*this));controls->sendLookAndFeelChange();
+        juce::DialogWindow::LaunchOptions options;options.content.setOwned(controls.release());
+        options.dialogTitle="Preset details";options.dialogBackgroundColour=paletteFor(*this).canvas;
+        options.escapeKeyTriggersCloseButton=true;options.useNativeTitleBar=true;options.resizable=false;
+        auto* launched=options.launchAsync();
+        if(!safe || !safe->isShowing())
+        {juce::Component::SafePointer<juce::DialogWindow> orphan(launched);if(orphan){orphan->exitModalState(0);orphan.deleteAndZero();}return;}
+        safe->metadataDialog=launched;
+    }
+    void dismissMetadataEditor()
+    {
+        auto dialog=metadataDialog;metadataDialog=nullptr;
+        if(dialog) {dialog->exitModalState(0);dialog.deleteAndZero();}
+    }
     ::state::StatePresets& presets;
     SearchLook searchLook;
     juce::Viewport viewport,sidebar;
     juce::Component content,categoriesContent;
     juce::TextEditor search;
     ActionButton closeButton;
+    ActionButton editDetails;
+    juce::Component::SafePointer<juce::DialogWindow> metadataDialog;
     PrimaryTextButton locateButton;
     std::vector<::state::StatePresets::BrowserEntry> entries;
     std::vector<std::unique_ptr<Row>> rows;

@@ -447,6 +447,8 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ### 2.1.0 (in development)
 
+- Add per-parameter locks for preset browsing and editable preset tags / notes,
+  with local Factory metadata overrides and protection against stale edits.
 - Add four MIDI CC modulation sources, note-triggered and one-shot LFOs, and
   seeded Random Hold / Random Glide modulation. Existing source IDs and
   automation parameter indices remain unchanged.
@@ -786,6 +788,26 @@ Shape. Copying a chain's routes uses the destination's current MIDI source
 configuration. A host must route MIDI into Fire to use external controllers;
 the existing AU component identity is retained, so MIDI delivery in AU depends
 on the host. Use VST3 or CLAP in hosts that do not send MIDI to an AU effect.
+
+**Preset locks and notes.** Parameter locks keep selected **base values** when
+browsing or stepping through whole-plugin presets. Modulation routes and source
+definitions still follow the incoming preset. No parameters are locked by
+default. Structural settings such as band count, crossover points, module
+presence and chain order cannot be locked. Lock preferences belong to the
+instance's project state, not to saved `.fire` sounds. A/B, Undo/Redo and host
+project restoration restore the complete sound regardless of locks. A sound
+that differs from its preset because of retained values shows the normal
+modified marker.
+
+Edit a preset's tags and description in the library to make it easier to find.
+Up to 16 tags of 32 characters and a 2048-character description are supported,
+including Chinese text. User notes travel with the `.fire` file; editing notes
+preserves its sound and frozen recordings. Saving over that file keeps its
+notes, and Save As inherits the selected preset's notes. Factory edits are local
+library overrides; restore the official notes to remove an override. Favourites
+and hidden status are independent. Archived user presets retain their notes and
+must be restored before editing. If a file or its notes changed while the editor
+was open, reopen the editor before saving rather than overwriting a newer edit.
 
 **Save chain preset…** stores a settings-only `.firechain` file; choose
 **Save chain preset with routing…** to include its mappings. These files live in

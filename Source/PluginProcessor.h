@@ -11,6 +11,7 @@
 #pragma once
 #include "Utility/ModulationSummary.h"
 #include "Utility/ChainSnapshot.h"
+#include "Utility/PresetParameterLocks.h"
 #include "Utility/ChannelModeParameters.h"
 #include "DSP/ChannelModeProcessor.h"
 #include "DSP/InsertRack.h"
@@ -494,6 +495,8 @@ private:
     // StatePresets) are still under construction. Keep that constructor path
     // on the LFO/APVTS-only snapshot until the full main model is alive.
     mutable juce::CriticalSection macroNamesLock;
+    mutable juce::CriticalSection presetLocksMutex;
+    juce::StringArray presetParameterLocks;
     fire::macro_names::Names macroDisplayNames = fire::macro_names::defaults();
     std::atomic<std::uint64_t> macroNamesRevision { 0 };
     std::atomic<bool> serializableMainStateReady { false };
@@ -512,6 +515,12 @@ public:
     bool isMidiLearnActive(std::uint64_t token) const noexcept;
     bool applyMidiLearn(std::uint64_t token);
     float getMidiCCValue(int slot) const noexcept;
+    using LockablePresetParameter = fire::preset_locks::Entry;
+    bool isPresetParameterLocked(const juce::String& id) const;
+    bool setPresetParameterLocked(const juce::String& id, bool locked);
+    void clearPresetParameterLocks();
+    juce::StringArray getPresetParameterLocks() const;
+    std::vector<LockablePresetParameter> getLockableParameters() const;
 
     using ModulationInfo = fire::ui::ModulationSummary;
 
@@ -910,6 +919,7 @@ private:
         fire::dsp::LoudnessMatchState::Settings loudnessMatch;
         fire::effects::FrozenRecordings frozenAudio;
         fire::macro_names::Names macroNames = fire::macro_names::defaults();
+        juce::StringArray presetLocks;
     };
 
     void initialiseParameterCache();

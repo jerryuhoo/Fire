@@ -105,6 +105,8 @@ public:
     std::function<void(const juce::String&)> onEditModulationRequested;
     std::function<int(const juce::String&)> getModulationRouteCount;
     bool isModulated = false;
+    bool isPresetLocked = false;
+    std::function<void(const juce::String&, bool)> onPresetLockChanged;
     bool isBipolar = true;
     bool isBypassed = false;
     juce::String parameterID;
@@ -123,6 +125,7 @@ public:
         std::uint32_t presentMask = (1u << fire::lfo_bank::defaultCount) - 1u;
         std::uint64_t revision = 0;
         std::array<juce::String, fire::mod_sources::macroCount> macroNames {};
+        bool presetLockAvailable = false, presetLockEnabled = false;
 
         bool contains(int index) const noexcept
         {
@@ -186,6 +189,7 @@ private:
     friend struct ModulatableSliderTestAccess;
     friend struct MultiSourceModulationUiTestAccess;
     friend struct LfoBankUiTestAccess;
+    friend struct PresetExperienceUiTestAccess;
     friend struct ModulatableSliderInteractionTestAccess;
 
     enum class PointerGesture

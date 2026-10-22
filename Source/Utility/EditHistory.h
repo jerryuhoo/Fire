@@ -4,6 +4,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <functional>
 #include <vector>
+#include "PresetParameterLocks.h"
 
 namespace fire::state
 {
@@ -85,7 +86,7 @@ public:
     bool canRedo() const noexcept { return ! resetPending.load() && ! dirty && cursor + 1 < entries.size(); }
     bool undo() { return travel(-1); }
     bool redo() { return travel(1); }
-    void ignoreNextHostDisplayChange() noexcept { skipReplayNotification = true; }
+    void ignoreNextHostDisplayChange() noexcept { if (onMessageThread()) skipReplayNotification = true; }
     void requestReset() noexcept
     {
         if (onMessageThread() && replaying) return;
@@ -106,7 +107,11 @@ private:
         auto xml = juce::AudioProcessor::getXmlFromBinary(data.getData(), static_cast<int>(data.getSize()));
         if (xml == nullptr) return data;
         if (auto* other = xml->getChildByName("otherState"))
-        { other->removeAttribute("editorWidth"); other->removeAttribute("editorHeight"); }
+        {
+            other->removeAttribute("editorWidth"); other->removeAttribute("editorHeight");
+            other->removeAttribute(preset_locks::versionAttribute);
+            other->removeAttribute(preset_locks::valuesAttribute);
+        }
         juce::MemoryBlock result;
         juce::AudioProcessor::copyXmlToBinary(*xml, result);
         return result;

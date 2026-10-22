@@ -1038,6 +1038,7 @@ public:
         g.setColour(colour);
         g.setFont(getTextButtonFont(button, button.getHeight()));
         auto textBounds = button.getLocalBounds().reduced(juce::roundToInt(7.0f * scale), 1);
+        textBounds.removeFromRight(static_cast<int>(button.getProperties().getWithDefault("firePresetLockSpace", 0)));
         const bool moduleRail = static_cast<bool>(
             button.getProperties().getWithDefault("fireModuleRail", false));
         if (moduleRail)

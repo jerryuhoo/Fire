@@ -124,6 +124,9 @@
         <FILE id="modStateValidation01" name="ModulationStateValidation.h" compile="0" resource="0" file="Source/Utility/ModulationStateValidation.h"/>
         <FILE id="modSummary01" name="ModulationSummary.h" compile="0" resource="0" file="Source/Utility/ModulationSummary.h"/>
         <FILE id="lfoPerformanceClock21" name="LfoPerformanceClock.h" compile="0" resource="0" file="Source/DSP/LfoPerformanceClock.h"/>
+        <FILE id="presetLockGlyph21" name="PresetLockGlyph.h" compile="0" resource="0" file="Source/GUI/PresetLockGlyph.h"/>
+        <FILE id="presetLockControls21" name="PresetLockControls.h" compile="0" resource="0" file="Source/GUI/PresetLockControls.h"/>
+        <FILE id="presetMetadataControls21" name="PresetMetadataControls.h" compile="0" resource="0" file="Source/GUI/PresetMetadataControls.h"/>
         <FILE id="performanceUiHelpers21" name="PerformanceControlHelpers.h" compile="0" resource="0" file="Source/GUI/PerformanceControlHelpers.h"/>
         <FILE id="lfoPlaybackUi21" name="LfoPlaybackControls.h" compile="0" resource="0" file="Source/GUI/LfoPlaybackControls.h"/>
         <FILE id="midiUi21" name="MidiControls.h" compile="0" resource="0" file="Source/GUI/MidiControls.h"/>
@@ -141,6 +144,9 @@
         <FILE id="lfoPlaybackParams21" name="LfoPlaybackParameters.h" compile="0" resource="0" file="Source/Utility/LfoPlaybackParameters.h"/>
         <FILE id="midiState21" name="MidiStateValidation.h" compile="0" resource="0" file="Source/Utility/MidiStateValidation.h"/>
         <FILE id="midiActions21" name="MidiControlActions.cpp" compile="1" resource="0" file="Source/Utility/MidiControlActions.cpp"/>
+        <FILE id="presetMetadata21" name="PresetMetadata.h" compile="0" resource="0" file="Source/Utility/PresetMetadata.h"/>
+        <FILE id="presetLocksHeader21" name="PresetParameterLocks.h" compile="0" resource="0" file="Source/Utility/PresetParameterLocks.h"/>
+        <FILE id="presetLocksSource21" name="PresetParameterLocks.cpp" compile="1" resource="0" file="Source/Utility/PresetParameterLocks.cpp"/>
         <FILE id="envState21" name="EnvelopeStateValidation.h" compile="0" resource="0" file="Source/Utility/EnvelopeStateValidation.h"/>
         <FILE id="envDsp21" name="EnvelopeDetectors.h" compile="0" resource="0" file="Source/DSP/EnvelopeDetectors.h"/>
       </GROUP>

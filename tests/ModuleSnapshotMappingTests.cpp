@@ -175,7 +175,7 @@ TEST_CASE("EQ snapshot includes all twelve stable nodes with models presence and
         moduleSet(processor,id(fire::eq::Field::bypassed),node % 3 == 0 ? 1 : 0);
     }
     cs::Module source; REQUIRE(cs::captureModule(processor,1,fire::module_order::firstInsert + slot,source).wasOk());
-    CHECK(source.values.size() == 6u + fire::eq::maxNodes * fire::eq::fieldCount);
+    CHECK(source.values.size() == 6u + fire::eq::maxNodes * (fire::eq::fieldCount + fire::dynamic_eq::fieldCount));
     Patch patch; juce::Array<ModulationRouting> routes;
     REQUIRE(cs::mapModule(processor,source,3,fire::module_order::firstInsert + 7,false,patch,routes).wasOk());
     moduleApply(processor,patch);

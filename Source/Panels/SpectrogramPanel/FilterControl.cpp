@@ -8,6 +8,7 @@
 */
 
 #include "FilterControl.h"
+#include "../../Utility/DynamicEqParameters.h"
 #include "../../GUI/InterfaceDefines.h"
 #include "../ControlPanel/GlobalPanel.h"
 #include <algorithm>
@@ -135,6 +136,9 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel)
             parameter->addListener(this);
             observedParameters.push_back(parameter);
         }
+    for(int node=0;node<fire::eq::maxNodes;++node)
+        dynamicEnableParameters[static_cast<size_t>(node)]=processor.treeState.getRawParameterValue(
+            fire::dynamic_eq::parameterID(0,-1,node,fire::dynamic_eq::enabled));
 
     processor.addChangeListener(this);
 
@@ -336,16 +340,16 @@ void FilterControl::paint(juce::Graphics& g)
 
     if (isFilterEnabled && isAnimationActive && ! lfoResponseCurve.isEmpty())
     {
-        g.setColour(fire::ui::colours::modulation.withAlpha(0.16f));
+        g.setColour(fire::ui::colours::modulation.withAlpha(0.16f*telemetryOpacity));
         g.strokePath(lfoResponseCurve, juce::PathStrokeType(3.0f));
 
-        juce::ColourGradient modulation(fire::ui::colours::modulation.withAlpha(0.82f),
+        juce::ColourGradient modulation(fire::ui::colours::modulation.withAlpha(0.82f*telemetryOpacity),
                                         bounds.getX(), bounds.getCentreY(),
-                                        fire::ui::colours::ember.withAlpha(0.72f),
+                                        fire::ui::colours::ember.withAlpha(0.72f*telemetryOpacity),
                                         bounds.getRight(), bounds.getCentreY(), false);
         g.setGradientFill(modulation);
         if (fire::ui::isLineSkin(*this))
-            g.setColour(fire::ui::lineInk(fire::ui::colours::modulation,fire::ui::skinFor(*this)).withAlpha(.86f));
+            g.setColour(fire::ui::lineInk(fire::ui::colours::modulation,fire::ui::skinFor(*this)).withAlpha(.86f*telemetryOpacity));
         g.strokePath(lfoResponseCurve, juce::PathStrokeType(1.0f));
     }
 
@@ -420,7 +424,14 @@ void FilterControl::animationTick()
 
     const bool parametersChanged = parameterUpdatePending.exchange(false, std::memory_order_acq_rel);
     const bool routingChanged = routingStateDirty.exchange(false, std::memory_order_acq_rel);
-    bool visualStateChanged = parametersChanged || routingChanged
+    bool dynamicChanged=false;
+    for(size_t node=0;node<dynamicEnableParameters.size();++node)
+    {
+        const bool enabled=dynamicEnableParameters[node] && dynamicEnableParameters[node]->load(std::memory_order_relaxed)>.5f;
+        dynamicChanged=dynamicChanged || enabled!=presentedDynamicEnabled[node];
+        presentedDynamicEnabled[node]=enabled;
+    }
+    bool visualStateChanged = parametersChanged || routingChanged || dynamicChanged
                            || sampleRateChanged;
     const auto selectedNode = globalPanel ? globalPanel->getSelectedEqNode() : -1;
     if (lastSelectedNode != selectedNode)
@@ -449,17 +460,27 @@ void FilterControl::animationTick()
             return;
     }
 
-    if (routingChanged || parametersChanged || sampleRateChanged)
+    if (routingChanged || parametersChanged || sampleRateChanged || dynamicChanged)
         checkAnimationStatus();
 
     if (isAnimationActive)
     {
         if (hasFreshModulatedValues)
         {
+            lastTelemetryTimeMs=juce::Time::getMillisecondCounterHiRes();
+            telemetryOpacity=1.f;
             updateLfoChain(modulatedValues);
             hasFreshTelemetryForPresentation = true;
             updateLfoResponseCurve();
             visualStateChanged = true;
+        }
+        else if(telemetryOpacity>0)
+        {
+            const auto age=static_cast<float>((juce::Time::getMillisecondCounterHiRes()-lastTelemetryTimeMs)/1000.0);
+            const auto opacity=juce::jlimit(0.f,1.f,1.f-(age-.15f)/.2f);
+            visualStateChanged=visualStateChanged || !juce::approximatelyEqual(opacity,telemetryOpacity);
+            telemetryOpacity=opacity;
+            if(opacity<=0){hasFreshTelemetryForPresentation=false;lfoResponseCurve.clear();}
         }
     }
 
@@ -478,6 +499,7 @@ void FilterControl::suspendTelemetryPresentation()
 
     telemetryPresentationActive = false;
     hasFreshTelemetryForPresentation = false;
+    telemetryOpacity=0;lastTelemetryTimeMs=0;
     requiredTelemetryCaptureEpoch = 0;
     if (! lfoResponseCurve.isEmpty())
     {
@@ -520,6 +542,14 @@ void FilterControl::checkAnimationStatus()
                 break;
             }
         }
+        if(!needsAnimation)
+            for(int slot=0;slot<fire::eq::maxNodes;++slot)
+            {
+                const auto state=processor.getEqNodeState(slot);
+                const auto* enabled=dynamicEnableParameters[static_cast<size_t>(slot)];
+                if(state.present && !state.bypassed && fire::dynamic_eq::supports(state.type) && enabled && enabled->load()>.5f)
+                {needsAnimation=true;break;}
+            }
     }
 
     if (needsAnimation != isAnimationActive)

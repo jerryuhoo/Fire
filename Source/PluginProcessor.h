@@ -28,6 +28,7 @@
 #include "Utility/LfoBankParameters.h"
 #include "DSP/EqCoefficients.h"
 #include "DSP/EqProcessor.h"
+#include "DSP/DynamicEqDetector.h"
 
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "DSP/WidthProcessor.h"
@@ -635,6 +636,7 @@ public:
         ModulatedFilterValues& values,
         std::uint64_t requiredCaptureEpoch = 0);
     std::uint64_t requestFreshModulatedFilterValuesEpoch() noexcept;
+    fire::dynamic_eq::VisualState getDynamicEqVisualState(int node, int scope = -1, int slot = -1) const noexcept;
     fire::eq::NodeState getEqNodeState(int slot, int fxScope = -1, int fxSlot = -1) const;
     int addEqNode(float frequency, float gainDb,
                   fire::eq::Type type = fire::eq::Type::bell, int fxScope = -1, int fxSlot = -1);
@@ -958,7 +960,29 @@ private:
     FilterParameterCache filterParameterCache;
     std::array<std::array<CachedParameter, fire::eq::fieldCount>, fire::eq::maxNodes> eqParameterCache;
     std::array<std::atomic<std::uint32_t>, fire::eq::maxNodes> eqNodeGenerations {};
+    std::array<std::array<std::array<std::atomic<std::uint32_t>, fire::eq::maxNodes>, fire::effects::slotCount>, fire::effects::scopeCount> insertEqNodeGenerations {};
     fire::eq::Processor eqProcessor;
+    using DynamicEqParameterCache = std::array<CachedParameter, fire::dynamic_eq::fieldCount>;
+    using DynamicEqModuleCache = std::array<DynamicEqParameterCache, fire::eq::maxNodes>;
+    DynamicEqModuleCache nativeDynamicEqParameters;
+    std::array<std::array<DynamicEqModuleCache, fire::effects::slotCount>, fire::effects::scopeCount> insertDynamicEqParameters;
+    static fire::dynamic_eq::Configuration readDynamicEqConfiguration(const DynamicEqParameterCache&) noexcept;
+    fire::dynamic_eq::Detector legacyPeakDetector;
+    float legacyPeakDynamicGain = 0, legacyPeakAppliedGainChange = 0;
+    int legacyPeakDynamicRemaining = 0;
+    std::uint32_t legacyPeakDynamicGeneration = 0;
+    struct DynamicEqMeter
+    {
+        std::atomic<std::uint64_t> sequence {0};
+        std::atomic<float> gainChange {0}, effectiveGain {0};
+        std::atomic<bool> active {false};
+    };
+    std::array<std::array<DynamicEqMeter, fire::eq::maxNodes>, 1 + fire::effects::scopeCount * fire::effects::slotCount> dynamicEqMeters;
+    std::uint64_t dynamicEqRenderSequence = 0; // Audio-thread owned, also advances for oversized sub-blocks.
+    void publishDynamicEqMeters() noexcept;
+    void resetDynamicEqMeters() noexcept;
+    void resetDynamicEqNodeParameters(int node, int scope, int slot);
+
     CachedParameter numBandsParameter;
     CachedParameter hqParameter;
     CachedParameter globalOutputParameter;

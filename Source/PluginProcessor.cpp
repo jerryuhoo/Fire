@@ -19,6 +19,8 @@
 #include "Utility/EnvelopeStateValidation.h"
 #include "Utility/ChannelModeStateValidation.h"
 #include "Utility/MidiStateValidation.h"
+#include "Utility/DynamicEqParameterLayout.h"
+#include "Utility/DynamicEqStateValidation.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -125,7 +127,7 @@ Slope getSlopeParameterValue(const std::atomic<float>* parameter) noexcept
 constexpr int minimumProcessingBlockCapacity = 8192;
 constexpr double safePeakHoldSeconds = 0.05;
 constexpr double safePeakReleaseSeconds = 0.05;
-constexpr int hostStateFormatVersion = 5;
+constexpr int hostStateFormatVersion = 6;
 constexpr int oldestWrappedHostParameterCount = 19;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 std::atomic<HostBypassDenormalStateHook>
@@ -322,7 +324,7 @@ bool isValidVersionedHostRoutingState(
         // semantic routing and may repeat, but all populated targets must be
         // known and unique.
         const auto target = routing->getStringAttribute("target");
-        if (fire::mod_sources::isParameterID(target) || fire::channel_mode::isParameterID(target)) return false;
+        if (fire::mod_sources::isParameterID(target) || fire::channel_mode::isParameterID(target) || fire::dynamic_eq::isParameterID(target)) return false;
         if (target.isEmpty())
             continue;
         if (parameterState.getParameter(target) == nullptr
@@ -2887,6 +2889,8 @@ bool FireAudioProcessor::hasActiveFilterModulation() const noexcept
 
 void FireAudioProcessor::initialiseParameterCache()
 {
+    // Build route-validation lookup storage before any audio callback.
+    (void) fire::dynamic_eq::isParameterID(fire::dynamic_eq::parameterID(0, -1, 0, 0));
     const auto indexed = [this](const juce::String& base, int index)
     {
         return cacheParameter(ParameterIDAndName::getIDString(base, index));
@@ -3002,6 +3006,16 @@ void FireAudioProcessor::initialiseParameterCache()
         for (int field = 0; field < fire::eq::fieldCount; ++field)
             eqParameterCache[static_cast<size_t>(slot)][static_cast<size_t>(field)] =
                 cacheParameter(fire::eq::parameterID(slot, static_cast<fire::eq::Field>(field)));
+    for (int node = 0; node < fire::eq::maxNodes; ++node)
+        for (int field = 0; field < fire::dynamic_eq::fieldCount; ++field)
+            nativeDynamicEqParameters[static_cast<size_t>(node)][static_cast<size_t>(field)]
+                = cacheParameter(fire::dynamic_eq::parameterID(0, -1, node, field));
+    for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
+        for (int slot = 0; slot < fire::effects::slotCount; ++slot)
+            for (int node = 0; node < fire::eq::maxNodes; ++node)
+                for (int field = 0; field < fire::dynamic_eq::fieldCount; ++field)
+                    insertDynamicEqParameters[static_cast<size_t>(scope)][static_cast<size_t>(slot)][static_cast<size_t>(node)][static_cast<size_t>(field)]
+                        = cacheParameter(fire::dynamic_eq::parameterID(scope, slot, node, field));
 }
 
 //==============================================================================
@@ -3321,6 +3335,7 @@ int FireAudioProcessor::addEqNode(float frequency, float gainDb, fire::eq::Type 
     // its old LFO assignments before publishing its new active identity.
     for (auto field : {Field::frequency, Field::gain, Field::q})
         clearModulationForParameter(id(slot, field));
+    resetDynamicEqNodeParameters(slot, fxSlot < 0 ? 0 : fxScope, fxSlot);
     write(Field::frequency, frequency);
     write(Field::gain, gainDb);
     write(Field::q, slot < 3 ? 1.0f : 0.70710678f);
@@ -3328,6 +3343,8 @@ int FireAudioProcessor::addEqNode(float frequency, float gainDb, fire::eq::Type 
     write(Field::type, static_cast<float>(type));
     write(Field::bypassed, 0.0f);
     if (fxSlot < 0) eqNodeGenerations[static_cast<size_t>(slot)].fetch_add(1u, std::memory_order_relaxed);
+    else insertEqNodeGenerations[static_cast<size_t>(fxScope)][static_cast<size_t>(fxSlot)][static_cast<size_t>(slot)]
+        .fetch_add(1u, std::memory_order_relaxed);
     write(Field::present, 1.0f);
     if (auto* enabled = treeState.getParameter(fxSlot < 0 ? juce::String(FILTER_BYPASS_ID) : fire::effects::parameterID(fxScope, fxSlot, fire::effects::enabledField)))
     {
@@ -3352,6 +3369,7 @@ bool FireAudioProcessor::removeEqNode(int slot, int fxScope, int fxSlot)
     present->beginChangeGesture();
     present->setValueNotifyingHost(0.0f);
     present->endChangeGesture();
+    resetDynamicEqNodeParameters(slot, fxSlot < 0 ? 0 : fxScope, fxSlot);
     for (auto field : {Field::frequency, Field::gain, Field::q})
         clearModulationForParameter(id(slot, field));
     return true;
@@ -3374,6 +3392,9 @@ juce::StringArray legacyModuleParameters(int scope, int node)
         if (node == 0)
         {
             ids.add(FILTER_BYPASS_ID);
+            for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
+                for (int field = 0; field < fire::dynamic_eq::fieldCount; ++field)
+                    ids.add(fire::dynamic_eq::parameterID(0, -1, slot, field));
             for (int slot = 0; slot < fire::eq::maxNodes; ++slot)
                 for (int field = 0; field < fire::eq::fieldCount; ++field)
                     ids.add(fire::eq::parameterID(slot, static_cast<fire::eq::Field>(field)));
@@ -3640,6 +3661,7 @@ int FireAudioProcessor::addInsertEffect(int scope, fire::effects::Type type)
             ? parameter->convertTo0to1(static_cast<float>(fire::core_modules::encodeType(type))) : parameter->getDefaultValue());
         parameter->endChangeGesture();
     }
+    for (int node = 0; node < fire::eq::maxNodes; ++node) resetDynamicEqNodeParameters(node, scope, freeSlot);
     const auto driveID = fire::analog_params::driveID(scope, freeSlot);
     clearModulationForParameter(driveID);
     auto* analogDrive = treeState.getParameter(driveID);
@@ -3688,6 +3710,7 @@ void FireAudioProcessor::removeInsertEffect(int scope, int slot)
         auto* extra = treeState.getParameter(id);
         extra->beginChangeGesture(); extra->setValueNotifyingHost(extra->getDefaultValue()); extra->endChangeGesture();
     }
+    for (int node = 0; node < fire::eq::maxNodes; ++node) resetDynamicEqNodeParameters(node, scope, slot);
     const auto driveID = fire::analog_params::driveID(scope, slot);
     clearModulationForParameter(driveID);
     auto* analogDrive = treeState.getParameter(driveID);
@@ -4037,7 +4060,10 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     updateFilter(safeSampleRate);
     leftChain.prepare(spec);
     rightChain.prepare(spec);
-    eqProcessor.prepare(safeSampleRate);
+    eqProcessor.prepare(spec);
+    legacyPeakDetector.prepare(safeSampleRate);
+    legacyPeakDynamicGain = legacyPeakAppliedGainChange = 0; legacyPeakDynamicRemaining = 0;
+    resetDynamicEqMeters();
     lowCutSlopeTransition.leftStandby.prepare(spec);
     lowCutSlopeTransition.rightStandby.prepare(spec);
     highCutSlopeTransition.leftStandby.prepare(spec);
@@ -5251,6 +5277,8 @@ void FireAudioProcessor::performReset()
     leftChain.reset();
     rightChain.reset();
     eqProcessor.reset();
+    legacyPeakDetector.reset(); legacyPeakDynamicGain = legacyPeakAppliedGainChange = 0; legacyPeakDynamicRemaining = 0;
+    resetDynamicEqMeters();
     lowCutSlopeTransition.leftStandby.reset();
     lowCutSlopeTransition.rightStandby.reset();
     highCutSlopeTransition.leftStandby.reset();
@@ -5821,6 +5849,8 @@ void FireAudioProcessor::processWetBlock(
                                 mOutputLeftPeakGlobal,
                                 mOutputRightPeakGlobal);
 
+    publishDynamicEqMeters();
+
     // --- 1. Push Modulated Filter Data to its FIFO ---
     if (filterFifo.getFreeSpace() >= 1)
     {
@@ -5951,6 +5981,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute("modulationSourcesSchemaVersion", fire::mod_sources::schemaVersion);
     xmlState.setAttribute(fire::envelope_state::marker,fire::envelope_params::schemaVersion);
     xmlState.setAttribute(fire::channel_mode_state::marker,fire::channel_mode::schemaVersion);
+    xmlState.setAttribute(fire::dynamic_eq_state::marker, fire::dynamic_eq::schemaVersion);
     xmlState.setAttribute(fire::midi_state::ccMarker,fire::midi_mod::schemaVersion);
     xmlState.setAttribute(fire::midi_state::playbackMarker,fire::lfo_playback::schemaVersion);
     xmlState.setAttribute("moduleOrderSchemaVersion", 1);
@@ -6082,6 +6113,9 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         incomingParameterIDSet.insert(parameterID);
     }
 
+    bool legacyDynamicEqFamily=false;
+    if (!fire::dynamic_eq_state::validate(*xmlState,*this,
+            xmlState->getIntAttribute("stateFormatVersion",0)>=6,true,legacyDynamicEqFamily)) return;
     bool legacyEnvelopeFamily=false;
     if (!fire::envelope_state::validateHost(*xmlState,*this,
             xmlState->getIntAttribute("stateFormatVersion",0)>=3,legacyEnvelopeFamily)) return;
@@ -6533,6 +6567,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 || fire::mod_sources::isParameterID(routing.targetParameterID)
                 || migratedCloudsRoutingTargets.contains(routing.targetParameterID)
                 || fire::channel_mode::isParameterID(routing.targetParameterID)
+                || fire::dynamic_eq::isParameterID(routing.targetParameterID)
                 || (!advancedMapping && loadedRoutingTargets.contains(routing.targetParameterID)))
                 continue;
 
@@ -7807,6 +7842,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
                 parameters.push_back(std::make_unique<PChoice>(id,name,field==playMode?playModeNames():waveModeNames(),defaults[i]));
             else parameters.push_back(std::make_unique<PInt>(id,name,minimums[i],maximums[i],defaults[i]));
         }
+    fire::dynamic_eq::appendParameters(parameters);
     return { parameters.begin(), parameters.end() };
 }
 
@@ -7868,7 +7904,8 @@ void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackP
                 destination.state.bypassed = loadCachedParameter(field(fire::eq::Field::bypassed)) > 0.5f;
                 destination.state.type = static_cast<fire::eq::Type>(juce::jlimit(0, 6, juce::roundToInt(loadCachedParameter(field(fire::eq::Field::type)))));
                 destination.state.slope = juce::jlimit(0, 3, juce::roundToInt(loadCachedParameter(field(fire::eq::Field::slope))));
-                destination.generation = 0;
+                destination.generation = insertEqNodeGenerations[static_cast<size_t>(scope)][slot][static_cast<size_t>(node)].load(std::memory_order_relaxed);
+                destination.dynamic = readDynamicEqConfiguration(insertDynamicEqParameters[static_cast<size_t>(scope)][slot][static_cast<size_t>(node)]);
                 for (int control = 0; control < 3; ++control)
                 {
                     const auto& cached = field(static_cast<fire::eq::Field>(control));
@@ -8223,6 +8260,7 @@ void FireAudioProcessor::prepareAudioCallbackParameterSnapshot(
         using namespace fire::eq;
         auto& node = filter.eqNodes[static_cast<size_t>(slot)];
         node.generation = eqNodeGenerations[static_cast<size_t>(slot)].load(std::memory_order_relaxed);
+        node.dynamic = readDynamicEqConfiguration(nativeDynamicEqParameters[static_cast<size_t>(slot)]);
         const auto& cached = eqParameterCache[static_cast<size_t>(slot)];
         const auto read = [&](Field field, float fallback)
         { return loadCachedParameter(cached[static_cast<size_t>(field)], fallback); };
@@ -8587,6 +8625,28 @@ bool FireAudioProcessor::updateGlobalFilters(
     smoothedSettings.highCutGainInDecibels = highcutGainSmoother.getNextValue();
     smoothedSettings.highCutQuality = highcutQualitySmoother.getNextValue();
 
+    // The legacy Bell retains its original IIR path. Its level detector sees
+    // the module input, before Low Cut or any earlier node can change the level.
+    // Hold only the dynamic contribution on a fixed control grid; normal host
+    // automation and modulation keep their existing sample-accurate updates.
+    if (legacyPeakDetector.isActive())
+    {
+        const float offset = legacyPeakDetector.process(
+            eqProcessor.getModuleInputSample(0, lfoSampleIndex),
+            eqProcessor.getModuleInputSample(1, lfoSampleIndex), true,
+            smoothedSettings.peakFreq, smoothedSettings.peakQuality, fire::eq::Type::bell);
+        if (legacyPeakDynamicRemaining-- <= 0)
+        {
+            legacyPeakDynamicGain = offset;
+            legacyPeakDynamicRemaining = legacyPeakDetector.getControlPeriod() - 1;
+        }
+        if (!legacyPeakDetector.isActive()) legacyPeakDynamicGain = 0;
+        const auto baseGain = smoothedSettings.peakGainInDecibels;
+        smoothedSettings.peakGainInDecibels = juce::jlimit(-24.0f, 24.0f, baseGain + legacyPeakDynamicGain);
+        legacyPeakAppliedGainChange = smoothedSettings.peakGainInDecibels - baseGain;
+    }
+    else { legacyPeakDynamicGain = legacyPeakAppliedGainChange = 0; legacyPeakDynamicRemaining = 0; }
+
     const bool sampleRateChanged = ! globalFilterCacheValid
                                 || ! sameCachedValue(cachedGlobalFilterSampleRate, sampleRate);
     const bool lowCutChanged = sampleRateChanged
@@ -8726,6 +8786,19 @@ void FireAudioProcessor::applyMasterFilter(juce::AudioBuffer<float>& buffer, con
             eqProcessor.begin(slot, parameters);
         }
 
+        const auto& peakNode = filterSnapshot.eqNodes[1];
+        if (legacyPeakDynamicGeneration != peakNode.generation
+            || (legacyPeakDetector.isActive() && (!peakNode.state.present || !fire::eq::usesLegacyShape(1, peakNode.state.type))))
+        {
+            legacyPeakDetector.reset(); legacyPeakDynamicGain = legacyPeakAppliedGainChange = 0; legacyPeakDynamicRemaining = 0;
+            legacyPeakDynamicGeneration = peakNode.generation;
+        }
+        auto peakDynamics = peakNode.dynamic;
+        peakDynamics.enabled = peakDynamics.enabled && filterEnabled && peakNode.state.present
+            && !peakNode.state.bypassed && fire::eq::usesLegacyShape(1, peakNode.state.type);
+        legacyPeakDetector.setConfiguration(peakDynamics);
+        eqProcessor.beginModuleInput(block, legacyPeakDetector.isActive());
+
         const float lowCutMix = filterSnapshot.baseSettings.lowCutBypassed
                                     ? 0.0f
                                     : 1.0f;
@@ -8803,7 +8876,7 @@ void FireAudioProcessor::applyMasterFilter(juce::AudioBuffer<float>& buffer, con
         const bool coefficientsChanged = updateGlobalFilters(sampleRate,
                                                               lfoOutputs,
                                                               0);
-        const bool needsPerSampleUpdates = filterHasModulation || isFilterSmoothing();
+        const bool needsPerSampleUpdates = filterHasModulation || isFilterSmoothing() || legacyPeakDetector.isActive();
 
         if ((coefficientsChanged || needsPerSampleUpdates) && buffer.getNumSamples() > 0)
         {
@@ -8811,7 +8884,7 @@ void FireAudioProcessor::applyMasterFilter(juce::AudioBuffer<float>& buffer, con
             processedSamples = 1;
 
             while (processedSamples < buffer.getNumSamples()
-                   && (filterHasModulation || isFilterSmoothing()))
+                   && (filterHasModulation || isFilterSmoothing() || legacyPeakDetector.isActive()))
             {
                 updateGlobalFilters(sampleRate,
                                     lfoOutputs,
@@ -9336,6 +9409,8 @@ bool FireAudioProcessor::commitPendingTopologySnapshot() noexcept
     if (masterModeChanged)
     {
         leftChain.reset(); rightChain.reset(); eqProcessor.reset();
+        legacyPeakDetector.reset(); legacyPeakDynamicGain = legacyPeakAppliedGainChange = 0; legacyPeakDynamicRemaining = 0;
+        resetDynamicEqMeters();
         lowCutSlopeTransition.leftStandby.reset(); lowCutSlopeTransition.rightStandby.reset();
         highCutSlopeTransition.leftStandby.reset(); highCutSlopeTransition.rightStandby.reset();
         globalFilterCacheValid = false;

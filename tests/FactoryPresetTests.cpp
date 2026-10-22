@@ -41,6 +41,12 @@ TEST_CASE("Factory library offers 236 complete scenes in eleven collections with
         CHECK(preset.getIntAttribute("channelModeSchemaVersion") == fire::channel_mode::schemaVersion);
         CHECK(preset.getIntAttribute("midiModulationSchemaVersion") == fire::midi_mod::schemaVersion);
         CHECK(preset.getIntAttribute("lfoPlaybackSchemaVersion") == fire::lfo_playback::schemaVersion);
+        CHECK(preset.getIntAttribute("dynamicEqSchemaVersion") == fire::dynamic_eq::schemaVersion);
+        int dynamicFields=0;
+        for(const auto& attribute:preset.getAttributeIterator())
+            if(fire::dynamic_eq::isParameterID(attribute.name.toString()))
+            {++dynamicFields;CHECK(static_cast<float>(attribute.value.getDoubleValue())==processor.treeState.getParameter(attribute.name.toString())->getDefaultValue());}
+        CHECK(dynamicFields==fire::dynamic_eq::parameterCount);
         for(const auto* ids:{&fire::midi_mod::parameterIDs(),&fire::lfo_playback::parameterIDs()})
             for(const auto& id:*ids)
             {

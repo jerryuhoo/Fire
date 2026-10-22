@@ -2,6 +2,7 @@
 
 #include "EqCoefficients.h"
 #include "ModulatedValueProvider.h"
+#include "DynamicEqDetector.h"
 
 namespace fire::eq
 {
@@ -17,7 +18,16 @@ public:
         std::uint32_t generation = 0;
         std::array<ModulatedValueProvider, 3> controls; // frequency, gain, Q
         std::array<int, 3> sources { -1, -1, -1 };
+        dynamic_eq::Configuration dynamic;
     };
+
+    void prepare(const juce::dsp::ProcessSpec& spec)
+    {
+        const auto capacity = juce::jmax(1, static_cast<int>(std::min<juce::uint64>(
+            spec.maximumBlockSize, static_cast<juce::uint64>(std::numeric_limits<int>::max()))));
+        moduleInput.setSize(2, capacity);
+        prepare(spec.sampleRate);
+    }
 
     void prepare(double rate) noexcept
     {
@@ -28,6 +38,7 @@ public:
         updatePeriod = juce::jmax(1, juce::roundToInt(sampleRate / 6000.0));
         for (auto& node : nodes)
         {
+            node.detector.prepare(sampleRate);
             for (auto& base : node.bases) base.reset(sampleRate, 0.02);
             for (auto& route : node.routes) route.blend.reset(sampleRate, 0.01);
             node.wet.reset(sampleRate, 0.02);
@@ -38,8 +49,11 @@ public:
 
     void reset() noexcept
     {
+        moduleInputSamples = moduleInputChannels = 0;
         for (auto& node : nodes)
         {
+            node.detector.reset();
+            node.visual = {};
             node.initialised = false;
             node.enabled = false;
             node.wet.setCurrentAndTargetValue(0.0f);
@@ -60,8 +74,16 @@ public:
         auto& node = nodes[static_cast<size_t>(slot)];
         const bool wasDormant = ! node.initialised
                                || (! node.enabled && node.wet.getCurrentValue() == 0.0f);
+        // prepare/reset already initialises detector storage. Re-resetting all
+        // dormant nodes here would invalidate their coefficient caches every
+        // callback, even when Dynamics has never been enabled.
+        if (node.parameters.generation != parameters.generation) node.detector.reset();
         node.parameters = parameters;
         node.enabled = parameters.enabled;
+        auto dynamicConfiguration = parameters.dynamic;
+        dynamicConfiguration.enabled = dynamicConfiguration.enabled && parameters.enabled
+            && dynamic_eq::supports(parameters.state.type);
+        node.detector.setConfiguration(dynamicConfiguration);
         for (size_t control = 0; control < node.bases.size(); ++control)
         {
             const auto base = sanitise(control, parameters.controls[control].baseValue);
@@ -95,6 +117,7 @@ public:
             route.bipolar = provider.isBipolar;
             route.signalIsOffset = provider.signalIsOffset;
         }
+        if (wasDormant) node.effectiveValues = node.values;
         if (wasDormant && node.enabled)
         {
             node.banks[0].setRecipe(parameters.state, node.values, sampleRate, parameters.generation);
@@ -107,6 +130,36 @@ public:
         else node.wet.setTargetValue(node.enabled ? 1.0f : 0.0f);
         node.initialised = true;
         if (node.enabled) requestRecipe(node);
+    }
+
+    // Call after begin() for all nodes, before processing ANY node. The optional
+    // forced snapshot lets the original Master Bell share the same detector tap.
+    void beginModuleInput(const juce::dsp::AudioBlock<float>& input, bool force = false) noexcept
+    {
+        moduleInputSamples = moduleInputChannels = 0;
+        bool needed = force;
+        for (const auto& node : nodes) needed = needed || node.detector.isActive();
+        if (!needed) return;
+        jassert(input.getNumSamples() <= static_cast<size_t>(moduleInput.getNumSamples()));
+        if (input.getNumSamples() > static_cast<size_t>(moduleInput.getNumSamples())) return;
+        moduleInputSamples = static_cast<int>(input.getNumSamples());
+        moduleInputChannels = static_cast<int>(juce::jmin(size_t{2}, input.getNumChannels()));
+        for (int channel = 0; channel < moduleInputChannels; ++channel)
+            juce::FloatVectorOperations::copy(moduleInput.getWritePointer(channel), input.getChannelPointer(static_cast<size_t>(channel)), moduleInputSamples);
+    }
+
+    float getModuleInputSample(int channel, int sample) const noexcept
+    {
+        return juce::isPositiveAndBelow(channel, moduleInputChannels) && juce::isPositiveAndBelow(sample, moduleInputSamples)
+            ? moduleInput.getSample(channel, sample) : 0;
+    }
+
+    /** Audio thread only; the processor publishes a separate atomic UI copy. */
+    dynamic_eq::VisualState getDynamicEqVisualState(int slot) const noexcept
+    {
+        if (!validSlot(slot)) return {};
+        const auto& node = nodes[static_cast<size_t>(slot)];
+        return node.initialised && node.enabled && node.parameters.state.present && !node.parameters.state.bypassed ? node.visual : dynamic_eq::VisualState{};
     }
 
     void process(int slot, juce::dsp::AudioBlock<float>& block, int start, int count) noexcept
@@ -127,12 +180,20 @@ public:
                     : route.anchor + blend * (target - route.anchor);
                 route.blend.getNextValue();
             }
+            node.effectiveValues = node.values;
+            if (node.detector.isActive())
+            {
+                jassert(sample < moduleInputSamples);
+                const auto delta = node.detector.process(getModuleInputSample(0, sample), getModuleInputSample(1, sample),
+                    channels > 1, node.values[0], node.values[2], node.parameters.state.type);
+                node.effectiveValues[1] = juce::jlimit(-24.0f, 24.0f, node.values[1] + delta);
+            }
             const int active = node.typeBlend.getCurrentValue() >= 0.5f ? 1 : 0;
             if (node.counter == 0)
             {
-                node.banks[static_cast<size_t>(active)].update(node.values, sampleRate, updatePeriod);
+                node.banks[static_cast<size_t>(active)].update(node.effectiveValues, sampleRate, updatePeriod);
                 if (node.typeBlend.isSmoothing())
-                    node.banks[static_cast<size_t>(1 - active)].update(node.values, sampleRate, updatePeriod);
+                    node.banks[static_cast<size_t>(1 - active)].update(node.effectiveValues, sampleRate, updatePeriod);
                 node.counter = updatePeriod;
             }
             --node.counter;
@@ -158,6 +219,10 @@ public:
             node.typeBlend.getNextValue();
             if (changingType && ! node.typeBlend.isSmoothing() && node.enabled) requestRecipe(node);
         }
+        node.visual.gainChangeDb = node.effectiveValues[1] - node.values[1];
+        node.visual.effectiveGainDb = node.effectiveValues[1];
+        node.visual.active = node.detector.isActive() && dynamic_eq::supports(node.parameters.state.type);
+        ++node.visual.renderSequence;
     }
 
     NodeState currentState(int slot) const noexcept
@@ -166,7 +231,7 @@ public:
         const auto& node = nodes[static_cast<size_t>(slot)];
         auto state = node.parameters.state;
         state.frequency = node.values[0];
-        state.gainDb = node.values[1];
+        state.gainDb = node.effectiveValues[1];
         state.q = node.values[2];
         return state;
     }
@@ -250,6 +315,9 @@ private:
         std::array<juce::SmoothedValue<float>, 3> bases;
         std::array<Route, 3> routes;
         std::array<float, 3> values {};
+        std::array<float, 3> effectiveValues {};
+        dynamic_eq::Detector detector;
+        dynamic_eq::VisualState visual;
         juce::SmoothedValue<float> wet, typeBlend;
         int counter = 0;
         bool initialised = false, enabled = false;
@@ -272,7 +340,7 @@ private:
         }
         const int active = node.typeBlend.getCurrentValue() >= 0.5f ? 1 : 0;
         if (matches(active)) return;
-        node.banks[static_cast<size_t>(1 - active)].setRecipe(node.parameters.state, node.values, sampleRate,
+        node.banks[static_cast<size_t>(1 - active)].setRecipe(node.parameters.state, node.effectiveValues, sampleRate,
                                                            node.parameters.generation);
         node.typeBlend.setTargetValue(active == 0 ? 1.0f : 0.0f);
     }
@@ -287,6 +355,8 @@ private:
         return control == 1 ? juce::jlimit(-24.0f, 24.0f, value) : juce::jlimit(0.1f, 18.0f, value);
     }
     std::array<Node, maxNodes> nodes;
+    juce::AudioBuffer<float> moduleInput;
+    int moduleInputSamples = 0, moduleInputChannels = 0;
     double sampleRate = 48000.0;
     int updatePeriod = 8;
 };

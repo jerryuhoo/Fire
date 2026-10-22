@@ -1,11 +1,13 @@
 #pragma once
 #include <Utility/MidiModulationParameters.h>
 #include <Utility/LfoPlaybackParameters.h>
+#include "LegacyDynamicEqFixture.h"
 
 namespace fire::test
 {
 inline void stripMidiPresetFamily(juce::XmlElement& xml)
 {
+    stripDynamicEqPresetFamily(xml);
     xml.removeAttribute("midiModulationSchemaVersion");xml.removeAttribute("lfoPlaybackSchemaVersion");
     for (const auto& id : midi_mod::parameterIDs()) xml.removeAttribute(id);
     for (const auto& id : lfo_playback::parameterIDs()) xml.removeAttribute(id);
@@ -13,6 +15,7 @@ inline void stripMidiPresetFamily(juce::XmlElement& xml)
 }
 inline void stripMidiHostFamily(juce::XmlElement& xml)
 {
+    stripDynamicEqHostFamily(xml);
     xml.removeAttribute("midiModulationSchemaVersion");xml.removeAttribute("lfoPlaybackSchemaVersion");
     if (xml.getIntAttribute("stateFormatVersion",0) >= 5) xml.setAttribute("stateFormatVersion",4);
     if (auto* parameters = xml.getChildByName("PARAMETERS"))

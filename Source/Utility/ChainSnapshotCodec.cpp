@@ -24,6 +24,7 @@ bool strictBool(const juce::XmlElement& xml, const char* name)
 juce::Result validateRoute(const ModulationRouting& route, const Module& module)
 {
     if (!mod_sources::validSource(route.sourceLfoIndex)
+        || route.targetParameterID.contains(".dynamic.")
         || !std::isfinite(route.depth) || route.depth < -1 || route.depth > 1
         || !std::isfinite(route.rangeStart) || route.rangeStart < -1 || route.rangeStart > 1
         || !std::isfinite(route.rangeEnd) || route.rangeEnd < -1 || route.rangeEnd > 1
@@ -111,7 +112,7 @@ juce::Result decode(const juce::XmlElement& xml, Snapshot& destination)
     int version = 0;
     if (!xml.hasTagName("FIRE_CHAIN")
         || !modulation_state::readStrictIntegerAttribute(xml, "schemaVersion", version)
-        || (version != 1 && version != schemaVersion)
+        || version < 1 || version > schemaVersion
         || !(version == 1 ? hasOnlyAttributes(xml, {"schemaVersion", "includesRouting"})
                           : hasOnlyAttributes(xml, {"schemaVersion", "includesRouting", "channelMode"}))
         || !strictBool(xml, "includesRouting")
@@ -151,7 +152,7 @@ juce::Result decode(const juce::XmlElement& xml, Snapshot& destination)
             else return fail("The chain contains an unknown or repeated module section.");
         }
         if (values == nullptr || routes == nullptr || values->getNumAttributes() != 0
-            || values->getNumChildElements() < 1 || values->getNumChildElements() > 128)
+            || values->getNumChildElements() < 1 || values->getNumChildElements() > maximumModuleValues)
             return fail("The chain is missing its module settings.");
         for (const auto* value : values->getChildIterator())
         {
@@ -162,6 +163,17 @@ juce::Result decode(const juce::XmlElement& xml, Snapshot& destination)
                 || normalised < 0 || normalised > 1
                 || !module.values.emplace(value->getStringAttribute("key"), static_cast<float>(normalised)).second)
                 return fail("The chain contains a malformed or repeated parameter.");
+        }
+        if(version<3 && module.type==effects::Type::eq)
+        {
+            int present=0;for(const auto& [key,value]:module.values)
+                if(key.contains(".dynamic.")){juce::ignoreUnused(value);++present;}
+            if(present==0)
+            {
+                const auto defaults=defaultModule(module.type,module.sourceLegacy);
+                for(const auto& [key,value]:defaults.values)if(key.contains(".dynamic."))module.values.emplace(key,value);
+            }
+            else if(present!=72)return fail("The chain contains incomplete dynamic EQ settings.");
         }
         if (!hasOnlyAttributes(*routes, {"schemaVersion"}) || !modulation_state::hasSchema(*routes, true)
             || routes->getNumChildElements() > maximumRoutes - routeCount)

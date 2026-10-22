@@ -12,6 +12,7 @@ struct CoreEffect::Impl
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> baseShapeDelay{64};
     int shapeLatency = 0;
     bool qualityPrimed = false, lastHighQuality = false;
+    bool eqRendered = false;
 };
 CoreEffect::CoreEffect() : impl(std::make_unique<Impl>()) {}
 CoreEffect::~CoreEffect() = default;
@@ -25,15 +26,19 @@ void CoreEffect::prepare(const juce::dsp::ProcessSpec& spec)
     impl->baseShapeDelay.prepare(spec);
     impl->baseShapeDelay.setDelay(static_cast<float>(impl->shapeLatency));
     impl->qualityPrimed = false;
-    impl->equalizer.prepare(spec.sampleRate);
+    impl->eqRendered = false;
+    impl->equalizer.prepare(spec);
 }
 int CoreEffect::getShapeLatency() const noexcept { return impl->shapeLatency; }
+dynamic_eq::VisualState CoreEffect::getDynamicEqVisualState(int node) const noexcept
+{ return impl->eqRendered ? impl->equalizer.getDynamicEqVisualState(node) : dynamic_eq::VisualState{}; }
 void CoreEffect::reset() noexcept
 {
     impl->band.reset();
     impl->equalizer.reset();
     impl->baseShapeDelay.reset();
     impl->qualityPrimed = false;
+    impl->eqRendered = false;
 }
 void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
     const std::array<ModulatedValueProvider, 6>& values, bool normalised, int offset,
@@ -42,6 +47,7 @@ void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
     bool highQuality, bool fixedShapeLatency) noexcept
 {
     if (block.getNumChannels() == 0 || block.getNumSamples() == 0) return;
+    impl->eqRendered = type == Type::eq;
     if (type == Type::eq)
     {
         for (int node = 0; node < eq::maxNodes; ++node)
@@ -51,6 +57,7 @@ void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
             p.state = input.state;
             p.enabled = input.state.present && ! input.state.bypassed;
             p.generation = input.generation;
+            p.dynamic = input.dynamic;
             for (size_t i = 0; i < p.controls.size(); ++i)
             {
                 const auto& c = input.controls[i];
@@ -66,8 +73,10 @@ void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
                 p.sources[i] = c.source;
             }
             impl->equalizer.begin(node, p);
-            impl->equalizer.process(node, block, 0, static_cast<int>(block.getNumSamples()));
         }
+        impl->equalizer.beginModuleInput(block);
+        for (int node = 0; node < eq::maxNodes; ++node)
+            impl->equalizer.process(node, block, 0, static_cast<int>(block.getNumSamples()));
         return;
     }
     BandProcessingParameters p;

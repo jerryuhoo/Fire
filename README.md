@@ -447,6 +447,10 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ### 2.1.0 (in development)
 
+- Add per-point Dynamic EQ for Bell and Shelf filters, with linked frequency
+  detection, signed gain range and live gain-change readouts in every EQ module.
+- Restore valid project parameters at floating-point range endpoints, including
+  0.1 ms attack, without relaxing discrete-value or malformed-state checks.
 - Add per-parameter locks for preset browsing and editable preset tags / notes,
   with local Factory metadata overrides and protection against stale edits.
 - Add four MIDI CC modulation sources, note-triggered and one-shot LFOs, and
@@ -911,6 +915,24 @@ including the cut filters' gain/Q shaping. New points occupy fixed parameter
 slots: deleting a neighbour does not move automation or LFO assignments. EQ points
 and routing are saved in presets, A/B states and host projects. Adding/removing
 an EQ point leaves other effects' delay tails and Clouds Freeze recordings intact.
+
+**Dynamic EQ**: choose a Bell, Low Shelf or High Shelf point, then open
+**Dynamic** in the existing point header. Enable it and set Threshold, Ratio,
+Range, Attack and Release. The detector follows the EQ module's original input,
+filtered around that point's frequency and linked by the stronger left/right
+peak. Negative Range reduces gain above Threshold; positive Range adds gain.
+Ratio 1:1 produces no dynamic change. The combined base and dynamic gain is
+limited to ±24 dB.
+
+The panel shows the actual gain change and effective gain. The original Master
+EQ's live spectrum curve includes that change, while its draggable point and
+Gain knob retain their base value. Readouts and live curves fade back when the
+host stops sending audio. Dynamics are available in the original Master EQ and
+every inserted EQ. Frequency, Gain and Q retain their existing internal
+modulation; the six dynamics settings support host automation, parameter locks,
+presets, project state and chain copying. They do not accept internal modulation.
+Old presets open with dynamics disabled; deleting or reusing a point clears its
+dynamic settings. With dynamics disabled, the existing static EQ path is retained.
 
 ### LFO bank and control sizing
 

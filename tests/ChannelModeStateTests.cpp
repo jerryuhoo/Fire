@@ -41,7 +41,7 @@ TEST_CASE("Channel modes retain stable appended IDs and survive preset project a
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
-    REQUIRE(processor.getParameters().size()==4756);
+    REQUIRE(processor.getParameters().size()==7708);
     for(int scope=0;scope<5;++scope)
     {
         auto* p=processor.treeState.getParameter(cm::parameterID(scope));REQUIRE(p);
@@ -50,11 +50,11 @@ TEST_CASE("Channel modes retain stable appended IDs and survive preset project a
     }
     modeConfigure(processor,1);
     const auto first=modePreset(processor);
-    CHECK(first.getIntAttribute("presetFormatVersion")==6);
+    CHECK(first.getIntAttribute("presetFormatVersion")==7);
     CHECK(first.getIntAttribute(fire::channel_mode_state::marker)==1);
     processor.stateAB.copyAB(false);processor.stateAB.toggleAB();modeConfigure(processor,2);
     const auto second=modePreset(processor),host=modeHost(processor);
-    CHECK(host.getIntAttribute("stateFormatVersion")==5);
+    CHECK(host.getIntAttribute("stateFormatVersion")==6);
     FireAudioProcessor restored;
     REQUIRE(state::loadStateFromXml(second,restored));modeCheck(restored,2);
     modeRestoreHost(restored,host);modeCheck(restored,2);
@@ -119,7 +119,7 @@ TEST_CASE("Chain mode schema round trips and v1 migration are strict and atomic"
 {
     chain::Snapshot source;source.channelMode=cm::side;
     source.modules.push_back(chain::defaultModule(fire::effects::Type::delay));
-    auto xml=chain::encode(source);REQUIRE(xml);CHECK(xml->getIntAttribute("schemaVersion")==2);
+    auto xml=chain::encode(source);REQUIRE(xml);CHECK(xml->getIntAttribute("schemaVersion")==3);
     chain::Snapshot restored;REQUIRE(chain::decode(*xml,restored).wasOk());CHECK(restored.channelMode==cm::side);
     for(const auto* mode:{"-1","3","1.5","1tail","nan"})
     {auto bad=*xml;bad.setAttribute("channelMode",mode);CHECK(chain::decode(bad,restored).failed());CHECK(restored.channelMode==cm::side);}

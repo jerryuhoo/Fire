@@ -20,6 +20,7 @@
 #include "CoreModuleParameters.h"
 #include "AnalogShapeParameters.h"
 #include "ReverbModelParameters.h"
+#include "DynamicEqParameters.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_core/juce_core.h"
 #include <array>
@@ -443,6 +444,12 @@ namespace ParameterIDAndName
             for (int slot = 0; slot < fire::effects::slotCount; ++slot)
                 result.push_back({"FX " + juce::String(slot + 1) + " Shape Model", fire::analog_params::parameterID(1, slot).dropLastCharacters(1)});
             result.push_back({"Modern Drive Compensation", fire::drive_comp::parameterBase});
+            for(int slot=0;slot<fire::dynamic_eq::slotsPerScope;++slot)
+                for(int node=0;node<fire::dynamic_eq::nodesPerModule;++node)
+                    for(int field=0;field<fire::dynamic_eq::fieldCount;++field)
+                        result.push_back({"FX "+juce::String(slot+1)+" EQ "+juce::String(node+1)+" Dynamic "
+                            +fire::dynamic_eq::suffixes[static_cast<size_t>(field)],
+                            fire::dynamic_eq::parameterBase(slot,node,field)});
             return result;
         }();
         return params;

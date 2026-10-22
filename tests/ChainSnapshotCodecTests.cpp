@@ -66,7 +66,7 @@ struct CodecDirectory
 TEST_CASE("Chain codec retains settings modulation mappings and exact frozen PCM", "[chain][codec][state]")
 {
     const auto source = codecSnapshot(); auto xml = chain::encode(source); REQUIRE(xml != nullptr);
-    CHECK(xml->getIntAttribute("schemaVersion") == 2);
+    CHECK(xml->getIntAttribute("schemaVersion") == 3);
     chain::Snapshot restored;
     REQUIRE(chain::decode(*xml, restored).wasOk()); requireSame(restored, source);
     for (int type = static_cast<int>(Type::chorus); type < static_cast<int>(Type::count); ++type)
@@ -86,7 +86,7 @@ TEST_CASE("Chain codec rejects unknown missing and malformed module settings wit
     auto destination = source;
     const auto reject = [&](const juce::XmlElement& xml)
     { CHECK(chain::decode(xml, destination).failed()); requireSame(destination, source); };
-    for (const auto* schema : {"0", "3", "1.5", "1e0", "1tail"})
+    for (const auto* schema : {"0", "4", "1.5", "1e0", "1tail"})
     { auto bad = *valid; bad.setAttribute("schemaVersion", schema); reject(bad); }
     for (const auto* type : {"0", "15", "-1", "1.5", "1e0", "1tail"})
     { auto bad = *valid; bad.getFirstChildElement()->setAttribute("type", type); reject(bad); }

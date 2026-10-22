@@ -20,11 +20,27 @@ inline bool isValidValue(const juce::RangedAudioParameter& parameter,
     double value = 0.0;
     if (!utility::parseStrictFiniteDouble(text, value)) return false;
     const auto& range = parameter.getNormalisableRange();
-    if (normalised ? (value < 0.0 || value > 1.0)
-                   : (value < range.start || value > range.end)) return false;
     const bool discrete = dynamic_cast<const juce::AudioParameterChoice*>(&parameter) != nullptr
                        || dynamic_cast<const juce::AudioParameterBool*>(&parameter) != nullptr
                        || dynamic_cast<const juce::AudioParameterInt*>(&parameter) != nullptr;
+    if (normalised)
+    {
+        if(value<0.0 || value>1.0)return false;
+    }
+    else if(discrete)
+    {
+        if(value<range.start || value>range.end)return false;
+    }
+    else
+    {
+        // APVTS stores float controls as doubles and JUCE serialises those
+        // doubles to decimal text. For example 0.1f becomes
+        // "0.1000000014901161", a double slightly below the original float
+        // endpoint. Compare continuous host values in their actual storage
+        // precision; do not clamp, add a broad tolerance, or round choices.
+        const auto stored=static_cast<float>(value);
+        if(!std::isfinite(stored) || stored<range.start || stored>range.end)return false;
+    }
     if (!discrete) return true;
     if (!normalised) return std::floor(value) == value;
     const auto canonical = parameter.convertTo0to1(parameter.convertFrom0to1(static_cast<float>(value)));

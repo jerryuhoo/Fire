@@ -1508,7 +1508,8 @@ TEST_CASE("State round-trip preserves LFO data and upgrades legacy shape state",
             || fire::channel_mode::isParameterID(
                 legacyParameterState.getChild(child).getProperty("id").toString())
             || fire::midi_mod::isParameterID(legacyParameterState.getChild(child).getProperty("id").toString())
-            || fire::lfo_playback::isParameterID(legacyParameterState.getChild(child).getProperty("id").toString()))
+            || fire::lfo_playback::isParameterID(legacyParameterState.getChild(child).getProperty("id").toString())
+            || fire::dynamic_eq::isParameterID(legacyParameterState.getChild(child).getProperty("id").toString()))
             legacyParameterState.removeChild(child, nullptr);
     for (int band = 0; band < 4; ++band)
     {

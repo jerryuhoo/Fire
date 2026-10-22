@@ -2,6 +2,7 @@
 #include "../PluginProcessor.h"
 #include "AnalogDrivePresets.h"
 #include "ChannelModeParameters.h"
+#include "DynamicEqParameters.h"
 #include <array>
 #include <vector>
 
@@ -132,6 +133,7 @@ inline std::vector<std::unique_ptr<juce::XmlElement>> create(FireAudioProcessor&
     defaults.setAttribute("channelModeSchemaVersion", fire::channel_mode::schemaVersion);
     defaults.setAttribute("midiModulationSchemaVersion", fire::midi_mod::schemaVersion);
     defaults.setAttribute("lfoPlaybackSchemaVersion", fire::lfo_playback::schemaVersion);
+    defaults.setAttribute("dynamicEqSchemaVersion", fire::dynamic_eq::schemaVersion);
     defaults.setAttribute("pluginVersion", VERSION);
     for (auto* parameter : processor.getParameters())
         if (auto* identified = dynamic_cast<juce::AudioProcessorParameterWithID*>(parameter))

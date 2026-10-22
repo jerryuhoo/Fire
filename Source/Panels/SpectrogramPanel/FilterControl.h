@@ -48,6 +48,7 @@ public:
 private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct FilterControlTestAccess;
+    friend struct DynamicEqUiTestAccess;
 #endif
 
     FireAudioProcessor& processor;
@@ -81,10 +82,14 @@ private:
     bool isAnimationActive = false;
     bool telemetryPresentationActive = false;
     bool hasFreshTelemetryForPresentation = false;
+    float telemetryOpacity = 0;
+    double lastTelemetryTimeMs = 0;
     std::uint64_t requiredTelemetryCaptureEpoch = 0;
     std::atomic<bool> parameterUpdatePending { false };
     std::atomic<bool> routingStateDirty { true };
     std::vector<juce::AudioProcessorParameter*> observedParameters;
+    std::array<std::atomic<float>*, fire::eq::maxNodes> dynamicEnableParameters {};
+    std::array<bool, fire::eq::maxNodes> presentedDynamicEnabled {};
     std::vector<double> responseMagnitudes;
     std::vector<double> lfoMagnitudes;
     double responseSampleRate = 0.0;

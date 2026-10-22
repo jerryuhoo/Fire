@@ -7,6 +7,7 @@
 #include "DriveCompensationParameters.h"
 #include "ModulationEffectParameters.h"
 #include "ResonatorParameters.h"
+#include "DynamicEqParameters.h"
 #include <set>
 
 namespace fire::chain
@@ -150,6 +151,11 @@ Fields fieldsFor(Type type, bool legacy, int scope = 1, int slot = 0)
                 }
                 add(eqKey(node,field), id, range, value, 1, field >= static_cast<int>(eq::Field::slope));
             }
+            static constexpr const char* dynamicFields[]{"enabled","threshold","ratio","range","attack","release"};
+            for(int field=0;field<dynamic_eq::fieldCount;++field)
+                add("eq."+juce::String(node)+".dynamic."+dynamicFields[field],
+                    dynamic_eq::parameterID(legacy?0:scope,legacy?-1:slot,node,field),
+                    dynamic_eq::rangeFor(field),dynamic_eq::defaults[static_cast<size_t>(field)],1,field==dynamic_eq::enabled);
         }
     return fields;
 }
@@ -248,7 +254,10 @@ juce::Result validateModule(const Module& module)
             if (std::abs(plain - std::round(plain)) > .0001f)
                 return juce::Result::fail("Invalid discrete module control: " + field.key);
         }
-        if (field.id.isNotEmpty()) routedKeys.insert(field.key);
+        if (field.id.isNotEmpty())
+        {
+            if(!dynamic_eq::isParameterID(field.id))routedKeys.insert(field.key);
+        }
         else if (value->second != field.range.convertTo0to1(field.initial))
             return juce::Result::fail("Unsupported control in this module representation: " + field.key);
     }

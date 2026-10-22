@@ -8,7 +8,8 @@ namespace fire::ui
 {
 // ParameterAttachment is used only for host-to-view updates. User writes are
 // guarded before host callbacks so an old text edit cannot change a recycled
-// source slot, and the notifying stack never owns a UI attachment.
+// source slot. The notification stack keeps only the parameter listener alive;
+// its SafePointer callback does not retain the UI component.
 class PerformanceIntegerControl final : public PrimarySlider
 {
 public:
@@ -23,32 +24,53 @@ public:
         const juce::Component::SafePointer<PerformanceIntegerControl> safe(this);
         onDragStart = [safe]
         {
-            if (!safe || !safe->mayEdit() || safe->gesturing) return;
-            auto* target = safe->parameter;
-            safe->gesturing = true;
+            auto owner=safe;
+            if (!owner || !owner->mayEdit() || owner->gesturing) return;
+            auto* target = owner->parameter;
+            const auto keepListenerAlive=owner->attachment;
+            owner->gesturing = true; owner->startingGesture = true;
             target->beginChangeGesture();
+            const bool finishNow=!owner || !owner->gesturing;
+            if(owner) owner->startingGesture=false;
+            if(finishNow) target->endChangeGesture();
         };
         onDragEnd = [safe] { if (safe) safe->finishGesture(); };
         onValueChange = [safe]
         {
-            if (!safe || safe->updating || !safe->parameter) return;
-            auto* target = safe->parameter;
-            if (!safe->mayEdit())
+            auto owner=safe;
+            if (!owner || owner->updating || !owner->parameter) return;
+            if (owner->startingGesture) return;
+            auto* target = owner->parameter;
+            // JUCE's parameter broadcaster iterates a mutable listener array.
+            // Keep this listener installed while a host callback may delete
+            // the control, until both sides of the notification complete.
+            const auto keepListenerAlive=owner->attachment;
+            if (!owner->mayEdit())
             {
-                safe->setValue(target->convertFrom0to1(target->getValue()), juce::dontSendNotification);
+                owner->setValue(target->convertFrom0to1(target->getValue()), juce::dontSendNotification);
                 return;
             }
-            const float normalised = target->convertTo0to1(static_cast<float>(safe->getValue()));
+            const float normalised = target->convertTo0to1(static_cast<float>(owner->getValue()));
             if (juce::approximatelyEqual(normalised, target->getValue())) return;
-            const bool gesture = safe->gesturing;
-            auto beforeWrite = safe->onBeforeWrite;
+            const bool gesture = owner->gesturing;
+            auto beforeWrite = owner->onBeforeWrite;
             if (beforeWrite) beforeWrite();
-            if (!safe || !safe->mayEdit()) return;
-            if (!gesture) target->beginChangeGesture();
-            target->setValueNotifyingHost(normalised);
-            if (!gesture) target->endChangeGesture();
+            if (!owner || !owner->mayEdit()) return;
+            if (!gesture)
+            {
+                target->beginChangeGesture();
+                const juce::ScopeGuard finish{[target]{target->endChangeGesture();}};
+                if (!owner || owner->parameter != target || !owner->mayEdit())
+                {
+                    if (owner && owner->parameter == target)
+                        owner->setValue(target->convertFrom0to1(target->getValue()),juce::dontSendNotification);
+                    return;
+                }
+                target->setValueNotifyingHost(normalised);
+            }
+            else target->setValueNotifyingHost(normalised);
         };
-        attachment = std::make_unique<juce::ParameterAttachment>(target, [safe](float value)
+        attachment = std::make_shared<juce::ParameterAttachment>(target, [safe](float value)
         {
             if (!safe) return;
             safe->updating = true;
@@ -64,12 +86,14 @@ private:
     {
         if (!gesturing) return;
         gesturing = false;
+        if (startingGesture) return; // The begin caller pairs it after broadcasting returns.
+        const auto keepListenerAlive=attachment;
         if (parameter) parameter->endChangeGesture();
     }
     juce::RangedAudioParameter* parameter = nullptr;
     std::function<bool()> valid;
-    std::unique_ptr<juce::ParameterAttachment> attachment;
-    bool updating = false, gesturing = false;
+    std::shared_ptr<juce::ParameterAttachment> attachment;
+    bool updating = false, gesturing = false, startingGesture = false;
 };
 inline void performanceComboColours(juce::ComboBox& box, const SkinPalette& palette)
 {

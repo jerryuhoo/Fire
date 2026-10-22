@@ -459,6 +459,12 @@ public:
             if (right) right[sample] = juce::jmap(mix, dryR, std::isfinite(wetR) ? wetR : 0.0f);
         }
     }
+    /** Audio thread only. The outer processor owns any cross-thread publication. */
+    dynamic_eq::VisualState getDynamicEqVisualState(int node) const noexcept
+    {
+        return currentType == Type::eq && core != nullptr && !dormant && gate.getTargetValue() > 0
+            ? core->getDynamicEqVisualState(node) : dynamic_eq::VisualState{};
+    }
 private:
     enum : std::uint32_t {historyFamily = 1, tapeFamily = 2, reverbFamily = 4,
         cloudsFamily = 8, chordFamily = 16, coreFamily = 32, allFamilies = 63};

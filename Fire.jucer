@@ -147,6 +147,10 @@
         <FILE id="presetMetadata21" name="PresetMetadata.h" compile="0" resource="0" file="Source/Utility/PresetMetadata.h"/>
         <FILE id="presetLocksHeader21" name="PresetParameterLocks.h" compile="0" resource="0" file="Source/Utility/PresetParameterLocks.h"/>
         <FILE id="presetLocksSource21" name="PresetParameterLocks.cpp" compile="1" resource="0" file="Source/Utility/PresetParameterLocks.cpp"/>
+        <FILE id="dynamicEqHelper210" name="DynamicEqParameters.h" compile="0" resource="0" file="Source/Utility/DynamicEqParameters.h"/>
+        <FILE id="dynamicEqHelper211" name="DynamicEqParameterLayout.h" compile="0" resource="0" file="Source/Utility/DynamicEqParameterLayout.h"/>
+        <FILE id="dynamicEqHelper212" name="DynamicEqStateValidation.h" compile="0" resource="0" file="Source/Utility/DynamicEqStateValidation.h"/>
+        <FILE id="dynamicEqHelper213" name="DynamicEqActions.cpp" compile="1" resource="0" file="Source/Utility/DynamicEqActions.cpp"/>
         <FILE id="envState21" name="EnvelopeStateValidation.h" compile="0" resource="0" file="Source/Utility/EnvelopeStateValidation.h"/>
         <FILE id="envDsp21" name="EnvelopeDetectors.h" compile="0" resource="0" file="Source/DSP/EnvelopeDetectors.h"/>
       </GROUP>
@@ -157,6 +161,7 @@
         <FILE id="brandMarks" name="BrandMarks.h" compile="0" resource="0" file="Source/GUI/BrandMarks.h"/>
         <FILE id="logoMotion" name="FireLogoMotion.h" compile="0" resource="0" file="Source/GUI/FireLogoMotion.h"/>
         <FILE id="modSourceUi01" name="ModulationSourceControls.h" compile="0" resource="0" file="Source/GUI/ModulationSourceControls.h"/>
+        <FILE id="dynamicEqUi21" name="DynamicEqControls.h" compile="0" resource="0" file="Source/GUI/DynamicEqControls.h"/>
         <FILE id="eqUI1" name="EqControlsPanel.h" compile="0" resource="0" file="Source/GUI/EqControlsPanel.h"/>
         <FILE id="ottVis1" name="OttVisuals.h" compile="0" resource="0" file="Source/GUI/OttVisuals.h"/>
         <FILE id="moduleDrag" name="ModuleDragButton.h" compile="0" resource="0" file="Source/GUI/ModuleDragButton.h"/>
@@ -202,6 +207,7 @@
         <FILE id="analogSupply01" name="AnalogPowerSupply.h" compile="0" resource="0" file="Source/DSP/AnalogPowerSupply.h"/>
         <FILE id="analogMagnetics01" name="AnalogMagnetics.h" compile="0" resource="0" file="Source/DSP/AnalogMagnetics.h"/>
         <FILE id="analogTape01" name="AnalogTape.h" compile="0" resource="0" file="Source/DSP/AnalogTape.h"/>
+        <FILE id="dynamicEqDsp21" name="DynamicEqDetector.h" compile="0" resource="0" file="Source/DSP/DynamicEqDetector.h"/>
         <FILE id="eqDsp1" name="EqProcessor.h" compile="0" resource="0" file="Source/DSP/EqProcessor.h"/>
         <FILE id="eqDsp2" name="EqCoefficients.h" compile="0" resource="0" file="Source/DSP/EqCoefficients.h"/>
         <GROUP id="cloudsDspGroup" name="Clouds">

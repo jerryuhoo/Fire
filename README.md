@@ -176,8 +176,11 @@ state/audio smoke host, are documented in [Validation](docs/releasing/VALIDATION
 ## 3. User Manual
 
 The detailed illustrated **Fire 2.1 User Manual** is available in
-[English](docs/manual/Fire-2.1-User-Manual.md) and
-[简体中文](docs/manual/Fire-2.1-User-Manual-zh-CN.md). It covers the current development
+[English](docs/manual/Fire-2.1-User-Manual.md),
+[简体中文](docs/manual/Fire-2.1-User-Manual-zh-CN.md),
+[日本語](docs/manual/Fire-2.1-User-Manual-ja.md),
+[Français](docs/manual/Fire-2.1-User-Manual-fr.md), and
+[Español](docs/manual/Fire-2.1-User-Manual-es.md). It covers the current development
 edition, with genuine interface screenshots and step-by-step workflows.
 To export a PDF locally, follow the [authoring instructions](docs/manual/authoring/README.md).
 

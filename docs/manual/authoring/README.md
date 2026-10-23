@@ -3,8 +3,9 @@
 The canonical English text is `../Fire-2.1-User-Manual.md`. Image paths are
 relative to that file. `build_pdf.py` uses the same Markdown to produce
 `output/pdf/Fire-2.1-User-Manual.pdf` from the repository root.
-The complete Simplified Chinese edition is `../Fire-2.1-User-Manual-zh-CN.md`;
-it shares the same genuine screenshots and retains English UI labels for reference.
+Complete translations use the suffixes `-zh-CN`, `-ja`, `-fr`, and `-es` for
+Simplified Chinese, Japanese, French, and Spanish. All five editions share the
+same genuine screenshots and retain English UI labels for reference.
 
 ## PDF
 
@@ -13,6 +14,11 @@ Install `reportlab` and `Pillow` in your Python environment, then run:
 ```sh
 python3 docs/manual/authoring/build_pdf.py
 python3 docs/manual/authoring/build_pdf.py --language zh-CN
+python3 docs/manual/authoring/build_pdf.py --language fr
+python3 docs/manual/authoring/build_pdf.py --language es
+python3 docs/manual/authoring/build_pdf.py --language ja \
+  --cjk-regular /path/to/NotoSansJP-Regular.ttf \
+  --cjk-bold /path/to/NotoSansJP-Bold.ttf --cjk-index 0
 ```
 
 The PDF embeds the ReportLab-distributed Vera text fonts and uses standard
@@ -20,10 +26,36 @@ Courier for code. The Chinese edition embeds subsets of macOS's STHeiti SC
 Light and Medium fonts (collection face 1) and uses Chinese text wrapping.
 On another system, supply embeddable Chinese TrueType fonts with
 `--cjk-regular /path/to/regular.ttf --cjk-bold /path/to/bold.ttf --cjk-index 0`.
-Font binaries are not copied into the repository. The builder checks Chinese
-text for missing glyphs before export. Both editions include a linked contents page and chapter/section
+The Japanese edition uses Japanese glyphs from Noto Sans JP Regular and Bold.
+Obtain the variable TrueType source and its SIL Open Font License from the
+[official Google Fonts repository](https://github.com/google/fonts/tree/main/ofl/notosansjp).
+With the optional `fonttools` package installed, create static weights outside
+the repository using the following Python code (adjust the source path):
+
+```python
+from fontTools.ttLib import TTFont
+from fontTools.varLib.instancer import instantiateVariableFont
+
+source = TTFont('/path/to/NotoSansJP[wght].ttf')
+for name, weight in [('Regular', 400), ('Bold', 700)]:
+    face = instantiateVariableFont(source, {'wght': weight}, inplace=False,
+                                   updateFontNames=True)
+    face.save(f'/path/to/NotoSansJP-{name}.ttf')
+```
+
+Font binaries are not copied into the repository. The builder checks every
+edition for missing glyphs before export. Localized cover and navigation labels
+live in `manual_locales.py`. Japanese paragraphs use `japanese_layout.py` to
+preserve styled text while enforcing prohibited line-start/end characters.
+All editions include a linked contents page and chapter/section
 bookmarks. The `manual:body` comment separates the Markdown contents from the
-PDF body; `figure:landscape` requests a wide screenshot page. Re-render the PDF
+PDF body; `figure:landscape` requests a wide screenshot page. The optional
+`figure:max-height=215` comment caps the next screenshot's height in PDF points,
+and `table:keep` keeps the next short table together. Localized pagination may
+use these comments without changing the Markdown reading order. The Japanese
+and Spanish tape illustration uses an existing genuine close-up capture so its
+details remain readable alongside the longer translated model descriptions.
+Re-render the PDF
 with Poppler and inspect the pages before publishing an updated edition.
 Exported PDFs and portable ZIP bundles are ignored by Git; commit the Markdown,
 image sources, and authoring tools instead.

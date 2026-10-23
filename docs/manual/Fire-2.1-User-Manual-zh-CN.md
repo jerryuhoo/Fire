@@ -2,7 +2,7 @@
 
 **简体中文 / 开发版 / 2026 年 10 月 24 日**
 
-[English](Fire-2.1-User-Manual.md)
+[English](Fire-2.1-User-Manual.md) | [简体中文](Fire-2.1-User-Manual-zh-CN.md) | [日本語](Fire-2.1-User-Manual-ja.md) | [Français](Fire-2.1-User-Manual-fr.md) | [Español](Fire-2.1-User-Manual-es.md)
 
 本手册提供完整的中文操作说明与真实界面截图，对应产品源码修订 `9ea20d2`。界面按钮、参数和预设名称保留英文，方便对照插件操作。PDF 版包含可点击目录与书签。分享 Markdown 时，请将本文件与 `images` 目录放在一起。
 

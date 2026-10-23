@@ -27,6 +27,8 @@ from reportlab.platypus import (
     LongTable, NextPageTemplate, PageBreak, PageTemplate, Paragraph, Preformatted, Spacer, TableStyle,
 )
 from reportlab.platypus.tableofcontents import TableOfContents
+from manual_locales import LABELS
+from japanese_layout import JapaneseParagraph
 
 MANUAL = Path(__file__).resolve().parents[1]
 ROOT = MANUAL.parents[1]
@@ -43,29 +45,41 @@ WIDTH = PAGE_W - 2 * MARGIN
 LANGUAGE = 'en'
 
 
-def localized(english, chinese):
-    return chinese if LANGUAGE == 'zh-CN' else english
+def is_cjk():
+    return LANGUAGE in ('zh-CN', 'ja')
 
 
-def register_fonts(cjk_regular=None, cjk_bold=None, cjk_index=1):
+def script_value(western, east_asian):
+    return east_asian if is_cjk() else western
+
+
+def label(key):
+    return LABELS[LANGUAGE][key]
+
+
+def register_fonts(cjk_regular=None, cjk_bold=None, cjk_index=None):
     fonts = Path(reportlab.__file__).parent / 'fonts'
     pdfmetrics.registerFont(TTFont('Brand', str(fonts / 'VeraBd.ttf')))
-    if LANGUAGE == 'zh-CN':
+    if is_cjk():
         # ReportLab's Japanese defaults omit several Chinese full-width marks.
         # Extend both import sites so punctuation hangs with the preceding line.
         punctuation = '，：；？！…”’》〉'
         for module in (textsplit, paragraph_layout):
             module.ALL_CANNOT_START += ''.join(c for c in punctuation if c not in module.ALL_CANNOT_START)
+        if LANGUAGE == 'ja' and (cjk_regular is None or cjk_bold is None):
+            raise ValueError('Japanese export requires --cjk-regular and --cjk-bold '
+                             'with embeddable Japanese TrueType fonts (e.g. Noto Sans JP).')
         regular = cjk_regular or Path('/System/Library/Fonts/STHeiti Light.ttc')
         bold = cjk_bold or Path('/System/Library/Fonts/STHeiti Medium.ttc')
+        index = (0 if LANGUAGE == 'ja' else 1) if cjk_index is None else cjk_index
         for path in (regular, bold):
             if not path.is_file():
                 raise FileNotFoundError(
-                    f'Chinese font missing: {path}. Supply --cjk-regular, --cjk-bold '
-                    'and --cjk-index for embeddable TrueType Chinese fonts.')
+                    f'CJK font missing: {path}. Supply --cjk-regular, --cjk-bold '
+                    'and --cjk-index for embeddable TrueType fonts.')
         for name, path in [('Body', regular), ('Body-Bold', bold),
                            ('Body-Italic', regular), ('Body-BoldItalic', bold)]:
-            pdfmetrics.registerFont(TTFont(name, str(path), subfontIndex=cjk_index))
+            pdfmetrics.registerFont(TTFont(name, str(path), subfontIndex=index))
         pdfmetrics.registerFontFamily('Body', normal='Body', bold='Body-Bold',
                                       italic='Body-Italic', boldItalic='Body-BoldItalic')
         return
@@ -77,9 +91,11 @@ def register_fonts(cjk_regular=None, cjk_bold=None, cjk_index=1):
 
 
 def typography():
-    base = dict(fontName='Body', fontSize=localized(9.6, 10), leading=localized(14.1, 16),
+    base = dict(fontName='Body', fontSize=script_value(9.6, 10), leading=script_value(14.1, 16),
                 textColor=INK, spaceAfter=7.3, allowWidows=0, allowOrphans=0,
-                wordWrap=localized(None, 'CJK'))
+                wordWrap=script_value(None, 'CJK'))
+    if LANGUAGE == 'ja':
+        base.update(fontSize=9.6, leading=15)
     styles = {'body': ParagraphStyle('BodyText', **base)}
     styles['h2'] = ParagraphStyle('Chapter', **(base | dict(fontName='Body-Bold',
         fontSize=21, leading=27, spaceBefore=0, spaceAfter=16, keepWithNext=True)))
@@ -87,12 +103,12 @@ def typography():
         fontSize=12.2, leading=16.3, spaceBefore=13, spaceAfter=7, keepWithNext=True)))
     styles['h4'] = ParagraphStyle('Subsection', **(base | dict(fontName='Body-Bold',
         fontSize=10, leading=14, spaceBefore=8, spaceAfter=5, keepWithNext=True)))
-    styles['caption'] = ParagraphStyle('Caption', **(base | dict(fontSize=localized(8.1, 8.6),
-        leading=localized(11.6, 13.2), textColor=MUTED, spaceBefore=5, spaceAfter=14)))
-    styles['note'] = ParagraphStyle('Note', **(base | dict(fontSize=9.2, leading=localized(13.4, 15),
+    styles['caption'] = ParagraphStyle('Caption', **(base | dict(fontSize=script_value(8.1, 8.6),
+        leading=script_value(11.6, 13.2), textColor=MUTED, spaceBefore=5, spaceAfter=14)))
+    styles['note'] = ParagraphStyle('Note', **(base | dict(fontSize=9.2, leading=script_value(13.4, 15),
         backColor=PALE, borderColor=HAIRLINE, borderWidth=.55, borderPadding=10,
         spaceBefore=6, spaceAfter=13)))
-    styles['cell'] = ParagraphStyle('Cell', **(base | dict(fontSize=localized(8.4, 9), leading=localized(11.8, 13.8),
+    styles['cell'] = ParagraphStyle('Cell', **(base | dict(fontSize=script_value(8.4, 9), leading=script_value(11.8, 13.8),
         spaceAfter=0, allowWidows=1, allowOrphans=1)))
     styles['headercell'] = ParagraphStyle('HeaderCell', parent=styles['cell'],
         fontName='Body-Bold', textColor=colors.white)
@@ -102,7 +118,7 @@ def typography():
     styles['number'] = ParagraphStyle('Number', parent=styles['bullet'], leftIndent=20)
     styles['small'] = ParagraphStyle('Small', parent=styles['body'], fontSize=8.2,
         leading=12, textColor=MUTED)
-    styles['code'] = ParagraphStyle('Code', fontName=localized('Courier', 'Body'), fontSize=8.1,
+    styles['code'] = ParagraphStyle('Code', fontName=script_value('Courier', 'Body'), fontSize=8.1,
         leading=11.5, textColor=INK, backColor=PALE, borderPadding=9,
         spaceBefore=6, spaceAfter=10)
     return styles
@@ -113,7 +129,7 @@ def plain(value):
 
 
 def slug(value):
-    return re.sub(r'[^a-z0-9\u3400-\u9fff\s-]', '', plain(value).lower()).strip().replace(' ', '-')
+    return re.sub(r'[^\w\s-]', '', plain(value).lower()).strip().replace(' ', '-')
 
 
 def inline(value):
@@ -145,10 +161,10 @@ class Cover(Flowable):
         c.drawString(pdfmetrics.stringWidth('Fire', 'Brand', 66) + 3, h - 80, '.')
         c.setFillColor(INK)
         c.setFont('Body', 24)
-        c.drawString(0, h - 127, localized('User Manual', '用户操作手册'))
+        c.drawString(0, h - 127, label('title'))
         c.setFillColor(MUTED)
         c.setFont('Body', 10)
-        c.drawString(1, h - 153, localized('VERSION 2.1.0  /  DEVELOPMENT EDITION', '版本 2.1.0  /  开发版  /  简体中文'))
+        c.drawString(1, h - 153, label('edition'))
         c.setStrokeColor(PEACH)
         c.setLineWidth(3)
         c.line(0, h - 179, 58, h - 179)
@@ -160,12 +176,11 @@ class Cover(Flowable):
         y = h - 209 - WIDTH / 2 - 34
         c.setFont('Body-Bold', 17)
         c.setFillColor(INK)
-        c.drawString(0, y, localized('Make some beautiful noise.', '为声音创造更多可能。'))
+        c.drawString(0, y, label('tagline'))
         c.setFont('Body', 10)
         c.setFillColor(MUTED)
         for n, line in enumerate([
-            localized('Multiband colour, dynamics, modulation and space.', '多频段音色、动态、调制与空间处理。'),
-            localized('A practical guide to designing sounds and managing your work.', '从首次使用到声音设计、预设管理与日常排查。'),
+            label('description_1'), label('description_2'),
         ]):
             c.drawString(0, y - 27 - n * 16, line)
         c.setStrokeColor(HAIRLINE)
@@ -176,16 +191,15 @@ class Cover(Flowable):
         c.drawString(0, 34, 'BLUE WINGS MUSIC')
         c.setFont('Body', 8.2)
         c.setFillColor(MUTED)
-        c.drawRightString(WIDTH, 34, localized('24 OCTOBER 2026', '2026 年 10 月 24 日'))
-        c.drawString(0, 16, localized('Illustrated with genuine interface captures from Fire 2.1.0.',
-                                    '配图均来自 Fire 2.1.0 的真实界面。'))
+        c.drawRightString(WIDTH, 34, label('date'))
+        c.drawString(0, 16, label('capture_note'))
 
 
 class ManualDocument(BaseDocTemplate):
     def __init__(self, path):
         super().__init__(str(path), pagesize=A4, leftMargin=MARGIN, rightMargin=MARGIN,
-            topMargin=51, bottomMargin=48, title=localized('Fire 2.1 User Manual', 'Fire 2.1 用户操作手册'),
-            author='Blue Wings Music', subject=localized('Illustrated operation manual for Fire 2.1.0', 'Fire 2.1.0 中文图文操作手册'),
+            topMargin=51, bottomMargin=48, title=label('pdf_title'),
+            author='Blue Wings Music', subject=label('subject'),
             pageCompression=1, allowSplitting=1)
         frame = Frame(MARGIN, 48, WIDTH, PAGE_H - 99, leftPadding=0,
                       bottomPadding=0, rightPadding=0, topPadding=0, id='body')
@@ -204,7 +218,7 @@ class ManualDocument(BaseDocTemplate):
         if doc.page > 1:
             canvas.setFont('Body-Bold', 7.5)
             canvas.setFillColor(MUTED)
-            canvas.drawString(MARGIN, page_h - 29, localized('FIRE 2.1  /  USER MANUAL', 'FIRE 2.1  /  用户操作手册'))
+            canvas.drawString(MARGIN, page_h - 29, label('header'))
             canvas.setFont('Body', 7.2)
             canvas.drawRightString(page_w - MARGIN, page_h - 29, 'BLUE WINGS MUSIC')
             canvas.setStrokeColor(HAIRLINE)
@@ -212,7 +226,7 @@ class ManualDocument(BaseDocTemplate):
             canvas.line(MARGIN, page_h - 36, page_w - MARGIN, page_h - 36)
             canvas.line(MARGIN, 36, page_w - MARGIN, 36)
             canvas.setFont('Body', 7.2)
-            canvas.drawString(MARGIN, 23, localized('Development edition / 24 October 2026', '开发版 / 2026 年 10 月 24 日'))
+            canvas.drawString(MARGIN, 23, label('footer'))
             canvas.drawRightString(page_w - MARGIN, 23, f'{doc.page:02d}')
         canvas.restoreState()
 
@@ -227,7 +241,11 @@ class ManualDocument(BaseDocTemplate):
 
 
 def paragraph(text, style):
-    return Paragraph(inline(text), style)
+    return paragraph_type()(inline(text), style)
+
+
+def paragraph_type():
+    return JapaneseParagraph if LANGUAGE == 'ja' else Paragraph
 
 
 def table_widths(rows):
@@ -249,6 +267,8 @@ def markdown_flowables(text, source_dir, styles):
     i = 0
     figure = 0
     landscape_next = False
+    figure_max_height = None
+    keep_table = False
     def special(line):
         return (not line.strip() or line.startswith(('#', '>', '|', '```', '<!--'))
                 or re.match(r'^\s*(?:[-*+] |\d+\. |!\[)', line))
@@ -258,6 +278,11 @@ def markdown_flowables(text, source_dir, styles):
             i += 1
             continue
         if line.startswith('<!--'):
+            height = re.search(r'figure:max-height=(\d+)', line)
+            if height:
+                figure_max_height = int(height.group(1))
+            if 'table:keep' in line:
+                keep_table = True
             if 'figure:landscape' in line:
                 landscape_next = True
             if 'pagebreak' in line:
@@ -296,13 +321,15 @@ def markdown_flowables(text, source_dir, styles):
             width = min(available, 420 if ph / pw > 1.1 else available)
             height = width * ph / pw
             maximum_height = 400 if landscape_next else (510 if ph / pw > 1.1 else 325)
+            if figure_max_height is not None:
+                maximum_height = min(maximum_height, figure_max_height)
             if height > maximum_height:
                 width *= maximum_height / height
                 height = maximum_height
             figure += 1
             img = Image(str(path), width=width, height=height)
             img.hAlign = 'CENTER'
-            cap = paragraph(f'**{localized("Figure", "图")} {figure:02d}.** {caption}', styles['caption'])
+            cap = paragraph(f'**{label("figure")} {figure:02d}.** {caption}', styles['caption'])
             figure_group = [Spacer(1, 5), img, cap]
             if (not landscape_next and flow and isinstance(flow[-1], Paragraph)
                     and getattr(flow[-1], 'manual_heading', (None,))[0] == 1):
@@ -313,6 +340,7 @@ def markdown_flowables(text, source_dir, styles):
             if landscape_next:
                 flow.extend([NextPageTemplate('manual'), PageBreak()])
             landscape_next = False
+            figure_max_height = None
             i += 1
             continue
         if line.startswith('|'):
@@ -330,19 +358,20 @@ def markdown_flowables(text, source_dir, styles):
             table = LongTable(cells, colWidths=table_widths(rows), repeatRows=1,
                               hAlign='LEFT', spaceBefore=5, spaceAfter=12,
                               splitByRow=1, splitInRow=0,
-                              rowSplitRange=(3, -2) if LANGUAGE == 'zh-CN' and len(rows) > 5 else None)
+                              rowSplitRange=(3, -2) if LANGUAGE != 'en' and len(rows) > 5 else None)
             table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), INK),
                 ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, PAPER]),
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                 ('LEFTPADDING', (0, 0), (-1, -1), 9),
                 ('RIGHTPADDING', (0, 0), (-1, -1), 9),
-                ('TOPPADDING', (0, 0), (-1, -1), 6),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 5 if LANGUAGE in ('fr', 'es') else 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5 if LANGUAGE in ('fr', 'es') else 6),
                 ('LINEBELOW', (0, 0), (-1, 0), .6, INK),
                 ('LINEBELOW', (0, 1), (-1, -1), .35, HAIRLINE),
             ]))
-            flow.append(table)
+            flow.append(KeepTogether([table]) if keep_table else table)
+            keep_table = False
             continue
         if line.startswith('```'):
             i += 1
@@ -370,7 +399,7 @@ def markdown_flowables(text, source_dir, styles):
             style = styles['number' if mark[0].isdigit() else 'bullet']
             if indent:
                 style = ParagraphStyle('Nested', parent=style, leftIndent=style.leftIndent + 12)
-            p = Paragraph(inline(content), style, bulletText=mark.strip() if mark[0].isdigit() else '-')
+            p = paragraph_type()(inline(content), style, bulletText=mark.strip() if mark[0].isdigit() else '-')
             p.manual_list_kind = 'number' if mark[0].isdigit() else 'bullet'
             flow.append(p)
             continue
@@ -385,7 +414,7 @@ def markdown_flowables(text, source_dir, styles):
             content.append(lines[i].strip())
             i += 1
         paragraph_group = [paragraph(' '.join(content), styles['body'])]
-        if (LANGUAGE == 'zh-CN' and flow and isinstance(flow[-1], Paragraph)
+        if (LANGUAGE != 'en' and flow and isinstance(flow[-1], Paragraph)
                 and getattr(flow[-1], 'manual_heading', (None,))[0] == 1):
             paragraph_group.insert(0, flow.pop())
         flow.append(KeepTogether(paragraph_group))
@@ -410,15 +439,15 @@ def markdown_flowables(text, source_dir, styles):
 def main():
     global LANGUAGE
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--language', choices=['en', 'zh-CN'], default='en')
+    parser.add_argument('--language', choices=list(LABELS), default='en')
     parser.add_argument('--source', type=Path)
     parser.add_argument('--output', type=Path)
-    parser.add_argument('--cjk-regular', type=Path, help='Embeddable Chinese TrueType font or collection')
-    parser.add_argument('--cjk-bold', type=Path, help='Embeddable Chinese bold TrueType font or collection')
-    parser.add_argument('--cjk-index', type=int, default=1, help='Collection face index (use 0 for standalone TTF)')
+    parser.add_argument('--cjk-regular', type=Path, help='Embeddable Chinese/Japanese TrueType font or collection')
+    parser.add_argument('--cjk-bold', type=Path, help='Embeddable Chinese/Japanese bold TrueType font or collection')
+    parser.add_argument('--cjk-index', type=int, help='Collection face index (default: Chinese 1, Japanese 0)')
     args = parser.parse_args()
     LANGUAGE = args.language
-    stem = 'Fire-2.1-User-Manual' + localized('', '-zh-CN')
+    stem = 'Fire-2.1-User-Manual' + ('' if LANGUAGE == 'en' else f'-{LANGUAGE}')
     args.source = args.source or MANUAL / f'{stem}.md'
     args.output = args.output or ROOT / 'output/pdf' / f'{stem}.pdf'
     register_fonts(args.cjk_regular, args.cjk_bold, args.cjk_index)
@@ -428,28 +457,22 @@ def main():
         text = text.split('<!-- manual:body -->', 1)[1]
     if '[FIGURE:' in text or re.search(r'\bTODO\b|\bTBD\b', text):
         raise ValueError('Manual still has editorial placeholders')
-    if LANGUAGE == 'zh-CN':
-        for name in ('Body', 'Body-Bold'):
-            supported = pdfmetrics.getFont(name).face.charWidths
-            missing = sorted({c for c in text if not c.isspace() and ord(c) not in supported})
-            if missing:
-                raise ValueError(f'{name} lacks characters: {"".join(missing)}')
+    for name in ('Body', 'Body-Bold'):
+        supported = pdfmetrics.getFont(name).face.charWidths
+        characters = text + ''.join(LABELS[LANGUAGE].values())
+        missing = sorted({c for c in characters if not c.isspace() and ord(c) not in supported})
+        if missing:
+            raise ValueError(f'{name} lacks characters: {"".join(missing)}')
     toc = TableOfContents()
     toc.levelStyles = [ParagraphStyle('TOCLevel0', fontName='Body', fontSize=9.1,
         leading=14.5, leftIndent=0, firstLineIndent=0, rightIndent=23,
         spaceBefore=0, textColor=INK)]
     toc.dotsMinLevel = 0
     story = [Cover(args.source.parent / 'images/04-vintage-tube.png'), PageBreak(),
-             paragraph(localized('Contents', '目录'), styles['h2']),
-             paragraph(localized('Start with Chapters 01-02, then follow the chapters relevant to your session. '
-                       'Contents entries and PDF bookmarks are clickable.',
-                       '建议先阅读第 01-02 章，再按需要查阅相应功能。目录条目与 PDF 书签均可点击跳转。'), styles['body']),
+             paragraph(label('contents'), styles['h2']),
+             paragraph(label('contents_intro'), styles['body']),
              Spacer(1, 12), toc, Spacer(1, 17),
-             paragraph(localized('This manual describes Fire 2.1.0 in development. Reference build: '
-                       '9ea20d2. Illustrations show example settings, not mandatory presets. '
-                       'A public download may have a different version; check Menu > Settings.',
-                       '本手册对应 Fire 2.1.0 开发版，产品源码参考：9ea20d2。截图展示示例设置；'
-                       '公开下载版本可能不同，请在 Menu > Settings 中确认。界面按钮保留英文名称，便于对照操作。'), styles['note']),
+             paragraph(label('edition_note'), styles['note']),
              PageBreak()]
     content, figures = markdown_flowables(text, args.source.parent, styles)
     story.extend(content)

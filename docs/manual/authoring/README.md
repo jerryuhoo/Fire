@@ -3,6 +3,8 @@
 The canonical English text is `../Fire-2.1-User-Manual.md`. Image paths are
 relative to that file. `build_pdf.py` uses the same Markdown to produce
 `output/pdf/Fire-2.1-User-Manual.pdf` from the repository root.
+The complete Simplified Chinese edition is `../Fire-2.1-User-Manual-zh-CN.md`;
+it shares the same genuine screenshots and retains English UI labels for reference.
 
 ## PDF
 
@@ -10,13 +12,21 @@ Install `reportlab` and `Pillow` in your Python environment, then run:
 
 ```sh
 python3 docs/manual/authoring/build_pdf.py
+python3 docs/manual/authoring/build_pdf.py --language zh-CN
 ```
 
 The PDF embeds the ReportLab-distributed Vera text fonts and uses standard
-Courier for code. It includes a linked contents page and chapter/section
+Courier for code. The Chinese edition embeds subsets of macOS's STHeiti SC
+Light and Medium fonts (collection face 1) and uses Chinese text wrapping.
+On another system, supply embeddable Chinese TrueType fonts with
+`--cjk-regular /path/to/regular.ttf --cjk-bold /path/to/bold.ttf --cjk-index 0`.
+Font binaries are not copied into the repository. The builder checks Chinese
+text for missing glyphs before export. Both editions include a linked contents page and chapter/section
 bookmarks. The `manual:body` comment separates the Markdown contents from the
 PDF body; `figure:landscape` requests a wide screenshot page. Re-render the PDF
 with Poppler and inspect the pages before publishing an updated edition.
+Exported PDFs and portable ZIP bundles are ignored by Git; commit the Markdown,
+image sources, and authoring tools instead.
 
 ## Genuine interface captures
 

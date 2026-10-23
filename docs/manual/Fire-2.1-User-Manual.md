@@ -2,6 +2,8 @@
 
 **English / Development edition / 24 October 2026**
 
+[简体中文](Fire-2.1-User-Manual-zh-CN.md)
+
 Detailed operating instructions with genuine screenshots. Product-source reference: `9ea20d2`. The PDF edition includes a clickable contents page and bookmarks. Keep this Markdown file beside its `images` directory when sharing it.
 
 ## Contents

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EqProcessor.h"
+#include "OttProcessor.h"
 #include <juce_dsp/juce_dsp.h>
 #include <memory>
 
@@ -35,6 +36,7 @@ public:
     int getShapeLatency() const noexcept;
     /** Audio thread only. */
     dynamic_eq::VisualState getDynamicEqVisualState(int node) const noexcept;
+    OttProcessor::VisualState getOttVisualState() const noexcept;
     void process(juce::dsp::AudioBlock<float>, Type,
                  const std::array<ModulatedValueProvider, 6>&, bool normalised,
                  int offset, const std::array<int, 6>*,

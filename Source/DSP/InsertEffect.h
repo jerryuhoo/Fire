@@ -263,6 +263,8 @@ public:
         } clouds;
         Type type = Type::none;
         std::uint32_t publicationSequence = 0;
+        // Identity only: prevents a UI meter surviving a slot type replacement.
+        std::uint64_t typeGeneration = 0;
         bool enabled = true;
         bool normalised = false;
         bool highQuality = false, fixedShapeLatency = false;
@@ -464,6 +466,20 @@ public:
     {
         return currentType == Type::eq && core != nullptr && !dormant && gate.getTargetValue() > 0
             ? core->getDynamicEqVisualState(node) : dynamic_eq::VisualState{};
+    }
+    /** Audio thread only. Includes this insert's outer Mix/power bridge. */
+    OttProcessor::VisualState getOttVisualState() const noexcept
+    {
+        if (currentType != Type::ott || core == nullptr || dormant || gate.getTargetValue() <= 0)
+            return {};
+        auto result = core->getOttVisualState();
+        const auto amount = gate.getCurrentValue() * lastValues[5] * 0.01f;
+        const auto wetGain = juce::Decibels::decibelsToGain(result.gainChangeDb);
+        result.gainChangeDb = juce::Decibels::gainToDecibels(1.0f + amount * (wetGain - 1.0f), -120.0f);
+        result.dynamicsActivityDb *= amount;
+        result.typeGeneration = coreLastParameters.typeGeneration;
+        result.mixModulated = routes[5].routed;
+        return result;
     }
 private:
     enum : std::uint32_t {historyFamily = 1, tapeFamily = 2, reverbFamily = 4,

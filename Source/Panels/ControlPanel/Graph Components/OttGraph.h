@@ -98,6 +98,7 @@ public:
         }
     }
 private:
+    friend struct InsertOttGraphTestAccess;
     float input = -120.0f, gain = 0.0f, activity = 0.0f;
     float shownInput = -120.0f, shownGain = 0.0f;
     float lower = -48.0f, upper = -18.0f, centroid = 0.5f, readout = 0.0f;

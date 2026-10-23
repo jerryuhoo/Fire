@@ -55,12 +55,18 @@ public:
 
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     void presentDistortionGraphValues(const DistortionGraphValues& values);
-    bool isOttSelected() const { return ottSwitch.getToggleState(); }
+    bool isOttSelected() const { return selectedInsert<0 && ottSwitch.getToggleState(); }
+    bool isInsertedOttSelected() const { return selectedInsert>=0 && insertControls.usesOttGraph(); }
+    void setInsertedOttSpectrum(const float* data,int bins,float binWidth,const float* reference,float lowHz=20.f,float highHz=20000.f)
+    {insertControls.setOttSpectrum(data,bins,binWidth,reference,lowHz,highHz);}
     int getOttPreviewDirection() const;
     void setOttSpectrumVisuals(const fire::ui::OttSpectrumProfile& profile, float centroid, int interactionDirection)
     {
-        ottGraph.setSpectrum(profile, centroid);
-        spectrumOttInteraction = interactionDirection;
+        if(!isInsertedOttSelected())
+        {
+            ottGraph.setSpectrum(profile, centroid);
+            spectrumOttInteraction = interactionDirection;
+        }
     }
     std::function<void()> onModuleChanged;
 

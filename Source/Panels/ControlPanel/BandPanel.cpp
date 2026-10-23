@@ -1122,6 +1122,7 @@ GraphTemplate* BandPanel::getSelectedModuleGraph() noexcept
 
 GraphTemplate* BandPanel::getAutomaticModuleGraph() noexcept
 {
+    if(isInsertedOttSelected())return &ottGraph;
     if (selectedInsert >= 0) return insertControls.usesFullWidthLayout() ? nullptr : &oscilloscope;
     if (ottSwitch.getToggleState()) return &ottGraph;
     if (shapeSwitch.getToggleState())
@@ -1181,6 +1182,7 @@ void BandPanel::setAnimatedModuleTarget(int moduleIndex)
 void BandPanel::selectInsertEffect(int slot)
 {
     const juce::Component::SafePointer<BandPanel> safeThis(this);
+    insertControls.resetOttGraph(ottGraph);lastOttMeterGeneration=0;lastOttMeterTimeMs=-1;spectrumOttInteraction=0;
     if (slot < 0 || processor.getInsertEffectType(focusBandNum + 1, slot) == fire::effects::Type::none)
     {
         clearGraphZoom();
@@ -1238,6 +1240,7 @@ void BandPanel::refreshInsertLayout()
     if (selectedInsert < 0) return;
     const auto expectedSlot = selectedInsert;
     const juce::Component::SafePointer<BandPanel> safeThis(this);
+    insertControls.resetOttGraph(ottGraph);
     clearGraphZoom();
     if (! safeThis || selectedInsert != expectedSlot) return;
     applySelectedGraphView();
@@ -1291,29 +1294,33 @@ void BandPanel::animationTick(float deltaSeconds)
             static_cast<float>(getDriveKnob()->getValue()), juce::jmax(processor.getBandInputPeakLevel(focusBandNum, 0), processor.getBandInputPeakLevel(focusBandNum, 1)), deltaSeconds, processor.getAudioActivitySequence());
     updateDriveCompensationPresentation();
     if (! safeOwner) return;
-    if (ottSwitch.getToggleState())
+    if(isInsertedOttSelected())insertControls.updateOttGraph(ottGraph,deltaSeconds);
+    else
     {
-        auto* rawUp = processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(OTT_UPWARD_ID, focusBandNum));
-        auto* rawDown = processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(OTT_DOWNWARD_ID, focusBandNum));
-        auto& up = *modulatableSliderComponents.at(OTT_UPWARD_NAME);
-        auto& down = *modulatableSliderComponents.at(OTT_DOWNWARD_NAME);
-        if (rawUp && rawDown && ! up.hasActiveInteraction() && ! down.hasActiveInteraction())
+        if (ottSwitch.getToggleState())
         {
-            up.setValue(juce::jmin(rawUp->load(), rawDown->load() - 6.0f), juce::dontSendNotification);
-            down.setValue(rawDown->load(), juce::dontSendNotification);
+            auto* rawUp = processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(OTT_UPWARD_ID, focusBandNum));
+            auto* rawDown = processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(OTT_DOWNWARD_ID, focusBandNum));
+            auto& up = *modulatableSliderComponents.at(OTT_UPWARD_NAME);
+            auto& down = *modulatableSliderComponents.at(OTT_DOWNWARD_NAME);
+            if (rawUp && rawDown && ! up.hasActiveInteraction() && ! down.hasActiveInteraction())
+            {
+                up.setValue(juce::jmin(rawUp->load(), rawDown->load() - 6.0f), juce::dontSendNotification);
+                down.setValue(rawDown->load(), juce::dontSendNotification);
+            }
+            ottGraph.setThresholds(static_cast<float>(up.getValue()), static_cast<float>(down.getValue()));
         }
-        ottGraph.setThresholds(static_cast<float>(up.getValue()), static_cast<float>(down.getValue()));
+        if (lastOttMeterTimeMs >= 0.0 && juce::Time::getMillisecondCounterHiRes() - lastOttMeterTimeMs > 250.0)
+            ottGraph.setLevels(-120.0f, 0.0f);
+        if (ottGraph.isShowing())
+        {
+            bool reading = spectrumOttInteraction != 0;
+            for (auto* name : ParameterIDAndName::ottControlNames)
+                reading = reading || modulatableSliderComponents.at(name)->isValueReadoutRequested();
+            ottGraph.advanceVisuals(deltaSeconds, reading, getOttPreviewDirection() | spectrumOttInteraction);
+        }
+        else ottGraph.resetVisuals();
     }
-    if (lastOttMeterTimeMs >= 0.0 && juce::Time::getMillisecondCounterHiRes() - lastOttMeterTimeMs > 250.0)
-        ottGraph.setLevels(-120.0f, 0.0f);
-    if (ottGraph.isShowing())
-    {
-        bool reading = spectrumOttInteraction != 0;
-        for (auto* name : ParameterIDAndName::ottControlNames)
-            reading = reading || modulatableSliderComponents.at(name)->isValueReadoutRequested();
-        ottGraph.advanceVisuals(deltaSeconds, reading, getOttPreviewDirection() | spectrumOttInteraction);
-    }
-    else ottGraph.resetVisuals();
     if (! isShowing())
     {
         moduleSelectionPosition.snapTo(moduleSelectionPosition.target);
@@ -1735,6 +1742,10 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
 
     if (isSwitch)
     {
+        if(selectedInsert>=0)
+        {
+            insertControls.resetOttGraph(ottGraph);lastOttMeterGeneration=0;lastOttMeterTimeMs=-1;spectrumOttInteraction=0;
+        }
         selectedInsert = -1;
         effectNavigation.setSelectedSlot(-1);
         insertControls.setActive(false);
@@ -2302,6 +2313,7 @@ void BandPanel::presentMeterValues(const MeterValues& values,
                                    std::uint64_t generation)
 {
     vuPanel.presentMeterValues(values, generation);
+    if(isInsertedOttSelected())return;
     const auto index = static_cast<size_t>(juce::jlimit(0, 3, focusBandNum));
     if (generation != lastOttMeterGeneration)
     {

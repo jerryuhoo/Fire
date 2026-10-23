@@ -179,6 +179,7 @@
         <FILE id="insertUi2" name="InsertEffectControls.h" compile="0" resource="0" file="Source/GUI/InsertEffectControls.h"/>
         <FILE id="granularMediaUi21" name="GranularMediaControls.h" compile="0" resource="0" file="Source/GUI/GranularMediaControls.h"/>
         <FILE id="granularMediaWorker21" name="GranularMediaWorker.h" compile="0" resource="0" file="Source/GUI/GranularMediaWorker.h"/>
+        <FILE id="insertOttSpectrum21" name="InsertOttSpectrum.h" compile="0" resource="0" file="Source/GUI/InsertOttSpectrum.h"/>
         <FILE id="cACb01" name="ContextAwareComboBox.cpp" compile="1" resource="0"
               file="Source/GUI/ContextAwareComboBox.cpp"/>
         <FILE id="cACb02" name="ContextAwareComboBox.h" compile="0" resource="0"

@@ -7972,6 +7972,7 @@ void FireAudioProcessor::prepareInsertParameters(int scope, fire::effects::RackP
         const auto& cache = insertParameters[static_cast<size_t>(scope)][slot];
         auto& target = destination[slot];
         target.effect.publicationSequence = multibandTopologyResetGeneration.load(std::memory_order_seq_cst) & ~std::uint32_t{1};
+        target.effect.typeGeneration = granularSlotGenerations[static_cast<size_t>(scope)][slot].value.load(std::memory_order_acquire);
         target.effect.type = getInsertEffectType(scope, static_cast<int>(slot));
         target.effect.reverbModel = juce::roundToInt(loadCachedParameter(reverbModelParameters[static_cast<size_t>(scope)][slot]));
         target.effect.shapeModel = juce::roundToInt(loadCachedParameter(shapeModelParameters[static_cast<size_t>(scope)][slot]));

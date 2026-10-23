@@ -1993,6 +1993,15 @@ void FireAudioProcessorEditor::timerCallback()
             const float binWidth = static_cast<float>(processor.getSampleRate())
                                    / static_cast<float>(processor.getFFTSize());
             multiband.updateOttSpectrum(processedFftFrame.data(), processor.getNumBins(), binWidth, originalFftFrame.data());
+            if (globalPanel.isShowing() && globalPanel.isOttSelected())
+                globalPanel.setInsertedOttSpectrum(processedFftFrame.data(),
+                    processor.getNumBins(), binWidth, originalFftFrame.data());
+            if (bandPanel.isShowing() && bandPanel.isInsertedOttSelected())
+            {
+                const auto [lowHz, highHz] = multiband.getBandFrequencyRange(currentBand);
+                bandPanel.setInsertedOttSpectrum(processedFftFrame.data(),
+                    processor.getNumBins(), binWidth, originalFftFrame.data(), lowHz, highHz);
+            }
             processedSpectrum.updateSpectrum(processedFftFrame.data(), processor.getNumBins(), binWidth);
             originalSpectrum.updateSpectrum(originalFftFrame.data(), processor.getNumBins(), binWidth);
         }

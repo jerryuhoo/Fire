@@ -660,6 +660,7 @@ public:
         std::uint64_t requiredCaptureEpoch = 0);
     std::uint64_t requestFreshModulatedFilterValuesEpoch() noexcept;
     fire::dynamic_eq::VisualState getDynamicEqVisualState(int node, int scope = -1, int slot = -1) const noexcept;
+    OttProcessor::VisualState getInsertOttVisualState(int scope, int slot) const noexcept;
     fire::eq::NodeState getEqNodeState(int slot, int fxScope = -1, int fxSlot = -1) const;
     int addEqNode(float frequency, float gainDb,
                   fire::eq::Type type = fire::eq::Type::bell, int fxScope = -1, int fxSlot = -1);
@@ -1014,6 +1015,13 @@ private:
         std::atomic<bool> active {false};
     };
     std::array<std::array<DynamicEqMeter, fire::eq::maxNodes>, 1 + fire::effects::scopeCount * fire::effects::slotCount> dynamicEqMeters;
+    struct InsertOttMeter
+    {
+        std::atomic<std::uint64_t> sequence {0}, typeGeneration {0};
+        std::atomic<float> inputLevelDb {-120.0f}, gainChangeDb {0}, dynamicsActivityDb {0};
+        std::atomic<bool> valid {false}, mixModulated {false};
+    };
+    std::array<std::array<InsertOttMeter, fire::effects::slotCount>, fire::effects::scopeCount> insertOttMeters;
     std::uint64_t dynamicEqRenderSequence = 0; // Audio-thread owned, also advances for oversized sub-blocks.
     void publishDynamicEqMeters() noexcept;
     void resetDynamicEqMeters() noexcept;

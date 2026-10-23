@@ -103,6 +103,7 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
     addAndMakeVisible(oscilloscope);
     addAndMakeVisible(vuPanel);
     addAndMakeVisible(widthGraph);
+    addChildComponent(ottGraph);
     configureGraphInteractions();
 
     vuPanel.setFocusBandNum(-1);
@@ -290,6 +291,7 @@ void GlobalPanel::visibilityChanged()
 
     if (safeThis != nullptr && ! isShowing())
     {
+        insertControls.resetOttGraph(ottGraph);
         dismissTransientInteraction();
         if (safeThis == nullptr)
             return;
@@ -563,6 +565,7 @@ void GlobalPanel::setupComponentGroups()
     allControls.addArray(filterComponents);
     allControls.addArray(downsampleComponents);
     allControls.addArray(graphComponents);
+    allControls.add(&ottGraph);
     allControls.add(&insertControls);
     allControls.add(modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME).get());
     allControls.add(modulatableSliderComponents.at(GLOBAL_MIX_NAME).get());
@@ -722,6 +725,7 @@ void GlobalPanel::resized()
             auto graphArea = insertArea.removeFromRight(juce::jmin(insertArea.getWidth() / 2, juce::roundToInt(230.0f * uiScale)));
             insertArea.removeFromRight(controlGap);
             oscilloscope.setBounds(graphArea);
+            ottGraph.setBounds(graphArea);
         }
         insertControls.setBounds(insertArea);
         if (zoomedGraph != nullptr) zoomedGraph->setBounds(knobsColumnArea.reduced(2));
@@ -795,6 +799,7 @@ void GlobalPanel::animationTick(float deltaSeconds)
     if (! safeOwner) return;
     insertControls.refresh();
     if (! safeOwner) return;
+    if(isOttSelected())insertControls.updateOttGraph(ottGraph,deltaSeconds);
     if (! selectionAnimationInitialised)
         return;
 
@@ -825,8 +830,8 @@ void GlobalPanel::setScale(float newScale)
 
     scale = newScale;
     eqControls.setScale(newScale);
-    const std::array<GraphTemplate*, 3> graphs {
-        &oscilloscope, &vuPanel, &widthGraph
+    const std::array<GraphTemplate*, 4> graphs {
+        &oscilloscope, &vuPanel, &widthGraph, &ottGraph
     };
     for (auto* graph : graphs)
         graph->setScale(newScale);
@@ -913,8 +918,8 @@ void GlobalPanel::invalidateChromeCache()
 void GlobalPanel::configureGraphInteractions()
 {
     const juce::Component::SafePointer<GlobalPanel> safeThis(this);
-    const std::array<GraphTemplate*, 3> graphs {
-        &oscilloscope, &vuPanel, &widthGraph
+    const std::array<GraphTemplate*, 4> graphs {
+        &oscilloscope, &vuPanel, &widthGraph, &ottGraph
     };
 
     for (auto* graph : graphs)
@@ -930,8 +935,8 @@ void GlobalPanel::configureGraphInteractions()
 void GlobalPanel::toggleGraphZoom(GraphTemplate* graph)
 {
     const juce::Component::SafePointer<GlobalPanel> safeThis(this);
-    const std::array<GraphTemplate*, 3> graphs {
-        &oscilloscope, &vuPanel, &widthGraph
+    const std::array<GraphTemplate*, 4> graphs {
+        &oscilloscope, &vuPanel, &widthGraph, &ottGraph
     };
     if (graph == nullptr
         || std::find(graphs.begin(), graphs.end(), graph) == graphs.end()
@@ -1103,6 +1108,8 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
 
     if (isSwitch)
     {
+        insertControls.resetOttGraph(ottGraph);ottGraph.setVisible(false);
+        if(!safeThis)return;
         selectedInsert = -1;
         effectNavigation.setSelectedSlot(-1);
         insertControls.setActive(false);
@@ -1123,6 +1130,8 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
 void GlobalPanel::selectInsertEffect(int slot)
 {
     const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    insertControls.resetOttGraph(ottGraph);ottGraph.setVisible(false);
+    if(!safeThis)return;
     if (slot < 0 || processor.getInsertEffectType(0, slot) == fire::effects::Type::none)
     {
         clearGraphZoom();
@@ -1152,7 +1161,9 @@ void GlobalPanel::selectInsertEffect(int slot)
     if (! safeThis) return;
     insertControls.setActive(true);
     if (! safeThis) return;
-    oscilloscope.setVisible(! insertControls.usesFullWidthLayout());
+    oscilloscope.setVisible(! insertControls.usesFullWidthLayout() && !insertControls.usesOttGraph());
+    if (! safeThis) return;
+    ottGraph.setVisible(insertControls.usesOttGraph());
     if (! safeThis) return;
     modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setInteractionOnlyReadout(true);
     modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setInteractionOnlyReadout(true);
@@ -1180,9 +1191,12 @@ void GlobalPanel::refreshInsertLayout()
     if (selectedInsert < 0) return;
     const auto expectedSlot = selectedInsert;
     const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    insertControls.resetOttGraph(ottGraph);
     clearGraphZoom();
     if (! safeThis || selectedInsert != expectedSlot) return;
-    oscilloscope.setVisible(! insertControls.usesFullWidthLayout());
+    oscilloscope.setVisible(! insertControls.usesFullWidthLayout() && !insertControls.usesOttGraph());
+    if (! safeThis) return;
+    ottGraph.setVisible(insertControls.usesOttGraph());
     if (! safeThis) return;
     resized();
     if (! safeThis) return;

@@ -15,6 +15,14 @@ public:
     inline static constexpr std::array<float, controlCount> minimums { 0.0f, 10.0f, -72.0f, -36.0f, -24.0f, 0.0f };
     inline static constexpr std::array<float, controlCount> maximums { 1.0f, 400.0f, -6.0f, 0.0f, 24.0f, 1.0f };
 
+    struct VisualState
+    {
+        float inputLevelDb = -120.0f, gainChangeDb = 0.0f, dynamicsActivityDb = 0.0f;
+        std::uint64_t renderSequence = 0, typeGeneration = 0;
+        bool valid = false;
+        bool mixModulated = false;
+    };
+
     struct Parameters
     {
         bool enabled = false;

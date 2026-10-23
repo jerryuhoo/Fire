@@ -447,6 +447,8 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ### 2.1.0 (in development)
 
+- Use the same LIFT / PRESS view and knob arrangement for native Band OTT and
+  independently inserted Band / Master OTT, with each insert's own dynamics meters.
 - Import audio into Granular with a selectable start position, waveform preview
   and optional normalization; export frozen material as a sample-exact WAV.
 - Implement serial / parallel A-B routing per Band and Master, with modulatable

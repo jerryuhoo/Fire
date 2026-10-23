@@ -23,6 +23,10 @@ public:
     dynamic_eq::VisualState getDynamicEqVisualState(int slot, int node) const noexcept
     { return effects && juce::isPositiveAndBelow(slot, slotCount)
         ? (*effects)[static_cast<size_t>(slot)].getDynamicEqVisualState(node) : dynamic_eq::VisualState{}; }
+    /** Audio thread only; publish results to the processor's stable UI mirror. */
+    OttProcessor::VisualState getOttVisualState(int slot) const noexcept
+    { return effects && juce::isPositiveAndBelow(slot, slotCount)
+        ? (*effects)[static_cast<size_t>(slot)].getOttVisualState() : OttProcessor::VisualState{}; }
     FrozenRecordingPtr copyFrozenRecording(int slot) const
     { return effects && juce::isPositiveAndBelow(slot, slotCount) ? (*effects)[static_cast<size_t>(slot)].copyFrozenRecording() : FrozenRecordingPtr{}; }
     void stageFrozenRecording(int slot, const FrozenRecordingPtr& recording, std::uint32_t publication, bool smoothReplacement = false)

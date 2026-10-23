@@ -15,6 +15,7 @@
 #include "Graph Components/Oscilloscope.h"
 #include "Graph Components/VUPanel.h"
 #include "Graph Components/WidthGraph.h"
+#include "Graph Components/OttGraph.h"
 #include "PanelBase.h"
 #include "../../GUI/InsertEffectControls.h"
 #include "../../GUI/EqControlsPanel.h"
@@ -60,6 +61,9 @@ public:
     int getSelectedEqNode() const noexcept { return eqControls.getSelectedNode(); }
     EqControlsPanel& getEqControls() noexcept { return eqControls; }
     void presentMeterValues(const MeterValues& values, std::uint64_t generation);
+    bool isOttSelected() const {return selectedInsert>=0 && insertControls.usesOttGraph();}
+    void setInsertedOttSpectrum(const float* data,int bins,float binWidth,const float* reference,float lowHz=20.f,float highHz=20000.f)
+    {insertControls.setOttSpectrum(data,bins,binWidth,reference,lowHz,highHz);}
     float scale = 1.0f;
 
 private:
@@ -163,6 +167,7 @@ private:
     Oscilloscope oscilloscope { processor };
     VUPanel vuPanel { processor };
     WidthGraph widthGraph { processor };
+    OttGraph ottGraph;
     GraphTemplate* zoomedGraph = nullptr;
     std::vector<juce::Component::SafePointer<juce::Component>>
         componentsHiddenForGraphZoom;

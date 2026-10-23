@@ -13,6 +13,7 @@ struct CoreEffect::Impl
     int shapeLatency = 0;
     bool qualityPrimed = false, lastHighQuality = false;
     bool eqRendered = false;
+    bool ottRendered = false;
 };
 CoreEffect::CoreEffect() : impl(std::make_unique<Impl>()) {}
 CoreEffect::~CoreEffect() = default;
@@ -27,11 +28,18 @@ void CoreEffect::prepare(const juce::dsp::ProcessSpec& spec)
     impl->baseShapeDelay.setDelay(static_cast<float>(impl->shapeLatency));
     impl->qualityPrimed = false;
     impl->eqRendered = false;
+    impl->ottRendered = false;
     impl->equalizer.prepare(spec);
 }
 int CoreEffect::getShapeLatency() const noexcept { return impl->shapeLatency; }
 dynamic_eq::VisualState CoreEffect::getDynamicEqVisualState(int node) const noexcept
 { return impl->eqRendered ? impl->equalizer.getDynamicEqVisualState(node) : dynamic_eq::VisualState{}; }
+OttProcessor::VisualState CoreEffect::getOttVisualState() const noexcept
+{
+    if (!impl->ottRendered) return {};
+    return {impl->band.ott.getInputLevelDb(), impl->band.ott.getGainChangeDb(),
+            impl->band.ott.getDynamicsActivityDb(), 0, 0, true};
+}
 void CoreEffect::reset() noexcept
 {
     impl->band.reset();
@@ -39,6 +47,7 @@ void CoreEffect::reset() noexcept
     impl->baseShapeDelay.reset();
     impl->qualityPrimed = false;
     impl->eqRendered = false;
+    impl->ottRendered = false;
 }
 void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
     const std::array<ModulatedValueProvider, 6>& values, bool normalised, int offset,
@@ -48,6 +57,7 @@ void CoreEffect::process(juce::dsp::AudioBlock<float> block, Type type,
 {
     if (block.getNumChannels() == 0 || block.getNumSamples() == 0) return;
     impl->eqRendered = type == Type::eq;
+    impl->ottRendered = type == Type::ott;
     if (type == Type::eq)
     {
         for (int node = 0; node < eq::maxNodes; ++node)

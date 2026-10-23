@@ -2,6 +2,7 @@
 #include "../DSP/InsertEffect.h"
 #include "../DSP/ModulationRouting.h"
 #include "ChannelModeParameters.h"
+#include "ParallelChainParameters.h"
 #include <map>
 #include <memory>
 #include <vector>
@@ -15,6 +16,7 @@ struct Module
     // Preserve the original Drive mode explicitly; conversion must not
     // silently turn a legacy linked output into modern compensation.
     bool legacyLinked = false, modernDriveComp = true;
+    int branch=parallel_chain::a;
     std::map<juce::String,float> values; // Canonical keys, source-representation normalised values.
     juce::Array<ModulationRouting> routes; // Targets are canonical keys, not instance parameter IDs.
     effects::FrozenRecordingPtr frozen;
@@ -24,6 +26,9 @@ struct Snapshot
     std::vector<Module> modules;
     bool includesRouting = false;
     int channelMode = channel_mode::stereo; // Used only when replacing an entire chain.
+    int routingMode=parallel_chain::serial;
+    float parallelBlend=parallel_chain::defaultBlend;
+    juce::Array<ModulationRouting> scopeRoutes; // Canonical target "parallel.blend".
 };
 enum class ClipboardKind { module, chain };
 }

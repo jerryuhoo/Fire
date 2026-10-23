@@ -2667,6 +2667,8 @@ TEST_CASE("Band move/reset parameter contract covers every per-band processor pa
         expectedBaseIDs.insert("bandFx" + juce::String(slot) + "Resonator");
     expectedBaseIDs.insert("driveCompModern");
     expectedBaseIDs.insert("bandChannelMode");
+    expectedBaseIDs.insert("bandChainRouting");expectedBaseIDs.insert("bandParallelBlend");
+    for(int node=0;node<13;++node)expectedBaseIDs.insert("bandModuleBranch"+juce::String(node)+"Band");
     for(int slot=1;slot<=8;++slot)
         for(int node=1;node<=12;++node)
             for(const auto* field:{"Enabled","Threshold","Ratio","Range","Attack","Release"})

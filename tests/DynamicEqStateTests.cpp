@@ -42,7 +42,7 @@ void stripChainDynamic(juce::XmlElement& xml)
 TEST_CASE("Dynamic EQ parameters append stable automation indices while remaining unavailable as LFO targets",
           "[dynamic-eq-state][state][parameters][routing]")
 {
-    juce::ScopedJuceInitialiser_GUI gui;FireAudioProcessor p;REQUIRE(p.getParameters().size()==7708);
+    juce::ScopedJuceInitialiser_GUI gui;FireAudioProcessor p;REQUIRE(p.getParameters().size()==7780);
     int index=4756;
     for(const auto& id:de::parameterIDs())
     {const auto* parameter=p.treeState.getParameter(id);REQUIRE(parameter);CHECK(parameter->getParameterIndex()==index++);CHECK(parameter->getVersionHint()==18);}
@@ -56,9 +56,9 @@ TEST_CASE("Dynamic EQ settings roundtrip preset host and AB including inactive e
           "[dynamic-eq-state][state][preset][host][ab]")
 {
     juce::ScopedJuceInitialiser_GUI gui;FireAudioProcessor p;dynamicConfigure(p,0,-1,1);dynamicConfigure(p,4,7,1);
-    const auto first=dynamicPreset(p);CHECK(first.getIntAttribute("presetFormatVersion")==7);CHECK(first.getIntAttribute("dynamicEqSchemaVersion")==1);
+    const auto first=dynamicPreset(p);CHECK(first.getIntAttribute("presetFormatVersion")==8);CHECK(first.getIntAttribute("dynamicEqSchemaVersion")==1);
     p.stateAB.copyAB(false);p.stateAB.toggleAB();dynamicConfigure(p,0,-1,2);dynamicConfigure(p,4,7,2);
-    const auto second=dynamicPreset(p),host=dynamicHost(p);CHECK(host.getIntAttribute("stateFormatVersion")==6);
+    const auto second=dynamicPreset(p),host=dynamicHost(p);CHECK(host.getIntAttribute("stateFormatVersion")==7);
     FireAudioProcessor restored;REQUIRE(state::loadStateFromXml(second,restored));CHECK(restored.isCurrentStateEquivalentToPreset(second));
     dynamicRestore(restored,host);CHECK(restored.isCurrentStateEquivalentToPreset(second));
     restored.stateAB.toggleAB();CHECK(restored.isCurrentStateEquivalentToPreset(first));
@@ -116,11 +116,11 @@ TEST_CASE("EQ chain format migrates complete absent old families and rejects par
           "[dynamic-eq-state][chain][codec][legacy][validation]")
 {
     chain::Snapshot source;source.modules.push_back(chain::defaultModule(fire::effects::Type::eq));
-    REQUIRE(source.modules[0].values.size()==162);auto current=chain::encode(source);REQUIRE(current);CHECK(current->getIntAttribute("schemaVersion")==3);
+    REQUIRE(source.modules[0].values.size()==162);auto current=chain::encode(source);REQUIRE(current);CHECK(current->getIntAttribute("schemaVersion")==4);
     chain::Snapshot decoded;REQUIRE(chain::decode(*current,decoded).wasOk());CHECK(decoded.modules[0].values==source.modules[0].values);
     for(int version:{1,2})
     {
-        auto old=*current;old.setAttribute("schemaVersion",version);if(version==1)old.removeAttribute("channelMode");stripChainDynamic(old);
+        auto old=*current;fire::test::stripParallelChainSnapshot(old);old.setAttribute("schemaVersion",version);if(version==1)old.removeAttribute("channelMode");stripChainDynamic(old);
         REQUIRE(chain::decode(old,decoded).wasOk());CHECK(decoded.modules[0].values==source.modules[0].values);
         auto* added=old.getFirstChildElement()->getChildByName("VALUES")->createNewChildElement("PARAM");added->setAttribute("key","eq.0.dynamic.enabled");added->setAttribute("value",0);
         CHECK(chain::decode(old,decoded).failed());CHECK(decoded.modules[0].values==source.modules[0].values);

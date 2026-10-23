@@ -21,6 +21,8 @@
 #include "Utility/MidiStateValidation.h"
 #include "Utility/DynamicEqParameterLayout.h"
 #include "Utility/DynamicEqStateValidation.h"
+#include "Utility/ParallelChainParameterLayout.h"
+#include "Utility/ParallelChainStateValidation.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -34,6 +36,24 @@ void setHostBypassDenormalStateHookForTesting(
 
 namespace
 {
+struct ParallelPartition
+{
+    std::array<fire::module_order::Order, 2> orders;
+    std::array<int, 2> insertCounts {};
+    ParallelPartition(const fire::module_order::Order& order, const fire::parallel_chain::Routing& routing) noexcept
+    {
+        for (auto& lane : orders) lane.fill(-1);
+        std::array<size_t, 2> positions {};
+        for (int node : order)
+        {
+            if (!juce::isPositiveAndBelow(node, fire::module_order::capacity)) continue;
+            const auto branch = static_cast<size_t>(juce::jlimit(0, 1, routing.branches[static_cast<size_t>(node)]));
+            orders[branch][positions[branch]++] = node;
+            if (node >= fire::module_order::firstInsert) ++insertCounts[branch];
+        }
+    }
+};
+
 bool parseStrictFiniteDouble(const juce::String& textToParse, double& result) noexcept
 {
     return fire::utility::parseStrictFiniteDouble(textToParse, result);
@@ -127,7 +147,7 @@ Slope getSlopeParameterValue(const std::atomic<float>* parameter) noexcept
 constexpr int minimumProcessingBlockCapacity = 8192;
 constexpr double safePeakHoldSeconds = 0.05;
 constexpr double safePeakReleaseSeconds = 0.05;
-constexpr int hostStateFormatVersion = 6;
+constexpr int hostStateFormatVersion = 7;
 constexpr int oldestWrappedHostParameterCount = 19;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 std::atomic<HostBypassDenormalStateHook>
@@ -324,7 +344,7 @@ bool isValidVersionedHostRoutingState(
         // semantic routing and may repeat, but all populated targets must be
         // known and unique.
         const auto target = routing->getStringAttribute("target");
-        if (fire::mod_sources::isParameterID(target) || fire::channel_mode::isParameterID(target) || fire::dynamic_eq::isParameterID(target)) return false;
+        if (fire::mod_sources::isParameterID(target) || fire::channel_mode::isParameterID(target) || fire::dynamic_eq::isParameterID(target) || fire::parallel_chain::isStructuralID(target)) return false;
         if (target.isEmpty())
             continue;
         if (parameterState.getParameter(target) == nullptr
@@ -1375,6 +1395,8 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec, bool withInserts
     // The oversampling object also needs to be prepared.
     oversampling = std::make_unique<juce::dsp::Oversampling<float>>(spec.numChannels, oversampleFactor, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
     oversampling->initProcessing(static_cast<size_t>(maximumPreparedBlockSize));
+    parallelProcessor.prepare(spec, inserts.getReservedLatency()
+        + static_cast<int>(std::ceil(oversampling->getLatencyInSamples())) + 2);
 
     dryBuffer.setSize(numChannels, maximumBlockSize);
     dcFilterDryBuffer.setSize(numChannels, maximumBlockSize);
@@ -1465,6 +1487,7 @@ void BandProcessor::reset()
     widthMixer.reset();
     sharedBandDryDelay.reset();
     channelModeProcessor.reset();
+    parallelProcessor.reset();
     dcFilter.reset();
     bandEnableMixSmoother.setCurrentAndTargetValue(1.0f);
     dcFilterMixSmoother.setCurrentAndTargetValue(0.0f);
@@ -1505,6 +1528,7 @@ void BandProcessor::reset()
 
 void BandProcessor::resetQualityTransitionState() noexcept
 {
+    parallelProcessor.resetDelays();
     for (auto& bank : analogShapeBanks) for (auto& stage : bank) stage.reset();
     // The oversampler is the only per-band state that stops advancing in base
     // mode. Band/Enable mixers, the Shape Mix smoother, and their delay lines
@@ -1733,33 +1757,56 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         juce::dsp::ProcessContextReplacing<float>(bandEnableDryBlock));
     bandMixer.pushDrySamples(bandEnableDryBlock);
 
+    if (hasCompleteBaseRateLfoChunk && juce::isPositiveAndBelow(params.parallelBlendLfoSourceIndex, lfoOutputs.getNumChannels()))
+        paramsForProcessing.parallelBlend.lfoSignal = lfoOutputs.getReadPointer(params.parallelBlendLfoSourceIndex, lfoSampleOffset);
     const auto& order = orderTransition.begin(params.moduleOrder);
-    for (size_t position = 0; position < order.size(); ++position)
+    const auto processNodes = [&](juce::AudioBuffer<float>& target, const fire::module_order::Order& routedOrder)
     {
-        const int node = order[position];
-        if (node == 0)
+        auto targetBlock = juce::dsp::AudioBlock<float>(target);
+        for (size_t position = 0; position < routedOrder.size(); ++position)
         {
-            const bool joined = position + 1 < order.size() && order[position + 1] == 1;
-            const auto peak = position == 0 ? inputPeak : buffer.getMagnitude(0, buffer.getNumSamples());
-            processDriveShapeStage(buffer, params, lfoOutputs, lfoSampleOffset, peak, updateReductionMeter, true, joined);
-            if (joined) { processDcFilter(buffer, params.isDcFilterEnabled); ++position; }
+            const int node = routedOrder[position];
+            if (node == 0)
+            {
+                const bool joined = position + 1 < routedOrder.size() && routedOrder[position + 1] == 1;
+                const auto peak = position == 0 ? inputPeak : target.getMagnitude(0, target.getNumSamples());
+                processDriveShapeStage(target, params, lfoOutputs, lfoSampleOffset, peak, updateReductionMeter, true, joined);
+                if (joined) { processDcFilter(target, params.isDcFilterEnabled); ++position; }
+            }
+            else if (node == 1)
+            {
+                processDriveShapeStage(target, params, lfoOutputs, lfoSampleOffset, inputPeak, false, false, true);
+                processDcFilter(target, params.isDcFilterEnabled);
+            }
+            else if (node == 2) processCompressorStage(target, paramsForProcessing);
+            else if (node == 3) processStereoStage(target, paramsForProcessing);
+            else if (node == 4)
+            {
+                ott.process(targetBlock, paramsForProcessing.ott);
+                mOttInputLevelDb.store(params.isBandEnabled ? ott.getInputLevelDb() : -120.0f, std::memory_order_relaxed);
+                mOttGainChangeDb.store(params.isBandEnabled ? ott.getGainChangeDb() : 0.0f, std::memory_order_relaxed);
+                mOttDynamicsActivityDb.store(params.isBandEnabled ? ott.getDynamicsActivityDb() : 0.0f, std::memory_order_relaxed);
+            }
+            else if (node >= fire::module_order::firstInsert)
+                inserts.processSlot(targetBlock, node - fire::module_order::firstInsert, params.inserts, lfoOutputs, lfoSampleOffset, useHQ);
         }
-        else if (node == 1)
-        {
-            processDriveShapeStage(buffer, params, lfoOutputs, lfoSampleOffset, inputPeak, false, false, true);
-            processDcFilter(buffer, params.isDcFilterEnabled);
-        }
-        else if (node == 2) processCompressorStage(buffer, paramsForProcessing);
-        else if (node == 3) processStereoStage(buffer, paramsForProcessing);
-        else if (node == 4)
-        {
-            ott.process(block, paramsForProcessing.ott);
-            mOttInputLevelDb.store(params.isBandEnabled ? ott.getInputLevelDb() : -120.0f, std::memory_order_relaxed);
-            mOttGainChangeDb.store(params.isBandEnabled ? ott.getGainChangeDb() : 0.0f, std::memory_order_relaxed);
-            mOttDynamicsActivityDb.store(params.isBandEnabled ? ott.getDynamicsActivityDb() : 0.0f, std::memory_order_relaxed);
-        }
-        else if (node >= fire::module_order::firstInsert)
-            inserts.processSlot(block, node - fire::module_order::firstInsert, params.inserts, lfoOutputs, lfoSampleOffset, useHQ);
+    };
+    if (params.parallelRouting.mode == fire::parallel_chain::serial)
+        processNodes(buffer, order);
+    else
+    {
+        const ParallelPartition partition(order, params.parallelRouting);
+        auto second = parallelProcessor.begin(buffer);
+        processNodes(buffer, partition.orders[0]);
+        processNodes(second, partition.orders[1]);
+        const float reserve = static_cast<float>(inserts.getProcessingBudget());
+        const float perSlot = static_cast<float>(inserts.getProcessingSlotLatency());
+        const float shapeLatency = useHQ ? oversampling->getLatencyInSamples() : 0.0f;
+        const int shapeBranch = params.parallelRouting.branches[1];
+        const float padA = reserve - perSlot * partition.insertCounts[0] + (shapeBranch == 0 ? 0.0f : shapeLatency);
+        const float padB = reserve - perSlot * partition.insertCounts[1] + (shapeBranch == 1 ? 0.0f : shapeLatency);
+        parallelProcessor.finish(buffer, padA, padB, paramsForProcessing.parallelBlend,
+            paramsForProcessing.parallelBlend.baseValue, params.parallelBlendLfoSourceIndex);
     }
     orderTransition.apply(block, dryBuffer);
 
@@ -2268,7 +2315,13 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
         mSampleMaxValue.store(sampleMaxValue, std::memory_order_relaxed);
 
     const auto normaliseMode = [](int mode) noexcept
-    { return juce::isPositiveAndBelow(mode, fire::analog::modeCount) ? mode : 3; };
+    { return mode == -1 || juce::isPositiveAndBelow(mode, fire::analog::modeCount) ? mode : 3; };
+    const auto functionForMode = [](int mode) noexcept -> DistortionLogic::WaveshaperFunction
+    {
+        // Internal bypass identity only; the public Shape mode IDs stay fixed.
+        return mode == -1 ? +[](float input) noexcept { return input; }
+                          : DistortionLogic::getWaveshaperForMode(mode);
+    };
     const auto serviceModeRequest = [&](int rawRequestedMode)
     {
         const int requestedMode = normaliseMode(rawRequestedMode);
@@ -2306,9 +2359,10 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
     };
 
     if (processShape)
-        serviceModeRequest(params.mode);
-    auto mode0Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[0]);
-    auto mode1Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[1]);
+        serviceModeRequest(params.parallelRouting.mode == fire::parallel_chain::parallel && !params.isShapeEnabled
+            ? -1 : params.mode);
+    auto mode0Function = functionForMode(waveshaperModeSlots[0]);
+    auto mode1Function = functionForMode(waveshaperModeSlots[1]);
 
     // The providers are now correctly prepared with LFO signals (if any)
     auto driveProvider = params.driveVal;
@@ -2490,6 +2544,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
                 currentSample *= currentState.drive;
             if (processShape)
             {
+                const float unshapedSample = currentSample;
                 currentSample += currentState.bias;
 
                 const auto shapeAndRectify = [&](DistortionLogic::WaveshaperFunction function, size_t bank)
@@ -2508,22 +2563,43 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
                     return shaped;
                 };
 
-                if (modeMix <= 0.0f)
+                if (waveshaperModeSlots[0] == -1 || waveshaperModeSlots[1] == -1)
                 {
-                    currentSample = shapeAndRectify(mode0Function, 0);
-                }
-                else if (modeMix >= 1.0f)
-                {
-                    currentSample = shapeAndRectify(mode1Function, 1);
+                    // A Parallel branch with Shape off must pass only Drive.
+                    // The identity side bypasses residual Bias/Rectification
+                    // smoothing as well as the curve, while the old active
+                    // Shape fades out through its normal mode transition.
+                    const auto endpoint = [&](size_t bank, DistortionLogic::WaveshaperFunction function)
+                    {
+                        return waveshaperModeSlots[bank] == -1 ? unshapedSample
+                            : shapeAndRectify(function, bank) - currentState.bias;
+                    };
+                    if (modeMix <= 0.0f) currentSample = endpoint(0, mode0Function);
+                    else if (modeMix >= 1.0f) currentSample = endpoint(1, mode1Function);
+                    else
+                    {
+                        const auto first = endpoint(0, mode0Function), second = endpoint(1, mode1Function);
+                        currentSample = first + modeMix * (second - first);
+                    }
                 }
                 else
                 {
-                    const auto mode0Sample = shapeAndRectify(mode0Function, 0);
-                    const auto mode1Sample = shapeAndRectify(mode1Function, 1);
-                    currentSample = mode0Sample + modeMix * (mode1Sample - mode0Sample);
+                    if (modeMix <= 0.0f)
+                    {
+                        currentSample = shapeAndRectify(mode0Function, 0);
+                    }
+                    else if (modeMix >= 1.0f)
+                    {
+                        currentSample = shapeAndRectify(mode1Function, 1);
+                    }
+                    else
+                    {
+                        const auto mode0Sample = shapeAndRectify(mode0Function, 0);
+                        const auto mode1Sample = shapeAndRectify(mode1Function, 1);
+                        currentSample = mode0Sample + modeMix * (mode1Sample - mode0Sample);
+                    }
+                    currentSample -= currentState.bias;
                 }
-
-                currentSample -= currentState.bias;
 
                 // Shape Mix is a base-rate control even though the distortion is
                 // evaluated at 4x in HQ mode. Reuse one weight for the complete
@@ -2565,8 +2641,8 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float> &blockToProce
             if (!waveshaperModeMixSmoother.isSmoothing())
             {
                 serviceModeRequest(requestedWaveshaperMode);
-                mode0Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[0]);
-                mode1Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[1]);
+                mode0Function = functionForMode(waveshaperModeSlots[0]);
+                mode1Function = functionForMode(waveshaperModeSlots[1]);
             }
         }
     }
@@ -2887,10 +2963,23 @@ bool FireAudioProcessor::hasActiveFilterModulation() const noexcept
     return false;
 }
 
+fire::parallel_chain::Routing FireAudioProcessor::readParallelRouting(int scope) const noexcept
+{
+    fire::parallel_chain::Routing routing;
+    if (!juce::isPositiveAndBelow(scope, fire::effects::scopeCount)) return routing;
+    const auto index = static_cast<size_t>(scope);
+    routing.mode = juce::jlimit(0, 1, juce::roundToInt(loadCachedParameter(parallelModeParameters[index])));
+    for (int node = 0; node < fire::module_order::capacity; ++node)
+        routing.branches[static_cast<size_t>(node)] = juce::jlimit(0, 1,
+            juce::roundToInt(loadCachedParameter(parallelBranchParameters[index][static_cast<size_t>(node)])));
+    return routing;
+}
+
 void FireAudioProcessor::initialiseParameterCache()
 {
     // Build route-validation lookup storage before any audio callback.
     (void) fire::dynamic_eq::isParameterID(fire::dynamic_eq::parameterID(0, -1, 0, 0));
+    (void) fire::parallel_chain::parameterIDs();
     const auto indexed = [this](const juce::String& base, int index)
     {
         return cacheParameter(ParameterIDAndName::getIDString(base, index));
@@ -2954,6 +3043,11 @@ void FireAudioProcessor::initialiseParameterCache()
     for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
     {
         channelModeParameters[static_cast<size_t>(scope)] = cacheParameter(fire::channel_mode::parameterID(scope));
+        parallelModeParameters[static_cast<size_t>(scope)] = cacheParameter(fire::parallel_chain::modeID(scope));
+        parallelBlendParameters[static_cast<size_t>(scope)] = cacheParameter(fire::parallel_chain::blendID(scope));
+        for (int node = 0; node < fire::module_order::capacity; ++node)
+            if (fire::parallel_chain::validNode(scope, node))
+                parallelBranchParameters[static_cast<size_t>(scope)][static_cast<size_t>(node)] = cacheParameter(fire::parallel_chain::branchID(scope, node));
         for (int node = 0; node < (scope == 0 ? 3 : 5); ++node)
             modulePresenceParameters[static_cast<size_t>(scope)][static_cast<size_t>(node)] = cacheParameter(fire::core_modules::presenceID(scope, node));
         for (int slot = 0; slot < fire::effects::slotCount; ++slot)
@@ -3239,10 +3333,14 @@ double FireAudioProcessor::getTailLengthSeconds() const
         anySolo = anySolo || loadCachedParameter(bandParameterCache[static_cast<size_t>(band)].solo) > 0.5f;
     for (int scope = 0; scope < fire::effects::scopeCount; ++scope)
     {
-        double tail = 0;
+        const auto routing = readParallelRouting(scope);
+        std::array<double, 2> branchTails {};
         for (int slot = 0; slot < fire::effects::slotCount; ++slot)
         {
             const auto type = getInsertEffectType(scope, slot);
+            const auto branch = routing.mode == fire::parallel_chain::parallel
+                ? static_cast<size_t>(routing.branches[static_cast<size_t>(fire::module_order::firstInsert + slot)]) : size_t{0};
+            auto& tail = branchTails[branch];
             if (type == fire::effects::Type::delay) tail += 180.0;
             else if (type == fire::effects::Type::reverb) tail += 60.0;
             else if (type == fire::effects::Type::granular)
@@ -3267,6 +3365,7 @@ double FireAudioProcessor::getTailLengthSeconds() const
             else if (type == fire::effects::Type::chordResonator) tail += 8.0;
             else if (type == fire::effects::Type::lofi) tail += 0.05;
         }
+        const auto tail = juce::jmax(branchTails[0], branchTails[1]);
         if (scope == 0) master = tail; else bandsTail = juce::jmax(bandsTail, tail);
     }
     return master + bandsTail;
@@ -3474,6 +3573,7 @@ void FireAudioProcessor::removeModule(int scope, int node)
     beginMultibandTopologyEdit();
     const juce::ScopeGuard publish {[this] {requestMultibandTopologyReset();}};
     const auto ids = legacyModuleParameters(scope, node);
+    resetModuleBranchParameter(scope, node);
     for (const auto& id : ids) clearModulationForParameter(id);
     if (!ids.isEmpty())
         if (auto* enabled = treeState.getParameter(ids[0]))
@@ -3490,6 +3590,7 @@ bool FireAudioProcessor::restoreLegacyModule(int scope, int node)
     if (isModulePresent(scope, node)) return true;
     beginMultibandTopologyEdit();
     const juce::ScopeGuard publish {[this] {requestMultibandTopologyReset();}};
+    resetModuleBranchParameter(scope, node);
     for (const auto& id : legacyModuleParameters(scope, node))
     {
         clearModulationForParameter(id);
@@ -3612,6 +3713,7 @@ int FireAudioProcessor::addInsertEffect(int scope, fire::effects::Type type)
         if (getInsertEffectType(scope, slot) == Type::none) { if (freeSlot < 0) freeSlot = slot; }
         else active.push_back(slot);
     if (freeSlot < 0) return -1;
+    resetModuleBranchParameter(scope, fire::module_order::firstInsert + freeSlot);
     auto& rack = scope == 0 ? masterInserts : bands[static_cast<size_t>(scope - 1)]->inserts;
     rack.stageFrozenRecording(freeSlot, {}, multibandTopologyResetGeneration.load(std::memory_order_seq_cst) + 1u);
     std::stable_sort(active.begin(), active.end(), [&](int a, int b) {return getInsertEffectOrder(scope, a) < getInsertEffectOrder(scope, b);});
@@ -3690,6 +3792,7 @@ void FireAudioProcessor::removeInsertEffect(int scope, int slot)
     if (getInsertEffectType(scope, slot) == Type::none) return;
     beginMultibandTopologyEdit();
     const juce::ScopeGuard publish { [this] { requestMultibandTopologyReset(); } };
+    resetModuleBranchParameter(scope, fire::module_order::firstInsert + slot);
     auto& rack = scope == 0 ? masterInserts : bands[static_cast<size_t>(scope - 1)]->inserts;
     rack.stageFrozenRecording(slot, {}, multibandTopologyResetGeneration.load(std::memory_order_seq_cst) + 1u);
     for (int control = 0; control < static_cast<int>(controlCount); ++control)
@@ -4162,6 +4265,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     masterOrderDryDelay.prepare(spec);
     masterOrderDryDelay.setDelay(static_cast<float>(masterInserts.getReservedLatency()));
     masterChannelModeProcessor.prepare(spec, masterInserts.getReservedLatency());
+    masterParallelProcessor.prepare(spec, masterInserts.getReservedLatency() + 2);
     masterTape.prepare(safeSampleRate);
     for (size_t i = 0; i < tapeSmoothers.size(); ++i)
     {
@@ -5129,6 +5233,7 @@ bool FireAudioProcessor::tryCaptureMultibandTopologySnapshot(
     candidate.publicationSequence = sequenceBefore;
     candidate.dspResetSequence = multibandDspResetSequence.load(std::memory_order_relaxed);
     candidate.masterChannelMode = juce::jlimit(0, 2, juce::roundToInt(loadCachedParameter(channelModeParameters[0])));
+    candidate.masterParallelRouting = readParallelRouting(0);
     candidate.numBands = juce::jlimit(
         1,
         4,
@@ -5238,6 +5343,7 @@ void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
             multibandDspResetSequence.load(std::memory_order_relaxed);
         activeMultibandTopologySnapshot.masterChannelMode = juce::jlimit(0, 2,
             juce::roundToInt(loadCachedParameter(channelModeParameters[0])));
+        activeMultibandTopologySnapshot.masterParallelRouting = readParallelRouting(0);
         activeMultibandTopologySnapshotInitialised = true;
     }
 
@@ -5340,6 +5446,7 @@ void FireAudioProcessor::performReset()
     masterInserts.reset(true);
     masterOrderDryDelay.reset();
     masterChannelModeProcessor.reset();
+    masterParallelProcessor.reset();
     unusedInsertReserveDelay.reset();
     masterOrderTransition.reset();
     masterTape.reset();
@@ -5982,6 +6089,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.setAttribute(fire::envelope_state::marker,fire::envelope_params::schemaVersion);
     xmlState.setAttribute(fire::channel_mode_state::marker,fire::channel_mode::schemaVersion);
     xmlState.setAttribute(fire::dynamic_eq_state::marker, fire::dynamic_eq::schemaVersion);
+    xmlState.setAttribute(fire::parallel_chain_state::marker, fire::parallel_chain::schemaVersion);
     xmlState.setAttribute(fire::midi_state::ccMarker,fire::midi_mod::schemaVersion);
     xmlState.setAttribute(fire::midi_state::playbackMarker,fire::lfo_playback::schemaVersion);
     xmlState.setAttribute("moduleOrderSchemaVersion", 1);
@@ -6113,6 +6221,9 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         incomingParameterIDSet.insert(parameterID);
     }
 
+    bool legacyParallelFamily=false;
+    if (!fire::parallel_chain_state::validate(*xmlState,*this,
+            xmlState->getIntAttribute("stateFormatVersion",0)>=7,true,legacyParallelFamily)) return;
     bool legacyDynamicEqFamily=false;
     if (!fire::dynamic_eq_state::validate(*xmlState,*this,
             xmlState->getIntAttribute("stateFormatVersion",0)>=6,true,legacyDynamicEqFamily)) return;
@@ -6568,6 +6679,7 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 || migratedCloudsRoutingTargets.contains(routing.targetParameterID)
                 || fire::channel_mode::isParameterID(routing.targetParameterID)
                 || fire::dynamic_eq::isParameterID(routing.targetParameterID)
+                || fire::parallel_chain::isStructuralID(routing.targetParameterID)
                 || (!advancedMapping && loadedRoutingTargets.contains(routing.targetParameterID)))
                 continue;
 
@@ -7843,6 +7955,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
             else parameters.push_back(std::make_unique<PInt>(id,name,minimums[i],maximums[i],defaults[i]));
         }
     fire::dynamic_eq::appendParameters(parameters);
+    fire::parallel_chain::appendParameters(parameters);
     return { parameters.begin(), parameters.end() };
 }
 
@@ -8072,6 +8185,7 @@ void FireAudioProcessor::prepareHqCallbackContext(
         params.ott.enabled = isModulePresent(i + 1, 4) && loadCachedParameter(parameters.ottEnabled) > 0.5f;
         prepareInsertParameters(i + 1, params.inserts);
         params.moduleOrder = getModuleOrder(i + 1);
+        params.parallelRouting = readParallelRouting(i + 1);
         params.channelMode = juce::jlimit(0, 2,
             juce::roundToInt(loadCachedParameter(channelModeParameters[static_cast<size_t>(i + 1)])));
         params.isWidthEnabled = isModulePresent(i + 1, 3) && loadCachedParameter(parameters.widthEnabled) > 0.5f;
@@ -8104,6 +8218,7 @@ void FireAudioProcessor::prepareHqCallbackContext(
         for (size_t control = 0; control < params.ott.controls.size(); ++control)
             setupProvider(params.ott.controls[control], params.ott.sources[control], parameters.ottControls[control]);
 
+        setupProvider(params.parallelBlend, params.parallelBlendLfoSourceIndex, parallelBlendParameters[index + 1]);
         setupProvider(params.driveVal, params.driveLfoSourceIndex, parameters.drive);
         setupProvider(params.biasVal, params.biasLfoSourceIndex, parameters.bias);
         setupProvider(params.recVal, params.recLfoSourceIndex, parameters.rec);
@@ -8293,6 +8408,7 @@ void FireAudioProcessor::prepareAudioCallbackParameterSnapshot(
 
     prepareModulatedParameter(globalOutputParameter, snapshot.globalOutput);
     prepareModulatedParameter(globalMixParameter, snapshot.globalMix);
+    prepareModulatedParameter(parallelBlendParameters[0], snapshot.parallelBlend);
     prepareModulatedParameter(downsampleRateParameter,
                               snapshot.downsampleRate);
     prepareModulatedParameter(bitDepthParameter, snapshot.bitDepth);
@@ -8750,13 +8866,36 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     masterOrderDryDelay.process(juce::dsp::ProcessContextReplacing<float>(alignedOrderDry));
     const auto& order = masterOrderTransition.begin(activeAudioCallbackParameterSnapshot.moduleOrder);
     auto block = juce::dsp::AudioBlock<float>(buffer);
-    for (int node : order)
+    const auto processNodes = [&](juce::AudioBuffer<float>& target, const fire::module_order::Order& routedOrder)
     {
-        if (node == 0) applyMasterFilter(buffer, lfoOutputs, sampleRate);
-        else if (node == 1) applyDownsamplingEffect(buffer, lfoOutputs);
-        else if (node >= fire::module_order::firstInsert)
-            masterInserts.processSlot(block, node - fire::module_order::firstInsert, activeAudioCallbackParameterSnapshot.inserts, lfoOutputs, 0, highQuality);
-        // Analysis is a view-only row; its position has no audio operation.
+        auto targetBlock = juce::dsp::AudioBlock<float>(target);
+        for (int node : routedOrder)
+        {
+            if (node == 0) applyMasterFilter(target, lfoOutputs, sampleRate);
+            else if (node == 1) applyDownsamplingEffect(target, lfoOutputs);
+            else if (node >= fire::module_order::firstInsert)
+                masterInserts.processSlot(targetBlock, node - fire::module_order::firstInsert,
+                    activeAudioCallbackParameterSnapshot.inserts, lfoOutputs, 0, highQuality);
+            // Analysis is a view-only row.
+        }
+    };
+    const auto& routing = activeMultibandTopologySnapshot.masterParallelRouting;
+    if (routing.mode == fire::parallel_chain::serial)
+        processNodes(buffer, order);
+    else
+    {
+        const ParallelPartition partition(order, routing);
+        auto second = masterParallelProcessor.begin(buffer);
+        processNodes(buffer, partition.orders[0]);
+        processNodes(second, partition.orders[1]);
+        auto blend = activeAudioCallbackParameterSnapshot.parallelBlend.provider;
+        const int source = activeAudioCallbackParameterSnapshot.parallelBlend.lfoSourceIndex;
+        if (juce::isPositiveAndBelow(source, lfoOutputs.getNumChannels()) && lfoOutputs.getNumSamples() >= buffer.getNumSamples())
+            blend.lfoSignal = lfoOutputs.getReadPointer(source);
+        const float reserve = static_cast<float>(masterInserts.getProcessingBudget());
+        const float perSlot = static_cast<float>(masterInserts.getProcessingSlotLatency());
+        masterParallelProcessor.finish(buffer, reserve - perSlot * partition.insertCounts[0],
+            reserve - perSlot * partition.insertCounts[1], blend, blend.baseValue, source);
     }
     masterOrderTransition.apply(block, masterOrderDry);
     applyMasterOutput(buffer, lfoOutputs);
@@ -9241,6 +9380,11 @@ bool FireAudioProcessor::sameTopologyIdentity(
     for (int band = 0; band < first.numBands; ++band)
         if (first.callbackContext.bandParameters[static_cast<size_t>(band)].channelMode
             != second.callbackContext.bandParameters[static_cast<size_t>(band)].channelMode) return false;
+    if (!fire::parallel_chain::sameAudibleRouting(first.masterParallelRouting, second.masterParallelRouting)) return false;
+    for (int band = 0; band < first.numBands; ++band)
+        if (!fire::parallel_chain::sameAudibleRouting(
+                first.callbackContext.bandParameters[static_cast<size_t>(band)].parallelRouting,
+                second.callbackContext.bandParameters[static_cast<size_t>(band)].parallelRouting)) return false;
     return true;
 }
 
@@ -9391,7 +9535,9 @@ bool FireAudioProcessor::commitPendingTopologySnapshot() noexcept
     const bool insertBudgetChanged = activeMultibandTopologySnapshot.independentShapeBudget
         != pendingMultibandTopologySnapshot.independentShapeBudget;
     const bool masterModeChanged = activeMultibandTopologySnapshot.masterChannelMode
-        != pendingMultibandTopologySnapshot.masterChannelMode;
+        != pendingMultibandTopologySnapshot.masterChannelMode
+        || !fire::parallel_chain::sameAudibleRouting(activeMultibandTopologySnapshot.masterParallelRouting,
+                                                     pendingMultibandTopologySnapshot.masterParallelRouting);
     activeMultibandTopologySnapshot = pendingMultibandTopologySnapshot;
     applyInsertLatencyBudget();
     numBands = activeMultibandTopologySnapshot.numBands;
@@ -9404,6 +9550,7 @@ bool FireAudioProcessor::commitPendingTopologySnapshot() noexcept
         masterInserts.reset(true);
         masterOrderDryDelay.reset();
         masterChannelModeProcessor.reset();
+        masterParallelProcessor.reset();
         unusedInsertReserveDelay.reset();
     }
     if (masterModeChanged)
@@ -9447,6 +9594,7 @@ void FireAudioProcessor::snapHqTransitionToParameter() noexcept
 
 void FireAudioProcessor::resetHqQualityPathState() noexcept
 {
+    masterParallelProcessor.resetDelays();
     for (int bandIndex = 0; bandIndex < numBands; ++bandIndex)
         if (auto* band = bands[static_cast<size_t>(bandIndex)].get())
             band->resetQualityTransitionState();
@@ -10190,9 +10338,10 @@ const juce::StringArray& FireAudioProcessor::getLfoRateSyncDivisions() const
 void FireAudioProcessor::lfoDataHasChanged()
 {
     modulationUiRevision.fetch_add(1, std::memory_order_release);
+    modulationUiChangeBroadcaster.sendChangeMessage();
+    // Host notifications can synchronously close their editor/processor.
     updateHostDisplay(
         juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
-    modulationUiChangeBroadcaster.sendChangeMessage();
 }
 
 bool FireAudioProcessor::isLfoPresent(int index) const noexcept

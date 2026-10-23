@@ -1,6 +1,7 @@
 #include "PresetParameterLocks.h"
 #include "../PluginProcessor.h"
 #include "EditHistory.h"
+#include "ParallelChainParameters.h"
 #include <set>
 
 namespace fire::preset_locks
@@ -45,13 +46,13 @@ const std::set<juce::String>& structuralParameters()
 bool eligible(const juce::RangedAudioParameter& parameter)
 {
     return parameter.isAutomatable() && !parameter.isMetaParameter()
-        && !structuralParameters().contains(parameter.paramID);
+        && !structuralParameters().contains(parameter.paramID) && !parallel_chain::isStructuralID(parameter.paramID);
 }
 }
 
 bool isLockableParameter(const juce::AudioProcessor& processor, const juce::String& id)
 {
-    if (id.isEmpty() || structuralParameters().contains(id)) return false;
+    if (id.isEmpty() || structuralParameters().contains(id) || parallel_chain::isStructuralID(id)) return false;
     for (const auto* parameter : processor.getParameters())
         if (const auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(parameter);
             ranged != nullptr && ranged->paramID == id) return eligible(*ranged);

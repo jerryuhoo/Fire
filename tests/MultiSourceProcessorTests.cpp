@@ -50,7 +50,7 @@ TEST_CASE("Multi-source host state round trips mappings and rejects damaged new 
     REQUIRE(source.getLfoManager().updateModulationRoutingIfRevisionMatches(index, snapshot.revision, *found, mapping).accepted);
     const auto saved = multiHostState(source);
     auto xml = juce::AudioProcessor::getXmlFromBinary(saved.getData(), static_cast<int>(saved.getSize())); REQUIRE(xml);
-    REQUIRE(xml->getIntAttribute("stateFormatVersion") == 6);
+    REQUIRE(xml->getIntAttribute("stateFormatVersion") == 7);
     FireAudioProcessor restored; loadMultiHost(restored, *xml);
     CHECK(restored.getModulationInfoForParameter("drive1").routeCount == 2);
     const auto restoredRoutes = restored.getLfoManager().getModulationRoutingsCopy();

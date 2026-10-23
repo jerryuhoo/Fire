@@ -40,7 +40,14 @@ juce::Result validateSnapshot(const Snapshot& snapshot)
         return fail("The chain contains an invalid channel mode.");
     if (snapshot.modules.size() > maximumModules)
         return fail("A chain may contain at most 13 modules.");
-    int routeCount = 0;
+    if(snapshot.routingMode<0 || snapshot.routingMode>1 || !std::isfinite(snapshot.parallelBlend)
+        || snapshot.parallelBlend<0 || snapshot.parallelBlend>1)return fail("Invalid parallel chain settings.");
+    if(snapshot.scopeRoutes.size()>maximumRoutes || (!snapshot.includesRouting && !snapshot.scopeRoutes.isEmpty()))
+        return fail("The chain contains too many or undeclared modulation routes.");
+    Module scope;scope.values["parallel.blend"]=snapshot.parallelBlend;
+    for(const auto& route:snapshot.scopeRoutes)
+        if(route.targetParameterID!="parallel.blend" || validateRoute(route,scope).failed())return fail("Invalid chain-level modulation route.");
+    int routeCount = snapshot.scopeRoutes.size();
     for (const auto& module : snapshot.modules)
     {
         if (module.type <= effects::Type::none || module.type >= effects::Type::count)
@@ -80,6 +87,8 @@ std::unique_ptr<juce::XmlElement> encode(const Snapshot& snapshot)
     xml->setAttribute("schemaVersion", schemaVersion);
     xml->setAttribute("includesRouting", snapshot.includesRouting);
     xml->setAttribute("channelMode", snapshot.channelMode);
+    xml->setAttribute("routingMode",snapshot.routingMode);
+    xml->setAttribute("parallelBlend",snapshot.parallelBlend);
     for (const auto& module : snapshot.modules)
     {
         auto* item = xml->createNewChildElement("MODULE");
@@ -88,6 +97,7 @@ std::unique_ptr<juce::XmlElement> encode(const Snapshot& snapshot)
         item->setAttribute("sourceLegacy", module.sourceLegacy);
         item->setAttribute("legacyLinked", module.legacyLinked);
         item->setAttribute("modernDriveComp", module.modernDriveComp);
+        item->setAttribute("branch",module.branch);
         auto* parameters = item->createNewChildElement("VALUES");
         for (const auto& [key, value] : module.values)
         {
@@ -104,6 +114,9 @@ std::unique_ptr<juce::XmlElement> encode(const Snapshot& snapshot)
             media->setAttribute("data", effects::encodeFrozenRecording(*module.frozen));
         }
     }
+    auto* scopeRoutes=xml->createNewChildElement("SCOPE_ROUTINGS");
+    scopeRoutes->setAttribute("schemaVersion",modulation_state::schemaVersion);
+    for(const auto& route:snapshot.scopeRoutes)route.writeToXml(*scopeRoutes->createNewChildElement("ROUTING"));
     return xml;
 }
 
@@ -114,21 +127,53 @@ juce::Result decode(const juce::XmlElement& xml, Snapshot& destination)
         || !modulation_state::readStrictIntegerAttribute(xml, "schemaVersion", version)
         || version < 1 || version > schemaVersion
         || !(version == 1 ? hasOnlyAttributes(xml, {"schemaVersion", "includesRouting"})
-                          : hasOnlyAttributes(xml, {"schemaVersion", "includesRouting", "channelMode"}))
+                          : version<4?hasOnlyAttributes(xml, {"schemaVersion", "includesRouting", "channelMode"})
+                          : hasOnlyAttributes(xml,{"schemaVersion","includesRouting","channelMode","routingMode","parallelBlend"}))
         || !strictBool(xml, "includesRouting")
-        || xml.getNumChildElements() > maximumModules)
+        || xml.getNumChildElements() > maximumModules+(version>=4?1:0))
         return fail("This is not a supported Fire chain file.");
     Snapshot snapshot;
     if (version >= 2 && (!modulation_state::readStrictIntegerAttribute(xml, "channelMode", snapshot.channelMode)
                         || !channel_mode::valid(snapshot.channelMode)))
         return fail("The chain contains an invalid channel mode.");
     snapshot.includesRouting = xml.getBoolAttribute("includesRouting");
+    if(version>=4)
+    {
+        double blend=0;
+        if(!modulation_state::readStrictIntegerAttribute(xml,"routingMode",snapshot.routingMode) || snapshot.routingMode<0 || snapshot.routingMode>1
+            || !utility::parseStrictFiniteDouble(xml.getStringAttribute("parallelBlend"),blend) || blend<0 || blend>1)return fail("Invalid parallel chain settings.");
+        snapshot.parallelBlend=static_cast<float>(blend);
+    }
     int routeCount = 0;
+    bool scopeRoutesFound=false;
     for (const auto* item : xml.getChildIterator())
     {
+        if(item->hasTagName("SCOPE_ROUTINGS"))
+        {
+            if(version<4 || scopeRoutesFound || !hasOnlyAttributes(*item,{"schemaVersion"}) || !modulation_state::hasSchema(*item,true)
+                || item->getNumChildElements()>maximumRoutes-routeCount)return fail("Invalid chain-level modulation section.");
+            scopeRoutesFound=true;routeCount+=item->getNumChildElements();
+            if(!snapshot.includesRouting && item->getNumChildElements()!=0)return fail("Undeclared chain-level modulation.");
+            Module scope;scope.values["parallel.blend"]=snapshot.parallelBlend;
+            for(const auto* routeXml:item->getChildIterator())
+            {
+                int source=-1;double depth=0;
+                if(!routeXml->hasTagName("ROUTING") || routeXml->getNumChildElements()!=0
+                    || !hasOnlyAttributes(*routeXml,{"source","target","depth","bipolar","bypassed","customRange","rangeStart","rangeEnd","curve","depthMacro"})
+                    || !modulation_state::readStrictIntegerAttribute(*routeXml,"source",source) || !mod_sources::validSource(source)
+                    || !utility::parseStrictFiniteDouble(routeXml->getStringAttribute("depth"),depth) || depth<-1 || depth>1
+                    || !strictBool(*routeXml,"bipolar") || !strictBool(*routeXml,"bypassed") || !modulation_state::hasValidMapping(*routeXml))
+                    return fail("Invalid chain-level modulation route.");
+                auto route=ModulationRouting::readFromXml(*routeXml);
+                if(route.targetParameterID!="parallel.blend" || validateRoute(route,scope).failed())return fail("Invalid chain-level modulation target.");
+                snapshot.scopeRoutes.add(std::move(route));
+            }
+            continue;
+        }
         int type = 0;
         if (!item->hasTagName("MODULE")
-            || !hasOnlyAttributes(*item, {"type", "enabled", "sourceLegacy", "legacyLinked", "modernDriveComp"})
+            || !(version<4?hasOnlyAttributes(*item, {"type", "enabled", "sourceLegacy", "legacyLinked", "modernDriveComp"})
+                          :hasOnlyAttributes(*item,{"type","enabled","sourceLegacy","legacyLinked","modernDriveComp","branch"}))
             || !modulation_state::readStrictIntegerAttribute(*item, "type", type)
             || type <= static_cast<int>(effects::Type::none) || type >= static_cast<int>(effects::Type::count)
             || !strictBool(*item, "enabled") || !strictBool(*item, "sourceLegacy")
@@ -136,6 +181,8 @@ juce::Result decode(const juce::XmlElement& xml, Snapshot& destination)
             || item->getNumChildElements() < 2 || item->getNumChildElements() > 3)
             return fail("The chain contains a malformed module.");
         Module module;
+        if(version>=4 && (!modulation_state::readStrictIntegerAttribute(*item,"branch",module.branch) || module.branch<0 || module.branch>1))
+            return fail("Invalid module branch.");
         module.type = static_cast<effects::Type>(type);
         module.enabled = item->getBoolAttribute("enabled");
         module.sourceLegacy = item->getBoolAttribute("sourceLegacy");
@@ -208,6 +255,7 @@ juce::Result decode(const juce::XmlElement& xml, Snapshot& destination)
         if (const auto result = validateModule(module); result.failed()) return result;
         snapshot.modules.push_back(std::move(module));
     }
+    if(version>=4 && !scopeRoutesFound)return fail("Missing chain-level modulation section.");
     if (const auto result = validateSnapshot(snapshot); result.failed()) return result;
     destination = std::move(snapshot);
     return juce::Result::ok();
@@ -254,7 +302,7 @@ juce::Result write(const juce::File& file, const Snapshot& snapshot)
 juce::Result setClipboard(ClipboardKind kind, const Snapshot& snapshot)
 {
     const auto index = clipboardIndex(kind);
-    if (index < 0 || (kind == ClipboardKind::module && snapshot.modules.size() != 1))
+    if (index < 0 || (kind == ClipboardKind::module && (snapshot.modules.size() != 1 || !snapshot.scopeRoutes.isEmpty())))
         return fail("The module clipboard requires exactly one module.");
     if (const auto result = validateSnapshot(snapshot); result.failed()) return result;
     auto replacement = std::make_shared<const Snapshot>(snapshot);

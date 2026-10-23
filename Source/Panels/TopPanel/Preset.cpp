@@ -19,6 +19,7 @@
 #include "../../Utility/ChannelModeStateValidation.h"
 #include "../../Utility/MidiStateValidation.h"
 #include "../../Utility/DynamicEqStateValidation.h"
+#include "../../Utility/ParallelChainStateValidation.h"
 #include "../../Utility/LfoBankParameters.h"
 #include "../../Utility/DriveCompensationParameters.h"
 #include <algorithm>
@@ -300,7 +301,8 @@ bool isValidRoutingState(const juce::XmlElement& routingState,
 
         const auto target = routing->getStringAttribute("target");
         if (fire::mod_sources::isParameterID(target) || fire::envelope_params::isParameterID(target)
-            || fire::channel_mode::isParameterID(target) || fire::dynamic_eq::isParameterID(target)) return false;
+            || fire::channel_mode::isParameterID(target) || fire::dynamic_eq::isParameterID(target)
+            || fire::parallel_chain::isStructuralID(target)) return false;
         if (target.isEmpty())
             continue; // Empty preallocated routing slots are part of Init.
 
@@ -394,6 +396,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         || !fire::midi_state::validateFamily(snapshot,processor,formatVersion>=6,false,true,legacyWithoutPlayback)) return false;
     bool legacyWithoutDynamicEq=false;
     if(!fire::dynamic_eq_state::validate(snapshot,processor,formatVersion>=7,false,legacyWithoutDynamicEq))return false;
+    bool legacyWithoutParallel=false;
+    if(!fire::parallel_chain_state::validate(snapshot,processor,formatVersion>=8,false,legacyWithoutParallel))return false;
 
     bool legacyWithoutOtt = false;
     if (! validateParameterFamily(snapshot, processor, legacyWithoutOtt))
@@ -472,6 +476,7 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         if (legacyWithoutMidi && fire::midi_mod::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutPlayback && fire::lfo_playback::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutDynamicEq && fire::dynamic_eq::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutParallel && fire::parallel_chain::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutReverbModels && fire::reverb_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutAnalogShapes && fire::analog_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutCoreModules && fire::core_modules::isParameterID(parameterWithID->paramID)) continue;
@@ -582,6 +587,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         || !fire::midi_state::validateFamily(xml,processor,formatVersion>=6,false,true,legacyWithoutPlayback)) return false;
     bool legacyWithoutDynamicEq=false;
     if(!fire::dynamic_eq_state::validate(xml,processor,formatVersion>=7,false,legacyWithoutDynamicEq))return false;
+    bool legacyWithoutParallel=false;
+    if(!fire::parallel_chain_state::validate(xml,processor,formatVersion>=8,false,legacyWithoutParallel))return false;
 
     if (formatVersion < 2)
     {
@@ -595,7 +602,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
                     if (route->getIntAttribute("source", -1) >= fire::mod_sources::firstMacro + fire::mod_sources::macroCount
                         || fire::mod_sources::isParameterID(route->getStringAttribute("target"))
                         || fire::channel_mode::isParameterID(route->getStringAttribute("target"))
-                        || fire::dynamic_eq::isParameterID(route->getStringAttribute("target"))) return false;
+                        || fire::dynamic_eq::isParameterID(route->getStringAttribute("target"))
+                        || fire::parallel_chain::isStructuralID(route->getStringAttribute("target"))) return false;
             }
         return true;
     }
@@ -633,6 +641,7 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         if (legacyWithoutMidi && fire::midi_mod::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutPlayback && fire::lfo_playback::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutDynamicEq && fire::dynamic_eq::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutParallel && fire::parallel_chain::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutReverbModels && fire::reverb_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutAnalogShapes && fire::analog_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutCoreModules && fire::core_modules::isParameterID(parameterWithID->paramID)) continue;
@@ -700,6 +709,7 @@ void writeSerializablePresetSnapshotToXml(
     xml.setAttribute(fire::midi_state::ccMarker,fire::midi_mod::schemaVersion);
     xml.setAttribute(fire::midi_state::playbackMarker,fire::lfo_playback::schemaVersion);
     xml.setAttribute(fire::dynamic_eq_state::marker,fire::dynamic_eq::schemaVersion);
+    xml.setAttribute(fire::parallel_chain_state::marker,fire::parallel_chain::schemaVersion);
     xml.setAttribute("moduleOrderSchemaVersion", 1);
     xml.setAttribute("eqSchemaVersion", 1);
     xml.setAttribute("coreModulesSchemaVersion", fire::core_modules::schemaVersion);
@@ -995,6 +1005,7 @@ namespace state
                     && !fire::envelope_params::isParameterID(routing.targetParameterID)
                     && !fire::channel_mode::isParameterID(routing.targetParameterID)
                     && !fire::dynamic_eq::isParameterID(routing.targetParameterID)
+                    && !fire::parallel_chain::isStructuralID(routing.targetParameterID)
                     && fireProc.treeState.getParameter(routing.targetParameterID) != nullptr)
                     routingsToLoad.add(std::move(routing));
             }

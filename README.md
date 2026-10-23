@@ -447,6 +447,8 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ### 2.1.0 (in development)
 
+- Implement serial / parallel A-B routing per Band and Master, with modulatable
+  Blend and portable routing presets.
 - Add per-point Dynamic EQ for Bell and Shelf filters, with linked frequency
   detection, signed gain range and live gain-change readouts in every EQ module.
 - Restore valid project parameters at floating-point range endpoints, including
@@ -758,7 +760,9 @@ An empty copied chain clears the destination audio modules. Master Analysis is
 a display page and is excluded from the copy. Duplicate, paste and chain
 replacement each form one Undo step.
 
-Each Band and Master chain has a **Stereo / Mid / Side** selector. Stereo runs
+Open the compact **Routing** button beside **CHAIN** (showing Stereo, Mid or
+Side) to choose a processing channel and signal path. Each Band and Master has
+its own **Stereo / Mid / Side** selector in this panel. Stereo runs
 the full stereo signal through its modules. Mid processes the centre signal;
 Side processes the difference between left and right, retaining the other
 component. This is an audio-processing choice, independent of the spectrum
@@ -771,6 +775,30 @@ with whole-plugin presets, projects and A/B snapshots. Chain copy/save also
 captures it; replacing a chain restores it in the same Undo step. Copying or
 duplicating a single module leaves the destination chain's mode unchanged.
 Older presets, projects and version 1 chain files open in Stereo.
+
+**Parallel A/B chains.** In Routing, **Serial** keeps the original module path.
+**Parallel A/B** sends the same input through two branches. Use **To A / To B**
+in the panel, or **Move to Branch A/B** in a module's menu, to assign a module.
+Use Up/Down to reorder within a branch. Analysis remains a display page.
+
+**Blend** is the percentage of Branch B: 0% B gives A only, 100% B gives B only.
+The mix is linear, so identical branches retain unity gain. An empty branch
+passes dry input. Both branches keep running at either endpoint, preserving
+current delay and reverb tails. Branches are delay-compensated before merging;
+the existing scope Output/Mix follows the merge. Stereo/Mid/Side processing
+wraps the complete chain. Legacy Drive Link still controls the final Band Output
+and therefore affects both branches; modern Drive Comp stays inside Drive.
+
+Blend supports LFOs, envelopes, macros, MIDI CC, host automation and preset
+parameter locks. Find it under **Routing / Blend** in the modulation matrix.
+Serial retains these settings for later Parallel use. Routing mode and branch
+assignments support host automation but are structural settings, so they cannot
+be internally modulated or preset-locked. Module copies retain their branch
+without changing the destination's routing mode or Blend. Whole-chain presets
+restore mode, Blend, branches and, when requested, Blend's modulation routes.
+Older sounds and chain files open in Serial. In Parallel, disabled or removed
+modules pass through; the original native Shape transitions smoothly to dry
+while retaining its HQ timing. Serial keeps its established processing behavior.
 
 **MIDI modulation and triggered LFOs.** Four **MIDI CC** sources can receive a
 controller number on a specific MIDI channel or **Omni**; **Off** disables the

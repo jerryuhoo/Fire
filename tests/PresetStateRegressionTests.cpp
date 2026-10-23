@@ -3036,7 +3036,7 @@ TEST_CASE("Versioned presets reject incomplete snapshots atomically",
 
     juce::XmlElement completePreset { "WINGSFIRE" };
     state::saveStateToXml(processor, completePreset);
-    REQUIRE(completePreset.getIntAttribute("presetFormatVersion") == 7);
+    REQUIRE(completePreset.getIntAttribute("presetFormatVersion") == 8);
 
     std::vector<std::unique_ptr<juce::XmlElement>> invalidPresets;
 
@@ -3067,7 +3067,7 @@ TEST_CASE("Versioned presets reject incomplete snapshots atomically",
     invalidPresets.push_back(std::move(duplicateRouting));
 
     auto unsupportedFutureVersion = std::make_unique<juce::XmlElement>(completePreset);
-    unsupportedFutureVersion->setAttribute("presetFormatVersion", 8);
+    unsupportedFutureVersion->setAttribute("presetFormatVersion", 9);
     invalidPresets.push_back(std::move(unsupportedFutureVersion));
 
     for (const auto& invalidPreset : invalidPresets)

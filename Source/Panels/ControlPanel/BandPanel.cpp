@@ -96,6 +96,8 @@ BandPanel::BandPanel(FireAudioProcessor& p,
 {
     // Create all UI components using helper methods
     createSliders();
+    setupModulationCallbacks(effectNavigation.getParallelBlendSlider());
+    modulatableSliders.push_back(&effectNavigation.getParallelBlendSlider());
     createLabels();
     createButtons();
     createComboBoxes(); // Create distortion mode dropdowns
@@ -224,6 +226,11 @@ BandPanel::~BandPanel()
     }
 
     dismissTransientInteraction();
+
+    // The rack is a derived-class member and dies before PanelBase. Its Blend
+    // is registered for editor interaction, but is not owned by the base's
+    // slider map; the base destructor must not visit that expired pointer.
+    std::erase(modulatableSliders, &effectNavigation.getParallelBlendSlider());
 
     // Remove all parameter listeners that were added in the constructor.
     for (int i = 0; i < 4; ++i)

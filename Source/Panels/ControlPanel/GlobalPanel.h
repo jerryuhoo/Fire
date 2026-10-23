@@ -38,6 +38,7 @@ public:
                 std::function<void(ModulatableSlider*)> onHoverStart,
                 std::function<void(ModulatableSlider*)> onHoverEnd);
     ~GlobalPanel() override;
+    void revealParallelBlend() { effectNavigation.revealParallelBlend(); }
 
     void paint(juce::Graphics&) override;
     void resized() override;

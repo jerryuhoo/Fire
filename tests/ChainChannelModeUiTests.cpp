@@ -5,7 +5,10 @@
 
 struct ChainChannelModeUiTestAccess
 {
-    static ContextAwareComboBox& selector(fire::ui::EffectRackNavigation& rack) { return rack.channelMode; }
+    static ContextAwareComboBox& selector(fire::ui::EffectRackNavigation& rack)
+    {if(rack.isShowing() && !rack.channelMode.isShowing())rack.showRouting();return rack.channelMode;}
+    static auto& summary(fire::ui::EffectRackNavigation& rack){return rack.routingButton;}
+    static void reopen(fire::ui::EffectRackNavigation& rack){rack.closeRouting();rack.showRouting();}
     static const juce::Button& tools(const fire::ui::EffectRackNavigation& rack) { return rack.chainButton; }
     static const juce::Button& add(const fire::ui::EffectRackNavigation& rack) { return rack.addButton; }
     static std::function<void(int)> choice(ContextAwareComboBox& combo) { return combo.createPopupResultHandler(); }
@@ -22,12 +25,14 @@ struct Fixture
 {
     FireAudioProcessor processor;
     FireLookAndFeel look;
+    juce::Component host;
     Rack rack {processor, 1};
     Fixture()
     {
         rack.setLookAndFeel(&look);
         rack.setSize(210, 258);
-        rack.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        host.setSize(800,620);host.addAndMakeVisible(rack);
+        host.addToDesktop(juce::ComponentPeer::windowIsTemporary);host.setVisible(true);
         rack.setVisible(true);
     }
     ~Fixture() { rack.setLookAndFeel(nullptr); }
@@ -102,21 +107,22 @@ TEST_CASE("Chain processing popup cannot change rebound hidden disabled or repla
     stale(3);
     CHECK(fixture.value(1) == mode::stereo);
     CHECK(fixture.value(2) == mode::stereo);
-    stale = Access::choice(selector);
+    stale = Access::choice(Access::selector(fixture.rack));
     fixture.rack.setVisible(false);
     fixture.rack.setVisible(true);
     stale(3);
     CHECK(fixture.value(2) == mode::stereo);
-    stale = Access::choice(selector);
+    stale = Access::choice(Access::selector(fixture.rack));
     fixture.rack.setEnabled(false);
     fixture.rack.setEnabled(true);
     stale(3);
     CHECK(fixture.value(2) == mode::stereo);
-    stale = Access::choice(selector);
+    stale = Access::choice(Access::selector(fixture.rack));
     fixture.processor.removeModule(2, 0);
     stale(3);
     CHECK(fixture.value(2) == mode::stereo);
-    auto current = Access::choice(selector);
+    Access::reopen(fixture.rack);
+    auto current = Access::choice(Access::selector(fixture.rack));
     current(2);
     current(3);
     CHECK(fixture.value(2) == mode::mid);
@@ -131,6 +137,7 @@ TEST_CASE("Processing channel is accessible inside the existing rail header in e
 {
     Fixture fixture;
     auto& selector = Access::selector(fixture.rack);
+    auto& summary=Access::summary(fixture.rack);
     for (auto skin : fire::ui::skins)
     {
         fire::ui::setSkin(fixture.rack, skin);
@@ -141,14 +148,14 @@ TEST_CASE("Processing channel is accessible inside the existing rail header in e
             fixture.look.scale = scale;
             fixture.rack.setScale(scale);
             fixture.rack.setSize(juce::roundToInt(180 * scale), juce::roundToInt(258 * scale));
-            CHECK(fixture.rack.getLocalBounds().contains(selector.getBounds()));
-            CHECK(selector.getWidth() == juce::roundToInt(70 * scale));
-            CHECK(selector.getHeight() == juce::roundToInt(21 * scale));
-            CHECK(selector.getX() >= juce::roundToInt(8 * scale) + juce::roundToInt(40 * scale));
-            CHECK(selector.getY() == Access::tools(fixture.rack).getY());
-            CHECK_FALSE(selector.getBounds().intersects(Access::tools(fixture.rack).getBounds()));
-            CHECK_FALSE(selector.getBounds().intersects(Access::add(fixture.rack).getBounds()));
-            CHECK_FALSE(selector.getBounds().intersects(fixture.rack.getViewport().getBounds()));
+            CHECK(fixture.rack.getLocalBounds().contains(summary.getBounds()));
+            CHECK(summary.getWidth() == juce::roundToInt(70 * scale));
+            CHECK(summary.getHeight() == juce::roundToInt(21 * scale));
+            CHECK(summary.getX() >= juce::roundToInt(8 * scale) + juce::roundToInt(40 * scale));
+            CHECK(summary.getY() == Access::tools(fixture.rack).getY());
+            CHECK_FALSE(summary.getBounds().intersects(Access::tools(fixture.rack).getBounds()));
+            CHECK_FALSE(summary.getBounds().intersects(Access::add(fixture.rack).getBounds()));
+            CHECK_FALSE(summary.getBounds().intersects(fixture.rack.getViewport().getBounds()));
             CHECK(fixture.rack.getViewport().getY() == juce::roundToInt(8 * scale) + juce::roundToInt(22 * scale));
             auto* accessibility = selector.getAccessibilityHandler();
             REQUIRE(accessibility != nullptr);

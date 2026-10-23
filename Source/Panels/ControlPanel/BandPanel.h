@@ -71,6 +71,7 @@ public:
     PrimaryToggleButton dcFilterButton;
 
     int getFocusBandNum() const { return focusBandNum; }
+    void revealParallelBlend() { effectNavigation.revealParallelBlend(); }
     void setSwitch(const int index, bool state);
     void updateWhenChangingFocus();
     void updateDriveMeter();

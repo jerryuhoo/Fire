@@ -14,6 +14,8 @@
 #include "Utility/PresetParameterLocks.h"
 #include "Utility/ChannelModeParameters.h"
 #include "DSP/ChannelModeProcessor.h"
+#include "Utility/ParallelChainParameters.h"
+#include "DSP/ParallelChainProcessor.h"
 #include "DSP/InsertRack.h"
 #include "DSP/LoudnessMatchState.h"
 #include "DSP/DriveCompensation.h"
@@ -86,6 +88,9 @@ struct BandProcessingParameters
     OttProcessor::Parameters ott;
     fire::effects::RackParameters inserts;
     fire::module_order::Order moduleOrder = fire::module_order::bandDefault;
+    fire::parallel_chain::Routing parallelRouting;
+    ModulatedValueProvider parallelBlend;
+    int parallelBlendLfoSourceIndex = -1;
     float width { 0.5f };
     ModulatedValueProvider widthValProvider;
     float pan { 0.0f };
@@ -379,6 +384,7 @@ private:
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran>
         sharedBandDryDelay { 2048 };
     fire::dsp::ChannelModeProcessor channelModeProcessor;
+    fire::dsp::ParallelChainProcessor parallelProcessor;
     float safePeakEnvelope = 0.0f;
     float safePeakReleaseCoefficient = 0.0f;
     int safePeakHoldSamples = 1;
@@ -529,6 +535,11 @@ public:
     juce::Result captureChainSnapshot(int scope, bool includeRouting, fire::chain::Snapshot&) const;
     juce::Result pasteModuleSnapshot(int scope, int afterNode, const fire::chain::Snapshot&, int& newNode);
     juce::Result pasteChainSnapshot(int scope, const fire::chain::Snapshot&);
+    int getChainRoutingMode(int scope) const noexcept;
+    bool setChainRoutingMode(int scope, int mode, std::uint64_t* committedRevision = nullptr);
+    int getModuleBranch(int scope, int node) const noexcept;
+    bool setModuleBranch(int scope, int node, int branch, std::uint64_t* committedRevision = nullptr);
+    float getParallelBlend(int scope) const noexcept;
     std::uint64_t getChainEditRevision() const noexcept
     { return multibandTopologyResetGeneration.load(std::memory_order_acquire); }
 
@@ -864,6 +875,7 @@ private:
         GlobalFilterCallbackSnapshot globalFilter;
         ModulatedParameterSnapshot globalOutput;
         ModulatedParameterSnapshot globalMix;
+        ModulatedParameterSnapshot parallelBlend;
         ModulatedParameterSnapshot downsampleRate;
         ModulatedParameterSnapshot bitDepth;
         ModulatedParameterSnapshot jitter;
@@ -885,6 +897,7 @@ private:
         std::uint32_t dspResetSequence = 0;
         bool independentShapeBudget = false;
         int masterChannelMode = 0;
+        fire::parallel_chain::Routing masterParallelRouting;
         int numBands = 1;
     };
 
@@ -1003,6 +1016,10 @@ private:
     void synchroniseInsertPreparation() noexcept;
     std::array<std::array<CachedParameter, fire::module_order::capacity>, fire::effects::scopeCount> moduleOrderParameters;
     std::array<CachedParameter, fire::effects::scopeCount> channelModeParameters {};
+    std::array<CachedParameter, fire::effects::scopeCount> parallelModeParameters {}, parallelBlendParameters {};
+    std::array<std::array<CachedParameter, fire::module_order::capacity>, fire::effects::scopeCount> parallelBranchParameters {};
+    fire::parallel_chain::Routing readParallelRouting(int scope) const noexcept;
+    void resetModuleBranchParameter(int scope, int node);
     std::atomic<std::uint64_t> midiLearnStartRevision { 0 };
     std::array<std::array<CachedParameter, 5>, fire::effects::scopeCount> modulePresenceParameters;
     std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> shapeModelParameters;
@@ -1013,6 +1030,7 @@ private:
     juce::AudioBuffer<float> masterOrderDry;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> masterOrderDryDelay{256};
     fire::dsp::ChannelModeProcessor masterChannelModeProcessor;
+    fire::dsp::ParallelChainProcessor masterParallelProcessor;
     fire::dsp::LoudnessMatchState loudnessMatch;
     juce::AudioBuffer<float> loudnessReference;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran> loudnessReferenceDelay;

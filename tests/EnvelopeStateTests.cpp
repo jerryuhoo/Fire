@@ -106,7 +106,7 @@ TEST_CASE("Envelope bank settings and fixed source identities roundtrip presets 
     FireAudioProcessor processor;
     configureEnvelopes(processor, 0);
     auto first = envelopePreset(processor);
-    CHECK(first.getIntAttribute("presetFormatVersion") == 7);
+    CHECK(first.getIntAttribute("presetFormatVersion") == 8);
     CHECK(first.getIntAttribute(fire::envelope_state::marker) == 1);
     for (int source : {16, 17, 20, 21, 22, 23}) addEnvelopeRouting(first, source);
     REQUIRE(state::loadStateFromXml(first, processor));

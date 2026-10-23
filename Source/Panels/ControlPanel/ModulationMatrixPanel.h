@@ -190,6 +190,7 @@ public:
 
 private:
     friend struct ModulationMatrixRowTestAccess;
+    friend struct ChainRoutingUiTestAccess;
 
     class PrimaryButtonSlider final : public juce::Slider,
                                       private juce::Timer,

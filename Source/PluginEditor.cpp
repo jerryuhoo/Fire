@@ -2257,6 +2257,8 @@ void FireAudioProcessorEditor::revealModulationTarget(const juce::String& parame
     // must never insert a module, add an EQ point or enable audio processing.
     const juce::Component::SafePointer<FireAudioProcessorEditor> safe(this);
     int scope=-1,slot=-1,node=-1,eqPoint=-1;
+    for(int candidateScope=0;candidateScope<fire::parallel_chain::scopeCount;++candidateScope)
+        if(parameterID==fire::parallel_chain::blendID(candidateScope))scope=candidateScope;
     for(int candidateScope=0;candidateScope<fire::effects::scopeCount;++candidateScope)
         for(int candidateSlot=0;candidateSlot<fire::effects::slotCount;++candidateSlot)
         {
@@ -2322,6 +2324,11 @@ void FireAudioProcessorEditor::revealModulationTarget(const juce::String& parame
         multiband.setFocusIndex(scope-1); if(!safe) return;
         if(alreadyFocused) updateWhenChangingFocus(scope-1);
         if(!safe) return;
+    }
+    if(fire::parallel_chain::isBlendID(parameterID))
+    {
+        if(scope==0)globalPanel.revealParallelBlend();else bandPanel.revealParallelBlend();
+        return;
     }
     if(slot>=0)
     {

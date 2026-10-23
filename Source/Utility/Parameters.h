@@ -21,6 +21,7 @@
 #include "AnalogShapeParameters.h"
 #include "ReverbModelParameters.h"
 #include "DynamicEqParameters.h"
+#include "ParallelChainParameters.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_core/juce_core.h"
 #include <array>
@@ -284,6 +285,7 @@ namespace ParameterIDAndName
                     result.push_back({"FX " + juce::String(slot + 1) + " Clouds "
                                           + fire::clouds_params::fieldNames[static_cast<size_t>(field)],
                                       fire::clouds_params::parameterBase(slot, field, false)});
+            result.push_back({"Parallel Blend","bandParallelBlend"});
             return result;
         }();
         return parameters;
@@ -325,6 +327,7 @@ namespace ParameterIDAndName
                                           + (field == fire::eq::Field::frequency ? " Frequency"
                                              : field == fire::eq::Field::gain ? " Gain" : " Q"),
                                       fire::eq::parameterID(slot, field)});
+            result.push_back({"Master Parallel Blend","masterParallelBlend"});
             return result;
         }();
         return params;
@@ -383,6 +386,7 @@ namespace ParameterIDAndName
         // This static vector is initialized only once.
         static const auto params = [] {
             std::vector<ModulatableParameterInfo> result {
+            { "Chain Routing", "bandChainRouting" }, { "Parallel Blend", "bandParallelBlend" },
             { OTT_DEPTH_NAME, OTT_DEPTH_ID }, { OTT_TIME_NAME, OTT_TIME_ID },
             { OTT_UPWARD_NAME, OTT_UPWARD_ID }, { OTT_DOWNWARD_NAME, OTT_DOWNWARD_ID },
             { OTT_OUTPUT_NAME, OTT_OUTPUT_ID }, { OTT_MIX_NAME, OTT_MIX_ID },
@@ -444,6 +448,8 @@ namespace ParameterIDAndName
             for (int slot = 0; slot < fire::effects::slotCount; ++slot)
                 result.push_back({"FX " + juce::String(slot + 1) + " Shape Model", fire::analog_params::parameterID(1, slot).dropLastCharacters(1)});
             result.push_back({"Modern Drive Compensation", fire::drive_comp::parameterBase});
+            for(int node=0;node<fire::module_order::capacity;++node)
+                result.push_back({"Module "+juce::String(node)+" Branch",fire::parallel_chain::branchBase(node,false)});
             for(int slot=0;slot<fire::dynamic_eq::slotsPerScope;++slot)
                 for(int node=0;node<fire::dynamic_eq::nodesPerModule;++node)
                     for(int field=0;field<fire::dynamic_eq::fieldCount;++field)

@@ -225,6 +225,7 @@ juce::StringArray ownedParameterIDs(int scope, int node, Type type)
     for (const auto& field : fieldsFor(type,legacy,scope,node - module_order::firstInsert))
         if (field.id.isNotEmpty()) ids.addIfNotAlreadyThere(field.id);
     ids.addIfNotAlreadyThere(enabledId(type,scope,node));
+    ids.addIfNotAlreadyThere(parallel_chain::branchID(scope,node));
     if (legacy) ids.addIfNotAlreadyThere(core_modules::presenceID(scope,node));
     else
     {
@@ -239,6 +240,7 @@ juce::StringArray ownedParameterIDs(int scope, int node, Type type)
 
 juce::Result validateModule(const Module& module)
 {
+    if(module.branch<parallel_chain::a || module.branch>parallel_chain::b)return juce::Result::fail("Invalid module branch.");
     const auto fields = fieldsFor(module.type,module.sourceLegacy);
     if (fields.empty()) return juce::Result::fail("Unsupported module representation.");
     if (module.values.size() != fields.size()) return juce::Result::fail("The module has incomplete or unknown controls.");
@@ -317,6 +319,7 @@ juce::Result captureModuleFromSnapshot(const FireAudioProcessor& processor,
     if (fields.empty()) return juce::Result::fail("Analysis is not an audio module and cannot be copied.");
     juce::ignoreUnused(processor);
     module.enabled = plain(enabledId(module.type,scope,node),1) > .5f;
+    module.branch=juce::roundToInt(plain(parallel_chain::branchID(scope,node),parallel_chain::a));
     for (auto route : snapshot.routings)
         if (route.targetParameterID == enabledId(module.type,scope,node))
         { route.targetParameterID = "enabled"; module.routes.add(std::move(route)); }
@@ -414,6 +417,7 @@ juce::Result mapModule(const FireAudioProcessor& processor, const Module& module
             proposed[id] = parameter->convertTo0to1(value);
     };
     setPlain(enabledId(module.type,scope,node),module.enabled ? 1 : 0);
+    setPlain(parallel_chain::branchID(scope,node),static_cast<float>(module.branch));
     if (includeRoutes)
         for (auto route : module.routes)
             if (route.targetParameterID == "enabled")

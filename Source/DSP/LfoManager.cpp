@@ -14,6 +14,7 @@
 #include "../GUI/InterfaceDefines.h"
 #include "../Utility/ChannelModeParameters.h"
 #include "../Utility/DynamicEqParameters.h"
+#include "../Utility/ParallelChainParameters.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -807,7 +808,7 @@ bool LfoManager::captureRuntimeRoutings(
 
     for (const auto& routing : modulationRoutings)
     {
-        if (routing.targetParameterID.isEmpty() || (fire::dynamic_eq::isParameterID(routing.targetParameterID) || fire::channel_mode::isParameterID(routing.targetParameterID) || fire::lfo_playback::isParameterID(routing.targetParameterID) || fire::midi_mod::isParameterID(routing.targetParameterID))
+        if (routing.targetParameterID.isEmpty() || (fire::dynamic_eq::isParameterID(routing.targetParameterID) || fire::parallel_chain::isStructuralID(routing.targetParameterID) || fire::channel_mode::isParameterID(routing.targetParameterID) || fire::lfo_playback::isParameterID(routing.targetParameterID) || fire::midi_mod::isParameterID(routing.targetParameterID))
             || ! isModulationSourcePresent(routing.sourceLfoIndex))
             continue;
 
@@ -1495,7 +1496,7 @@ LfoManager::updateModulationRoutingIfRevisionMatches(
     const ModulationRouting& replacementRouting)
 {
     auto safeReplacement = replacementRouting;
-    if ((fire::dynamic_eq::isParameterID(safeReplacement.targetParameterID) || fire::channel_mode::isParameterID(safeReplacement.targetParameterID) || fire::lfo_playback::isParameterID(safeReplacement.targetParameterID) || fire::midi_mod::isParameterID(safeReplacement.targetParameterID))) return {};
+    if ((fire::dynamic_eq::isParameterID(safeReplacement.targetParameterID) || fire::parallel_chain::isStructuralID(safeReplacement.targetParameterID) || fire::channel_mode::isParameterID(safeReplacement.targetParameterID) || fire::lfo_playback::isParameterID(safeReplacement.targetParameterID) || fire::midi_mod::isParameterID(safeReplacement.targetParameterID))) return {};
     safeReplacement.sanitise();
     if (safeReplacement.sourceLfoIndex != expectedRouting.sourceLfoIndex
         || safeReplacement.targetParameterID
@@ -1541,7 +1542,7 @@ LfoManager::assignModulationRoutingIfRevisionMatches(
 
     const int safeSourceIndex = juce::jlimit(0, fire::mod_sources::sourceCount - 1, sourceLfoIndex);
     if (fire::mod_sources::isParameterID(targetParameterID)
-        || (fire::dynamic_eq::isParameterID(targetParameterID) || fire::channel_mode::isParameterID(targetParameterID) || fire::lfo_playback::isParameterID(targetParameterID) || fire::midi_mod::isParameterID(targetParameterID))) return {};
+        || (fire::dynamic_eq::isParameterID(targetParameterID) || fire::parallel_chain::isStructuralID(targetParameterID) || fire::channel_mode::isParameterID(targetParameterID) || fire::lfo_playback::isParameterID(targetParameterID) || fire::midi_mod::isParameterID(targetParameterID))) return {};
     const juce::ScopedLock lock(dataAccessLock);
     if (targetParameterID.isNotEmpty() && ! isModulationSourcePresent(safeSourceIndex)) return {};
     ModulationRoutingEditResult result;
@@ -1741,7 +1742,7 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
 {
     if (! fire::mod_sources::validSource(sourceLfoIndex) || targetParameterID.isEmpty()
         || fire::mod_sources::isParameterID(targetParameterID)
-        || (fire::dynamic_eq::isParameterID(targetParameterID) || fire::channel_mode::isParameterID(targetParameterID) || fire::lfo_playback::isParameterID(targetParameterID) || fire::midi_mod::isParameterID(targetParameterID)))
+        || (fire::dynamic_eq::isParameterID(targetParameterID) || fire::parallel_chain::isStructuralID(targetParameterID) || fire::channel_mode::isParameterID(targetParameterID) || fire::lfo_playback::isParameterID(targetParameterID) || fire::midi_mod::isParameterID(targetParameterID)))
     {
         jassertfalse;
         return AssignmentResult::invalidRequest;
@@ -1914,7 +1915,7 @@ bool LfoManager::replaceLfoDataAndRoutings(
     if (newRoutings.size() > maximumModulationRoutings)
         return false;
     for (const auto& routing : newRoutings)
-        if (fire::dynamic_eq::isParameterID(routing.targetParameterID)
+        if (fire::dynamic_eq::isParameterID(routing.targetParameterID) || fire::parallel_chain::isStructuralID(routing.targetParameterID)
             || fire::lfo_playback::isParameterID(routing.targetParameterID)
             || fire::midi_mod::isParameterID(routing.targetParameterID)) return false;
 

@@ -147,6 +147,10 @@
         <FILE id="presetMetadata21" name="PresetMetadata.h" compile="0" resource="0" file="Source/Utility/PresetMetadata.h"/>
         <FILE id="presetLocksHeader21" name="PresetParameterLocks.h" compile="0" resource="0" file="Source/Utility/PresetParameterLocks.h"/>
         <FILE id="presetLocksSource21" name="PresetParameterLocks.cpp" compile="1" resource="0" file="Source/Utility/PresetParameterLocks.cpp"/>
+        <FILE id="parallelChainParams21" name="ParallelChainParameters.h" compile="0" resource="0" file="Source/Utility/ParallelChainParameters.h"/>
+        <FILE id="parallelChainLayout21" name="ParallelChainParameterLayout.h" compile="0" resource="0" file="Source/Utility/ParallelChainParameterLayout.h"/>
+        <FILE id="parallelChainState21" name="ParallelChainStateValidation.h" compile="0" resource="0" file="Source/Utility/ParallelChainStateValidation.h"/>
+        <FILE id="parallelChainActions21" name="ParallelChainActions.cpp" compile="1" resource="0" file="Source/Utility/ParallelChainActions.cpp"/>
         <FILE id="dynamicEqHelper210" name="DynamicEqParameters.h" compile="0" resource="0" file="Source/Utility/DynamicEqParameters.h"/>
         <FILE id="dynamicEqHelper211" name="DynamicEqParameterLayout.h" compile="0" resource="0" file="Source/Utility/DynamicEqParameterLayout.h"/>
         <FILE id="dynamicEqHelper212" name="DynamicEqStateValidation.h" compile="0" resource="0" file="Source/Utility/DynamicEqStateValidation.h"/>
@@ -161,6 +165,8 @@
         <FILE id="brandMarks" name="BrandMarks.h" compile="0" resource="0" file="Source/GUI/BrandMarks.h"/>
         <FILE id="logoMotion" name="FireLogoMotion.h" compile="0" resource="0" file="Source/GUI/FireLogoMotion.h"/>
         <FILE id="modSourceUi01" name="ModulationSourceControls.h" compile="0" resource="0" file="Source/GUI/ModulationSourceControls.h"/>
+        <FILE id="chainBlendBinding21" name="ChainBlendAttachment.h" compile="0" resource="0" file="Source/GUI/ChainBlendAttachment.h"/>
+        <FILE id="chainRoutingUi21" name="ChainRoutingControls.h" compile="0" resource="0" file="Source/GUI/ChainRoutingControls.h"/>
         <FILE id="dynamicEqUi21" name="DynamicEqControls.h" compile="0" resource="0" file="Source/GUI/DynamicEqControls.h"/>
         <FILE id="eqUI1" name="EqControlsPanel.h" compile="0" resource="0" file="Source/GUI/EqControlsPanel.h"/>
         <FILE id="ottVis1" name="OttVisuals.h" compile="0" resource="0" file="Source/GUI/OttVisuals.h"/>
@@ -207,6 +213,7 @@
         <FILE id="analogSupply01" name="AnalogPowerSupply.h" compile="0" resource="0" file="Source/DSP/AnalogPowerSupply.h"/>
         <FILE id="analogMagnetics01" name="AnalogMagnetics.h" compile="0" resource="0" file="Source/DSP/AnalogMagnetics.h"/>
         <FILE id="analogTape01" name="AnalogTape.h" compile="0" resource="0" file="Source/DSP/AnalogTape.h"/>
+        <FILE id="parallelChainDsp21" name="ParallelChainProcessor.h" compile="0" resource="0" file="Source/DSP/ParallelChainProcessor.h"/>
         <FILE id="dynamicEqDsp21" name="DynamicEqDetector.h" compile="0" resource="0" file="Source/DSP/DynamicEqDetector.h"/>
         <FILE id="eqDsp1" name="EqProcessor.h" compile="0" resource="0" file="Source/DSP/EqProcessor.h"/>
         <FILE id="eqDsp2" name="EqCoefficients.h" compile="0" resource="0" file="Source/DSP/EqCoefficients.h"/>

@@ -41,7 +41,7 @@ TEST_CASE("Channel modes retain stable appended IDs and survive preset project a
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
-    REQUIRE(processor.getParameters().size()==7708);
+    REQUIRE(processor.getParameters().size()==7780);
     for(int scope=0;scope<5;++scope)
     {
         auto* p=processor.treeState.getParameter(cm::parameterID(scope));REQUIRE(p);
@@ -50,11 +50,11 @@ TEST_CASE("Channel modes retain stable appended IDs and survive preset project a
     }
     modeConfigure(processor,1);
     const auto first=modePreset(processor);
-    CHECK(first.getIntAttribute("presetFormatVersion")==7);
+    CHECK(first.getIntAttribute("presetFormatVersion")==8);
     CHECK(first.getIntAttribute(fire::channel_mode_state::marker)==1);
     processor.stateAB.copyAB(false);processor.stateAB.toggleAB();modeConfigure(processor,2);
     const auto second=modePreset(processor),host=modeHost(processor);
-    CHECK(host.getIntAttribute("stateFormatVersion")==6);
+    CHECK(host.getIntAttribute("stateFormatVersion")==7);
     FireAudioProcessor restored;
     REQUIRE(state::loadStateFromXml(second,restored));modeCheck(restored,2);
     modeRestoreHost(restored,host);modeCheck(restored,2);
@@ -119,12 +119,12 @@ TEST_CASE("Chain mode schema round trips and v1 migration are strict and atomic"
 {
     chain::Snapshot source;source.channelMode=cm::side;
     source.modules.push_back(chain::defaultModule(fire::effects::Type::delay));
-    auto xml=chain::encode(source);REQUIRE(xml);CHECK(xml->getIntAttribute("schemaVersion")==3);
+    auto xml=chain::encode(source);REQUIRE(xml);CHECK(xml->getIntAttribute("schemaVersion")==4);
     chain::Snapshot restored;REQUIRE(chain::decode(*xml,restored).wasOk());CHECK(restored.channelMode==cm::side);
     for(const auto* mode:{"-1","3","1.5","1tail","nan"})
     {auto bad=*xml;bad.setAttribute("channelMode",mode);CHECK(chain::decode(bad,restored).failed());CHECK(restored.channelMode==cm::side);}
     auto missing=*xml;missing.removeAttribute("channelMode");CHECK(chain::decode(missing,restored).failed());
-    missing.setAttribute("schemaVersion",1);REQUIRE(chain::decode(missing,restored).wasOk());CHECK(restored.channelMode==cm::stereo);
+    fire::test::stripParallelChainSnapshot(missing);missing.setAttribute("schemaVersion",1);REQUIRE(chain::decode(missing,restored).wasOk());CHECK(restored.channelMode==cm::stereo);
     missing.setAttribute("channelMode",2);CHECK(chain::decode(missing,restored).failed());CHECK(restored.channelMode==cm::stereo);
     source.channelMode=3;CHECK(chain::encode(source)==nullptr);
 }

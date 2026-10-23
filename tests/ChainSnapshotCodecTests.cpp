@@ -42,11 +42,15 @@ void requireSame(const chain::Snapshot& actual, const chain::Snapshot& expected)
 {
     REQUIRE(actual.includesRouting == expected.includesRouting);
     REQUIRE(actual.channelMode == expected.channelMode);
+    REQUIRE(actual.routingMode==expected.routingMode);REQUIRE(actual.parallelBlend==expected.parallelBlend);
+    REQUIRE(actual.scopeRoutes.size()==expected.scopeRoutes.size());
+    for(int i=0;i<actual.scopeRoutes.size();++i)CHECK(actual.scopeRoutes[i].hasSameState(expected.scopeRoutes[i]));
     REQUIRE(actual.modules.size() == expected.modules.size());
     for (size_t index = 0; index < actual.modules.size(); ++index)
     {
         CAPTURE(index); const auto& a = actual.modules[index]; const auto& b = expected.modules[index];
         CHECK(a.type == b.type); CHECK(a.enabled == b.enabled); CHECK(a.sourceLegacy == b.sourceLegacy);
+        CHECK(a.branch==b.branch);
         CHECK(a.legacyLinked == b.legacyLinked); CHECK(a.modernDriveComp == b.modernDriveComp);
         CHECK(a.values == b.values); REQUIRE(a.routes.size() == b.routes.size());
         for (int route = 0; route < a.routes.size(); ++route) CHECK(a.routes[route].hasSameState(b.routes[route]));
@@ -66,7 +70,7 @@ struct CodecDirectory
 TEST_CASE("Chain codec retains settings modulation mappings and exact frozen PCM", "[chain][codec][state]")
 {
     const auto source = codecSnapshot(); auto xml = chain::encode(source); REQUIRE(xml != nullptr);
-    CHECK(xml->getIntAttribute("schemaVersion") == 3);
+    CHECK(xml->getIntAttribute("schemaVersion") == 4);
     chain::Snapshot restored;
     REQUIRE(chain::decode(*xml, restored).wasOk()); requireSame(restored, source);
     for (int type = static_cast<int>(Type::chorus); type < static_cast<int>(Type::count); ++type)
@@ -86,8 +90,9 @@ TEST_CASE("Chain codec rejects unknown missing and malformed module settings wit
     auto destination = source;
     const auto reject = [&](const juce::XmlElement& xml)
     { CHECK(chain::decode(xml, destination).failed()); requireSame(destination, source); };
-    for (const auto* schema : {"0", "4", "1.5", "1e0", "1tail"})
+    for (const auto* schema : {"0", "1.5", "1e0", "1tail"})
     { auto bad = *valid; bad.setAttribute("schemaVersion", schema); reject(bad); }
+    { auto bad = *valid; bad.setAttribute("schemaVersion", chain::schemaVersion + 1); reject(bad); }
     for (const auto* type : {"0", "15", "-1", "1.5", "1e0", "1tail"})
     { auto bad = *valid; bad.getFirstChildElement()->setAttribute("type", type); reject(bad); }
     for (const auto* boolean : {"enabled", "sourceLegacy", "legacyLinked", "modernDriveComp"})
@@ -124,7 +129,17 @@ TEST_CASE("Chain codec rejects unknown missing and malformed module settings wit
     SECTION("module limit")
     {
         auto bad = *valid;
-        while (bad.getNumChildElements() <= chain::maximumModules) bad.addChildElement(new juce::XmlElement(*valid->getFirstChildElement()));
+        // Schema 4 adds SCOPE_ROUTINGS beside MODULE children. It must not
+        // count toward the module limit or accidentally make this an in-range
+        // thirteen-module fixture.
+        int moduleCount=0;
+        for(const auto* child:bad.getChildIterator())if(child->hasTagName("MODULE"))++moduleCount;
+        while(moduleCount<chain::maximumModules)
+        {bad.addChildElement(new juce::XmlElement(*valid->getFirstChildElement()));++moduleCount;}
+        chain::Snapshot atLimit;
+        REQUIRE(chain::decode(bad,atLimit).wasOk());
+        REQUIRE(atLimit.modules.size()==static_cast<size_t>(chain::maximumModules));
+        bad.addChildElement(new juce::XmlElement(*valid->getFirstChildElement()));
         reject(bad);
     }
 }

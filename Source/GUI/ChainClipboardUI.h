@@ -5,12 +5,12 @@
 namespace fire::ui
 {
 inline const juce::String chainRoutingNote =
-    "Routing uses the destination instance's current LFOs, envelopes and macros.";
+    "Routing uses the destination instance's current LFOs, envelopes, macros and MIDI CC sources.";
 
 inline juce::String copiedModuleName(const std::shared_ptr<const chain::Snapshot>& snapshot)
 {
     return snapshot && snapshot->modules.size() == 1
-        ? juce::String(effects::name(snapshot->modules.front().type)) : juce::String();
+        ? juce::String(effects::name(snapshot->modules.front().type)) + (snapshot->modules.front().branch==0?" (A)":" (B)") : juce::String();
 }
 
 class ChainMenuButton final : public PrimaryTextButton

@@ -94,6 +94,8 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
     : PanelBase(p)
 {
     createSliders();
+    setupModulationCallbacks(effectNavigation.getParallelBlendSlider());
+    modulatableSliders.push_back(&effectNavigation.getParallelBlendSlider());
     createLabels();
     createButtons();
     createComboBoxes();
@@ -183,6 +185,9 @@ GlobalPanel::~GlobalPanel()
     effectNavigation.onSelectEffect = nullptr;
     insertControls.onLayoutChanged = nullptr;
     dismissTransientInteraction();
+    // Remove the borrowed rack slider before derived members are destroyed.
+    // PanelBase still closes its own sliders after this destructor returns.
+    std::erase(modulatableSliders, &effectNavigation.getParallelBlendSlider());
 
     filterSwitch.removeListener(this);
     downsampleSwitch.removeListener(this);

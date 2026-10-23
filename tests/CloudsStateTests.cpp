@@ -181,6 +181,8 @@ TEST_CASE("Clouds appends a separate parameter family without changing original 
     for (const auto& id : fire::lfo_playback::parameterIDs()) checkParameter(id,17);
     CHECK(index == 4756);
     for (const auto& id : fire::dynamic_eq::parameterIDs()) checkParameter(id,18);
+    CHECK(index==7708);
+    for (const auto& id : fire::parallel_chain::parameterIDs()) checkParameter(id,19);
     CHECK(index == parameters.size());
     CHECK_FALSE(clouds::isParameterID("masterFx1CloudsBogus"));
     CHECK_FALSE(clouds::isParameterID("bandFx9CloudsEngine1"));

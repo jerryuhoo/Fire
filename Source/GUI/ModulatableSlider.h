@@ -190,6 +190,7 @@ private:
     friend struct MultiSourceModulationUiTestAccess;
     friend struct LfoBankUiTestAccess;
     friend struct PresetExperienceUiTestAccess;
+    friend struct ChainRoutingUiTestAccess;
     friend struct ModulatableSliderInteractionTestAccess;
 
     enum class PointerGesture

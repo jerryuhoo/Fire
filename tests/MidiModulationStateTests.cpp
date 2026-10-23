@@ -51,7 +51,7 @@ TEST_CASE("MIDI source and LFO playback parameters append stable IDs and default
           "[midi-state][state][parameters]")
 {
     juce::ScopedJuceInitialiser_GUI gui;FireAudioProcessor p;
-    REQUIRE(p.getParameters().size()==7708);
+    REQUIRE(p.getParameters().size()==7780);
     int index=4668;
     for(const auto* ids:{&cc::parameterIDs(),&play::parameterIDs()})for(const auto& id:*ids)
     {
@@ -71,11 +71,11 @@ TEST_CASE("MIDI settings playback seeds and new routes survive preset host and A
           "[midi-state][state][preset][host][ab]")
 {
     juce::ScopedJuceInitialiser_GUI gui;FireAudioProcessor p;midiConfigure(p,1);
-    auto first=midiPreset(p);CHECK(first.getIntAttribute("presetFormatVersion")==7);
+    auto first=midiPreset(p);CHECK(first.getIntAttribute("presetFormatVersion")==8);
     for(int source=24;source<28;++source)midiAddRoute(first,source);
     REQUIRE(state::loadStateFromXml(first,p));REQUIRE(p.isCurrentStateEquivalentToPreset(first));
     p.stateAB.copyAB(false);p.stateAB.toggleAB();midiConfigure(p,2);
-    const auto second=midiPreset(p),host=midiHost(p);CHECK(host.getIntAttribute("stateFormatVersion")==6);
+    const auto second=midiPreset(p),host=midiHost(p);CHECK(host.getIntAttribute("stateFormatVersion")==7);
     FireAudioProcessor restored;REQUIRE(state::loadStateFromXml(second,restored));CHECK(restored.isCurrentStateEquivalentToPreset(second));
     midiRestore(restored,host);CHECK(restored.isCurrentStateEquivalentToPreset(second));
     restored.stateAB.toggleAB();CHECK(restored.isCurrentStateEquivalentToPreset(first));
@@ -161,7 +161,7 @@ TEST_CASE("Chain CC routes retain destination MIDI definitions and roundtrip thr
     const auto target=fire::effects::parameterID(1,slot,0);
     REQUIRE(source.assignLfoToTarget(24,target)==LfoManager::AssignmentResult::changed);
     fire::chain::Snapshot captured;REQUIRE(source.captureModuleSnapshot(1,fire::module_order::firstInsert+slot,true,captured).wasOk());
-    auto xml=fire::chain::encode(captured);REQUIRE(xml);CHECK(xml->getIntAttribute("schemaVersion")==3);
+    auto xml=fire::chain::encode(captured);REQUIRE(xml);CHECK(xml->getIntAttribute("schemaVersion")==4);
     fire::chain::Snapshot decoded;REQUIRE(fire::chain::decode(*xml,decoded).wasOk());
     int added=-1;REQUIRE(destination.pasteModuleSnapshot(0,-1,decoded,added).wasOk());
     for(int i=0;i<cc::count;++i)CHECK(midiGet(destination,cc::parameterID(i,cc::number))==i*17+2);

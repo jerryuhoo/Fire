@@ -84,7 +84,7 @@ TEST_CASE("Current preset format retains every source and advanced mapping on a 
     FireAudioProcessor source;
     const auto routes = mappings();
     const auto preset = presetWithRoutes(source, routes);
-    REQUIRE(preset->getIntAttribute("presetFormatVersion") == 7);
+    REQUIRE(preset->getIntAttribute("presetFormatVersion") == 8);
     REQUIRE(preset->getChildByName("MODULATION_STATE")->getIntAttribute("schemaVersion") == 2);
     REQUIRE(state::canLoadStateFromXml(*preset, source));
     FireAudioProcessor restored;
@@ -205,7 +205,7 @@ TEST_CASE("AB snapshots roundtrip multiple source mappings and reject damaged ad
     const auto savedA = hostSnapshot(processor);
     const auto* alternate = savedA->getChildByName("AB_STATE");
     REQUIRE(alternate != nullptr);
-    REQUIRE(alternate->getIntAttribute("presetFormatVersion") == 7);
+    REQUIRE(alternate->getIntAttribute("presetFormatVersion") == 8);
     REQUIRE(alternate->getChildByName("MODULATION_STATE") != nullptr);
     REQUIRE(alternate->getChildByName("MODULATION_STATE")->getIntAttribute("schemaVersion") == 2);
     REQUIRE(state::loadStateFromXml(*presetB, processor));

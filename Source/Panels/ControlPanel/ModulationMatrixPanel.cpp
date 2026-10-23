@@ -1615,6 +1615,11 @@ std::vector<ModulationMatrixRoutingComboBox::TargetChoice> ModulationMatrixRow::
         if(!processor.getEqNodeState(node).present)
             for(auto field:{fire::eq::Field::frequency,fire::eq::Field::gain,fire::eq::Field::q})
                 if(auto found=details.find(fire::eq::parameterID(node,field));found!=details.end()) found->second.active=false;
+    // A scope's Blend belongs to its routing, even if the scope has no EQ or
+    // no modules at all. Serial retains it as a dormant, assignable target.
+    for(int scope=0;scope<fire::parallel_chain::scopeCount;++scope)
+        add(fire::parallel_chain::blendID(scope),scope,"Routing","Blend",
+            processor.getChainRoutingMode(scope)==fire::parallel_chain::parallel);
     std::vector<Choice> result {{1,"","","None","",true}};
     for(size_t index=0;index<allPossibleTargets.size();++index)
     {

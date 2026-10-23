@@ -66,6 +66,7 @@ public:
     }
     int getReservedLatency() const noexcept {return slotLatency * slotCount;}
     int getProcessingBudget() const noexcept {return latencyActive ? getReservedLatency() : 0;}
+    int getProcessingSlotLatency() const noexcept {return latencyActive ? slotLatency : 0;}
     void setLatencyActive(bool active) noexcept {latencyActive = active;}
     bool prepareSlotForType(int slot, Type type) noexcept
     {return effects && juce::isPositiveAndBelow(slot, slotCount) ? (*effects)[static_cast<size_t>(slot)].prepareForType(type) : type == Type::none;}

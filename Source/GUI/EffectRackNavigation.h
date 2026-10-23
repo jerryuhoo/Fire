@@ -3,6 +3,8 @@
 #include "LookAndFeel.h"
 #include "ModuleDragButton.h"
 #include "ChainClipboardUI.h"
+#include "ChainRoutingControls.h"
+#include "ChainBlendAttachment.h"
 #include "ContextAwareComboBox.h"
 #include "../Utility/ChannelModeParameters.h"
 #include <optional>
@@ -50,6 +52,7 @@ class EffectRackNavigation final : public juce::Component
 #endif
     friend struct ::ChainClipboardUiTestAccess;
     friend struct ::ChainChannelModeUiTestAccess;
+    friend struct ::ChainRoutingUiTestAccess;
 public:
     enum MenuAction
     {
@@ -58,6 +61,7 @@ public:
         pasteCopiedModule = 200,
         copyChainSettings = 301, copyChainWithRouting = 302, pasteChain = 303,
         saveChainSettings = 304, saveChainWithRouting = 305, loadChain = 306
+        , moveToA = 401, moveToB = 402, openRouting = 403
     };
     struct Row { juce::TextButton* button; juce::ToggleButton* power; };
     EffectRackNavigation(FireAudioProcessor& p, int initialScope) : processor(p), content(*this)
@@ -77,7 +81,16 @@ public:
         addButton.onClick = [this] { showAddMenu(); };
         addAndMakeVisible(chainButton);
         chainButton.onClick = [this] { showChainMenu(); };
-        addAndMakeVisible(channelMode);
+        addChildComponent(channelMode);
+        addAndMakeVisible(routingButton);
+        routingButton.setComponentID("chain_routing_summary");
+        routingButton.onClick=[safe=juce::Component::SafePointer<EffectRackNavigation>(this)]{if(safe)safe->showRouting();};
+        addChildComponent(parallelBlend);
+        parallelBlend.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        parallelBlend.setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
+        parallelBlend.setTitle("Parallel chain Blend");parallelBlend.setTooltip("Blend A and B linearly. 0% B is A only; 100% B is B only. An empty branch is dry.");
+        parallelBlend.setLabel("Blend",paletteFor(*this).textSecondary);
+        parallelBlend.setDoubleClickReturnValue(true,.5);
         channelMode.addItem("Stereo", 1);
         channelMode.addItem("Mid", 2);
         channelMode.addItem("Side", 3);
@@ -86,6 +99,7 @@ public:
             "Mid processes the centre; Side processes the stereo difference, preserving the other component. "
             "Side passes mono input through. This does not change the spectrum display.");
         applyChannelColours();
+        for(auto& badge:branchBadges){content.addChildComponent(badge);badge.setInterceptsMouseClicks(false,false);}
         for (int slot = 0; slot < effects::slotCount; ++slot)
         {
             auto& button = insertButtons[static_cast<size_t>(slot)];
@@ -125,6 +139,28 @@ public:
     }
     ~EffectRackNavigation() override { dismiss(); content.removeMouseListener(this); viewport.setViewedComponent(nullptr, false); }
     std::function<void(int)> onSelectEffect;
+    ModulatableSlider& getParallelBlendSlider() noexcept {return parallelBlend;}
+    void revealParallelBlend()
+    {const juce::Component::SafePointer<EffectRackNavigation> safe(this);if(!routingPopover || !routingPopover->isVisible())showRouting();
+     if(safe && parallelBlend.isShowing() && parallelBlend.isEnabled())parallelBlend.grabKeyboardFocus();}
+    void showRouting()
+    {
+        if(!isShowing() || !isEnabled())return;
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        if(routingPopover){const bool visible=routingPopover->isVisible();closeRouting();if(!safe || visible)return;}
+        const int boundScope=scope;const auto epoch=routingContextGeneration;
+        auto session=std::make_unique<RoutingSession>();
+        session->content=std::make_unique<ChainRoutingControls>(processor,scope,channelMode,parallelBlend,[safe,boundScope,epoch]
+        {return safe && safe->scope==boundScope && safe->routingContextGeneration==epoch && safe->isShowing() && safe->isEnabled();});
+        setSkin(*session->content,skinFor(*this));session->content->sendLookAndFeelChange();
+        auto* parent=getTopLevelComponent();
+        session->content->setSize(juce::jmax(1,juce::jmin(620,parent->getWidth()-60)),juce::jmax(1,juce::jmin(480,parent->getHeight()-60)));
+        session->callout=std::make_unique<juce::CallOutBox>(*session->content,
+            parent->getLocalArea(&routingButton,routingButton.getLocalBounds()),parent);
+        if(!safe)return;
+        session->content->styleCallout(*session->callout);session->callout->setDismissalMouseClicksAreAlwaysConsumed(true);
+        routingPopover=session->callout.get();routingSession=std::move(session);routingPopover->enterModalState(true,nullptr,false);
+    }
 
     void setBuiltins(std::vector<Row> rows)
     {
@@ -155,10 +191,17 @@ public:
         channelMode.setHelpText(channelMode.getTooltip());
         channelMode.configurePopupSession(
             [safe] { return safe ? safe->generation + safe->processor.getChainEditRevision() : 0; },
-            [safe, nextScope] { return safe && safe->scope == nextScope && safe->isShowing() && safe->isEnabled(); },
+            [safe, nextScope] { return safe && safe->scope == nextScope && safe->isShowing() && safe->isEnabled()
+                && safe->routingSession && safe->routingSession->content->contextCurrent(); },
             processor.treeState.getParameter(channelID));
         channelAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
             processor.treeState, channelID, channelMode);
+        blendAttachment.reset();if(!safe)return;
+        parallelBlend.parameterID=parallel_chain::blendID(scope);parallelBlend.setComponentID(parallelBlend.parameterID);
+        blendAttachment=std::make_unique<ChainBlendAttachment>(processor.treeState,parallelBlend.parameterID,parallelBlend,
+            [safe,nextScope]{return safe && safe->scope==nextScope && safe->routingSession && safe->routingSession->content->contextCurrent();});
+        parallelBlend.textFromValueFunction=[](double value){return juce::String(value*100,1)+"% B";};
+        parallelBlend.valueFromTextFunction=[](const juce::String& text){return text.getDoubleValue()/100.;};parallelBlend.updateText();
         cachedTypes.fill(-1); cachedModuleOrder.fill(-2); cachedPresence.fill(-1);
         addButton.setComponentID(scope == 0 ? "addMasterEffect" : "addBandEffect");
         chainButton.setComponentID(scope == 0 ? "masterChainTools" : "bandChainTools");
@@ -197,6 +240,7 @@ public:
     void refresh()
     {
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        updateRoutingSummary();
         int selectedNode = selectedSlot >= 0 ? module_order::firstInsert + selectedSlot : -1;
         if (selectedNode < 0)
             for (size_t node = 0; node < builtins.size(); ++node)
@@ -281,7 +325,7 @@ public:
         // Audio routing lives in the existing header, keeping all module rails
         // aligned with the Mod Forge bank and preserving their five-row pitch.
         const auto modeWidth = juce::roundToInt(70.0f * scale);
-        channelMode.setBounds(chainButton.getX() - juce::roundToInt(4.0f * scale) - modeWidth,
+        routingButton.setBounds(chainButton.getX() - juce::roundToInt(4.0f * scale) - modeWidth,
                               addButton.getY(), modeWidth, side);
         viewport.setScrollBarThickness(juce::jmax(3, juce::roundToInt(4.0f * scale)));
         viewport.setBounds(area);
@@ -292,6 +336,8 @@ public:
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
         refresh();
         if (! safe) return;
+        if(routingPopover && !routingPopover->isVisible()){closeRouting();if(!safe)return;}
+        updateRoutingSummary();
         updateSelection(false);
         if (!usesNavigationMotion(*this))
         {
@@ -332,12 +378,15 @@ public:
                     || (row.power && row.power->hasKeyboardFocus(true)) || remove->getFocusAnimation() > 0.01f);
             if (remove->isPresented() != reveal) remove->setPresented(reveal);
             if (!safe) return;
+            if(parallel_chain::validNode(scope,node))branchBadges[static_cast<size_t>(node)].setAlpha(1.f-remove->getVisibilityAnimation());
         }
     }
     void dismiss()
     {
         const juce::Component::SafePointer<EffectRackNavigation> safe(this);
         ++generation;
+        ++routingContextGeneration;closeRouting();if(!safe)return;
+        routingButton.dismissPointerGesture();if(!safe)return;
         cancelRowInteractions();
         if (! safe) return;
         addButton.dismissPointerGesture();
@@ -468,6 +517,11 @@ public:
         menu.addItem(copySettings, "Copy settings", realModule);
         menu.addItem(copyWithRouting, "Copy with routing", realModule);
         menu.addItem(duplicateSettings, "Duplicate settings", realModule);
+        if(realModule)
+        {
+            menu.addItem(moveToA,"Move to Branch A",true,processor.getModuleBranch(scope,node)==0);
+            menu.addItem(moveToB,"Move to Branch B",true,processor.getModuleBranch(scope,node)==1);
+        }
         const auto copied = chain::getClipboard(chain::ClipboardKind::module);
         menu.addItem(pasteAfter, copied ? "Paste " + copiedModuleName(copied) + " after" : "Paste after", copied != nullptr);
         menu.addSeparator();
@@ -511,6 +565,7 @@ public:
             }
             if (result == pasteAfter) { if (copied) safe->pasteModule(node, copied); return; }
             if (result == removeEffect) safe->processor.removeModule(originalScope, node);
+            else if(result==moveToA || result==moveToB) safe->processor.setModuleBranch(originalScope,node,result==moveToA?0:1);
             else if (result == moveUp || result == moveDown)
                 safe->processor.moveModuleBy(originalScope, node, result == moveUp ? -1 : 1);
             if (safe && safe->scope == originalScope) safe->refresh();
@@ -520,6 +575,7 @@ public:
     juce::PopupMenu createChainMenu() const
     {
         juce::PopupMenu menu;
+        menu.addItem(openRouting,"Open channel and chain routing...");menu.addSeparator();
         menu.addItem(copyChainSettings, "Copy chain settings");
         menu.addItem(copyChainWithRouting, "Copy chain with routing");
         const auto copied = chain::getClipboard(chain::ClipboardKind::chain);
@@ -549,6 +605,7 @@ public:
                 || safe->scope != originalScope || !safe->isShowing() || !safe->isEnabled()
                 || safe->processor.getChainEditRevision() != stateRevision) return;
             ++safe->toolMenuGeneration;
+            if(result==openRouting){safe->showRouting();return;}
             if (result == copyChainSettings || result == copyChainWithRouting)
             {
                 chain::Snapshot snapshot;
@@ -586,6 +643,48 @@ public:
             .withStandardItemHeight(juce::roundToInt(29.0f * scale)), createChainMenuResultHandler());
     }
 private:
+    void closeRouting()
+    {
+        const juce::Component::SafePointer<EffectRackNavigation> safe(this);
+        auto session=std::move(routingSession);routingPopover=nullptr;
+        if(session)
+        {
+            session->content->dismiss();
+            if(session->callout){session->callout->exitModalState(0);session->callout->setVisible(false);session->callout->setLookAndFeel(nullptr);}
+            session.reset();
+            if(!safe)return;
+            addChildComponent(channelMode);channelMode.setVisible(false);channelMode.setEnabled(true);
+            addChildComponent(parallelBlend);parallelBlend.setVisible(false);
+        }
+    }
+    void updateRoutingSummary()
+    {
+        if(scope<0)return;
+        const int channel=juce::jlimit(0,2,channelMode.getSelectedId()-1);
+        const auto label=channel_mode::names()[channel];const bool parallel=processor.getChainRoutingMode(scope)==parallel_chain::parallel;
+        if(routingButton.getButtonText()!=label || routingButton.parallel!=parallel)
+        {routingButton.setButtonText(label);routingButton.parallel=parallel;routingButton.repaint();}
+        const auto description=(scope==0?juce::String("Master"):"Band "+juce::String(scope))+" channel and chain routing: "+label+", "+(parallel?"Parallel A/B":"Serial");
+        routingButton.setTitle(description);routingButton.setTooltip(description+". Open processing channel and effect routing; this does not change the spectrum display.");
+        for(int node=0;node<module_order::capacity;++node)
+        {
+            auto& badge=branchBadges[static_cast<size_t>(node)];
+            const bool show=parallel && parallel_chain::validNode(scope,node) && processor.isModulePresent(scope,node);
+            badge.setVisible(show);if(show){const auto branch=processor.getModuleBranch(scope,node);if(badge.branch!=branch){badge.branch=branch;badge.repaint();}}
+            const auto row=rowForNode(node);
+            if(row.button)row.button->setTitle(row.button->getButtonText()+(show?(badge.branch==0?" / Branch A":" / Branch B"):""));
+        }
+    }
+    struct RoutingSession
+    {std::unique_ptr<ChainRoutingControls> content;std::unique_ptr<juce::CallOutBox> callout;};
+    class BranchBadge final:public juce::Component
+    {
+    public:int branch=0;
+        void paint(juce::Graphics& g)override
+        {const auto& p=paletteFor(*this);const float size=juce::jmin(getWidth(),getHeight())*.62f;
+         auto area=getLocalBounds().toFloat().withSizeKeepingCentre(size,size);g.setColour(p.accent.withAlpha(.10f));g.fillRoundedRectangle(area,3);
+         g.setColour(p.textSecondary);g.setFont(bodyFont(size*.70f));g.drawText(branch==0?"A":"B",area,juce::Justification::centred);}
+    };
     struct ChainFileContext
     {
         std::uint64_t epoch = 0, request = 0, stateRevision = 0;
@@ -999,6 +1098,9 @@ private:
                 const auto side = juce::jmin(row.getHeight(), juce::roundToInt(24.0f * scale));
                 visibleRows[i].button->getProperties().set("fireModuleTrailingSpace", side + 5.0f * scale);
                 remove->setBounds(row.getRight() - side - juce::roundToInt(3 * scale), row.getCentreY() - side / 2, side, side);
+                const int node=nodeForButton(visibleRows[i].button);
+                if(parallel_chain::validNode(scope,node))
+                {auto& badge=branchBadges[static_cast<size_t>(node)];badge.setBounds(remove->getBounds());badge.toFront(false);}
                 remove->toFront(false);
             }
             if (auto* power = visibleRows[i].power)
@@ -1046,6 +1148,8 @@ private:
     void lookAndFeelChanged() override
     {
         applyChannelColours();
+        if(routingSession && routingPopover)
+        {setSkin(*routingSession->content,skinFor(*this));routingSession->content->sendLookAndFeelChange();routingSession->content->styleCallout(*routingPopover);}
         // Switching back from a compact skin must also restore the classic
         // five-row geometry without requiring the host to resize its window.
         layoutRows();
@@ -1064,14 +1168,22 @@ private:
         channelMode.setColour(juce::ComboBox::outlineColourId, palette.hairline);
         channelMode.setColour(juce::ComboBox::arrowColourId, palette.textSecondary);
         channelMode.setColour(juce::ComboBox::focusedOutlineColourId, palette.accent);
+        parallelBlend.setColour(juce::Slider::rotarySliderFillColourId,palette.accent);
     }
     FireAudioProcessor& processor;
     juce::Viewport viewport;
     Content content;
     PrimaryTextButton addButton;
     ChainMenuButton chainButton;
+    RoutingSummaryButton routingButton;
     ContextAwareComboBox channelMode;
+    ModulatableSlider parallelBlend;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> channelAttachment;
+    std::unique_ptr<ChainBlendAttachment> blendAttachment;
+    std::unique_ptr<RoutingSession> routingSession;
+    juce::Component::SafePointer<juce::CallOutBox> routingPopover;
+    std::uint64_t routingContextGeneration=0;
+    std::array<BranchBadge,module_order::capacity> branchBadges;
     std::array<ModuleDragButton, effects::slotCount> insertButtons;
     std::array<PrimaryToggleButton, effects::slotCount> powerButtons;
     std::array<CloseButton, effects::slotCount> removeButtons;

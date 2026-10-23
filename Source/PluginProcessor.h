@@ -51,6 +51,7 @@
 #include <cstdint>
 #include <memory>
 #include <limits>
+#include <optional>
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 #include <functional>
 #endif
@@ -453,6 +454,17 @@ public:
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
     fire::effects::Type getInsertEffectType(int scope, int slot) const;
+    // An asynchronous file operation may only publish to the original module.
+    // The slot generation also rejects host-automated type-away/type-back ABA.
+    struct GranularAudioTarget
+    {
+        int scope = -1, slot = -1;
+        std::uint64_t revision = 0, slotGeneration = 0;
+    };
+    std::optional<GranularAudioTarget> getGranularAudioTarget(int scope, int slot) const;
+    bool isGranularAudioTargetCurrent(const GranularAudioTarget&) const noexcept;
+    juce::Result applyImportedGranularAudio(const GranularAudioTarget&, const fire::effects::FrozenRecordingPtr&);
+    juce::Result captureGranularAudioForExport(const GranularAudioTarget&, fire::effects::FrozenRecordingPtr&) const;
     int getInsertEffectOrder(int scope, int slot) const;
     int addInsertEffect(int scope, fire::effects::Type type);
     void removeInsertEffect(int scope, int slot);
@@ -938,6 +950,17 @@ private:
     };
 
     void initialiseParameterCache();
+    struct GranularSlotGeneration final : juce::AudioProcessorParameter::Listener
+    {
+        static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
+        std::atomic<std::uint64_t> value { 0 };
+        std::array<juce::RangedAudioParameter*, 4> parameters {};
+        void parameterValueChanged(int, float) override { value.fetch_add(1, std::memory_order_release); }
+        void parameterGestureChanged(int, bool) override {}
+    };
+    std::array<std::array<GranularSlotGeneration, fire::effects::slotCount>, fire::effects::scopeCount> granularSlotGenerations;
+    void initialiseGranularSlotGenerations();
+    void detachGranularSlotGenerations();
     void moveInsertEffectInternal(int scope, int slot, int position, bool relative);
     void writeModuleOrder(int scope, const fire::module_order::Order& order);
     std::vector<int> visibleModuleOrder(int scope) const;

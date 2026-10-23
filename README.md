@@ -447,6 +447,8 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ### 2.1.0 (in development)
 
+- Import audio into Granular with a selectable start position, waveform preview
+  and optional normalization; export frozen material as a sample-exact WAV.
 - Implement serial / parallel A-B routing per Band and Master, with modulatable
   Blend and portable routing presets.
 - Add per-point Dynamic EQ for Bell and Shelf filters, with linked frequency
@@ -891,6 +893,32 @@ to accommodate multiple frozen slots. Older files without recorded audio retain
 their previous empty-buffer capture behaviour. With an empty recording, Freeze
 captures fresh audio before holding it.
 Spread, Feedback and Reverb support host automation and LFO modulation.
+
+**Import and export.** Open **Sample** beside Freeze to choose an audio file.
+Select the start of the excerpt and preview the audio that will be imported.
+The recording holds up to **1.02175 seconds** (32,696 stereo frames at 32 kHz);
+longer files require choosing an excerpt. Mono is duplicated to both channels.
+Supported source rates are 8–384 kHz, with band-limited conversion to 32 kHz.
+**Normalize** is off by default; enabling it sets the shared stereo peak to
+−1 dBFS. Hot audio can clip when normalization is off.
+
+**Import and Freeze** replaces only the selected Granular recording, enables
+Freeze, and creates one Undo step. Importing during playback fades that module's
+wet audio while the recording changes; other modules keep their buffers and
+tails. Undo restores an earlier frozen recording and its settings. If the module
+was previously recording live, Undo restores live mode but cannot reconstruct
+its past rolling audio. The imported excerpt is embedded in presets, projects,
+A/B snapshots and portable module/chain files; the source file is not required
+after import. Closing the editor or replacing the target module cancels a pending
+import rather than applying it to a different sound.
+
+**Export frozen WAV** captures the current frozen recording before asking for a
+destination. It writes stereo 16-bit / 32 kHz WAV in chronological order, without
+normalization or the grain, pitch, feedback, reverb and Mix processing. Later
+parameter edits do not change that captured export. Enable Freeze and capture
+some audio first if no frozen recording is available. File decoding, resampling
+and writing run off the audio and interface threads. An existing destination is
+replaced only after confirmation and a complete temporary WAV has been written.
 
 The Clouds core runs at the original 32 kHz, stereo/16-bit quality, with
 band-limited conversion to and from the host sample rate. Its wet bandwidth and

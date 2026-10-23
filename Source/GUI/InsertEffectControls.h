@@ -3,6 +3,7 @@
 #include "ContextAwareComboBox.h"
 #include "EqControlsPanel.h"
 #include "HardwareColourPanel.h"
+#include "GranularMediaControls.h"
 #include "../DSP/ChordResonator.h"
 #include <atomic>
 #include "../Utility/CloudsParameters.h"
@@ -27,6 +28,9 @@ public:
         freezeButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::granular.withAlpha(0.25f));
         freezeButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textSecondary);
         freezeButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::whiteHot);
+        addChildComponent(sampleButton);sampleButton.setButtonText("Sample");sampleButton.setComponentID("granular_sample_tools");
+        sampleButton.setTitle("Granular audio import and export");sampleButton.setTooltip("Choose an audio window to import and freeze, or export captured frozen audio as WAV.");
+        sampleButton.onClick=[safe=juce::Component::SafePointer<InsertEffectControls>(this)]{if(safe)safe->showMedia();};
         for (auto* menu : {&rootMenu, &chordMenu})
         {
             addChildComponent(menu);
@@ -334,6 +338,8 @@ public:
         const juce::Component::SafePointer<InsertEffectControls> safe(this);
         if (scope >= 0 && slot >= 0) bind(scope, slot);
         if (!safe) return;
+        if(mediaPopover && (!mediaPopover->isVisible() || (mediaSession && !mediaSession->content->hasValidOwner())))
+        {closeMedia();if(!safe)return;}
         if (type == fire::effects::Type::eq) eqControls.animationTick(1.0f / 60.0f);
         if (!safe) return;
         if (hardwareColour.isShowing())
@@ -348,6 +354,7 @@ public:
     {
         const juce::Component::SafePointer<InsertEffectControls> safe(this);
         choiceGeneration.fetch_add(1, std::memory_order_release);
+        closeMedia();if(!safe)return;sampleButton.dismissPointerGesture();if(!safe)return;
         rootMenu.dismissTransientInteraction();
         if (! safe) return;
         chordMenu.dismissTransientInteraction();
@@ -486,8 +493,9 @@ public:
                 area.removeFromLeft(gap);
             }
             const auto buttonHeight = juce::jmin(size, juce::roundToInt(28.0f * scale));
-            freezeButton.setBounds(area.withSizeKeepingCentre(
-                juce::jmin(area.getWidth(), size * 2 + gap), buttonHeight));
+            auto buttons=area.withSizeKeepingCentre(juce::jmin(area.getWidth(),juce::roundToInt(204*scale)),buttonHeight);
+            const int sampleWidth=juce::jmin(juce::roundToInt(88*scale),juce::jmax(1,(buttons.getWidth()-gap)/2));
+            sampleButton.setBounds(buttons.removeFromRight(sampleWidth));buttons.removeFromRight(gap);freezeButton.setBounds(buttons);
         }
         else if (type == fire::effects::Type::lofi)
         {
@@ -519,8 +527,38 @@ public:
         }
     }
     std::function<void()> onLayoutChanged;
+    void lookAndFeelChanged()override
+    {if(mediaSession && mediaPopover){fire::ui::setSkin(*mediaSession->content,fire::ui::skinFor(*this));mediaSession->content->sendLookAndFeelChange();mediaSession->content->styleCallout(*mediaPopover);}}
 
 private:
+    friend struct GranularMediaUiTestAccess;
+    void showMedia()
+    {
+        if(!active || !isShowing() || !isEnabled() || type!=fire::effects::Type::granular)return;
+        const juce::Component::SafePointer<InsertEffectControls> safe(this);
+        if(mediaPopover){const bool visible=mediaPopover->isVisible();closeMedia();if(!safe || visible)return;}
+        const auto target=processor.getGranularAudioTarget(scope,slot);if(!target)return;
+        const auto binding=bindingGeneration,choice=choiceGeneration.load(std::memory_order_acquire);
+        auto session=std::make_unique<MediaSession>();
+        session->content=std::make_unique<fire::ui::GranularMediaControls>(processor,*target,[safe,binding,choice,scope=scope,slot=slot,epoch=target->slotGeneration]
+        {
+            if(!safe || !safe->isShowing() || !safe->isEnabled() || !safe->active || safe->bindingGeneration!=binding
+                || safe->choiceGeneration.load(std::memory_order_acquire)!=choice || safe->scope!=scope || safe->slot!=slot)return false;
+            const auto current=safe->processor.getGranularAudioTarget(scope,slot);
+            return current && current->slotGeneration==epoch;
+        });
+        fire::ui::setSkin(*session->content,fire::ui::skinFor(*this));session->content->sendLookAndFeelChange();
+        auto* parent=getTopLevelComponent();session->content->setSize(juce::jmax(1,juce::jmin(630,parent->getWidth()-60)),juce::jmax(1,juce::jmin(420,parent->getHeight()-60)));
+        session->callout=std::make_unique<juce::CallOutBox>(*session->content,parent->getLocalArea(&sampleButton,sampleButton.getLocalBounds()),parent);
+        if(!safe)return;
+        session->content->styleCallout(*session->callout);session->callout->setDismissalMouseClicksAreAlwaysConsumed(true);
+        mediaPopover=session->callout.get();mediaSession=std::move(session);mediaPopover->enterModalState(true,nullptr,false);
+    }
+    void closeMedia()
+    {
+        auto session=std::move(mediaSession);mediaPopover=nullptr;
+        if(session){session->content->dismiss();if(session->callout){session->callout->exitModalState(0);session->callout->setVisible(false);session->callout->setLookAndFeel(nullptr);}}
+    }
     bool usesChordSelectors() const noexcept { return type == fire::effects::Type::chordResonator; }
     void unobserveType()
     {
@@ -685,6 +723,7 @@ private:
             if (! current()) return;
         }
         freezeButton.setVisible(active && usesExpandedLayout());
+        if(!current())return;sampleButton.setVisible(active && usesExpandedLayout());
         if (current()) eqControls.setVisible(active && type == fire::effects::Type::eq);
         if (!current()) return;
         coreMode.setVisible(active && type == fire::effects::Type::shape);
@@ -718,6 +757,11 @@ private:
     std::array<ModulatableSlider*, fire::effects::controlCount> sliders {};
     std::array<ModulatableSlider*, cloudsExtraCount> cloudsSliders {};
     PrimaryTextButton freezeButton;
+    PrimaryTextButton sampleButton;
+    struct MediaSession
+    {std::unique_ptr<fire::ui::GranularMediaControls> content;std::unique_ptr<juce::CallOutBox> callout;};
+    std::unique_ptr<MediaSession> mediaSession;
+    juce::Component::SafePointer<juce::CallOutBox> mediaPopover;
     ContextAwareComboBox rootMenu, chordMenu;
     juce::Label rootLabel, chordLabel, chordNotes;
     std::array<juce::RangedAudioParameter*, 3> observedTypes {};

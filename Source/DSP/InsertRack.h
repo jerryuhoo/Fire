@@ -25,11 +25,11 @@ public:
         ? (*effects)[static_cast<size_t>(slot)].getDynamicEqVisualState(node) : dynamic_eq::VisualState{}; }
     FrozenRecordingPtr copyFrozenRecording(int slot) const
     { return effects && juce::isPositiveAndBelow(slot, slotCount) ? (*effects)[static_cast<size_t>(slot)].copyFrozenRecording() : FrozenRecordingPtr{}; }
-    void stageFrozenRecording(int slot, const FrozenRecordingPtr& recording, std::uint32_t publication)
+    void stageFrozenRecording(int slot, const FrozenRecordingPtr& recording, std::uint32_t publication, bool smoothReplacement = false)
     {
         if (! juce::isPositiveAndBelow(slot, slotCount)) return;
         if (! effects) effects = std::make_unique<std::array<InsertEffect, slotCount>>();
-        (*effects)[static_cast<size_t>(slot)].stageFrozenRecording(recording, publication);
+        (*effects)[static_cast<size_t>(slot)].stageFrozenRecording(recording, publication, smoothReplacement);
     }
     void prepare(const juce::dsp::ProcessSpec& spec, bool independentHq = false, bool eager = true)
     {

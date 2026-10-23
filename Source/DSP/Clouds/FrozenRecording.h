@@ -8,6 +8,7 @@
 namespace fire::effects
 {
 inline constexpr int frozenRecordingFrames = (65536 - 128) / 2 - 8;
+inline constexpr double frozenRecordingSampleRate = 32000.0;
 struct FrozenRecording
 {
     std::array<std::array<std::int16_t, frozenRecordingFrames>, 2> samples{};
@@ -34,29 +35,32 @@ public:
     }
     std::uint64_t generation() const noexcept { return sequence.load(std::memory_order_seq_cst); }
     template<class ReadSample>
-    void publish(int frames, int writeHead, std::uint32_t publication, ReadSample read) noexcept
+    void publish(int frames, int writeHead, std::uint32_t publication, ReadSample read, bool smoothReplacement = false) noexcept
     {
         sequence.fetch_add(1, std::memory_order_seq_cst);
         valid.store(frames, std::memory_order_relaxed);
         head.store(writeHead, std::memory_order_relaxed);
         requiredPublication.store(publication, std::memory_order_relaxed);
+        smooth.store(smoothReplacement, std::memory_order_relaxed);
         if (frames > 0)
             for (size_t channel = 0; channel < samples.size(); ++channel)
                 for (int i = 0; i < frozenRecordingFrames; ++i)
                     samples[channel][static_cast<size_t>(i)].store(read(channel, i), std::memory_order_relaxed);
         sequence.fetch_add(1, std::memory_order_seq_cst);
     }
-    void publish(const FrozenRecording* recording, std::uint32_t publication) noexcept
+    void publish(const FrozenRecording* recording, std::uint32_t publication, bool smoothReplacement = false) noexcept
     {
         publish(recording ? recording->validFrames : 0, recording ? recording->head : 0, publication,
-            [recording](size_t channel, int frame) { return recording->samples[channel][static_cast<size_t>(frame)]; });
+            [recording](size_t channel, int frame) { return recording->samples[channel][static_cast<size_t>(frame)]; }, smoothReplacement);
     }
     bool copy(FrozenRecording& destination, std::uint64_t& version,
-              std::uint32_t acceptedPublication = 0, bool respectPublication = false) const noexcept
+              std::uint32_t acceptedPublication = 0, bool respectPublication = false,
+              bool* smoothReplacement = nullptr) const noexcept
     {
         const auto before = sequence.load(std::memory_order_seq_cst);
         if (before == 0 || (before & 1u) != 0u) return false;
         const auto publication = requiredPublication.load(std::memory_order_relaxed);
+        const auto smoothCopy = smooth.load(std::memory_order_relaxed);
         if (respectPublication && static_cast<std::int32_t>(acceptedPublication - publication) < 0) return false;
         destination.head = head.load(std::memory_order_relaxed);
         destination.validFrames = valid.load(std::memory_order_relaxed);
@@ -65,6 +69,7 @@ public:
                 for (int i = 0; i < frozenRecordingFrames; ++i)
                     destination.samples[channel][static_cast<size_t>(i)] = samples[channel][static_cast<size_t>(i)].load(std::memory_order_relaxed);
         if (before != sequence.load(std::memory_order_seq_cst)) return false;
+        if (smoothReplacement) *smoothReplacement = smoothCopy;
         version = before;
         return true;
     }
@@ -72,6 +77,7 @@ private:
     std::array<std::array<std::atomic<std::int16_t>, frozenRecordingFrames>, 2> samples;
     std::atomic<int> head{0}, valid{0};
     std::atomic<std::uint32_t> requiredPublication{0};
+    std::atomic<bool> smooth{false};
     std::atomic<std::uint64_t> sequence{0};
 };
 }

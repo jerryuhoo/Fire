@@ -3147,6 +3147,7 @@ FireAudioProcessor::FireAudioProcessor()
     for (auto& generation : eqNodeGenerations) generation.store(0u, std::memory_order_relaxed);
     serializableMainStateReady.store(true, std::memory_order_release);
     initialiseParameterCache();
+    initialiseGranularSlotGenerations();
 
     // Initialize the band processors in a loop.
     for (int i = 0; i < 4; ++i)
@@ -3220,6 +3221,7 @@ FireAudioProcessor::FireAudioProcessor()
 FireAudioProcessor::~FireAudioProcessor()
 {
     stopTimer();
+    detachGranularSlotGenerations();
     insertPreparationWorker.reset();
     lfoManager->onStateEdited = {};
     editHistory.reset();

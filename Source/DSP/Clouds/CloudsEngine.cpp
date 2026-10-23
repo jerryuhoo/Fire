@@ -132,6 +132,12 @@ public:
         reset();
     }
     void reset() noexcept { written = position = 0; fraction = 0.0; }
+    void setInitialSourcePosition(double sourceFrame) noexcept
+    {
+        reset();
+        position = static_cast<std::int64_t>(std::floor(sourceFrame));
+        fraction = sourceFrame - static_cast<double>(position);
+    }
     void push(Frame value) noexcept
     {
         ring[static_cast<size_t>(written) & (ring.size() - 1)] = value;
@@ -320,10 +326,56 @@ private:
 };
 }
 
+namespace frozen_audio
+{
+int sourceGuardFrames(double sourceRate) noexcept
+{
+    if (!std::isfinite(sourceRate) || sourceRate < 8000 || sourceRate > 384000) return 0;
+    return static_cast<int>(std::ceil(24.0 * std::max(1.0, sourceRate / coreRate))) + 2;
+}
+
+bool resampleWindow(const float* left, const float* right, int inputFrames, double sourceRate,
+                    double firstSourceFrame, float* outputLeft, float* outputRight, int outputFrames,
+                    const std::atomic<bool>* cancelled)
+{
+    const auto stopped = [&] { return cancelled && cancelled->load(std::memory_order_relaxed); };
+    const auto guard = sourceGuardFrames(sourceRate);
+    if (stopped() || guard == 0 || left == nullptr || outputLeft == nullptr || outputRight == nullptr
+        || inputFrames <= 0 || outputFrames <= 0 || outputFrames > frozenRecordingFrames
+        || !std::isfinite(firstSourceFrame) || firstSourceFrame < 0 || firstSourceFrame >= inputFrames) return false;
+    const auto maximumInput = static_cast<int>(std::ceil(frozenRecordingFrames * sourceRate / coreRate)) + 2 * guard + 4;
+    if (inputFrames > maximumInput) return false;
+    const double lastFrame = firstSourceFrame + (outputFrames - 1) * sourceRate / coreRate;
+    if (!std::isfinite(lastFrame) || lastFrame >= inputFrames) return false;
+
+    StreamingSrc converter;
+    converter.prepare(sourceRate, coreRate);
+    converter.setInitialSourcePosition(firstSourceFrame);
+    const int framesToFeed = static_cast<int>(std::floor(lastFrame)) + guard + 2;
+    int written = 0;
+    for (int source = 0; source < framesToFeed && written < outputFrames; ++source)
+    {
+        if ((source & 63) == 0 && stopped()) return false;
+        const auto l = source < inputFrames ? safeSample(left[source]) : 0;
+        const auto r = source < inputFrames ? (right ? safeSample(right[source]) : l) : 0;
+        converter.push({l, r});
+        Frame sample;
+        while (written < outputFrames && converter.pop(sample))
+        {
+            if ((written & 63) == 0 && stopped()) return false;
+            outputLeft[written] = std::isfinite(sample.l) ? sample.l : 0;
+            outputRight[written] = std::isfinite(sample.r) ? sample.r : 0;
+            ++written;
+        }
+    }
+    return written == outputFrames && !stopped();
+}
+}
+
 struct CloudsEngine::RecordingExchange
 {
     AtomicFrozenRecording captured, restored;
-    FrozenRecording audioScratch;
+    FrozenRecording audioScratch, pendingReplacement;
     std::atomic<std::uint64_t> applied{0};
     std::mutex writerLock; // Restoring writers only; audio never enters it.
 };
@@ -339,6 +391,7 @@ struct CloudsEngine::Impl
         core.prepare();
         minimumOutput = static_cast<size_t>(std::ceil(sampleRate / coreRate * coreBlock)) + 2;
         outputQueue.resize(powerOfTwo(4 * minimumOutput + 128));
+        replacementFadeSamples = std::max(1, static_cast<int>(std::round(sampleRate * .005)));
         reset();
     }
     void reset(bool preserveFrozen = false) noexcept
@@ -355,6 +408,10 @@ struct CloudsEngine::Impl
         outputRead = outputWrite = outputCount = 0;
         outputPrimed = parametersPrimed = false;
         smoothed = {};
+        replacementPhase = ReplacementPhase::steady;
+        replacementGain = 1; replacementStep = 0; replacementRemaining = 0;
+        pendingRestore = 0; observedRestore = appliedRestore;
+        hasProcessed = false;
     }
     void smooth(const CloudsParameters& parameters) noexcept
     {
@@ -376,19 +433,68 @@ struct CloudsEngine::Impl
         smoothed.freeze = target.freeze;
         smoothed.publicationSequence = target.publicationSequence;
     }
-    void process(float& left, float& right, const CloudsParameters& parameters) noexcept
+    void installRecording(const FrozenRecording& saved, std::uint64_t version,
+                          std::uint32_t publication, bool clearPipeline) noexcept
     {
-        if (exchange.restored.generation() != appliedRestore)
+        core.restoreRecording(saved);
+        core.publishRecording(exchange.captured, publication);
+        appliedRestore = version;
+        exchange.applied.store(version, std::memory_order_release);
+        if (clearPipeline)
         {
-            std::uint64_t version = 0;
-            if (exchange.restored.copy(exchange.audioScratch, version, parameters.publicationSequence, true))
+            inputConverter.reset(); outputConverter.reset();
+            fill = 0; outputRead = outputWrite = outputCount = 0;
+            outputPrimed = parametersPrimed = false;
+            smoothed = {};
+        }
+    }
+    void serviceRecordingReplacement(const CloudsParameters& parameters) noexcept
+    {
+        if (exchange.restored.generation() != observedRestore)
+        {
+            std::uint64_t version = 0; bool smoothReplacement = false;
+            if (exchange.restored.copy(exchange.audioScratch, version, parameters.publicationSequence, true, &smoothReplacement))
             {
-                core.restoreRecording(exchange.audioScratch);
-                core.publishRecording(exchange.captured, parameters.publicationSequence);
-                appliedRestore = version;
-                exchange.applied.store(version, std::memory_order_release);
+                observedRestore = version;
+                if (!hasProcessed || (!smoothReplacement && replacementPhase == ReplacementPhase::steady))
+                {
+                    // Keep existing state/clear semantics outside an active
+                    // local import. First audio has no old audible material.
+                    installRecording(exchange.audioScratch, version, parameters.publicationSequence, false);
+                    pendingRestore = 0;
+                    replacementPhase = ReplacementPhase::steady;
+                    replacementGain = 1; replacementStep = 0; replacementRemaining = 0;
+                }
+                else
+                {
+                    // A second immutable scratch keeps the last complete
+                    // pending import intact if a concurrent seqlock copy fails.
+                    exchange.pendingReplacement = exchange.audioScratch;
+                    pendingRestore = version;
+                    if (replacementPhase != ReplacementPhase::fadingOut)
+                    {
+                        replacementPhase = ReplacementPhase::fadingOut;
+                        replacementRemaining = replacementGain > 0 ? replacementFadeSamples : 0;
+                        replacementStep = replacementRemaining > 0 ? -replacementGain / replacementRemaining : 0;
+                    }
+                }
             }
         }
+        if (replacementPhase == ReplacementPhase::fadingOut && replacementRemaining == 0 && pendingRestore != 0
+            && pendingRestore == exchange.restored.generation())
+        {
+            // If a newer publication is still being written or not accepted
+            // by the parameter snapshot, wait at zero instead of installing
+            // superseded material for a fraction of a callback.
+            installRecording(exchange.pendingReplacement, pendingRestore, parameters.publicationSequence, true);
+            pendingRestore = 0;
+            replacementGain = 0; replacementStep = 0;
+            replacementPhase = ReplacementPhase::warmingUp;
+        }
+    }
+    void process(float& left, float& right, const CloudsParameters& parameters) noexcept
+    {
+        serviceRecordingReplacement(parameters);
         inputConverter.push({safeSample(left), safeSample(right)});
         Frame frame;
         while (inputConverter.pop(frame))
@@ -426,6 +532,27 @@ struct CloudsEngine::Impl
             left = std::isfinite(value.l) ? value.l : 0.0f;
             right = std::isfinite(value.r) ? value.r : 0.0f;
         }
+        if (replacementPhase != ReplacementPhase::steady)
+        {
+            if (replacementPhase == ReplacementPhase::warmingUp && outputPrimed)
+            {
+                replacementPhase = ReplacementPhase::fadingIn;
+                replacementRemaining = replacementFadeSamples;
+                replacementStep = 1.0 / replacementFadeSamples;
+            }
+            left = static_cast<float>(left * replacementGain);
+            right = static_cast<float>(right * replacementGain);
+            if (replacementRemaining > 0)
+            {
+                replacementGain = std::clamp(replacementGain + replacementStep, 0.0, 1.0);
+                if (--replacementRemaining == 0)
+                {
+                    replacementGain = replacementPhase == ReplacementPhase::fadingIn ? 1 : 0;
+                    if (replacementPhase == ReplacementPhase::fadingIn) replacementPhase = ReplacementPhase::steady;
+                }
+            }
+        }
+        hasProcessed = true;
     }
     double sampleRate = 48000.0;
     StreamingSrc inputConverter, outputConverter;
@@ -437,7 +564,12 @@ struct CloudsEngine::Impl
     bool outputPrimed = false, parametersPrimed = false;
     CloudsParameters smoothed;
     RecordingExchange& exchange;
-    std::uint64_t appliedRestore = 0;
+    enum class ReplacementPhase { steady, fadingOut, warmingUp, fadingIn };
+    ReplacementPhase replacementPhase = ReplacementPhase::steady;
+    int replacementFadeSamples = 240, replacementRemaining = 0;
+    double replacementGain = 1, replacementStep = 0;
+    bool hasProcessed = false;
+    std::uint64_t appliedRestore = 0, observedRestore = 0, pendingRestore = 0;
 };
 
 CloudsEngine::CloudsEngine() noexcept = default;
@@ -463,12 +595,12 @@ void CloudsEngine::ensureRecordingExchange()
 {
     if (!recordings) recordings = std::make_unique<RecordingExchange>();
 }
-void CloudsEngine::stageFrozenRecording(const FrozenRecordingPtr& saved, std::uint32_t publication)
+void CloudsEngine::stageFrozenRecording(const FrozenRecordingPtr& saved, std::uint32_t publication, bool smoothReplacement)
 {
     if (!recordings && !saved) return;
     ensureRecordingExchange();
     const std::lock_guard<std::mutex> lock(recordings->writerLock);
-    recordings->restored.publish(saved.get(), publication);
+    recordings->restored.publish(saved.get(), publication, smoothReplacement);
 }
 FrozenRecordingPtr CloudsEngine::copyFrozenRecording() const
 {

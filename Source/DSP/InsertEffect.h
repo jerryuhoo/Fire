@@ -327,8 +327,8 @@ public:
     }
     FrozenRecordingPtr copyFrozenRecording() const
     {const std::lock_guard<std::mutex> lock(preparationLock); return cloudsEngine.copyFrozenRecording();}
-    void stageFrozenRecording(const FrozenRecordingPtr& recording, std::uint32_t publication)
-    {const std::lock_guard<std::mutex> lock(preparationLock); cloudsEngine.stageFrozenRecording(recording, publication);}
+    void stageFrozenRecording(const FrozenRecordingPtr& recording, std::uint32_t publication, bool smoothReplacement = false)
+    {const std::lock_guard<std::mutex> lock(preparationLock); cloudsEngine.stageFrozenRecording(recording, publication, smoothReplacement);}
     int getProcessingLatency() const noexcept
     {return currentType == Type::shape && fixedShapeLatencyActive && core ? core->getShapeLatency() : 0;}
     void process(juce::dsp::AudioBlock<float> block, const Parameters& parameters, int offset = 0,

@@ -151,6 +151,9 @@
         <FILE id="parallelChainLayout21" name="ParallelChainParameterLayout.h" compile="0" resource="0" file="Source/Utility/ParallelChainParameterLayout.h"/>
         <FILE id="parallelChainState21" name="ParallelChainStateValidation.h" compile="0" resource="0" file="Source/Utility/ParallelChainStateValidation.h"/>
         <FILE id="parallelChainActions21" name="ParallelChainActions.cpp" compile="1" resource="0" file="Source/Utility/ParallelChainActions.cpp"/>
+        <FILE id="granularMediaActions21" name="GranularMediaActions.cpp" compile="1" resource="0" file="Source/Utility/GranularMediaActions.cpp"/>
+        <FILE id="granularAudioIOHeader21" name="GranularAudioIO.h" compile="0" resource="0" file="Source/Utility/GranularAudioIO.h"/>
+        <FILE id="granularAudioIOSource21" name="GranularAudioIO.cpp" compile="1" resource="0" file="Source/Utility/GranularAudioIO.cpp"/>
         <FILE id="dynamicEqHelper210" name="DynamicEqParameters.h" compile="0" resource="0" file="Source/Utility/DynamicEqParameters.h"/>
         <FILE id="dynamicEqHelper211" name="DynamicEqParameterLayout.h" compile="0" resource="0" file="Source/Utility/DynamicEqParameterLayout.h"/>
         <FILE id="dynamicEqHelper212" name="DynamicEqStateValidation.h" compile="0" resource="0" file="Source/Utility/DynamicEqStateValidation.h"/>
@@ -174,6 +177,8 @@
         <FILE id="chainClipboardUI21" name="ChainClipboardUI.h" compile="0" resource="0" file="Source/GUI/ChainClipboardUI.h"/>
         <FILE id="insertUi1" name="EffectRackNavigation.h" compile="0" resource="0" file="Source/GUI/EffectRackNavigation.h"/>
         <FILE id="insertUi2" name="InsertEffectControls.h" compile="0" resource="0" file="Source/GUI/InsertEffectControls.h"/>
+        <FILE id="granularMediaUi21" name="GranularMediaControls.h" compile="0" resource="0" file="Source/GUI/GranularMediaControls.h"/>
+        <FILE id="granularMediaWorker21" name="GranularMediaWorker.h" compile="0" resource="0" file="Source/GUI/GranularMediaWorker.h"/>
         <FILE id="cACb01" name="ContextAwareComboBox.cpp" compile="1" resource="0"
               file="Source/GUI/ContextAwareComboBox.cpp"/>
         <FILE id="cACb02" name="ContextAwareComboBox.h" compile="0" resource="0"

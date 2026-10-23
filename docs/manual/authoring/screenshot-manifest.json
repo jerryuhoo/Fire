@@ -1,0 +1,168 @@
+{
+  "product_version": "2.1.0 development",
+  "source_commit": "9ea20d2",
+  "captured": "2026-10-24",
+  "figures": [
+    {
+      "file": "images/01-overview-ink.png",
+      "caption": "Fire in Ink: header controls, three frequency bands, workspace tabs, macros and the selected Band chain.",
+      "width": 1600,
+      "height": 800,
+      "sha256": "998267c4c65254850e18fea949f6c8510a9ee1d22979474a8b64834df0afb4b3"
+    },
+    {
+      "file": "images/21-preset-details.png",
+      "caption": "Preset details let you edit descriptive tags and notes; factory edits are local metadata overrides.",
+      "width": 1120,
+      "height": 820,
+      "sha256": "8c35a97199a1bae3b72ed4e68abe5741bf0af292cff8aaf381b42673664b2ae7"
+    },
+    {
+      "file": "images/20-preset-locks.png",
+      "caption": "The preset-lock manager lists available controls. Right-clicking the exact knob is the clearest way to identify which repeated module you are locking.",
+      "width": 1200,
+      "height": 920,
+      "sha256": "e15cc2c84c42939d5b4337c1bf26cf6594680ef3a1269e34417ec8d2294895bb"
+    },
+    {
+      "file": "images/19-preset-library.png",
+      "caption": "Sound Library: the Analog Drive collection contains 36 factory scenes. The star, removal control and pencil operate on library items.",
+      "width": 1600,
+      "height": 800,
+      "sha256": "a02aa04c26e368eca9bf6d197277a5ec9be32a1ca6c43a4ad2f88ba35aa8e17e"
+    },
+    {
+      "file": "images/13-routing-detail.png",
+      "caption": "The Routing panel combines channel selection, Serial/Parallel mode, branch assignment and Blend. Each branch uses the existing chain modules.",
+      "width": 1240,
+      "height": 960,
+      "sha256": "b571d9e29b64c24bec0e322d61a0c349f003799738740488ae325b75a26a19a4"
+    },
+    {
+      "file": "images/04-vintage-tube.png",
+      "caption": "Warm Triode in Vintage: hardware illustration, local Shape controls and the selected band. Tube illumination responds to input level and Drive.",
+      "width": 1600,
+      "height": 800,
+      "sha256": "bf97e52c9e5e03ea34dc540bebf0f94fe5120fd62c250b355b1cbf4897466880"
+    },
+    {
+      "file": "images/06-shape-panel.png",
+      "caption": "A digital Shape page shows its transfer view and asymmetry controls. The graph visualizes a curve, not the complete dynamic behavior of an analog model.",
+      "width": 2361,
+      "height": 621,
+      "sha256": "f4cbbef0177aa568155c72894eddefb97a4a44b9189d83794343ac04fd905c17"
+    },
+    {
+      "file": "images/05-vintage-tape.png",
+      "caption": "Tape Saturation has a moving transport display when processing audio. Its visual motion accompanies the selected model.",
+      "width": 1600,
+      "height": 800,
+      "sha256": "cdc3dd1abec5ebca2ae019fc8d8310cd5d0fafd8e62a0534ae9d9b1c1f6bebd6"
+    },
+    {
+      "file": "images/09-ott-panel.png",
+      "caption": "Master OTT uses the same LIFT / PRESS view as Band OTT. Its input, gain change and dynamic activity come from the selected OTT instance.",
+      "width": 2361,
+      "height": 621,
+      "sha256": "c9e69d82e6b3c8eb0335101dbe6a38b1f7c44520c264b61f244ffe576e0d9560"
+    },
+    {
+      "file": "images/07-master-eq.png",
+      "caption": "Master EQ: spectrum points and the selected point controls. Use the point navigation and type menu to edit the intended filter.",
+      "width": 1600,
+      "height": 800,
+      "sha256": "0ecd720f57d5061aafeaacca5b9bff0fb4658c3f8cc15191b7d389a722fe339b"
+    },
+    {
+      "file": "images/08-dynamic-eq.png",
+      "caption": "Dynamic controls belong to the selected Bell or Shelf point. Range determines the direction and maximum size of the gain movement.",
+      "width": 1080,
+      "height": 540,
+      "sha256": "11f7921966cea410f663e7885c6c08ed27bbfb67d23fa7152aed194e89e6da19"
+    },
+    {
+      "file": "images/10-reverb-panel.png",
+      "caption": "An inserted Reverb offers an algorithm menu and Size, Damping, Pre-delay, Width, Low Cut and Mix.",
+      "width": 2361,
+      "height": 621,
+      "sha256": "42f724c024df856612b0db26804c555bd4f9021ce38535b60116c9a0defcf4e5"
+    },
+    {
+      "file": "images/11-granular-panel.png",
+      "caption": "The expanded Granular page contains the Clouds controls, Freeze and the Sample entry point.",
+      "width": 2361,
+      "height": 621,
+      "sha256": "6a052c7840bbad3b7a6913b28fc87b80667fa6c346610d8d6c4c3f06e25ed1d2"
+    },
+    {
+      "file": "images/12-granular-import.png",
+      "caption": "After choosing a file, Sample previews the selected window and enables Import and Freeze. Normalize is optional and initially off.",
+      "width": 630,
+      "height": 420,
+      "sha256": "3e5f03a3214846f6f23262af3e57c7d55aadbc74787b7d10ea53f9ac057a4707"
+    },
+    {
+      "file": "images/12-granular-sample.png",
+      "caption": "A captured live recording can be exported from Sample. Start, Normalize and Import and Freeze remain unavailable until an import file has been selected.",
+      "width": 1260,
+      "height": 840,
+      "sha256": "6d69914d94d58007b176bd89e09af75fc053707130b5d483fa47eaa118c03ab7"
+    },
+    {
+      "file": "images/15-modulation-matrix.png",
+      "caption": "The matrix shows source, destination and mapping controls. Several rows can target one parameter; their contributions are summed.",
+      "width": 1600,
+      "height": 848,
+      "sha256": "06ce4e4401176f1436d57f10df239800ae6ae423756da84d4dd8609ebac14866"
+    },
+    {
+      "file": "images/14-mod-forge-panel.png",
+      "caption": "Mod Forge with a genuine editable triangle shape. Select an LFO in the rail, edit its curve, then assign destinations.",
+      "width": 2361,
+      "height": 621,
+      "sha256": "eb996444f1d067986c2a92325bf1ba695e45482e2a53d13bb34bf98e2073d001"
+    },
+    {
+      "file": "images/17-lfo-playback.png",
+      "caption": "Playback sets Loop/Retrigger/One-shot, Shape or random waves, MIDI trigger filtering, and the random seed.",
+      "width": 1040,
+      "height": 620,
+      "sha256": "789eaba8701b0dd2a7a3a6222094c5100ddbee63adb5838f38da106b5a1ae4cd"
+    },
+    {
+      "file": "images/16-envelopes-macros.png",
+      "caption": "Each ENV has independent detector input and filtering. This example selects External sidechain; the host must actually route a signal to it.",
+      "width": 1480,
+      "height": 960,
+      "sha256": "2dd0657030e82f9c4fce7c56e9c1476ef1d38e79bf09392883aa8fad8976190b"
+    },
+    {
+      "file": "images/18-midi-controls.png",
+      "caption": "Four MIDI CC slots can be configured explicitly or with Learn. They become modulation sources after the host delivers MIDI to Fire.",
+      "width": 1320,
+      "height": 708,
+      "sha256": "cd0b4710fa43bb13568709a4229e72721d647e9fc7e5757ad45c7e99cb337953"
+    },
+    {
+      "file": "images/22-settings.png",
+      "caption": "Settings provides appearance choices and locally copied diagnostics. This capture is from the documentation test host; your DAW and audio configuration will differ.",
+      "width": 1080,
+      "height": 1280,
+      "sha256": "2a0ba29e6d5a073bf293783e92a771f8c6010d2dbb6e377336d8803c68901816"
+    },
+    {
+      "file": "images/02-overview-paper.png",
+      "caption": "Paper uses a light background and fine-line controls. The processing and stored sound are unchanged.",
+      "width": 1600,
+      "height": 800,
+      "sha256": "289198df11be548a01a5bc45f580a4d08ecf75d8ba87216dd816dac5684e7b2d"
+    },
+    {
+      "file": "images/03-overview-modern.png",
+      "caption": "Modern uses a dark digital interface. Vintage and Ink are illustrated elsewhere in this manual.",
+      "width": 1600,
+      "height": 800,
+      "sha256": "cc5c7bee325f5c8e754180c6662fecdc710ca105dab158cd444a190461b534db"
+    }
+  ]
+}

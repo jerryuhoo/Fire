@@ -175,6 +175,11 @@ state/audio smoke host, are documented in [Validation](docs/releasing/VALIDATION
 
 ## 3. User Manual
 
+The detailed illustrated **Fire 2.1 English User Manual** is available as
+[Markdown](docs/manual/Fire-2.1-User-Manual.md). It covers the current development
+edition, with genuine interface screenshots and step-by-step workflows.
+To export a PDF locally, follow the [authoring instructions](docs/manual/authoring/README.md).
+
 『Fire』has a top panel, a spectrogram, four graph visualizers, band effect, and global effect.
 
 ### 3.1. Top panel

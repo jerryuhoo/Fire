@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include "LookAndFeel.h"
 #include "PrimarySlider.h"
 #include "GranularMediaWorker.h"
@@ -273,7 +274,10 @@ private:
             if(finished->status.failed()){status.setText(finished->status.getErrorMessage(),juce::dontSendNotification);updateButtons();return;}
             if(finished->kind==GranularMediaJob::Kind::inspect)
             {
-                info=finished->info;maximumStartFrame=juce::jmax<juce::int64>(0,info->sourceFrames-static_cast<juce::int64>(std::ceil(granular_io::maximumDuration*info->sampleRate)));
+                info=finished->info;
+                // Keep this scalar: JUCE's explicit jmax template also considers
+                // an unsupported SIMDRegister<long long> overload on Linux x86.
+                maximumStartFrame=std::max(juce::int64{0},info->sourceFrames-static_cast<juce::int64>(std::ceil(granular_io::maximumDuration*info->sampleRate)));
                 updatingStart=true;start.setRange(0,juce::jmax(1./info->sampleRate,maximumStartFrame/info->sampleRate),1./info->sampleRate);start.setValue(0,juce::dontSendNotification);updatingStart=false;
                 infoLabel.setText(sourceFile.getFileName()+" / "+juce::String(info->durationSeconds,3)+" s / "+juce::String(info->sampleRate/1000.,1)+" kHz / "+(info->channels==1?"mono -> stereo":"stereo"),juce::dontSendNotification);
                 decode();

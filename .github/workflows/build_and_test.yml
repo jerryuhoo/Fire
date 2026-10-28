@@ -134,12 +134,32 @@ jobs:
         run: cmake --build ${{ env.BUILD_DIR }} --config ${{ env.BUILD_TYPE }} --parallel 4
 
       - name: Test & Benchmarks
+        id: tests
         working-directory: ${{ env.BUILD_DIR }}
         run: |
+          # Do not publish reports left over from an earlier local/cached run.
+          rm -f test-layout-results.xml test-results.xml Testing/Temporary/LastTest.log Testing/Temporary/LastTestsFailed.log
           # Exercise native GUI rendering first for quick feedback on layout regressions.
           layout_test='^EQ and Drive layouts stay separated in both skins and all supported scales$'
-          ctest --verbose --output-on-failure -R "$layout_test"
-          ctest --verbose --output-on-failure -E "$layout_test"
+          ctest --output-on-failure --output-junit test-layout-results.xml -R "$layout_test"
+          ctest --output-on-failure --output-junit test-results.xml -E "$layout_test"
+
+      - name: Summarize test results
+        if: ${{ !cancelled() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
+        run: python3 tools/validation/report_ctest.py --build-dir "${{ env.BUILD_DIR }}"
+
+      - name: Upload test diagnostics
+        if: ${{ !cancelled() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.name }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            ${{ env.BUILD_DIR }}/test-layout-results.xml
+            ${{ env.BUILD_DIR }}/test-results.xml
+            ${{ env.BUILD_DIR }}/Testing/Temporary/LastTest.log
+            ${{ env.BUILD_DIR }}/Testing/Temporary/LastTestsFailed.log
 
       - name: Read in .env from CMake # see GitHubENV.cmake
         shell: bash

@@ -142,10 +142,44 @@ TEST_CASE("Performance dialogs keep the module rail pitch and close with their e
     Access::open(panel, true); auto midi = Access::dialog(panel, true); REQUIRE(midi);
     Access::select(panel, 1);
     CHECK(Access::dialog(panel, false) == nullptr);
+    CHECK(playback == nullptr);
     CHECK(Access::dialog(panel, true) != nullptr);
     CHECK(panel.getBankRowPitch() == pitch);
     panel.setVisible(false);
     CHECK(Access::dialog(panel, true) == nullptr);
+    CHECK(midi == nullptr);
+}
+
+TEST_CASE("Performance dialogs release processor attachments before owner teardown and reopen after native close",
+          "[performance-ui][ui][lifecycle][regression]")
+{
+    for (const bool midi : {false, true})
+    {
+        CAPTURE(midi);
+        auto processor = std::make_unique<FireAudioProcessor>();
+        auto panel = std::make_unique<LfoPanel>(*processor);
+        panel->setSize(1000, 280); show(*panel);
+        Access::open(*panel, midi);
+        auto first = Access::dialog(*panel, midi);
+        REQUIRE(first != nullptr);
+        juce::Component::SafePointer<juce::Component> firstContent(first->getContentComponent());
+        REQUIRE(firstContent != nullptr);
+        first->closeButtonPressed();
+        Access::open(*panel, midi);
+        CHECK(first == nullptr);
+        CHECK(firstContent == nullptr);
+
+        auto replacement = Access::dialog(*panel, midi);
+        REQUIRE(replacement != nullptr);
+        CHECK(replacement->isShowing());
+        juce::Component::SafePointer<juce::Component> content(replacement->getContentComponent());
+        panel.reset();
+        CHECK(replacement == nullptr);
+        CHECK(content == nullptr);
+        processor.reset();
+        // Pending modal callbacks must not retain content with dead parameters.
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    }
 }
 
 TEST_CASE("Playback and MIDI panels fit all skins and header buttons leave the bank unchanged", "[performance-ui][ui][skin][layout]")

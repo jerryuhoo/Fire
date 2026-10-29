@@ -3914,16 +3914,26 @@ void LfoPanel::dismissTransientInteraction()
 
 void LfoPanel::showPerformanceDialog(bool midi)
 {
+    const juce::Component::SafePointer<LfoPanel> safe(this);
     if (!isShowing() || !isEnabled() || (!midi && currentLfoIndex < 0)) return;
-    auto& existing = midi ? midiDialog : playbackDialog;
-    if (existing) { existing->toFront(true); return; }
+    auto existing = midi ? midiDialog : playbackDialog;
+    if (existing)
+    {
+        if (existing->isShowing() && existing->isCurrentlyModal(false))
+        { existing->toFront(true); return; }
+        // Native close leaves auto-deletion queued. Retire that hidden window
+        // before opening a replacement, while its parameter owner is alive.
+        (midi ? midiDialog : playbackDialog) = nullptr;
+        deleteDialogSynchronously(existing);
+        if (!safe || !isShowing() || !isEnabled() || (!midi && currentLfoIndex < 0)) return;
+    }
+    const auto launchGeneration = selectionGeneration;
     juce::DialogWindow::LaunchOptions options;
     if (midi) options.content.setOwned(new fire::ui::MidiControls(processor));
     else
     {
         const auto expectedSelection = selectionGeneration;
         const int index = currentLfoIndex;
-        const juce::Component::SafePointer<LfoPanel> safe(this);
         options.content.setOwned(new fire::ui::LfoPlaybackControls(processor, index,
             [safe, index, expectedSelection]
             { return safe && safe->isShowing() && safe->isEnabled() && safe->currentLfoIndex == index && safe->selectionGeneration == expectedSelection; }));
@@ -3935,7 +3945,13 @@ void LfoPanel::showPerformanceDialog(bool midi)
     options.escapeKeyTriggersCloseButton = true;
     options.useNativeTitleBar = true;
     options.resizable = false;
-    existing = options.launchAsync();
+    juce::Component::SafePointer<juce::DialogWindow> launched = options.launchAsync();
+    if (!safe || selectionGeneration != launchGeneration || !isShowing() || !isEnabled())
+    {
+        deleteDialogSynchronously(launched);
+        return;
+    }
+    (midi ? midiDialog : playbackDialog) = launched;
 }
 
 void LfoPanel::dismissPerformanceDialogs(bool includeMidi)
@@ -3946,7 +3962,9 @@ void LfoPanel::dismissPerformanceDialogs(bool includeMidi)
     if (playback)
     {
         if (auto* controls = dynamic_cast<fire::ui::LfoPlaybackControls*>(playback->getContentComponent())) controls->dismiss();
-        if (playback) playback->closeButtonPressed();
+        // The content owns parameter attachments and references the processor.
+        // Do not leave its destruction to the modal queue after owner teardown.
+        deleteDialogSynchronously(playback);
     }
     if (!safe || !includeMidi) return;
     auto midi = midiDialog;
@@ -3954,7 +3972,7 @@ void LfoPanel::dismissPerformanceDialogs(bool includeMidi)
     if (midi)
     {
         if (auto* controls = dynamic_cast<fire::ui::MidiControls*>(midi->getContentComponent())) controls->dismiss();
-        if (midi) midi->closeButtonPressed();
+        deleteDialogSynchronously(midi);
     }
 }
 

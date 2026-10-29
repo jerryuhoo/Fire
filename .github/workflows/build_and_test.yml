@@ -139,10 +139,10 @@ jobs:
         run: |
           # Do not publish reports left over from an earlier local/cached run.
           rm -f test-layout-results.xml test-results.xml Testing/Temporary/LastTest.log Testing/Temporary/LastTestsFailed.log
-          # Exercise native GUI rendering first for quick feedback on layout regressions.
-          layout_test='^EQ and Drive layouts stay separated in both skins and all supported scales$'
-          ctest --output-on-failure --output-junit test-layout-results.xml -R "$layout_test"
-          ctest --output-on-failure --output-junit test-results.xml -E "$layout_test"
+          # Check UI teardown and platform-sensitive layouts before the longer DSP/state suite.
+          ui_smoke_tests='^(EQ and Drive layouts stay separated in both skins and all supported scales|Performance dialogs.*|Line meter readouts and scales follow the palette after warming their cache|Preset menu uses editor scale and remains anchored to its button)$'
+          ctest --output-on-failure --output-junit test-layout-results.xml -R "$ui_smoke_tests"
+          ctest --output-on-failure --output-junit test-results.xml -E "$ui_smoke_tests"
 
       - name: Summarize test results
         if: ${{ !cancelled() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}

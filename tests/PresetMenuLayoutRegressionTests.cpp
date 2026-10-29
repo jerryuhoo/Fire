@@ -132,7 +132,23 @@ void checkPresetMenuAtEditorSize(int width, int height, float expectedScale)
     INFO("target screen bounds: " << targetScreenBounds.toString().toStdString());
     INFO("editor screen bounds: " << editor->getScreenBounds().toString().toStdString());
     INFO("display user area: " << userArea.toString().toStdString());
-    CHECK(std::abs(popupScreenBounds.getY() - targetScreenBounds.getBottom()) <= 1);
+    const auto availableArea = userArea.getIntersection(editor->getScreenBounds());
+    REQUIRE_FALSE(availableArea.isEmpty());
+    CHECK(availableArea.expanded(1).contains(popupScreenBounds));
+    CHECK(popupScreenBounds.getX() <= targetScreenBounds.getRight());
+    CHECK(popupScreenBounds.getRight() >= targetScreenBounds.getX());
+    const int spaceBelow = availableArea.getBottom() - targetScreenBounds.getBottom();
+    // A tall 2x menu on a small display must shift upward to remain usable.
+    // Still require exact anchoring when there is room, and bottom-edge
+    // clamping (not arbitrary floating placement) in the constrained case.
+    constexpr int edgeMargin = 32;
+    if (spaceBelow >= popupScreenBounds.getHeight() + edgeMargin)
+        CHECK(std::abs(popupScreenBounds.getY() - targetScreenBounds.getBottom()) <= 1);
+    else
+    {
+        CHECK(popupScreenBounds.getY() <= targetScreenBounds.getBottom() + 1);
+        CHECK(popupScreenBounds.getBottom() >= availableArea.getBottom() - edgeMargin);
+    }
 }
 } // namespace
 

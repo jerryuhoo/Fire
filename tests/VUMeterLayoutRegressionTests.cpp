@@ -221,9 +221,10 @@ void paintMeter(VUMeter& meter)
     meter.paint(graphics);
 }
 
-juce::Image meterSnapshot(juce::Component& component, const juce::String& name = {})
+juce::Image meterSnapshot(juce::Component& component, const juce::String& name = {},
+                         float snapshotScale = 1.0f)
 {
-    auto image = component.createComponentSnapshot(component.getLocalBounds());
+    auto image = component.createComponentSnapshot(component.getLocalBounds(), true, snapshotScale);
     REQUIRE(image.isValid());
     if (const auto* directory = std::getenv("FIRE_METER_PREVIEW_DIR"); directory && name.isNotEmpty())
     {
@@ -309,7 +310,11 @@ TEST_CASE("Line meter readouts and scales follow the palette after warming their
     VUPanel panel(processor);
     panel.setFocusBandNum(-1);
     panel.setSize(420, 340);
-    meterSnapshot(panel);
+    // Tiny 1x glyphs may contain no solid-colour interiors with FreeType's
+    // antialiasing. Keep one physical scale throughout cache warming and skin
+    // switches, and inspect well-resolved glyph interiors rather than coverage.
+    constexpr float snapshotScale = 4.0f;
+    meterSnapshot(panel, {}, snapshotScale);
 
     using fire::ui::Skin;
     for (const auto skin : {Skin::paper, Skin::ink, Skin::paper})
@@ -319,7 +324,7 @@ TEST_CASE("Line meter readouts and scales follow the palette after warming their
         panel.sendLookAndFeelChange();
         VUPanelTestAccess::resetPresentation(panel);
         const auto name = juce::String(fire::ui::skinName(skin)).toLowerCase();
-        meterSnapshot(panel, name + "-levels-idle");
+        meterSnapshot(panel, name + "-levels-idle", snapshotScale);
         MeterValues values;
         values.inputRMS_L = juce::Decibels::decibelsToGain(-18.0f);
         values.inputRMS_R = juce::Decibels::decibelsToGain(-21.0f);
@@ -330,12 +335,14 @@ TEST_CASE("Line meter readouts and scales follow the palette after warming their
         values.outputPeak_L = juce::Decibels::decibelsToGain(-12.0f);
         values.outputPeak_R = juce::Decibels::decibelsToGain(-15.0f);
         VUPanelTestAccess::applyLevels(panel, values);
-        const auto image = meterSnapshot(panel, name + "-levels-active");
+        const auto image = meterSnapshot(panel, name + "-levels-active", snapshotScale);
         const auto& palette = fire::ui::skinPalette(skin);
-        CHECK(countMeterColour(image, VUPanelTestAccess::inputReadoutBounds(panel).toNearestInt(),
-                               palette.accent) >= 10);
-        CHECK(countMeterColour(image, VUPanelTestAccess::scaleBounds(panel).toNearestInt(),
-                               palette.textMuted) >= 10);
+        CHECK(countMeterColour(image, (VUPanelTestAccess::inputReadoutBounds(panel) * snapshotScale).toNearestInt(),
+                               palette.accent) >= 40);
+        // Exclude the zero label, which intentionally uses textPrimary.
+        const auto mutedScaleBounds = VUPanelTestAccess::scaleBounds(panel).withTrimmedTop(12.0f);
+        CHECK(countMeterColour(image, (mutedScaleBounds * snapshotScale).toNearestInt(),
+                               palette.textMuted) >= 40);
         CHECK(VUPanelTestAccess::inputPeakText(panel) == "-6.0");
         CHECK(VUPanelTestAccess::outputPeakText(panel) == "-12.0");
     }

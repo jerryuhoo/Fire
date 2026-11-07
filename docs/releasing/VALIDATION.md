@@ -43,6 +43,30 @@ multi-configuration generators may place it in a configuration subdirectory.
 It does not link Fire's processing implementation, so it exercises the actual
 format wrapper rather than only the shared code.
 
+## CLAP GUI scaling on Windows
+
+The Windows CI also runs `CLAP Windows GUI DPI and resize contract` against
+the built CLAP binary. It embeds the editor in a native Win32 parent and checks
+100%, 125%, 150% and 200% host scales, minimum/adjusted sizes, live scale changes,
+resizing and reopening. The native child client size must match CLAP's reported
+physical pixel size, including when the host accepts `request_resize` without
+calling `set_size` back into the plug-in.
+
+```sh
+ctest --test-dir Builds/Release --output-on-failure -R '^CLAP Windows GUI DPI and resize contract$'
+```
+
+A separate Windows unit regression applies controlled 125%, 150% and 200%
+native peer scales, so duplicate DPI application is caught even on a 100% CI
+desktop. The generated CLAP wrapper pins its peer to 1:1 after attachment and
+refreshes the native bounds; the editor already applies the host scale. Cocoa
+retains its logical-point convention. This backports the mechanism from
+[clap-juce-extensions #183](https://github.com/free-audio/clap-juce-extensions/pull/183)
+for [Fire #101](https://github.com/jerryuhoo/Fire/issues/101), without modifying
+the pinned submodule. Before release, also check Bitwig on Windows at 125%:
+open the editor, resize it, reopen it and move it between differently scaled
+displays. A macOS build cannot establish that native Windows/DAW result.
+
 ## AU and VST3 validation
 
 CI pins [Tracktion pluginval](https://github.com/Tracktion/pluginval) to v1.0.4,

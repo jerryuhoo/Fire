@@ -69,6 +69,7 @@ set(FireClapTailNotification [=[        // process any leftover events
         return CLAP_PROCESS_CONTINUE;]=])
 string(REPLACE "${FireClapTailNotifyPoint}" "${FireClapTailNotification}"
     FireClapWrapper "${FireClapWrapper}")
+include("${CMAKE_CURRENT_LIST_DIR}/ClapGui.cmake")
 set(FireClapGeneratedDir "${CMAKE_CURRENT_BINARY_DIR}/generated/fire-clap")
 file(CONFIGURE OUTPUT "${FireClapGeneratedDir}/clap-juce-wrapper.cpp"
     CONTENT "#include \"Utility/ClapTail.h\"\n${FireClapWrapper}" @ONLY)

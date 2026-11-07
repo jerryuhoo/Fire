@@ -277,6 +277,7 @@
         <FILE id="resParams" name="ResonatorParameters.h" compile="0" resource="0" file="Source/Utility/ResonatorParameters.h"/>
         <FILE id="driveCompParams" name="DriveCompensationParameters.h" compile="0" resource="0" file="Source/Utility/DriveCompensationParameters.h"/>
         <FILE id="clapTail" name="ClapTail.h" compile="0" resource="0" file="Source/Utility/ClapTail.h"/>
+        <FILE id="clapGuiScaling" name="ClapGuiScaling.h" compile="0" resource="0" file="Source/Utility/ClapGuiScaling.h"/>
         <FILE id="moduleOrder1" name="ModuleOrder.h" compile="0" resource="0" file="Source/Utility/ModuleOrder.h"/>
         <FILE id="y9Kac2" name="SampleAccurateCompressor.h" compile="0" resource="0"
               file="Source/DSP/SampleAccurateCompressor.h"/>

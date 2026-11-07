@@ -103,17 +103,41 @@ struct Library
 struct Host
 {
     bool audioThread = false, callbackPending = false;
+#if defined(_WIN32)
+    HWND guiWindow = nullptr;
+    uint32_t requestedWidth = 0, requestedHeight = 0;
+#endif
     clap_host_t api { CLAP_VERSION, this, "Fire CLAP smoke host", "Blue Wings Music",
         "https://www.bluewingsmusic.com/fire.html", "1.0.0", extension,
         [](const clap_host_t*) {}, [](const clap_host_t*) {},
         [](const clap_host_t* h) { self(h).callbackPending = true; } };
     static Host& self(const clap_host_t* h) { return *static_cast<Host*>(h->host_data); }
-    static const void* CLAP_ABI extension(const clap_host_t*, const char* id)
+    static const void* CLAP_ABI extension(const clap_host_t* host, const char* id)
     {
         static const clap_host_thread_check_t threads {
             [](const clap_host_t* h) { return !self(h).audioThread; },
             [](const clap_host_t* h) { return self(h).audioThread; } };
         if (std::strcmp(id, CLAP_EXT_THREAD_CHECK) == 0) return &threads;
+#if defined(_WIN32)
+        static const clap_host_gui_t gui {
+            [](const clap_host_t*) {},
+            [](const clap_host_t* h, uint32_t width, uint32_t height)
+            {
+                auto& state = self(h);
+                state.requestedWidth = width; state.requestedHeight = height;
+                // Accept without calling plugin.set_size(), as CLAP permits.
+                return width > 0 && height > 0 && width <= 16000 && height <= 16000
+                    && SetWindowPos(state.guiWindow, nullptr, 0, 0,
+                        static_cast<int>(width), static_cast<int>(height),
+                        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) != 0;
+            },
+            [](const clap_host_t*) { return true; },
+            [](const clap_host_t*) { return true; },
+            [](const clap_host_t*, bool) {} };
+        if (self(host).guiWindow && std::strcmp(id, CLAP_EXT_GUI) == 0) return &gui;
+#else
+        (void) host;
+#endif
         return nullptr;
     }
     void dispatch(const clap_plugin_t* plugin)
@@ -146,6 +170,102 @@ struct Plugin
         host.dispatch(api);
     }
 };
+
+#if defined(_WIN32)
+void checkGui(const clap_plugin_factory_t* factory, const char* id)
+{
+    struct DpiContext
+    {
+        using Setter = HANDLE (WINAPI*)(HANDLE);
+        Setter setter = reinterpret_cast<Setter>(GetProcAddress(GetModuleHandleW(L"user32.dll"),
+                                                               "SetThreadDpiAwarenessContext"));
+        HANDLE previous = setter ? setter(reinterpret_cast<HANDLE>(static_cast<intptr_t>(-4))) : nullptr;
+        ~DpiContext() { if (setter && previous) setter(previous); }
+    } dpi;
+    require(dpi.previous != nullptr, "per-monitor DPI awareness unavailable");
+    struct ParentWindow
+    {
+        HWND handle = CreateWindowExW(0, L"STATIC", L"Fire CLAP GUI smoke",
+            WS_POPUP | WS_CLIPCHILDREN, 0, 0, 1000, 500, nullptr, nullptr,
+            GetModuleHandleW(nullptr), nullptr);
+        ~ParentWindow() { if (handle) DestroyWindow(handle); }
+    } parent;
+    require(parent.handle != nullptr, "could not create CLAP test parent");
+    Plugin plugin;
+    plugin.host.guiWindow = parent.handle;
+    plugin.create(factory, id);
+    const auto* gui = static_cast<const clap_plugin_gui_t*>(plugin.api->get_extension(plugin.api, CLAP_EXT_GUI));
+    require(gui && gui->is_api_supported(plugin.api, CLAP_WINDOW_API_WIN32, false), "Win32 GUI unavailable");
+    const auto dispatch = [&]
+    {
+        MSG message {};
+        for (int iteration = 0; iteration < 10; ++iteration)
+        {
+            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+            { TranslateMessage(&message); DispatchMessageW(&message); }
+            plugin.host.dispatch(plugin.api);
+            Sleep(1);
+        }
+    };
+    const auto checkNative = [&](uint32_t width, uint32_t height)
+    {
+        dispatch();
+        uint32_t reportedWidth = 0, reportedHeight = 0;
+        require(gui->get_size(plugin.api, &reportedWidth, &reportedHeight)
+            && reportedWidth == width && reportedHeight == height, "GUI size drifted after native attachment/resize");
+        const auto child = GetWindow(parent.handle, GW_CHILD);
+        RECT bounds {};
+        require(child && GetClientRect(child, &bounds), "CLAP native child unavailable");
+        if (bounds.right - bounds.left != static_cast<LONG>(width)
+            || bounds.bottom - bounds.top != static_cast<LONG>(height))
+        {
+            std::cerr << "reported " << width << 'x' << height << ", native "
+                      << bounds.right - bounds.left << 'x' << bounds.bottom - bounds.top << '\n';
+            require(false, "CLAP native client differs from reported physical pixels");
+        }
+    };
+    for (const double initialScale : {1.0, 1.25, 1.5, 2.0})
+    {
+        require(gui->create(plugin.api, CLAP_WINDOW_API_WIN32, false), "CLAP GUI create failed");
+        struct GuiLifetime
+        {
+            const clap_plugin_t* plugin;
+            const clap_plugin_gui_t* gui;
+            ~GuiLifetime() { gui->destroy(plugin); }
+        } lifetime {plugin.api, gui};
+        require(gui->set_scale(plugin.api, initialScale), "initial GUI scale rejected");
+        uint32_t width = 1, height = 1;
+        require(gui->adjust_size(plugin.api, &width, &height), "GUI size adjustment failed");
+        require(width == static_cast<uint32_t>(std::lround(1000 * initialScale))
+            && height == static_cast<uint32_t>(std::lround(500 * initialScale)), "scaled minimum size incorrect");
+        require(gui->set_size(plugin.api, width, height), "initial GUI size rejected");
+        require(SetWindowPos(parent.handle, nullptr, 0, 0, static_cast<int>(width), static_cast<int>(height),
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) != 0, "test parent resize failed");
+        clap_window_t window {}; window.api = CLAP_WINDOW_API_WIN32; window.win32 = parent.handle;
+        require(gui->set_parent(plugin.api, &window) && gui->show(plugin.api), "CLAP GUI attachment failed");
+        checkNative(width, height);
+        for (const double scale : {1.25, 1.5, 2.0, 1.25, 1.0})
+        {
+            require(gui->set_scale(plugin.api, scale), "live GUI scale rejected");
+            width = static_cast<uint32_t>(std::lround(1000 * scale));
+            height = static_cast<uint32_t>(std::lround(500 * scale));
+            require(plugin.host.requestedWidth == width && plugin.host.requestedHeight == height,
+                    "GUI host resize request does not use physical pixels");
+            checkNative(width, height);
+            for (const uint32_t logicalHeight : {600u, 1000u, 500u})
+            {
+                auto w = static_cast<uint32_t>(std::lround(logicalHeight * 2 * scale));
+                auto h = static_cast<uint32_t>(std::lround(logicalHeight * scale));
+                const auto expectedW = w, expectedH = h;
+                require(gui->adjust_size(plugin.api, &w, &h) && w == expectedW && h == expectedH,
+                        "valid fractional-scale size was changed by adjust_size");
+                require(gui->set_size(plugin.api, w, h), "host GUI resize rejected");
+                checkNative(w, h);
+            }
+        }
+    }
+}
+#endif
 
 struct MemoryStream
 {
@@ -332,7 +452,8 @@ int main(int argc, char** argv)
 {
     try
     {
-        require(argc == 3, "usage: FireClapSmoke <plugin.clap> <expected-version>");
+        const bool guiOnly = argc == 4 && std::strcmp(argv[3], "--gui") == 0;
+        require(argc == 3 || guiOnly, "usage: FireClapSmoke <plugin.clap> <expected-version> [--gui]");
         const auto path = absolutePath(argv[1]);
         Library library(path);
         require(library.entry && clap_version_is_compatible(library.entry->clap_version), "missing or incompatible clap_entry");
@@ -342,6 +463,16 @@ int main(int argc, char** argv)
         require(factory && factory->get_plugin_count(factory) == 1, "expected one CLAP plug-in");
         const auto* descriptor = factory->get_plugin_descriptor(factory, 0);
         require(descriptor && std::strcmp(descriptor->version, argv[2]) == 0, "CLAP version differs from VERSION");
+        if (guiOnly)
+        {
+#if defined(_WIN32)
+            checkGui(factory, descriptor->id);
+            std::cout << "CLAP Win32 GUI: physical size, 100/125/150/200% scale, resize and reopen passed\n";
+            return 0;
+#else
+            require(false, "native Win32 GUI validation requires Windows");
+#endif
+        }
         Plugin original;
         original.create(factory, descriptor->id);
         const auto* parameters = static_cast<const clap_plugin_params_t*>(original.api->get_extension(original.api, CLAP_EXT_PARAMS));

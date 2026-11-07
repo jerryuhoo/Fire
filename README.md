@@ -456,6 +456,8 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ### 2.1.0 (in development)
 
+- Fix Windows CLAP editor cropping at fractional display scales such as 125%
+  by avoiding duplicate JUCE 9 native DPI scaling (issue #101).
 - Use the same LIFT / PRESS view and knob arrangement for native Band OTT and
   independently inserted Band / Master OTT, with each insert's own dynamics meters.
 - Import audio into Granular with a selectable start position, waveform preview

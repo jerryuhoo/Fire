@@ -65,6 +65,7 @@ TEST_CASE("CLAP Windows peer uses host pixels once at fractional native DPI",
             CAPTURE(nativeScale, hostScale);
             content.setTransform(juce::AffineTransform::scale(hostScale));
             const auto hostPixels = wrapper.getLocalArea(&content, content.getLocalBounds());
+            const juce::Point<int> expectedSize {hostPixels.getWidth(), hostPixels.getHeight()};
             wrapper.setSize(hostPixels.getWidth(), hostPixels.getHeight());
             peer->setCustomPlatformScaleFactor(nativeScale);
             peer->updateBounds();
@@ -72,11 +73,12 @@ TEST_CASE("CLAP Windows peer uses host pixels once at fractional native DPI",
 
             fire::utility::configureClapPhysicalPixelPeer(wrapper);
             CHECK(peer->getPlatformScaleFactor() == Catch::Approx(1.0));
-            CHECK(clientSize() == hostPixels.getSize());
+            CHECK(clientSize() == expectedSize);
             // Native resize notifications must not reintroduce the old bounds.
             juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
-            CHECK(clientSize() == hostPixels.getSize());
-            CHECK(wrapper.getLocalBounds().getSize() == hostPixels.getSize());
+            CHECK(clientSize() == expectedSize);
+            CHECK(wrapper.getWidth() == expectedSize.x);
+            CHECK(wrapper.getHeight() == expectedSize.y);
         }
     }
 }

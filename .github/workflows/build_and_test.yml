@@ -48,7 +48,7 @@ jobs:
             pluginval-binary: ./pluginval
             extra-flags: -G Ninja
           - name: macOS
-            os: macos-14
+            os: macos-15
             pluginval-binary: pluginval.app/Contents/MacOS/pluginval
             extra-flags: -G Ninja -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
           - name: Windows
@@ -100,7 +100,7 @@ jobs:
         if: ${{ matrix.name == 'macOS' }}
         run: brew install ninja
 
-      # This block can be removed once 15.1 is default (JUCE requires it when building on macOS 14)
+      # Use the newest stable Xcode available on the selected runner image.
       - name: Use latest Xcode on system (macOS)
         if: ${{ matrix.name == 'macOS' }}
         uses: maxim-lobanov/setup-xcode@v1

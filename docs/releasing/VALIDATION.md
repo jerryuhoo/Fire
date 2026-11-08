@@ -21,6 +21,13 @@ stable Xcode on its image. Windows does not upgrade LLVM through Chocolatey
 during job setup. The logs print the actual compiler version for diagnosis.
 Ninja is installed only if it is absent from the Windows/macOS image.
 
+For Windows Clang builds, CMake backports JUCE's
+[WebP intrinsic-header fix](https://github.com/juce-framework/JUCE/commit/46561f27af02bab50bd8c781e39f85db3a98b7d0)
+to the pinned JUCE 9.0.3 revision before configuring `juceaide`. LLVM 19/20 need
+`intrin.h` included before WebP's SSE4.1/AVX2 target attributes. This preserves
+the SIMD kernels and C++23 settings. The patch is idempotent and fails on
+conflicting dependency edits instead of resetting them.
+
 Compiler caching is optional: CI uses an existing `sccache` only when its server
 starts successfully. Otherwise CMake's compiler launchers are explicitly empty
 and the same build and tests run without caching. CI does not download sccache

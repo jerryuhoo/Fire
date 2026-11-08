@@ -51,6 +51,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # The recorded submodule revision pins the tested JUCE release (9.0.3).
 # On Github Actions, this is done as a part of actions/checkout
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake-overrides/JuceCallbackSafety.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake-overrides/JuceWebpClang.cmake")
 add_subdirectory(JUCE)
 
 # Add CLAP format

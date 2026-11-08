@@ -193,23 +193,37 @@ jobs:
           fi
 
       - name: Audio Unit load and state validation
+        id: au_validation
         if: ${{ matrix.name == 'macOS' }}
         run: |
-          # AU hosts instantiate registered components by type/subtype/maker,
-          # even when --validate is given a bundle path. Register this exact
-          # build on the disposable hosted runner before starting pluginval.
+          python3 -m unittest discover -s tools/validation -p 'test_validate_au.py' -v
+          au_log_dir="$RUNNER_TEMP/fire-au-validation"
+          mkdir -p "$au_log_dir"
+          xcrun clang++ -std=c++17 tools/validation/AuRegistryProbe.cpp \
+            -framework AudioToolbox -framework CoreFoundation \
+            -o "$RUNNER_TEMP/fire-au-registry-probe" > "$au_log_dir/probe-build.log" 2>&1
+          # Copying a bundle does not synchronously publish it in the AU registry.
+          # Refresh only this disposable runner user's registrar, then wait for
+          # the exact component identity and version in fresh probe processes.
           installed_au="$HOME/Library/Audio/Plug-Ins/Components/${{ env.PRODUCT_NAME }}.component"
           mkdir -p "$(dirname "$installed_au")"
           ditto "$AU_PATH" "$installed_au"
-          codesign --verify --deep --strict "$installed_au"
-          pluginval.app/Contents/MacOS/pluginval --strictness-level 10 --timeout-ms "${{ env.PLUGINVAL_TIMEOUT_MS }}" --skip-gui-tests --verbose --validate "$installed_au" 2>&1 | tee "$RUNNER_TEMP/fire-au-validation.log"
-          python3 - "$RUNNER_TEMP/fire-au-validation.log" "$VERSION" <<'PY'
-          import pathlib, re, sys
-          log = pathlib.Path(sys.argv[1]).read_text()
-          expected = re.escape("Blue Wings Music: Fire v" + sys.argv[2])
-          if not re.search(r"(?m)^" + expected + r"\s*$", log) or not re.search(r"(?m)^SUCCESS\s*$", log):
-              raise SystemExit("AU validation did not confirm the current build version and success")
-          PY
+          codesign --verify --deep --strict "$installed_au" 2>&1 | tee "$au_log_dir/signature.log"
+          touch "$(dirname "$installed_au")"
+          killall -u "$(id -un)" AudioComponentRegistrar > "$au_log_dir/registrar-refresh.log" 2>&1 || true
+          python3 tools/validation/validate_au.py --bundle "$installed_au" --version "$VERSION" \
+            --probe "$RUNNER_TEMP/fire-au-registry-probe" \
+            --pluginval "pluginval.app/Contents/MacOS/pluginval" --log-dir "$au_log_dir" \
+            --registration-timeout 60 --validation-timeout-ms "${{ env.PLUGINVAL_TIMEOUT_MS }}"
+
+      - name: Upload AU validation diagnostics
+        if: ${{ !cancelled() && (steps.au_validation.outcome == 'success' || steps.au_validation.outcome == 'failure') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: au-validation-macOS
+          retention-days: 14
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/fire-au-validation/
 
       - name: Verify macOS bundle signatures
         if: ${{ matrix.name == 'macOS' }}

@@ -18,6 +18,7 @@ env:
   CMAKE_BUILD_PARALLEL_LEVEL: 3 # Use up to 3 cpus to build juceaide, etc
   HOMEBREW_NO_INSTALL_CLEANUP: 1
   PLUGINVAL_VERSION: v1.0.4
+  PLUGINVAL_SOURCE_REV: ed19c2c16b57a6d94db391bea3ef4a80b769d5bf # v1.0.4, including its pinned JUCE
   # Large parameter banks need time for exhaustive state-restoration checks.
   PLUGINVAL_TIMEOUT_MS: 1800000
   SCCACHE_CACHE_MULTIARCH: 1
@@ -148,36 +149,12 @@ jobs:
           echo "FIRE_COMPILER_LAUNCHER=$compiler_launcher" >> "$GITHUB_ENV"
 
       # Resolve required validation tooling before spending time on the build.
-      - name: Download pluginval
-        shell: bash
+      - name: Prepare pluginval
         run: |
-          archive="pluginval_${{ matrix.name }}.zip"
-          download_options=(--fail --location --retry 2 --retry-delay 5 --retry-max-time 180 --connect-timeout 15 --max-time 90)
-          if ! curl "${download_options[@]}" --output "$archive.part" \
-              "https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_VERSION/$archive"; then
-            echo "::warning::Release download failed; trying GitHub's official release asset API."
-            release_json="$RUNNER_TEMP/pluginval-release.json"
-            curl "${download_options[@]}" --output "$release_json" \
-              "https://api.github.com/repos/Tracktion/pluginval/releases/tags/$PLUGINVAL_VERSION"
-            asset_id="$(python3 - "$release_json" "$PLUGINVAL_VERSION" "$archive" <<'PY'
-          import json, sys
-          with open(sys.argv[1], encoding='utf-8') as source:
-              release = json.load(source)
-          assets = [a for a in release.get('assets', []) if a.get('name') == sys.argv[3]]
-          if release.get('tag_name') != sys.argv[2] or len(assets) != 1:
-              raise SystemExit('Pinned pluginval release/asset not found')
-          asset_id = assets[0].get('id')
-          if type(asset_id) is not int or asset_id <= 0:
-              raise SystemExit('Invalid pluginval asset ID')
-          print(asset_id)
-          PY
-            )"
-            curl "${download_options[@]}" -H 'Accept: application/octet-stream' \
-              --output "$archive.part" \
-              "https://api.github.com/repos/Tracktion/pluginval/releases/assets/$asset_id"
+          if ! bash tools/validation/download_pluginval.sh "${{ matrix.name }}"; then
+            echo "::warning::Binary downloads unavailable; building the pinned pluginval source instead."
+            bash tools/validation/build_pluginval.sh "${{ matrix.name }}"
           fi
-          mv "$archive.part" "$archive"
-          7z x "$archive"
 
       - name: Validate release tag
         if: startsWith(github.ref, 'refs/tags/v')

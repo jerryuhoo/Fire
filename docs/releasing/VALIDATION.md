@@ -27,10 +27,19 @@ and the same build and tests run without caching. CI does not download sccache
 or run its former post-job action. An unavailable cache can increase build time,
 but must not prevent validation. The required, version-pinned pluginval download
 has bounded HTTP retries. If the normal release URL fails, it resolves the exact
-tag and platform asset through GitHub's official release asset API. This step
-runs before compilation so a download outage fails early. A successful download
-is required before extraction and validation; a missing asset or failure of both
-download routes still fails the job.
+tag and platform asset through GitHub's official release asset API. If both
+download routes fail, CI builds pluginval from the pinned v1.0.4 source commit
+`ed19c2c16b57a6d94db391bea3ef4a80b769d5bf` and its recorded JUCE submodule,
+then runs the validator's own tests. It does not substitute Fire's JUCE or skip
+any AU/VST3 checks. This setup runs before Fire's compilation. A source/version
+mismatch, build failure or failed validator self-test still fails the job;
+failed Fire validation never triggers this setup fallback.
+
+The source fallback leaves pluginval's `TestUtilities.cpp` unoptimised so recent
+compilers cannot remove the unused-vector allocations that its allocation
+self-tests deliberately check. This is a per-source CMake build option, not an
+upstream source patch; the rest of pluginval and all Fire targets remain Release
+builds. The validator's complete self-test category must pass before use.
 
 The normal CTest run covers DSP, state, UI regressions and benchmarks, including:
 

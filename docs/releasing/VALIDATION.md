@@ -16,6 +16,22 @@ with the plug-in's minimum deployment target.
 
 ## Tests in CI
 
+Windows uses the hosted runner's preinstalled LLVM, and macOS uses the newest
+stable Xcode on its image. Windows does not upgrade LLVM through Chocolatey
+during job setup. The logs print the actual compiler version for diagnosis.
+Ninja is installed only if it is absent from the Windows/macOS image.
+
+Compiler caching is optional: CI uses an existing `sccache` only when its server
+starts successfully. Otherwise CMake's compiler launchers are explicitly empty
+and the same build and tests run without caching. CI does not download sccache
+or run its former post-job action. An unavailable cache can increase build time,
+but must not prevent validation. The required, version-pinned pluginval download
+has bounded HTTP retries. If the normal release URL fails, it resolves the exact
+tag and platform asset through GitHub's official release asset API. This step
+runs before compilation so a download outage fails early. A successful download
+is required before extraction and validation; a missing asset or failure of both
+download routes still fails the job.
+
 The normal CTest run covers DSP, state, UI regressions and benchmarks, including:
 
 - Stereo spectrum selection, opposite-phase/right-only audio and fresh capture

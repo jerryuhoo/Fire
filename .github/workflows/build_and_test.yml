@@ -20,8 +20,8 @@ env:
   PLUGINVAL_VERSION: v1.0.4
   # Large parameter banks need time for exhaustive state-restoration checks.
   PLUGINVAL_TIMEOUT_MS: 1800000
-  SCCACHE_GHA_ENABLED: true
   SCCACHE_CACHE_MULTIARCH: 1
+  SCCACHE_IGNORE_SERVER_IO_ERROR: 1
   # IPP_DIR is still defined, but the installation step is removed as it was likely broken.
   # If IPP is a hard requirement, you must find a modern way to install it.
   # If it's optional, your CMake should handle its absence gracefully.
@@ -56,10 +56,28 @@ jobs:
             pluginval-binary: ./pluginval.exe
 
     steps:
-      # This is just easier than debugging different compilers on different platforms
-      - name: Set up Clang
-        if: ${{ matrix.name != 'macOS' }}
+      - name: Set up Clang (Linux)
+        if: runner.os == 'Linux'
         uses: egor-tensin/setup-clang@v1
+
+      # The hosted image already includes LLVM. setup-clang upgrades it through
+      # Chocolatey, making every build depend on another large release download.
+      - name: Use preinstalled Clang (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $llvmBin = Join-Path $env:ProgramFiles 'LLVM/bin'
+          foreach ($compiler in @('clang.exe', 'clang++.exe')) {
+            $compilerPath = Join-Path $llvmBin $compiler
+            if (!(Test-Path $compilerPath -PathType Leaf)) {
+              throw "The runner image is missing its preinstalled compiler: $compilerPath"
+            }
+            & $compilerPath --version
+            if ($LASTEXITCODE -ne 0) { throw "Compiler check failed: $compilerPath" }
+          }
+          $llvmBin >> $env:GITHUB_PATH
+          'CC=clang' >> $env:GITHUB_ENV
+          'CXX=clang++' >> $env:GITHUB_ENV
 
       # This also starts up our "fake" display Xvfb, needed for pluginval
       - name: Install JUCE's Linux Deps
@@ -94,11 +112,15 @@ jobs:
 
       - name: Install Ninja (Windows)
         if: runner.os == 'Windows'
-        run: choco install ninja
+        run: |
+          if ! command -v ninja >/dev/null 2>&1; then choco install ninja --yes --no-progress; fi
+          ninja --version
 
       - name: Install macOS Deps
         if: ${{ matrix.name == 'macOS' }}
-        run: brew install ninja
+        run: |
+          if ! command -v ninja >/dev/null 2>&1; then brew install ninja; fi
+          ninja --version
 
       # Use the newest stable Xcode available on the selected runner image.
       - name: Use latest Xcode on system (macOS)
@@ -113,8 +135,49 @@ jobs:
           submodules: recursive
           lfs: true
 
-      - name: Cache the build
-        uses: mozilla-actions/sccache-action@v0.0.9
+      # Caching is optional. Do not download sccache just to start compilation:
+      # an outage must not fail either setup or an action's post-job cleanup.
+      - name: Select available compiler cache
+        run: |
+          compiler_launcher=""
+          if command -v sccache >/dev/null 2>&1 && sccache --start-server; then
+            compiler_launcher="sccache"
+          else
+            echo "::notice::Compiler cache unavailable; building directly with the installed compiler."
+          fi
+          echo "FIRE_COMPILER_LAUNCHER=$compiler_launcher" >> "$GITHUB_ENV"
+
+      # Resolve required validation tooling before spending time on the build.
+      - name: Download pluginval
+        shell: bash
+        run: |
+          archive="pluginval_${{ matrix.name }}.zip"
+          download_options=(--fail --location --retry 2 --retry-delay 5 --retry-max-time 180 --connect-timeout 15 --max-time 90)
+          if ! curl "${download_options[@]}" --output "$archive.part" \
+              "https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_VERSION/$archive"; then
+            echo "::warning::Release download failed; trying GitHub's official release asset API."
+            release_json="$RUNNER_TEMP/pluginval-release.json"
+            curl "${download_options[@]}" --output "$release_json" \
+              "https://api.github.com/repos/Tracktion/pluginval/releases/tags/$PLUGINVAL_VERSION"
+            asset_id="$(python3 - "$release_json" "$PLUGINVAL_VERSION" "$archive" <<'PY'
+          import json, sys
+          with open(sys.argv[1], encoding='utf-8') as source:
+              release = json.load(source)
+          assets = [a for a in release.get('assets', []) if a.get('name') == sys.argv[3]]
+          if release.get('tag_name') != sys.argv[2] or len(assets) != 1:
+              raise SystemExit('Pinned pluginval release/asset not found')
+          asset_id = assets[0].get('id')
+          if type(asset_id) is not int or asset_id <= 0:
+              raise SystemExit('Invalid pluginval asset ID')
+          print(asset_id)
+          PY
+            )"
+            curl "${download_options[@]}" -H 'Accept: application/octet-stream' \
+              --output "$archive.part" \
+              "https://api.github.com/repos/Tracktion/pluginval/releases/assets/$asset_id"
+          fi
+          mv "$archive.part" "$archive"
+          7z x "$archive"
 
       - name: Validate release tag
         if: startsWith(github.ref, 'refs/tags/v')
@@ -127,7 +190,10 @@ jobs:
 
       - name: Configure
         shell: bash
-        run: cmake -B ${{ env.BUILD_DIR }} -G Ninja -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE}} -DFIRE_INSTALL_PLUGINS=OFF -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache .
+        run: |
+          cmake -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DFIRE_INSTALL_PLUGINS=OFF \
+            -DCMAKE_C_COMPILER_LAUNCHER="$FIRE_COMPILER_LAUNCHER" \
+            -DCMAKE_CXX_COMPILER_LAUNCHER="$FIRE_COMPILER_LAUNCHER" .
 
       - name: Build
         shell: bash
@@ -182,8 +248,6 @@ jobs:
       - name: Pluginval
         shell: bash
         run: |
-          curl -LO "https://github.com/Tracktion/pluginval/releases/download/${{ env.PLUGINVAL_VERSION }}/pluginval_${{ matrix.name }}.zip"
-          7z x pluginval_${{ matrix.name }}.zip
           if [ "${{ matrix.name }}" = "macOS" ]; then
             echo "Running pluginval on macOS with --skip-gui-tests"
             ${{ matrix.pluginval-binary }} --strictness-level 10 --timeout-ms "${{ env.PLUGINVAL_TIMEOUT_MS }}" --skip-gui-tests --verbose --validate "${{ env.VST3_PATH }}"

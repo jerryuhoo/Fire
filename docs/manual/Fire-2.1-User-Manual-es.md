@@ -1,10 +1,10 @@
 # Fire 2.1 Manual de usuario
 
-**Español / Edición en desarrollo / 24 de octubre de 2026**
+**Español / Edición estable / 15 de noviembre de 2026**
 
-[English](Fire-2.1-User-Manual.md) | [简体中文](Fire-2.1-User-Manual-zh-CN.md) | [日本語](Fire-2.1-User-Manual-ja.md) | [Français](Fire-2.1-User-Manual-fr.md) | [Español](Fire-2.1-User-Manual-es.md)
+[English](Fire-2.1-User-Manual.md) | [简体中文](Fire-2.1-User-Manual-zh-CN.md) | [繁體中文](Fire-2.1-User-Manual-zh-TW.md) | [日本語](Fire-2.1-User-Manual-ja.md) | [Français](Fire-2.1-User-Manual-fr.md) | [Español](Fire-2.1-User-Manual-es.md)
 
-Instrucciones detalladas con capturas auténticas de la interfaz. Revisión de referencia del producto: `9ea20d2`. Los nombres de los controles y presets se conservan en inglés para facilitar su identificación. El PDF incluye un índice y marcadores que permiten navegar por el documento. Al compartir este Markdown, mantén la carpeta `images` junto al archivo.
+Instrucciones detalladas con capturas auténticas de la interfaz. Versión de referencia: `v2.1.0`. Los nombres de los controles y presets se conservan en inglés para facilitar su identificación. El PDF incluye un índice y marcadores que permiten navegar por el documento. Al compartir este Markdown, mantén la carpeta `images` junto al archivo.
 
 ## Índice
 
@@ -35,7 +35,7 @@ Instrucciones detalladas con capturas auténticas de la interfaz. Revisión de r
 
 ## 01. Primeros pasos
 
-Esta edición describe **Fire 2.1.0 en desarrollo**, incluido el sistema de modulación ampliado, Dynamic EQ, las cadenas paralelas, la importación y exportación de muestras y la visualización unificada de OTT. Se preparó el **24 de octubre de 2026** a partir de la revisión **9ea20d2** del código del producto. Consulta **Menu > Settings** para identificar la versión que ha cargado tu programa anfitrión. La descarga pública puede ofrecer un conjunto de funciones anterior.
+Esta edición describe **Fire 2.1.0**, incluido el sistema de modulación ampliado, Dynamic EQ, las cadenas paralelas, la importación y exportación de muestras y la visualización unificada de OTT. Se actualizó para esta versión el **15 de noviembre de 2026**. Consulta **Menu > Settings** para identificar la versión que ha cargado tu programa anfitrión.
 
 Los ejemplos utilizan capturas auténticas de la interfaz del plugin actual, con audio generado para demostración. Los ajustes de las imágenes son ilustrativos: no son preajustes calibrados ni valores obligatorios. La mayoría de las figuras utilizan Ink; Vintage muestra las visualizaciones de aspecto físico. La apariencia no cambia el sonido.
 
@@ -794,11 +794,11 @@ Estos atajos pertenecen a la interfaz de Fire cuando tiene el foco. La DAW o un 
 
 ### Sobre esta edición y asistencia
 
-Esta es una guía de manejo de la implementación 2.1.0 en desarrollo, no una promesa de que una versión anterior contenga las mismas funciones. Es posible que los preajustes nuevos no se carguen en versiones anteriores de Fire. Conserva copias de los preajustes y proyectos originales importantes antes de trasladar una sesión de producción a otra versión.
+Esta es una guía de manejo de la versión estable 2.1.0, no una promesa de que una versión anterior contenga las mismas funciones. Es posible que los preajustes nuevos no se carguen en versiones anteriores de Fire. Conserva copias de los preajustes y proyectos originales importantes antes de trasladar una sesión de producción a otra versión.
 
 Los módulos nativos/originales y los añadidos de forma independiente a veces tienen distintos intervalos o comportamientos de compatibilidad. Esta guía identifica esas diferencias cuando afectan al uso. Las coloraciones analógicas son modelos y procesadores creativos, no garantías de reproducir exactamente un equipo concreto. Fire no incluye un simulador de pantalla de guitarra y micrófono.
 
-Las capturas se generaron mediante componentes reales del producto, con audio de demostración generado y una biblioteca de preajustes aislada. No contienen sesiones ni interpretaciones grabadas de usuarios. La revisión del código del producto es **9ea20d2**, con la corrección de visualización de OTT de Master e insertado incluida.
+Las capturas se generaron mediante componentes reales del producto, con audio de demostración generado y una biblioteca de preajustes aislada. No contienen sesiones ni interpretaciones grabadas de usuarios. La revisión utilizada para las capturas es **9ea20d2**, con la corrección de visualización de OTT de Master e insertado incluida.
 
 - [Página de producto de Fire](https://www.bluewingsmusic.com/fire.html)
 - [Versiones oficiales y notas de versión](https://github.com/jerryuhoo/Fire/releases)

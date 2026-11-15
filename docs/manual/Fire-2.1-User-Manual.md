@@ -1,10 +1,10 @@
 # Fire 2.1 User Manual
 
-**English / Development edition / 24 October 2026**
+**English / Release edition / 15 November 2026**
 
-[English](Fire-2.1-User-Manual.md) | [简体中文](Fire-2.1-User-Manual-zh-CN.md) | [日本語](Fire-2.1-User-Manual-ja.md) | [Français](Fire-2.1-User-Manual-fr.md) | [Español](Fire-2.1-User-Manual-es.md)
+[English](Fire-2.1-User-Manual.md) | [简体中文](Fire-2.1-User-Manual-zh-CN.md) | [繁體中文](Fire-2.1-User-Manual-zh-TW.md) | [日本語](Fire-2.1-User-Manual-ja.md) | [Français](Fire-2.1-User-Manual-fr.md) | [Español](Fire-2.1-User-Manual-es.md)
 
-Detailed operating instructions with genuine screenshots. Product-source reference: `9ea20d2`. The PDF edition includes a clickable contents page and bookmarks. Keep this Markdown file beside its `images` directory when sharing it.
+Detailed operating instructions with genuine screenshots. Release reference: `v2.1.0`. The PDF edition includes a clickable contents page and bookmarks. Keep this Markdown file beside its `images` directory when sharing it.
 
 ## Contents
 
@@ -35,7 +35,7 @@ Detailed operating instructions with genuine screenshots. Product-source referen
 
 ## 01. Getting started
 
-This edition describes **Fire 2.1.0 in development**, including the extended modulation system, Dynamic EQ, parallel chains, sample import/export, and the unified OTT display. It was prepared on **24 October 2026** against product source **9ea20d2**. Check **Menu > Settings** to identify the version loaded by your host. A public download may have an earlier feature set.
+This edition describes **Fire 2.1.0**, including the extended modulation system, Dynamic EQ, parallel chains, sample import/export, and the unified OTT display. It was updated for this release on **15 November 2026**. Check **Menu > Settings** to identify the version loaded by your host.
 
 The examples use genuine interface captures from the current plug-in, with generated demonstration audio. Screenshots are illustrative settings, not calibrated presets or mandatory values. Most figures use Ink; Vintage illustrates the hardware-style displays. Appearance does not change the sound.
 
@@ -790,11 +790,11 @@ These shortcuts belong to Fire's focused interface. Your DAW or an active text f
 
 ### About this edition and support
 
-This is an operation guide for the 2.1.0 development implementation, not a promise that an earlier release contains the same features. New presets may not load in older Fire versions. Retain copies of important original presets and projects before moving a production session to another version.
+This is an operation guide for the 2.1.0 release, not a promise that an earlier release contains the same features. New presets may not load in older Fire versions. Retain copies of important original presets and projects before moving a production session to another version.
 
 Native/original modules and independently added modules sometimes have different ranges or compatibility behavior. This guide identifies those differences where they affect operation. The analog colours are models and creative processors, not guarantees of an exact named hardware unit. Fire does not include a guitar cabinet/microphone simulator.
 
-The screenshots were rendered by genuine product components using generated demonstration audio and an isolated preset library. They contain no user's session or recorded performance. The product-source reference is **9ea20d2**, with the Master/inserted OTT display correction included.
+The screenshots were rendered by genuine product components using generated demonstration audio and an isolated preset library. They contain no user's session or recorded performance. The screenshot-source reference is **9ea20d2**, with the Master/inserted OTT display correction included.
 
 - [Fire product page](https://www.bluewingsmusic.com/fire.html)
 - [Official releases and release notes](https://github.com/jerryuhoo/Fire/releases)

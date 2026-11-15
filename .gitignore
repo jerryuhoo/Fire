@@ -34,5 +34,5 @@ tests/RegressionOutput
 *.asd
 
 # Exported documentation artifacts (Markdown, images and authoring tools are tracked).
-output/pdf/*.pdf
-output/pdf/*.zip
+output/pdf/
+tmp/pdfs/

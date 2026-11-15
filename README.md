@@ -1,12 +1,14 @@
-# Fire (Version 2.1.0 — in development) [![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
+# Fire (Version 2.1.0) [![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
 
-![Fire 2.0 Vintage skin with a sound-reactive Warm Triode tube and three-band processing](Fire1.png)
+[Download Fire 2.1.0](https://github.com/jerryuhoo/Fire/releases/tag/v2.1.0) · [Release notes](docs/releases/v2.1.0.md) · [User manuals](#3-user-manual)
 
-**Vintage · Amber Triode** — Walnut cabinet, hardware controls and tube filaments that respond to the input level, with Drive adding intensity.
+![Fire 2.1 Vintage skin with a sound-reactive Warm Triode tube and three-band processing](docs/manual/images/04-vintage-tube.png)
 
-![Fire 2.0 Modern skin with Tape Saturation, reel-to-reel hardware and three-band processing](Fire2.png)
+**Vintage · Warm Triode** — Walnut cabinet, hardware controls and tube filaments that respond to the input level, with Drive adding intensity.
 
-**Modern · Studio Tape** — Graphite and aluminium styling with signal-driven tape reels. Four skins share the same DSP and can be selected from **Menu → Skin** or **Settings**.
+![Fire 2.1 Modern skin with three-band processing, four macros and the Band Drive waveform](docs/manual/images/03-overview-modern.png)
+
+**Modern · Band Lab** — A compact spectrum, four named macros and independent effect chains. Four skins share the same DSP and can be selected from **Menu → Skin** or **Settings**.
 
 **Paper / Ink** — Two minimal line-art skins inspired by the Blue Wings portfolio:
 warm paper with dark ink, or the Fire website's blue-black page with warm white
@@ -25,6 +27,15 @@ persists locally and does not alter presets, processing or undo history.
 ## 1. Introduce
 
 [『Fire』](https://www.bluewingsmusic.com/fire.html) is a multiband distortion and modulation effect for AU, VST3 and CLAP hosts. Build independent Band and Master effect chains with analogue distortion colours, dynamics, modulation, delay, reverb and granular processing. Explore 236 factory presets across eleven collections in the full-page sound library, including 36 dedicated Analog Drive scenes.
+
+**New in 2.1:**
+
+- Four independent envelope followers with external sidechain and per-band detection.
+- Multi-source modulation routes, response curves, MIDI CC control and triggered LFO playback.
+- Stereo/Mid/Side processing, serial/parallel chains, module copying and portable chain presets.
+- Per-point Dynamic EQ, Granular audio import/export and consistent live OTT metering.
+- Preset parameter locks, editable library metadata and build/audio diagnostics.
+- Windows CLAP fractional-scale UI fixes and illustrated manuals in six languages.
 
 Demo video:
 
@@ -107,6 +118,9 @@ in `cmake-overrides/juce-9.0.3-callback-safety.patch`. These protect controls
 whose host deletes their editor during a gesture or enablement notification.
 The patch leaves the JUCE commit unchanged, is safe to reapply, and stops with
 an error if the dependency revision or edited source does not match.
+Windows CMake builds using Clang also backport JUCE's WebP intrinsic-header
+compatibility fix, allowing the preinstalled LLVM 19/20 toolchains to build the
+pinned revision without disabling SIMD processing.
 To build plug-in bundles without installing them into the user's plug-in folders:
 
 ```sh
@@ -175,14 +189,21 @@ state/audio smoke host, are documented in [Validation](docs/releasing/VALIDATION
 
 ## 3. User Manual
 
-The detailed illustrated **Fire 2.1 User Manual** is available in
-[English](docs/manual/Fire-2.1-User-Manual.md),
-[简体中文](docs/manual/Fire-2.1-User-Manual-zh-CN.md),
-[日本語](docs/manual/Fire-2.1-User-Manual-ja.md),
-[Français](docs/manual/Fire-2.1-User-Manual-fr.md), and
-[Español](docs/manual/Fire-2.1-User-Manual-es.md). It covers the current development
-edition, with genuine interface screenshots and step-by-step workflows.
-To export a PDF locally, follow the [authoring instructions](docs/manual/authoring/README.md).
+The illustrated **Fire 2.1 User Manual** covers the 2.1.0 release in 22 chapters,
+with genuine interface screenshots, step-by-step workflows and linked PDF contents.
+
+| Language | Read online | Download PDF |
+| --- | --- | --- |
+| English | [Markdown](docs/manual/Fire-2.1-User-Manual.md) | [PDF](https://github.com/jerryuhoo/Fire/releases/download/v2.1.0/Fire-2.1-User-Manual.pdf) |
+| 简体中文 | [Markdown](docs/manual/Fire-2.1-User-Manual-zh-CN.md) | [PDF](https://github.com/jerryuhoo/Fire/releases/download/v2.1.0/Fire-2.1-User-Manual-zh-CN.pdf) |
+| 繁體中文 | [Markdown](docs/manual/Fire-2.1-User-Manual-zh-TW.md) | [PDF](https://github.com/jerryuhoo/Fire/releases/download/v2.1.0/Fire-2.1-User-Manual-zh-TW.pdf) |
+| 日本語 | [Markdown](docs/manual/Fire-2.1-User-Manual-ja.md) | [PDF](https://github.com/jerryuhoo/Fire/releases/download/v2.1.0/Fire-2.1-User-Manual-ja.pdf) |
+| Français | [Markdown](docs/manual/Fire-2.1-User-Manual-fr.md) | [PDF](https://github.com/jerryuhoo/Fire/releases/download/v2.1.0/Fire-2.1-User-Manual-fr.pdf) |
+| Español | [Markdown](docs/manual/Fire-2.1-User-Manual-es.md) | [PDF](https://github.com/jerryuhoo/Fire/releases/download/v2.1.0/Fire-2.1-User-Manual-es.pdf) |
+
+[Download all six manuals and their Markdown/image sources](https://github.com/jerryuhoo/Fire/releases/download/v2.1.0/Fire-2.1-Manuals.zip).
+PDFs are generated as Release assets; only their sources and authoring tools are
+versioned. To rebuild them locally, follow the [authoring instructions](docs/manual/authoring/README.md).
 
 『Fire』has a top panel, a spectrogram, four graph visualizers, band effect, and global effect.
 
@@ -454,7 +475,7 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ## 6. Update Notes
 
-### 2.1.0 (in development)
+### 2.1.0
 
 - Fix Windows CLAP editor cropping at fractional display scales such as 125%
   by avoiding duplicate JUCE 9 native DPI scaling (issue #101).
@@ -485,8 +506,10 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 - Add multi-source modulation, per-route offset ranges, response curves and
   macro-controlled depth, with combined knob feedback and expanded matrix rows.
 - Preserve older single-source presets and append no changes to their parameter IDs.
+- Publish complete illustrated PDF and Markdown manuals in English, Simplified
+  Chinese, Traditional Chinese, Japanese, French and Spanish.
 
-### 2.0.1 (unreleased)
+Additional improvements since 2.0.0, included in 2.1.0:
 
 - Add stereo-aware spectrum modes and avoid unnecessary display collection when
   the editor is closed.
@@ -500,7 +523,7 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 - Validate CLAP loading, audio and fresh-instance state restoration in CI,
   alongside AU and VST3 plug-in validation. Remove a timing-dependent UI test.
 - Add an opt-in Developer ID/notarization workflow while preserving the default
-  ad-hoc build. Version 2.0.0 remains available as the current public release.
+  ad-hoc build. Each release states the signing status of its macOS packages.
 
 ### 2.0.0
 

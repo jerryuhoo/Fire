@@ -3,9 +3,39 @@
 The canonical English text is `../Fire-2.1-User-Manual.md`. Image paths are
 relative to that file. `build_pdf.py` uses the same Markdown to produce
 `output/pdf/Fire-2.1-User-Manual.pdf` from the repository root.
-Complete translations use the suffixes `-zh-CN`, `-ja`, `-fr`, and `-es` for
-Simplified Chinese, Japanese, French, and Spanish. All five editions share the
+Complete translations use the suffixes `-zh-CN`, `-zh-TW`, `-ja`, `-fr`, and `-es` for
+Simplified Chinese, Traditional Chinese, Japanese, French, and Spanish. All six editions share the
 same genuine screenshots and retain English UI labels for reference.
+
+## Release bundle
+
+Use Python 3.12 and the pinned dependencies to build all six PDFs and a ZIP
+containing the PDFs, Markdown, screenshots and font licenses:
+
+```sh
+python3 -m pip install -r docs/manual/authoring/requirements.txt
+python3 docs/manual/authoring/build_release_manuals.py
+```
+
+The release builder downloads Noto Sans SC, TC and JP from the immutable Google
+Fonts revision recorded in `fonts.json`, verifies each SHA-256, and creates static
+Regular/Bold faces with the pinned fonttools version. The same fonts and package
+versions are used locally and on Linux CI. Font binaries stay in `tmp/pdfs/fonts`;
+they are not committed. Optional `--font-dir` and `--output-dir` arguments select
+other cache and export directories.
+
+Before packaging, every edition must have chapters 01-22, all 23 screenshot
+references, valid contents links, matching release metadata, readable PDF text
+and working chapter bookmarks. The builder emits `manual-validation.json` with
+page counts and PDF hashes. Visual inspection is still required before release.
+
+The Actions `User manuals` job uploads the exports as `Fire-User-Manuals`.
+The tag release job requires that job and all platform builds to succeed. It
+rejects missing/duplicate packages or languages and requires the standalone PDFs
+to match the copies and hashes in the manual ZIP. The final assets include
+`SHA256SUMS.txt`. The workflow creates a draft release; inspect the uploaded
+packages and manuals before publishing it as the stable release. PDFs and
+export bundles remain outside Git.
 
 ## PDF
 
@@ -14,6 +44,7 @@ Install `reportlab` and `Pillow` in your Python environment, then run:
 ```sh
 python3 docs/manual/authoring/build_pdf.py
 python3 docs/manual/authoring/build_pdf.py --language zh-CN
+python3 docs/manual/authoring/build_pdf.py --language zh-TW
 python3 docs/manual/authoring/build_pdf.py --language fr
 python3 docs/manual/authoring/build_pdf.py --language es
 python3 docs/manual/authoring/build_pdf.py --language ja \
@@ -22,8 +53,9 @@ python3 docs/manual/authoring/build_pdf.py --language ja \
 ```
 
 The PDF embeds the ReportLab-distributed Vera text fonts and uses standard
-Courier for code. The Chinese edition embeds subsets of macOS's STHeiti SC
-Light and Medium fonts (collection face 1) and uses Chinese text wrapping.
+Courier for code. A standalone Chinese export on macOS defaults to STHeiti
+Light and Medium: face 1 for Simplified Chinese, face 0 for Traditional Chinese.
+Both use Chinese text wrapping. Release exports use the pinned Noto fonts above.
 On another system, supply embeddable Chinese TrueType fonts with
 `--cjk-regular /path/to/regular.ttf --cjk-bold /path/to/bold.ttf --cjk-index 0`.
 The Japanese edition uses Japanese glyphs from Noto Sans JP Regular and Bold.
@@ -98,8 +130,10 @@ full-window/detail variants are retained in `images/` for future documentation.
 
 ## Edition and validation
 
-- Product source: `9ea20d2` (Fire 2.1.0 development edition).
-- Prepared: 24 October 2026.
+- Manual edition: Fire 2.1.0 release, updated 15 November 2026.
+- Screenshot source: `9ea20d2`, captured 24 October 2026. These genuine captures
+  remain applicable to the release; their original provenance is retained in
+  `screenshot-manifest.json`.
 - Scope: 22 chapters, all current effect families, extended modulation,
   parallel/Mid-Side routing, state/library operations and sample import/export.
 - Source review distinguished original and independently inserted module

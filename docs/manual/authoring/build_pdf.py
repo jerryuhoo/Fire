@@ -17,9 +17,9 @@ import reportlab.lib.textsplit as textsplit
 import reportlab.platypus.paragraph as paragraph_layout
 from PIL import Image as PILImage
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
@@ -46,7 +46,7 @@ LANGUAGE = 'en'
 
 
 def is_cjk():
-    return LANGUAGE in ('zh-CN', 'ja')
+    return LANGUAGE in ('zh-CN', 'zh-TW', 'ja')
 
 
 def script_value(western, east_asian):
@@ -71,7 +71,7 @@ def register_fonts(cjk_regular=None, cjk_bold=None, cjk_index=None):
                              'with embeddable Japanese TrueType fonts (e.g. Noto Sans JP).')
         regular = cjk_regular or Path('/System/Library/Fonts/STHeiti Light.ttc')
         bold = cjk_bold or Path('/System/Library/Fonts/STHeiti Medium.ttc')
-        index = (0 if LANGUAGE == 'ja' else 1) if cjk_index is None else cjk_index
+        index = (1 if LANGUAGE == 'zh-CN' else 0) if cjk_index is None else cjk_index
         for path in (regular, bold):
             if not path.is_file():
                 raise FileNotFoundError(
@@ -444,7 +444,7 @@ def main():
     parser.add_argument('--output', type=Path)
     parser.add_argument('--cjk-regular', type=Path, help='Embeddable Chinese/Japanese TrueType font or collection')
     parser.add_argument('--cjk-bold', type=Path, help='Embeddable Chinese/Japanese bold TrueType font or collection')
-    parser.add_argument('--cjk-index', type=int, help='Collection face index (default: Chinese 1, Japanese 0)')
+    parser.add_argument('--cjk-index', type=int, help='Collection face index (default: Simplified Chinese 1, Traditional Chinese/Japanese 0)')
     args = parser.parse_args()
     LANGUAGE = args.language
     stem = 'Fire-2.1-User-Manual' + ('' if LANGUAGE == 'en' else f'-{LANGUAGE}')

@@ -334,7 +334,7 @@ readable.
 - **Drive**:『Fire』 has several distortion functions, with **Gain Comp**, **Safe** and **Extreme** controls.
   - **Gain Comp**: Estimates a level reduction from the audible Drive gain while keeping Output independent. The amount appears beside the Drive control. Older projects retain **Legacy Link** until explicitly upgraded.
   - **Safe**: If your drive knob pushes your volume too loud, it will automatically reduce your drive value. It also shows reduced value on drive knob.
-  - **Extreme**: It expands the range of the the drive knob (from around +40db to around +60db) when it is enabled to give more distortion.
+  - **Extreme**: It increases the gain available from the same Drive setting while preserving a zero-gain starting point. Begin at a low Drive value when enabling it; Safe may reduce the gain actually applied.
 - **Retification and bias**: Change your distortion shape.
 - **Compressor**: You can change threshold, ratio, attack, and release for each band.
 - **Stereo**: Change audio width and pan.

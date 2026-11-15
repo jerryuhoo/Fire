@@ -65,7 +65,7 @@
  #define JucePlugin_IsSynth                0
 #endif
 #ifndef  JucePlugin_WantsMidiInput
- #define JucePlugin_WantsMidiInput         0
+ #define JucePlugin_WantsMidiInput         1
 #endif
 #ifndef  JucePlugin_ProducesMidiOutput
  #define JucePlugin_ProducesMidiOutput     0
@@ -77,13 +77,13 @@
  #define JucePlugin_EditorRequiresKeyboardFocus  0
 #endif
 #ifndef  JucePlugin_Version
- #define JucePlugin_Version                2.0.0
+ #define JucePlugin_Version                2.1.0
 #endif
 #ifndef  JucePlugin_VersionCode
- #define JucePlugin_VersionCode            0x20000
+ #define JucePlugin_VersionCode            0x20100
 #endif
 #ifndef  JucePlugin_VersionString
- #define JucePlugin_VersionString          "2.0.0"
+ #define JucePlugin_VersionString          "2.1.0"
 #endif
 #ifndef  JucePlugin_VSTUniqueID
  #define JucePlugin_VSTUniqueID            JucePlugin_PluginCode

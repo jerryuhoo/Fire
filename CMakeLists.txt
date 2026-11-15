@@ -51,6 +51,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # The recorded submodule revision pins the tested JUCE release (9.0.3).
 # On Github Actions, this is done as a part of actions/checkout
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake-overrides/JuceCallbackSafety.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake-overrides/JuceWebpClang.cmake")
 add_subdirectory(JUCE)
 
 # Add CLAP format
@@ -70,6 +71,10 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_CONFIGURATION_TYPES)
 endif ()
 option(FIRE_INSTALL_PLUGINS "Copy compiled plug-ins to the user's plug-in folders" ${FIRE_INSTALL_PLUGINS_DEFAULT})
 juce_add_plugin("${PROJECT_NAME}"
+    NEEDS_MIDI_INPUT TRUE
+    # Keep the published AU component identity while enabling MIDI for hosts
+    # which deliver it to audio effects (VST3/CLAP always expose the input).
+    AU_MAIN_TYPE kAudioUnitType_Effect
     # Icons for the standalone app
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/packaging/icon.png"
 
@@ -347,3 +352,9 @@ else ()
         COMMAND FireClapSmoke "$<TARGET_FILE:Fire_CLAP>" "${CURRENT_VERSION}")
 endif ()
 set_tests_properties("CLAP load, audio and state roundtrip" PROPERTIES TIMEOUT 120)
+if (WIN32)
+    target_link_libraries(FireClapSmoke PRIVATE user32)
+    add_test(NAME "CLAP Windows GUI DPI and resize contract"
+        COMMAND FireClapSmoke "$<TARGET_FILE:Fire_CLAP>" "${CURRENT_VERSION}" --gui)
+    set_tests_properties("CLAP Windows GUI DPI and resize contract" PROPERTIES TIMEOUT 120)
+endif ()

@@ -20,6 +20,14 @@ TEST_CASE("Factory library offers 236 complete scenes in eleven collections with
     FireAudioProcessor processor;
     CHECK(fire::factory::presetCount == 236);
     REQUIRE(processor.statePresets.getNumFactoryPresets() == fire::factory::presetCount);
+    // Generating the library must use default Stereo rather than inheriting
+    // the currently auditioned chain modes, and must not change that sound.
+    for (int scope = 0; scope < fire::channel_mode::parameterCount; ++scope)
+    {
+        auto* parameter = processor.treeState.getParameter(fire::channel_mode::parameterID(scope));
+        REQUIRE(parameter);
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(1 + scope % 2)));
+    }
     juce::MemoryBlock before, after;
     processor.getStateInformation(before);
     juce::StringArray keys, categories;
@@ -30,6 +38,30 @@ TEST_CASE("Factory library offers 236 complete scenes in eleven collections with
         auto presets = fire::factory::create(processor, index); REQUIRE(presets.size() == 1);
         const auto& preset = *presets.front();
         CHECK(state::canLoadStateFromXml(preset, processor));
+        CHECK(preset.getIntAttribute("channelModeSchemaVersion") == fire::channel_mode::schemaVersion);
+        CHECK(preset.getIntAttribute("midiModulationSchemaVersion") == fire::midi_mod::schemaVersion);
+        CHECK(preset.getIntAttribute("lfoPlaybackSchemaVersion") == fire::lfo_playback::schemaVersion);
+        CHECK(preset.getIntAttribute("dynamicEqSchemaVersion") == fire::dynamic_eq::schemaVersion);
+        CHECK(preset.getIntAttribute("parallelChainSchemaVersion")==fire::parallel_chain::schemaVersion);
+        int dynamicFields=0;
+        for(const auto& attribute:preset.getAttributeIterator())
+            if(fire::dynamic_eq::isParameterID(attribute.name.toString()))
+            {++dynamicFields;CHECK(static_cast<float>(attribute.value.getDoubleValue())==processor.treeState.getParameter(attribute.name.toString())->getDefaultValue());}
+        CHECK(dynamicFields==fire::dynamic_eq::parameterCount);
+        for(const auto& id:fire::parallel_chain::parameterIDs())
+        {REQUIRE(preset.hasAttribute(id));CHECK(static_cast<float>(preset.getDoubleAttribute(id))==processor.treeState.getParameter(id)->getDefaultValue());}
+        for(const auto* ids:{&fire::midi_mod::parameterIDs(),&fire::lfo_playback::parameterIDs()})
+            for(const auto& id:*ids)
+            {
+                REQUIRE(preset.hasAttribute(id));
+                CHECK(static_cast<float>(preset.getDoubleAttribute(id)) == processor.treeState.getParameter(id)->getDefaultValue());
+            }
+        for (int scope = 0; scope < fire::channel_mode::parameterCount; ++scope)
+        {
+            const auto id = fire::channel_mode::parameterID(scope);
+            REQUIRE(preset.hasAttribute(id));
+            CHECK(preset.getDoubleAttribute(id) == 0.0);
+        }
         CHECK(preset.getStringAttribute("presetDescription").isNotEmpty());
         CHECK(preset.getStringAttribute("presetKey").startsWith("@factory/"));
         keys.add(preset.getStringAttribute("presetKey"));

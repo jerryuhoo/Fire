@@ -590,11 +590,29 @@ TEST_CASE("Production control panels wire graph zoom into their live layouts",
         analysisButton->triggerClick();
 
         auto graphs = directGraphs(panel);
-        REQUIRE(graphs.size() == 3);
-        REQUIRE(std::all_of(graphs.begin(), graphs.end(),
+        REQUIRE(graphs.size() == 4);
+        // The inserted OTT view is a direct graph child, but Analysis still
+        // presents only its waveform, levels and stereo graphs.
+        REQUIRE(std::count_if(graphs.begin(), graphs.end(), [](const auto* graph)
+        {
+            return dynamic_cast<const OttGraph*>(graph) != nullptr;
+        }) == 1);
+        std::vector<GraphTemplate*> analysisGraphs;
+        GraphTemplate* ottGraph = nullptr;
+        for (auto* graph : graphs)
+        {
+            if (dynamic_cast<OttGraph*>(graph) != nullptr)
+                ottGraph = graph;
+            else
+                analysisGraphs.push_back(graph);
+        }
+        REQUIRE(ottGraph != nullptr);
+        CHECK_FALSE(ottGraph->isVisible());
+        REQUIRE(analysisGraphs.size() == 3);
+        REQUIRE(std::all_of(analysisGraphs.begin(), analysisGraphs.end(),
                             [](const auto* graph) { return graph->isShowing(); }));
-        auto* graph = graphs.front();
-        auto* preHiddenSibling = graphs.back();
+        auto* graph = analysisGraphs.front();
+        auto* preHiddenSibling = analysisGraphs.back();
         preHiddenSibling->setVisible(false);
         const auto normalBounds = graph->getBounds();
         const auto normalStates = captureDirectComponentStates(panel);
@@ -606,8 +624,9 @@ TEST_CASE("Production control panels wire graph zoom into their live layouts",
         CHECK(std::count_if(graphs.begin(), graphs.end(),
                             [](const auto* candidate) { return candidate->isShowing(); })
               == 1);
-        CHECK_FALSE(graphs[1]->isVisible());
+        CHECK_FALSE(analysisGraphs[1]->isVisible());
         CHECK_FALSE(preHiddenSibling->isVisible());
+        CHECK_FALSE(ottGraph->isVisible());
 
         auto* handler = graph->getAccessibilityHandler();
         REQUIRE(handler != nullptr);

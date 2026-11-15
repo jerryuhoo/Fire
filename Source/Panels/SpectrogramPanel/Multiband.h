@@ -23,6 +23,7 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
@@ -49,6 +50,7 @@ public:
     void clearOttSpectrum();
     fire::ui::OttSpectrumProfile getOttSpectrum(int band) const;
     float getOttCentroid(int band) const;
+    std::pair<float, float> getBandFrequencyRange(int band) const;
     int getOttInteractionDirection(int band) const;
     void setOttKnobInteraction(int band, int direction);
     void mouseEnter(const juce::MouseEvent& event) override;

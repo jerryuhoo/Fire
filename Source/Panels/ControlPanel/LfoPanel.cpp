@@ -3,6 +3,8 @@
 #include "../../GUI/FireIcons.h"
 #include "../../DSP/LfoShapeGenerator.h"
 #include "../../GUI/FireTheme.h"
+#include "../../GUI/LfoPlaybackControls.h"
+#include "../../GUI/MidiControls.h"
 #include "../../PluginProcessor.h"
 
 #include <utility>
@@ -3007,6 +3009,16 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     for (auto* knob : {&rateSlider, &lfoSmoothSlider, &lfoPhaseSlider})
         knob->getProperties().set("fireOrdinaryKnob", true);
     toolbarReady = true;
+    addAndMakeVisible(playbackSettingsButton);
+    playbackSettingsButton.setComponentID("lfo_playback_settings");
+    playbackSettingsButton.setTitle("LFO playback settings");
+    playbackSettingsButton.setTooltip("Playback mode, seeded random motion and MIDI triggering for the selected LFO");
+    playbackSettingsButton.onClick = [this] { showPerformanceDialog(false); };
+    addAndMakeVisible(midiControlsButton);
+    midiControlsButton.setComponentID("midi_controls");
+    midiControlsButton.setTitle("MIDI modulation controls");
+    midiControlsButton.setTooltip("Configure and learn four MIDI CC modulation sources");
+    midiControlsButton.onClick = [this] { showPerformanceDialog(true); };
     refreshBank(true);
     updateToolbarAppearance();
 
@@ -3019,6 +3031,7 @@ LfoPanel::~LfoPanel()
     // still send its matching endGesture to the host.
     dismissTransientInteraction();
     dismissModulationMatrixDialog();
+    dismissPerformanceDialogs(true);
 
     // Remove listeners from all buttons styled with styleButton()
     for (auto& button : lfoSelectButtons)
@@ -3150,6 +3163,13 @@ void LfoPanel::lookAndFeelChanged()
             fire::ui::setSkin(*content, fire::ui::skinFor(*this));
             content->sendLookAndFeelChange();
         }
+    for (auto window : {playbackDialog, midiDialog})
+        if (window)
+            if (auto* content = window->getContentComponent())
+            {
+                fire::ui::setSkin(*content, fire::ui::skinFor(*this));
+                content->sendLookAndFeelChange();
+            }
     repaint();
 }
 
@@ -3211,7 +3231,8 @@ void LfoPanel::paintChrome(juce::Graphics& g) const
     g.setFont(line ? fire::ui::portfolioMonoFont(juce::jlimit(9.5f,18.0f,bankTitle.getHeight()*.44f)).withExtraKerningFactor(.035f)
                    : fire::ui::labelFont(juce::jlimit(10.0f,20.0f,bankTitle.getHeight()*.46f)));
     g.drawText("LFO BANK", bankTitle.withTrimmedRight(juce::roundToInt(25 * scale)), juce::Justification::centredLeft);
-    drawPlainTitle(centerColumnArea, "SHAPE FORGE");
+    drawPlainTitle(centerColumnArea, presentedWaveMode == fire::lfo_playback::randomHold ? "STORED SHAPE / RANDOM HOLD ACTIVE"
+        : presentedWaveMode == fire::lfo_playback::randomGlide ? "STORED SHAPE / RANDOM GLIDE ACTIVE" : "SHAPE FORGE");
     drawPlainTitle(rightColumnArea, "MOTION");
 
     if (! separatorLine.isEmpty())
@@ -3290,6 +3311,11 @@ void LfoPanel::resized()
     leftColumnArea = mainArea.removeFromLeft(leftWidth);
     mainArea.removeFromLeft(gap);
     rightColumnArea = mainArea.removeFromRight(rightWidth);
+    auto motionHeader = rightColumnArea.reduced(juce::roundToInt(8 * uiScale), 0).withHeight(juce::roundToInt(21 * uiScale));
+    motionHeader.translate(0, juce::roundToInt(5 * uiScale));
+    midiControlsButton.setBounds(motionHeader.removeFromRight(juce::roundToInt(46 * uiScale)));
+    motionHeader.removeFromRight(juce::roundToInt(6 * uiScale));
+    playbackSettingsButton.setBounds(motionHeader.removeFromRight(juce::roundToInt(76 * uiScale)));
     mainArea.removeFromRight(gap);
     centerColumnArea = mainArea;
 
@@ -3495,6 +3521,7 @@ void LfoPanel::animationTick(float deltaSeconds)
         if (remove.advanceAnimation(deltaSeconds)) remove.repaint();
     }
     if (currentLfoIndex < 0) return;
+    updatePlaybackSummary();
     updateFlowPresentation(deltaSeconds);
 }
 
@@ -3556,6 +3583,7 @@ void LfoPanel::updateAssignLabelVisibility()
 
 void LfoPanel::updateToolbarAppearance()
 {
+    updatePlaybackSummary();
     const auto accent = currentLfoIndex >= 0 ? fire::ui::lfoBankColour(currentLfoIndex) : fire::ui::colours::modulation;
     for (auto* button : {&matrixButton, &syncButton, &assignButton, &editModeButton, &brushModeButton})
         button->setColour(juce::TextButton::textColourOnId, accent);
@@ -3569,6 +3597,27 @@ void LfoPanel::updateToolbarAppearance()
     assignButton.setHelpText(help);
     updateAssignLabelVisibility();
     assignButton.repaint();
+}
+
+void LfoPanel::updatePlaybackSummary()
+{
+    if (currentLfoIndex < 0) return;
+    const auto read = [this](int field)
+    { return juce::roundToInt(processor.treeState.getRawParameterValue(fire::lfo_playback::parameterID(currentLfoIndex, field))->load()); };
+    const int wave = read(fire::lfo_playback::waveMode), mode = read(fire::lfo_playback::playMode);
+    if (wave == presentedWaveMode && mode == presentedPlayMode) return;
+    presentedWaveMode = wave; presentedPlayMode = mode;
+    const auto waveName = fire::lfo_playback::waveModeNames()[wave];
+    playbackSettingsButton.setTooltip(waveName + " / " + fire::lfo_playback::playModeNames()[mode]
+        + ". Open playback, random seed and MIDI trigger settings.");
+    playbackSettingsButton.setHelpText(playbackSettingsButton.getTooltip());
+    const bool random = wave != fire::lfo_playback::shape;
+    lfoEditor.setTitle(random ? "Stored shape; " + waveName + " output active" : "LFO shape editor");
+    lfoEditor.setHelpText(random ? "Random output is active. Editing this stored curve and Smooth only affects Shape output when you switch back."
+                                : "Edit the active LFO shape.");
+    lfoSmoothSlider.setTooltip("Smooth the stored LFO shape. Shape and Smooth only affect Shape output, not Random Hold or Random Glide.");
+    lfoSmoothSlider.setHelpText(lfoSmoothSlider.getTooltip());
+    chromeCache = {}; repaint();
 }
 
 void LfoPanel::showAssignArmed(int lfoIndex)
@@ -3712,6 +3761,8 @@ void LfoPanel::setLfo(int newIndex)
     }
     gridYSlider.setEnabled(newIndex >= 0);
     if (! contextCurrent()) return;
+    playbackSettingsButton.setEnabled(newIndex >= 0);
+    if (! contextCurrent()) return;
     lfoEditor.setVisible(newIndex >= 0);
     if (! contextCurrent()) return;
     emptyBankLabel.setVisible(newIndex < 0);
@@ -3787,6 +3838,12 @@ void LfoPanel::dismissTransientInteraction()
     resetFlowPresentation();
 
     ++selectionGeneration;
+    dismissPerformanceDialogs(false);
+    if (!safeThis) return;
+    playbackSettingsButton.dismissPointerGesture();
+    if (!safeThis) return;
+    midiControlsButton.dismissPointerGesture();
+    if (!safeThis) return;
     addLfoButton.dismissPointerGesture();
     if (! safeThis) return;
     for (auto& remove : removeLfoButtons)
@@ -3855,6 +3912,70 @@ void LfoPanel::dismissTransientInteraction()
     lfoPhaseSlider.dismissTransientInteraction();
 }
 
+void LfoPanel::showPerformanceDialog(bool midi)
+{
+    const juce::Component::SafePointer<LfoPanel> safe(this);
+    if (!isShowing() || !isEnabled() || (!midi && currentLfoIndex < 0)) return;
+    auto existing = midi ? midiDialog : playbackDialog;
+    if (existing)
+    {
+        if (existing->isShowing() && existing->isCurrentlyModal(false))
+        { existing->toFront(true); return; }
+        // Native close leaves auto-deletion queued. Retire that hidden window
+        // before opening a replacement, while its parameter owner is alive.
+        (midi ? midiDialog : playbackDialog) = nullptr;
+        deleteDialogSynchronously(existing);
+        if (!safe || !isShowing() || !isEnabled() || (!midi && currentLfoIndex < 0)) return;
+    }
+    const auto launchGeneration = selectionGeneration;
+    juce::DialogWindow::LaunchOptions options;
+    if (midi) options.content.setOwned(new fire::ui::MidiControls(processor));
+    else
+    {
+        const auto expectedSelection = selectionGeneration;
+        const int index = currentLfoIndex;
+        options.content.setOwned(new fire::ui::LfoPlaybackControls(processor, index,
+            [safe, index, expectedSelection]
+            { return safe && safe->isShowing() && safe->isEnabled() && safe->currentLfoIndex == index && safe->selectionGeneration == expectedSelection; }));
+    }
+    fire::ui::setSkin(*options.content, fire::ui::skinFor(*this));
+    options.content->sendLookAndFeelChange();
+    options.dialogTitle = midi ? "MIDI Controls" : "LFO " + juce::String(currentLfoIndex + 1) + " Playback";
+    options.dialogBackgroundColour = fire::ui::paletteFor(*this).canvas;
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar = true;
+    options.resizable = false;
+    juce::Component::SafePointer<juce::DialogWindow> launched = options.launchAsync();
+    if (!safe || selectionGeneration != launchGeneration || !isShowing() || !isEnabled())
+    {
+        deleteDialogSynchronously(launched);
+        return;
+    }
+    (midi ? midiDialog : playbackDialog) = launched;
+}
+
+void LfoPanel::dismissPerformanceDialogs(bool includeMidi)
+{
+    const juce::Component::SafePointer<LfoPanel> safe(this);
+    auto playback = playbackDialog;
+    playbackDialog = nullptr;
+    if (playback)
+    {
+        if (auto* controls = dynamic_cast<fire::ui::LfoPlaybackControls*>(playback->getContentComponent())) controls->dismiss();
+        // The content owns parameter attachments and references the processor.
+        // Do not leave its destruction to the modal queue after owner teardown.
+        deleteDialogSynchronously(playback);
+    }
+    if (!safe || !includeMidi) return;
+    auto midi = midiDialog;
+    midiDialog = nullptr;
+    if (midi)
+    {
+        if (auto* controls = dynamic_cast<fire::ui::MidiControls*>(midi->getContentComponent())) controls->dismiss();
+        deleteDialogSynchronously(midi);
+    }
+}
+
 void LfoPanel::configureModulationMatrixDialog(
     juce::DialogWindow::LaunchOptions& launchOptions)
 {
@@ -3914,6 +4035,16 @@ void LfoPanel::configureModulationMatrixDialogResizeLimits(
                                 minimumDialogHeight,
                                 juce::jmax(4096, minimumDialogWidth),
                                 juce::jmax(4096, minimumDialogHeight));
+}
+
+void LfoPanel::openModulationMatrixForTarget(const juce::String& parameterID)
+{
+    const juce::Component::SafePointer<LfoPanel> safe(this);
+    const auto target = parameterID;
+    showModulationMatrixDialog();
+    if (!safe) return;
+    if (auto* dialog = modulationMatrixDialog.getComponent())
+        if (auto* matrix = dynamic_cast<ModulationMatrixPanel*>(dialog->getContentComponent())) matrix->focusTarget(target);
 }
 
 void LfoPanel::showModulationMatrixDialog()
@@ -4026,6 +4157,7 @@ void LfoPanel::visibilityChanged()
             return;
 
         dismissModulationMatrixDialog();
+        if (safeThis) dismissPerformanceDialogs(true);
     }
 }
 
@@ -4041,6 +4173,7 @@ void LfoPanel::enablementChanged()
 
         if (safeThis != nullptr)
             dismissModulationMatrixDialog();
+        if (safeThis) dismissPerformanceDialogs(true);
     }
 }
 

@@ -18,6 +18,10 @@
 #include "LfoEngine.h"
 #include "ModulationRouting.h"
 #include "AuxiliaryModulation.h"
+#include "EnvelopeDetectors.h"
+#include "LfoPerformanceClock.h"
+#include "../Utility/LfoPlaybackParameters.h"
+#include "../Utility/MidiModulationParameters.h"
 #include "../Utility/LfoBankParameters.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include <array>
@@ -25,11 +29,12 @@
 #include <cstdint>
 #include <memory>
 #include <functional>
+#include <optional>
 
-class LfoManager
+class LfoManager : private juce::AudioProcessorValueTreeState::Listener
 {
 public:
-    static constexpr int maximumModulationRoutings = 128;
+    static constexpr int maximumModulationRoutings = fire::mod_sources::maximumRoutings;
 
     enum class AssignmentResult
     {
@@ -40,6 +45,7 @@ public:
     };
 
     LfoManager(juce::AudioProcessorValueTreeState& apvts);
+    ~LfoManager() override;
     std::function<void()> onStateEdited;
 
     void prepare(const juce::dsp::ProcessSpec& spec);
@@ -69,10 +75,17 @@ public:
             float smoothness = 0.0f;
             bool present = false;
             std::uint32_t generation = 0;
+            std::uint32_t performanceGeneration = 0;
+            fire::lfo_playback::Config playback;
         };
 
         std::array<Parameters, fire::lfo_bank::capacity> lfos {};
+        fire::midi_mod::Bank midiCC {};
+        std::uint32_t midiGeneration = 0;
         fire::dsp::AuxiliaryModulation::Parameters auxiliary = fire::mod_sources::defaults;
+        fire::envelope_params::Bank envelopes {};
+        int envelopeBandCount = 1;
+        std::array<float, 3> envelopeCrossovers {200, 2000, 6000};
         AudioThreadParameterSnapshot()
         {
             for (int index = 0; index < fire::lfo_bank::defaultCount; ++index)
@@ -143,6 +156,7 @@ public:
         int sourceLfoIndex = -1;
         float depth = 0.0f;
         bool isBipolar = true;
+        bool signalIsOffset = false;
     };
 
     /** Looks up the active route, or the candidate during a two-phase capture.
@@ -245,6 +259,25 @@ public:
     bool isModulationSourcePresent(int index) const noexcept
     { return fire::mod_sources::isAuxiliary(index) || isLfoPresent(index); }
     void setAudioInput(const juce::AudioBuffer<float>* input) noexcept { audioInput = input; }
+    void setMidiInput(const juce::MidiBuffer* input, int baseOffset = 0) noexcept
+    { midiInput = input; midiBaseOffset = juce::jmax(0, baseOffset); }
+    bool requestLfoTrigger(int index, std::uint32_t expectedGeneration) noexcept;
+    // M5 performance identity, distinct from legacy shape/phase slot generation.
+    std::uint32_t getLfoSlotGeneration(int index) const noexcept;
+    struct MidiLearnResult { int slot = -1, number = -1, channel = 0; float value = 0; };
+    std::uint64_t beginMidiLearn(int slot) noexcept;
+    void cancelMidiLearn(std::uint64_t token) noexcept;
+    bool isMidiLearnActive(std::uint64_t token) const noexcept
+    { return token != 0 && midiLearnOwner.load(std::memory_order_acquire) == token; }
+    std::optional<MidiLearnResult> pollMidiLearn(std::uint64_t token) noexcept;
+    float getMidiCCValue(int slot) const noexcept;
+    void stageMidiCCInitialValue(int slot, int number, int channel, float value) noexcept;
+    void setExternalAudioInput(const juce::AudioBuffer<float>* input, int offset = 0) noexcept
+    { externalAudioInput = input; externalAudioInputOffset = juce::jmax(0, offset); }
+    // Caller-owned prepared output, valid only during render. Unlike the
+    // envelope level, this carries the actual filtered stereo detector audio.
+    void setEnvelopeAuditionOutput(juce::AudioBuffer<float>* target, int envelopeIndex) noexcept
+    { envelopeAuditionOutput = target; auditionEnvelopeIndex = envelopeIndex; }
     struct VisualState
     {
         float phase = -1.0f;
@@ -272,6 +305,7 @@ public:
     bool toggleBypassForRouting(const juce::String& targetParameterID);
     juce::CriticalSection& getLfoDataLock() { return dataAccessLock; }
 private:
+    void parameterChanged(const juce::String& parameterID, float value) override;
     struct LfoParameterPointers
     {
         std::atomic<float>* syncMode = nullptr;
@@ -280,6 +314,7 @@ private:
         std::atomic<float>* phaseOffset = nullptr;
         std::atomic<float>* smoothness = nullptr;
         std::atomic<float>* present = nullptr;
+        std::array<std::atomic<float>*, fire::lfo_playback::fieldCount> playback {};
     };
 
     struct RuntimeRouting
@@ -289,6 +324,27 @@ private:
         float depth = 0.0f;
         bool isBipolar = true;
         float normalisedBaseValue = 0.0f;
+        bool customRange = false;
+        float rangeStart = 0.0f, rangeEnd = 1.0f;
+        int curve = 0, depthMacro = -1;
+        int targetSlot = -1;
+        ModulationRouting mapping() const noexcept;
+        bool sameMapping(const RuntimeRouting&) const noexcept;
+    };
+    struct RuntimeTarget
+    {
+        juce::RangedAudioParameter* parameter = nullptr;
+        int firstRoute = -1, routeCount = 0;
+        bool aggregate = false;
+        std::uint64_t configuration = 0;
+    };
+    struct AggregateTransition
+    {
+        juce::RangedAudioParameter* parameter = nullptr;
+        std::uint64_t configuration = 0;
+        float lastOffset = 0.0f, anchor = 0.0f;
+        int remaining = 0;
+        bool initialised = false;
     };
 
     struct RuntimeModulatedValue
@@ -305,7 +361,9 @@ private:
         juce::AudioPlayHead* playHead,
         int numSamples,
         const AudioThreadParameterSnapshot& parameterSnapshot,
-        juce::int64 playheadSampleOffset);
+        juce::int64 playheadSampleOffset,
+        int midiRangeOffset);
+    void renderMidiCC(int samples, int midiRangeOffset, const fire::midi_mod::Bank&, std::uint32_t generation) noexcept;
     void renderBlock(juce::AudioBuffer<float>& outputBuffer,
                      float sampleRate,
                      juce::AudioPlayHead* playHead,
@@ -315,7 +373,12 @@ private:
                      juce::int64 playheadSampleOffset);
     bool captureRuntimeRoutings(
         std::array<RuntimeRouting, maximumModulationRoutings>& destination,
-        size_t& destinationCount) const;
+        size_t& destinationCount,
+        std::array<RuntimeTarget, maximumModulationRoutings>& targets,
+        std::array<int, maximumModulationRoutings>& activeSlots,
+        size_t& activeCount) const;
+    void commitRuntimeTargets() noexcept;
+    void renderAggregateSignals(int samples, const AudioThreadParameterSnapshot&) noexcept;
     bool refreshRuntimeStateIfAvailable();
     void updatePublishedRoutingState() noexcept;
     void publishVisualState(const AudioThreadParameterSnapshot* parameters) noexcept;
@@ -335,10 +398,37 @@ private:
     std::unique_ptr<EngineBank> engineStorage = std::make_unique<EngineBank>();
     EngineBank& lfoEngines = *engineStorage;
     std::array<LfoParameterPointers, fire::lfo_bank::capacity> lfoParameters;
+    std::array<fire::lfo_performance::PerformanceClock, fire::lfo_bank::capacity> performanceClocks;
+    std::array<std::atomic<std::uint32_t>, fire::lfo_bank::capacity> performanceGenerations {};
+    std::array<std::uint32_t, fire::lfo_bank::capacity> appliedPerformanceGenerations {};
+    std::array<bool, fire::lfo_bank::capacity> advancedPlaybackActive {};
+    std::array<std::atomic<std::uint64_t>, fire::lfo_bank::capacity> manualRequests {};
+    std::array<std::uint64_t, fire::lfo_bank::capacity> consumedManualRequests {};
+    std::array<std::uint32_t, fire::lfo_bank::capacity> manualCounts {};
+    std::array<std::array<std::atomic<float>*, fire::midi_mod::fieldCount>, fire::midi_mod::count> midiParameters {};
+    std::array<std::array<juce::String, fire::midi_mod::fieldCount>, fire::midi_mod::count> midiParameterIDs;
+    std::array<std::atomic<std::uint32_t>, fire::midi_mod::count> midiConfigurationGenerations {};
+    fire::midi_mod::Bank activeMidiConfig {};
+    std::atomic<std::uint32_t> midiStateGeneration {0};
+    std::uint32_t appliedMidiGeneration = 0;
+    std::array<juce::SmoothedValue<float>, fire::midi_mod::count> midiValues;
+    std::array<std::atomic<std::uint64_t>, fire::midi_mod::count> midiInitialValues {};
+    const juce::MidiBuffer* midiInput = nullptr;
+    int midiBaseOffset = 0;
+    juce::MidiBuffer emptyMidiInput;
+    std::atomic<std::uint64_t> midiLearnCounter {0}, midiLearnOwner {0}, midiLearnRequest {0}, midiLearnResult {0};
     std::array<std::atomic<float>*, fire::mod_sources::parameterCount> auxiliaryParameters{};
+    std::array<std::array<std::atomic<float>*, fire::envelope_params::fieldCount>, fire::envelope_params::count> envelopeParameters{};
+    std::atomic<float>* envelopeBandCountParameter = nullptr;
+    std::array<std::atomic<float>*, 3> envelopeCrossoverParameters {};
     fire::dsp::AuxiliaryModulation auxiliary;
+    fire::dsp::EnvelopeDetectors envelopeDetectors;
     const juce::AudioBuffer<float>* audioInput = nullptr;
-    std::array<std::atomic<float>, 5> auxiliaryLevels{};
+    const juce::AudioBuffer<float>* externalAudioInput = nullptr;
+    int externalAudioInputOffset = 0;
+    juce::AudioBuffer<float>* envelopeAuditionOutput = nullptr;
+    int auditionEnvelopeIndex = -1;
+    std::array<std::atomic<float>, fire::mod_sources::sourceCount - fire::mod_sources::envelope> auxiliaryLevels{};
     std::array<juce::String, fire::lfo_bank::capacity> smoothnessParameterIDs;
     std::vector<LfoData> lfoData;
     std::array<std::uint64_t, fire::lfo_bank::capacity> lfoDataRevisions {};
@@ -359,7 +449,15 @@ private:
     // Fixed-capacity, audio-thread-owned snapshots avoid per-block allocation and UI lock waits.
     std::array<RuntimeRouting, maximumModulationRoutings> runtimeRoutings {};
     std::array<RuntimeRouting, maximumModulationRoutings> candidateRuntimeRoutings {};
+    std::array<RuntimeTarget, maximumModulationRoutings> runtimeTargets {}, candidateRuntimeTargets {};
+    // Dense lookup lists point into stable target slots. Removing an earlier
+    // target must not renumber a surviving aggregate signal channel.
+    std::array<int, maximumModulationRoutings> runtimeActiveTargetSlots {}, candidateActiveTargetSlots {};
+    size_t runtimeActiveTargetCount = 0, candidateActiveTargetCount = 0;
+    std::array<AggregateTransition, maximumModulationRoutings> aggregateTransitions {};
+    int aggregateTransitionSamples = 882;
     std::array<RuntimeModulatedValue, maximumModulationRoutings> modulatedValues {};
+    friend struct MultiSourceModulationTestAccess;
     size_t runtimeRoutingCount = 0;
     size_t candidateRuntimeRoutingCount = 0;
     size_t modulatedValueCount = 0;

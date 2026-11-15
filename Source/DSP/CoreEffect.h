@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EqProcessor.h"
+#include "OttProcessor.h"
 #include <juce_dsp/juce_dsp.h>
 #include <memory>
 
@@ -19,18 +20,23 @@ public:
         int source = -1;
         bool bipolar = true;
         const float* signal = nullptr;
+        bool signalIsOffset = false;
     };
     struct EqNode
     {
         eq::NodeState state;
         std::array<EqControl, 3> controls;
         std::uint32_t generation = 0;
+        dynamic_eq::Configuration dynamic;
     };
     CoreEffect();
     ~CoreEffect();
     void prepare(const juce::dsp::ProcessSpec&);
     void reset() noexcept;
     int getShapeLatency() const noexcept;
+    /** Audio thread only. */
+    dynamic_eq::VisualState getDynamicEqVisualState(int node) const noexcept;
+    OttProcessor::VisualState getOttVisualState() const noexcept;
     void process(juce::dsp::AudioBlock<float>, Type,
                  const std::array<ModulatedValueProvider, 6>&, bool normalised,
                  int offset, const std::array<int, 6>*,

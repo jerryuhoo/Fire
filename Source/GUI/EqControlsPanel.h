@@ -5,6 +5,7 @@
 #include "ContextAwareComboBox.h"
 #include "ModulatableSlider.h"
 #include "PrimaryButton.h"
+#include "DynamicEqControls.h"
 
 // Only the selected point's controls are presented. Slots keep their parameter
 // identity when other points are removed; the navigation uses visible ordinals.
@@ -23,6 +24,11 @@ public:
         addAndMakeVisible(powerButton);
         addAndMakeVisible(typeMenu);
         addAndMakeVisible(slopeMenu);
+        addAndMakeVisible(dynamicButton);
+        dynamicButton.setButtonText("Dynamic");dynamicButton.setTitle("Dynamic EQ settings for selected point");
+        dynamicButton.setTooltip("Open dynamic EQ for Bell and Shelf points. Negative Range cuts and positive Range boosts above Threshold.");
+        dynamicButton.setComponentID("eq_dynamic_settings");
+        dynamicButton.onClick=[safe=juce::Component::SafePointer<EqControlsPanel>(this)] {if(safe)safe->showDynamics();};
         addButton.setButtonText("+");
         addButton.setTitle("Add EQ point");
         addButton.setTooltip("Add a bell point. You can also double-click the spectrum.");
@@ -127,6 +133,13 @@ public:
         refresh();
     }
     int getSelectedNode() const noexcept { return selected; }
+    void lookAndFeelChanged() override
+    {
+        if(auto callout=dynamicPopover)
+            for(auto* child:callout->getChildren())
+                if(auto* body=dynamic_cast<fire::ui::DynamicEqControls*>(child))
+                {fire::ui::setSkin(*body,fire::ui::skinFor(*this));body->sendLookAndFeelChange();body->styleCallout(*callout);}
+    }
     void setScale(float next)
     {
         if (juce::approximatelyEqual(scale, next)) return;
@@ -156,6 +169,9 @@ public:
     {
         ++generation;
         const juce::Component::SafePointer<EqControlsPanel> safe(this);
+        closeDynamics();if(!safe)return;
+        dynamicButton.dismissPointerGesture();if(!safe)return;
+        dynamicPresentation.reset();
         typeMenu.dismissTransientInteraction();
         if (! safe) return;
         slopeMenu.dismissTransientInteraction();
@@ -182,8 +198,20 @@ public:
     {
         if (! isShowing()) return;
         const juce::Component::SafePointer<EqControlsPanel> safe(this);
+        if(dynamicPopover && !dynamicPopover->isVisible()) {closeDynamics();if(!safe)return;}
         refresh();
         if (! safe) return;
+        if(selected>=0)
+        {
+            const auto state=processor.getEqNodeState(selected,fxScope,fxSlot);
+            dynamicPresentation.update(processor.getDynamicEqVisualState(selected,fxScope,fxSlot),state.gainDb,seconds);
+            const auto* parameter=processor.treeState.getRawParameterValue(fire::dynamic_eq::parameterID(fxSlot<0?0:fxScope,fxSlot,selected,fire::dynamic_eq::enabled));
+            const bool enabled=parameter && parameter->load()>.5f && fire::dynamic_eq::supports(state.type);
+            const auto text=enabled ? "Dynamic "+fire::ui::dynamicGainText(dynamicPresentation.gainChangeDb) : juce::String("Dynamic");
+            if(dynamicButton.getButtonText()!=text)dynamicButton.setButtonText(text);
+            dynamicButton.setToggleState(enabled,juce::dontSendNotification);
+            if(!safe)return;
+        }
         for (auto& dot : navigation) dot.advance(seconds);
     }
     void refresh()
@@ -267,6 +295,7 @@ public:
         if (! safe) return;
         slopeMenu.setVisible(selected >= 0);
         if (! safe) return;
+        dynamicButton.setVisible(selected>=0);if(!safe)return;
         if (selected >= 0)
         {
             const auto index = static_cast<size_t>(selected);
@@ -277,6 +306,9 @@ public:
             powerButton.setToggleState(! bypassed, juce::dontSendNotification);
             powerButton.setTitle("EQ point " + juce::String(navigation[static_cast<size_t>(selected)].ordinal) + " power");
             const bool cut = type == 1 || type == 2;
+            const bool dynamicSupported=fire::dynamic_eq::supports(static_cast<fire::eq::Type>(type));
+            if(!dynamicSupported && dynamicPopover) {closeDynamics();if(!safe)return;}
+            dynamicButton.setEnabled(dynamicSupported);if(!safe)return;
             slopeMenu.setEnabled(cut);
             if (! safe) return;
             auto* gain = knobs[static_cast<size_t>(selected)][1];
@@ -324,6 +356,8 @@ public:
         addButton.setBounds(actions.removeFromRight(buttonWidth));
         actions.removeFromLeft(juce::roundToInt(78 * scale));
         powerButton.setBounds(actions.removeFromLeft(buttonWidth));
+        actions.removeFromLeft(juce::roundToInt(8*scale));
+        dynamicButton.setBounds(actions.removeFromLeft(juce::jmin(actions.getWidth(),juce::roundToInt(116*scale))));
 
         int count = 0;
         for (bool enabled : present) if (enabled) ++count;
@@ -399,6 +433,46 @@ public:
         return true;
     }
 private:
+    friend struct DynamicEqUiTestAccess;
+    void showDynamics()
+    {
+        if(!isShowing() || !isEnabled() || selected<0 || !dynamicButton.isEnabled())return;
+        const juce::Component::SafePointer<EqControlsPanel> safe(this);
+        if(dynamicPopover)
+        {
+            const bool showing=dynamicPopover->isVisible();closeDynamics();
+            if(!safe || showing)return;
+        }
+        const int node=selected,scope=fxScope,slot=fxSlot;
+        const auto generationAtOpen=interactionGeneration(),revision=processor.getChainEditRevision();
+        auto body=std::make_unique<fire::ui::DynamicEqControls>(processor,node,scope,slot,[safe,node,scope,slot,generationAtOpen,revision]
+        {return safe && safe->isShowing() && safe->isEnabled() && safe->selected==node && safe->fxScope==scope && safe->fxSlot==slot
+            && safe->interactionGeneration()==generationAtOpen && safe->processor.getChainEditRevision()==revision
+            && (slot<0 || safe->processor.getInsertEffectType(scope,slot)==fire::effects::Type::eq);});
+        fire::ui::setSkin(*body,fire::ui::skinFor(*this));body->sendLookAndFeelChange();
+        // Own a standalone CallOutBox and its content explicitly. JUCE's
+        // launchAsynchronously() returns an embedded member of its modal
+        // callback and cannot be synchronously deleted by this panel.
+        auto session=std::make_unique<DynamicSession>();session->content=std::move(body);
+        auto* parent=getTopLevelComponent();
+        session->callout=std::make_unique<juce::CallOutBox>(*session->content,
+            parent->getLocalArea(&dynamicButton,dynamicButton.getLocalBounds()),parent);
+        if(!safe)return;
+        session->content->styleCallout(*session->callout);
+        session->callout->setDismissalMouseClicksAreAlwaysConsumed(true);
+        dynamicPopover=session->callout.get();dynamicSession=std::move(session);
+        dynamicPopover->enterModalState(true,nullptr,false);
+    }
+    void closeDynamics()
+    {
+        auto session=std::move(dynamicSession);dynamicPopover=nullptr;
+        if(session && session->callout)
+        {
+            session->callout->exitModalState(0);
+            session->callout->setVisible(false);
+            session->callout->setLookAndFeel(nullptr);
+        }
+    }
     class PointButton final : public PrimaryTextButton
     {
     public:
@@ -481,6 +555,15 @@ private:
     std::array<std::atomic<float>*, capacity> presentParameters {}, typeParameters {}, bypassParameters {};
     std::array<juce::RangedAudioParameter*, capacity> presentParameterObjects {};
     PrimaryTextButton addButton, removeButton;
+    PrimaryTextButton dynamicButton;
+    struct DynamicSession
+    {
+        std::unique_ptr<fire::ui::DynamicEqControls> content;
+        std::unique_ptr<juce::CallOutBox> callout; // Destroy before its referenced content/LookAndFeel.
+    };
+    std::unique_ptr<DynamicSession> dynamicSession;
+    juce::Component::SafePointer<juce::CallOutBox> dynamicPopover;
+    fire::ui::DynamicEqPresentation dynamicPresentation;
     PrimaryToggleButton powerButton;
     ContextAwareComboBox typeMenu, slopeMenu;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> typeAttachment, slopeAttachment;

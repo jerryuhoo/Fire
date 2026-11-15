@@ -9,6 +9,7 @@
 */
 
 #include "ModulatableSlider.h"
+#include "PresetLockGlyph.h"
 #include "LookAndFeel.h"
 #include "OttVisuals.h"
 #include <cmath>
@@ -263,6 +264,13 @@ juce::Rectangle<int> ModulatableSlider::getValueDisplayBounds() const
 
 void ModulatableSlider::paintOverChildren(juce::Graphics& g)
 {
+    if (isPresetLocked)
+    {
+        const float size = 10.0f * getUiScale();
+        const auto valueArea = getValueDisplayBounds().toFloat();
+        fire::ui::drawPresetLock(g, {2.0f * getUiScale(), juce::jmax(0.f, valueArea.getY() - size - 3.f), size, size},
+                                 fire::ui::paletteFor(*this).textSecondary);
+    }
     if (getTextBoxPosition() != juce::Slider::NoTextBox)
         return;
 
@@ -454,6 +462,12 @@ void ModulatableSlider::mouseDoubleClick(const juce::MouseEvent& event)
         && getModulationHandleHitBounds().contains(
             event.getPosition().toFloat()))
     {
+        if(needsMatrixEditing())
+        {
+            auto callback=onEditModulationRequested;const auto target=parameterID;
+            if(callback) callback(target);
+            return;
+        }
         repaint();
         auto callback = onModulationReset;
         if (callback)
@@ -555,6 +569,15 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
     // while the pointer is already over the modulation handle.
     if (isOnModulationHandle)
     {
+        if(needsMatrixEditing())
+        {
+            // Reuse the assignment gesture's double-click suppression: opening
+            // the matrix must not turn the following release into a knob edit.
+            beginPointerGesture(PointerGesture::assignment,event);
+            auto callback=onEditModulationRequested;const auto target=parameterID;
+            if(callback) callback(target);
+            return;
+        }
         if (event.mods.isCommandDown() || event.mods.isCtrlDown())
         {
             auto callback = onBipolarModeToggled;
@@ -664,15 +687,17 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
         juce::PopupMenu menu;
         if (completedPopupTarget == PopupMenuTarget::modulationHandle)
         {
-            menu.addItem(1, "Set Value");
-            menu.addItem(2, "Clear LFO");
-            menu.addItem(3, "Invert Depth");
-
-            juce::String bipolarToggleText = isBipolar ? "Switch to Unipolar" : "Switch to Bipolar";
-            menu.addItem(4, bipolarToggleText);
-
-            juce::String bypassToggleText = isBypassed ? "Enable modulation" : "Bypass modulation";
-            menu.addItem(5, bypassToggleText);
+            if(needsMatrixEditing())
+            {
+                menu.addItem(static_cast<int>(ModulationMenuCommand::editModulation),"Edit modulation in matrix");
+                menu.addItem(static_cast<int>(ModulationMenuCommand::clearModulation),"Clear all modulation");
+            }
+            else
+            {
+                menu.addItem(1,"Set Value");menu.addItem(2,"Clear modulation");menu.addItem(3,"Invert Depth");
+                menu.addItem(4,isBipolar?"Switch to Unipolar":"Switch to Bipolar");
+                menu.addItem(5,isBypassed?"Enable modulation":"Bypass modulation");
+            }
 
             menu.showMenuAsync(fire::ui::prepareContextMenu(
                                    menu, *this, event.getScreenPosition()),
@@ -993,8 +1018,13 @@ std::function<void(int)> ModulatableSlider::createModulationMenuResultHandler(
     if (targetParameterIDAtOpen.isEmpty())
         targetParameterIDAtOpen = parameterID;
 
+    const juce::Component::SafePointer<ModulatableSlider> owner(this);
+    auto stateProvider=getLfoSourceMenuState;
+    const std::optional<std::uint64_t> routingRevision=stateProvider
+        ? std::optional<std::uint64_t>{stateProvider().revision}:std::nullopt;
+    if(!owner) return {};
     const auto sessionRevision = ++contextMenuRevision;
-    return [safeThis = juce::Component::SafePointer<ModulatableSlider>(this),
+    return [safeThis = owner, routingRevision,
             sessionRevision,
             frozenTargetParameterID = std::move(targetParameterIDAtOpen)](int result)
     {
@@ -1006,8 +1036,13 @@ std::function<void(int)> ModulatableSlider::createModulationMenuResultHandler(
         // synchronously delete this slider, and duplicate PopupMenu results
         // must never execute the same command twice.
         ++safeThis->contextMenuRevision;
-        if (result <= 0)
-            return;
+        if (result <= 0) return;
+        if(routingRevision)
+        {
+            auto provider=safeThis->getLfoSourceMenuState;
+            const auto current=provider?provider().revision:0;
+            if(!safeThis || current!=*routingRevision) return;
+        }
 
         safeThis->executeModulationMenuCommand(
             static_cast<ModulationMenuCommand>(result),
@@ -1018,15 +1053,33 @@ std::function<void(int)> ModulatableSlider::createModulationMenuResultHandler(
 juce::PopupMenu ModulatableSlider::createLfoAssignmentMenu(const LfoSourceMenuState& state) const
 {
     juce::PopupMenu menu;
-    menu.addSectionHeader("Assign modulation");
-    for (int lfoIndex = 0; lfoIndex < fire::lfo_bank::capacity; ++lfoIndex)
+    if(isModulated)
+    {
+        menu.addItem(1001,"Edit modulation in matrix");
+        menu.addItem(1002,"Clear all modulation");menu.addSeparator();
+    }
+    menu.addSectionHeader("Add modulation source");
+    for (int lfoIndex = 0; lfoIndex < fire::mod_sources::sourceCount; ++lfoIndex)
         if (state.contains(lfoIndex))
+        {
+            auto name = fire::mod_sources::name(lfoIndex);
+            if (fire::mod_sources::isMacro(lfoIndex))
+            {
+                const auto custom = state.macroNames[static_cast<size_t>(lfoIndex - fire::mod_sources::firstMacro)];
+                if (custom.isNotEmpty() && custom != name) name += " · " + custom;
+            }
             menu.addColouredItem(lfoIndex + 1,
-                                 "LFO " + juce::String(lfoIndex + 1),
-                                 fire::ui::lfoBankColour(lfoIndex), true,
+                                 name,
+                                 fire::ui::modulationSourceColour(lfoIndex), true,
                                  isModulated && lfoSource == lfoIndex + 1);
+        }
     if (state.presentMask == 0)
         menu.addItem(0, "Add an LFO in Mod Forge", false);
+    if (state.presetLockAvailable)
+    {
+        menu.addSeparator();
+        menu.addItem(1003, "Keep value when loading presets", true, state.presetLockEnabled);
+    }
     return menu;
 }
 
@@ -1051,15 +1104,26 @@ std::function<void(int)> ModulatableSlider::createLfoAssignmentMenuResultHandler
             return;
 
         ++safeThis->contextMenuRevision;
-        if (! sourceState.contains(result - 1) || frozenTargetParameterID.isEmpty())
-            return;
+        const bool management=result==1001 || result==1002 || result==1003;
+        if ((!management && !sourceState.contains(result-1)) || frozenTargetParameterID.isEmpty()) return;
 
         auto currentStateProvider = safeThis->getLfoSourceMenuState;
         const auto currentState = currentStateProvider ? currentStateProvider() : LfoSourceMenuState {};
         if (! safeThis || safeThis->contextMenuRevision != sessionRevision + 1
             || currentState.revision != sourceState.revision
-            || ! currentState.contains(result - 1))
+            || (!management && !currentState.contains(result-1))) return;
+        if(management)
+        {
+            if (result == 1003)
+            {
+                if (!sourceState.presetLockAvailable) return;
+                auto callback = safeThis->onPresetLockChanged;
+                if (callback) callback(frozenTargetParameterID, !sourceState.presetLockEnabled);
+                return;
+            }
+            safeThis->executeModulationMenuCommand(result==1001?ModulationMenuCommand::editModulation:ModulationMenuCommand::clearModulation,frozenTargetParameterID);
             return;
+        }
 
         auto callback = safeThis->onLfoAssignmentRequested;
         if (callback)
@@ -1074,8 +1138,20 @@ void ModulatableSlider::executeModulationMenuCommand(
     if (targetParameterID.isEmpty())
         return;
 
+    const juce::Component::SafePointer<ModulatableSlider> safe(this);
+    auto provider=getModulationRouteCount;
+    const int count=provider?provider(targetParameterID):modulationRouteCount;
+    if(!safe) return;
+    if(command!=ModulationMenuCommand::editModulation && command!=ModulationMenuCommand::clearModulation
+        && (count>1 || (targetParameterID==parameterID && needsMatrixEditing())))
+    {
+        auto callback=onEditModulationRequested;if(callback) callback(targetParameterID);
+        return;
+    }
     switch (command)
     {
+        case ModulationMenuCommand::editModulation:
+        {auto callback=onEditModulationRequested;if(callback) callback(targetParameterID);break;}
         case ModulationMenuCommand::setValue:
         {
             auto callback = onSetValueRequested;

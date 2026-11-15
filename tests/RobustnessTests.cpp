@@ -951,9 +951,10 @@ TEST_CASE("Processor accepts zero, mono, and larger-than-prepared blocks", "[pro
     FireAudioProcessor processor;
     juce::MidiBuffer midi;
 
-    juce::AudioProcessor::BusesLayout monoLayout;
-    monoLayout.inputBuses.add(juce::AudioChannelSet::mono());
-    monoLayout.outputBuses.add(juce::AudioChannelSet::mono());
+    auto monoLayout = processor.getBusesLayout();
+    monoLayout.inputBuses.set(0, juce::AudioChannelSet::mono());
+    monoLayout.inputBuses.set(1, juce::AudioChannelSet::disabled());
+    monoLayout.outputBuses.set(0, juce::AudioChannelSet::mono());
     REQUIRE(processor.setBusesLayout(monoLayout));
     processor.prepareToPlay(32000.0, 16);
 
@@ -1499,11 +1500,17 @@ TEST_CASE("State round-trip preserves LFO data and upgrades legacy shape state",
     // Simulate an older state written before the per-band shape enable
     // parameters existed. Loading must enable Shape to preserve the old sound.
     auto legacyParameterState = source.treeState.copyState();
-    // This fixture also predates the extended bank, whose presence would
-    // correctly require a complete sixteen-shape LFO_STATE section.
+    // This fixture also predates the extended bank (which requires a complete
+    // sixteen-shape section) and the explicitly versioned channel-mode family.
     for (int child = legacyParameterState.getNumChildren(); --child >= 0;)
         if (fire::lfo_bank::isAppendedParameterID(
-                legacyParameterState.getChild(child).getProperty("id").toString()))
+                legacyParameterState.getChild(child).getProperty("id").toString())
+            || fire::channel_mode::isParameterID(
+                legacyParameterState.getChild(child).getProperty("id").toString())
+            || fire::midi_mod::isParameterID(legacyParameterState.getChild(child).getProperty("id").toString())
+            || fire::lfo_playback::isParameterID(legacyParameterState.getChild(child).getProperty("id").toString())
+            || fire::dynamic_eq::isParameterID(legacyParameterState.getChild(child).getProperty("id").toString())
+            || fire::parallel_chain::isParameterID(legacyParameterState.getChild(child).getProperty("id").toString()))
             legacyParameterState.removeChild(child, nullptr);
     for (int band = 0; band < 4; ++band)
     {

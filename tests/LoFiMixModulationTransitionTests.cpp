@@ -1,4 +1,5 @@
 #include "helpers/ProcessingLatency.h"
+#include "helpers/SingleSourceRouting.h"
 #include <PluginProcessor.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -303,7 +304,7 @@ TEST_CASE("LoFi Mix bridges an active LFO source change in ten milliseconds",
             streamPosition += 256;
         }
 
-        subject.assignLfoToTarget(1, DOWNSAMPLE_MIX_ID);
+        fire::tests::assignSingleSourceRoute(subject, 1, DOWNSAMPLE_MIX_ID);
         const int audibleOffset = fire::tests::legacyControlOutputDelay(useHq, subject.getLatencySamples());
         const int eventSamples = audibleOffset + bridgeSamples + 1;
         juce::AudioBuffer<float> subjectAudio(2, eventSamples);

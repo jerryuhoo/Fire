@@ -39,6 +39,7 @@ private:
         int sourceIndex = -1;
         float modulationDepth = 0.0f;
         bool isBipolar = true;
+        bool signalIsOffset = false;
     };
 
     struct RouteTransitionState

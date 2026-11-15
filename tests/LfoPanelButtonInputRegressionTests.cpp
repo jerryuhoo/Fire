@@ -279,7 +279,7 @@ TEST_CASE("LFO panel actions use primary-only pointer buttons",
     panel.setVisible(true);
 
     auto buttons = collectVisiblePanelButtons(panel);
-    REQUIRE(buttons.size() == 10);
+    REQUIRE(buttons.size() == 12);
 
     std::map<juce::String, int> counts;
     for (auto* button : buttons)
@@ -292,6 +292,8 @@ TEST_CASE("LFO panel actions use primary-only pointer buttons",
     CHECK(counts["Assign"] == 1);
     CHECK(counts["Matrix"] == 1);
     CHECK(counts["BPM"] == 1);
+    CHECK(counts["Playback"] == 1);
+    CHECK(counts["MIDI"] == 1);
     CHECK(counts["+"] == 1);
     for (int lfoIndex = 5; lfoIndex <= 16; ++lfoIndex)
         CHECK(counts["LFO " + juce::String(lfoIndex)] == 0);
@@ -311,6 +313,23 @@ TEST_CASE("LFO panel actions use primary-only pointer buttons",
         CHECK_FALSE(button->isDown());
         endPrimaryClick(*button);
         CHECK(clicks == 0);
+
+        if (button->getComponentID() == "lfo_playback_settings"
+            || button->getComponentID() == "midi_controls")
+        {
+            // New dialog actions obey the same pointer ownership contract;
+            // auxiliary or mixed presses must not open a performance window.
+            for (int modifiers : std::array<int, 3>{juce::ModifierKeys::rightButtonModifier,
+                                  juce::ModifierKeys::middleButtonModifier,
+                                  juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::rightButtonModifier})
+            {
+                button->mouseDown(makeMouseEvent(*button, juce::ModifierKeys(modifiers)));
+                button->mouseUp(makeMouseEvent(*button, {}));
+                CHECK(clicks == 0);
+            }
+            performPrimaryClick(*button);
+            CHECK(clicks == 1);
+        }
 
         button->onClick = nullptr;
     }
@@ -718,7 +737,7 @@ TEST_CASE("LFO panel preserves interactive layout at narrow and scaled sizes",
                                              LfoEditMode::BrushPaint);
 
         auto controls = collectVisibleInteractiveChildren(panel);
-        REQUIRE(controls.size() == 17);
+        REQUIRE(controls.size() == 19);
         for (size_t first = 0; first < controls.size(); ++first)
         {
             const auto firstBounds = panel.getLocalArea(controls[first], controls[first]->getLocalBounds());

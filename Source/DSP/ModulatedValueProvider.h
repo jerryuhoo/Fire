@@ -56,6 +56,10 @@ struct ModulatedValueProvider
      */
     juce::NormalisableRange<float> range;
 
+    // A combined routing already contains a signed normalised offset. Keep
+    // legacy raw sources on the original path for exact preset compatibility.
+    bool signalIsOffset = false;
+
     //==============================================================================
     // // Main function
     //==============================================================================
@@ -101,6 +105,14 @@ struct ModulatedValueProvider
         const float rawLfoSample = lfoSignal[sampleIndex];
         if (! std::isfinite(rawLfoSample))
             return safeBaseValue;
+        if (signalIsOffset)
+        {
+            const auto base = range.convertTo0to1(safeBaseValue);
+            if (!std::isfinite(base)) return safeBaseValue;
+            const auto value = range.convertFrom0to1(juce::jlimit(0.0f, 1.0f,
+                juce::jlimit(0.0f, 1.0f, base) + juce::jlimit(-1.0f, 1.0f, rawLfoSample)));
+            return std::isfinite(value) ? value : safeBaseValue;
+        }
         const float lfoSample = juce::jlimit(0.0f, 1.0f, rawLfoSample);
 
         // // 2. Map LFO to bipolar [-1, 1] or unipolar [0, 1] space.

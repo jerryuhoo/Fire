@@ -350,20 +350,45 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                 valueEntryPopup.grabKeyboardFocus();
         };
 
-        slider->getLfoSourceMenuState = [this]
+        slider->getModulationRouteCount = [this](const juce::String& id)
+        { return processor.getModulationInfoForParameter(id).routeCount; };
+        slider->onEditModulationRequested = [safe = juce::Component::SafePointer<FireAudioProcessorEditor>(this)](const juce::String& parameter)
+        {
+            if (!safe) return;
+            const auto id = parameter;
+            safe->exitAssignMode(false); if (!safe) return;
+            safe->windowLeftButton.setToggleState(false, juce::dontSendNotification);
+            safe->windowRightButton.setToggleState(false, juce::dontSendNotification);
+            safe->windowLfoButton.setToggleState(true, juce::dontSendNotification);
+            safe->selectWorkspace(1, false); if (!safe) return;
+            safe->lfoPanel.openModulationMatrixForTarget(id);
+        };
+
+        slider->getLfoSourceMenuState = [this, slider]
         {
             ModulatableSlider::LfoSourceMenuState state;
             state.presentMask = 0;
+            state.macroNames = processor.getMacroDisplayNames();
+            const auto lockable = processor.getLockableParameters();
+            const auto parameter = slider->getParamID();
+            state.presetLockAvailable = std::any_of(lockable.begin(), lockable.end(), [&](const auto& entry) { return entry.id == parameter; });
+            state.presetLockEnabled = processor.isPresetParameterLocked(parameter);
             state.revision = processor.getLfoManager().getModulationRoutingStateSnapshot().revision;
             for (int index = 0; index < fire::lfo_bank::capacity; ++index)
                 if (processor.isLfoPresent(index))
                     state.presentMask |= 1u << index;
             return state;
         };
+        slider->onPresetLockChanged = [safe = juce::Component::SafePointer<FireAudioProcessorEditor>(this)](const juce::String& id, bool locked)
+        {
+            if (!safe) return;
+            safe->processor.setPresetParameterLocked(id, locked);
+            if (safe) safe->applyModulationSnapshot();
+        };
         slider->onLfoAssignmentRequested = [this](int lfoIndex,
                                                    const juce::String& targetParameterID)
         {
-            if (! processor.isLfoPresent(lfoIndex)
+            if (! processor.isModulationSourcePresent(lfoIndex)
                 || targetParameterID.isEmpty())
                 return;
 
@@ -378,9 +403,12 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                 processor.assignLfoToTarget(lfoIndex, targetParameterID);
             if (safeThis != nullptr)
             {
-                showLfoAssignmentResult(safeThis->lfoPanel,
-                                        lfoIndex,
-                                        result);
+                if (fire::lfo_bank::validIndex(lfoIndex))
+                    showLfoAssignmentResult(safeThis->lfoPanel, lfoIndex, result);
+                else if (result == LfoManager::AssignmentResult::capacityReached)
+                    safeThis->lfoPanel.showAssignCapacityReached();
+                else
+                    safeThis->lfoPanel.clearAssignFeedback();
                 if (result == LfoManager::AssignmentResult::changed)
                 {
                     safeThis->modulationSnapshotFramesRemaining = 0;
@@ -1965,6 +1993,15 @@ void FireAudioProcessorEditor::timerCallback()
             const float binWidth = static_cast<float>(processor.getSampleRate())
                                    / static_cast<float>(processor.getFFTSize());
             multiband.updateOttSpectrum(processedFftFrame.data(), processor.getNumBins(), binWidth, originalFftFrame.data());
+            if (globalPanel.isShowing() && globalPanel.isOttSelected())
+                globalPanel.setInsertedOttSpectrum(processedFftFrame.data(),
+                    processor.getNumBins(), binWidth, originalFftFrame.data());
+            if (bandPanel.isShowing() && bandPanel.isInsertedOttSelected())
+            {
+                const auto [lowHz, highHz] = multiband.getBandFrequencyRange(currentBand);
+                bandPanel.setInsertedOttSpectrum(processedFftFrame.data(),
+                    processor.getNumBins(), binWidth, originalFftFrame.data(), lowHz, highHz);
+            }
             processedSpectrum.updateSpectrum(processedFftFrame.data(), processor.getNumBins(), binWidth);
             originalSpectrum.updateSpectrum(originalFftFrame.data(), processor.getNumBins(), binWidth);
         }
@@ -2229,6 +2266,8 @@ void FireAudioProcessorEditor::revealModulationTarget(const juce::String& parame
     // must never insert a module, add an EQ point or enable audio processing.
     const juce::Component::SafePointer<FireAudioProcessorEditor> safe(this);
     int scope=-1,slot=-1,node=-1,eqPoint=-1;
+    for(int candidateScope=0;candidateScope<fire::parallel_chain::scopeCount;++candidateScope)
+        if(parameterID==fire::parallel_chain::blendID(candidateScope))scope=candidateScope;
     for(int candidateScope=0;candidateScope<fire::effects::scopeCount;++candidateScope)
         for(int candidateSlot=0;candidateSlot<fire::effects::slotCount;++candidateSlot)
         {
@@ -2294,6 +2333,11 @@ void FireAudioProcessorEditor::revealModulationTarget(const juce::String& parame
         multiband.setFocusIndex(scope-1); if(!safe) return;
         if(alreadyFocused) updateWhenChangingFocus(scope-1);
         if(!safe) return;
+    }
+    if(fire::parallel_chain::isBlendID(parameterID))
+    {
+        if(scope==0)globalPanel.revealParallelBlend();else bandPanel.revealParallelBlend();
+        return;
     }
     if(slot>=0)
     {
@@ -2981,7 +3025,10 @@ bool FireAudioProcessorEditor::updateValuePopupContentAndBounds(
     // for linear ranges and gives misleading values for frequency and other
     // skewed parameters. This is the configured handle endpoint even while a
     // route is bypassed, so dragging its grey handle still has useful feedback.
-    if (modInfo.isModulated)
+    if (modInfo.usesMappedDisplay)
+        extremeValue = param->convertFrom0to1(juce::jlimit(0.0f, 1.0f,
+            param->convertTo0to1(baseValue) + modInfo.maximumOffset));
+    else if (modInfo.isModulated)
     {
         const float endpointLfoSample = 1.0f;
         ModulatedValueProvider endpointProvider;
@@ -3076,7 +3123,7 @@ void FireAudioProcessorEditor::refreshModulationSnapshot()
         }
     }
     modulationRoutingSnapshot = processor.getLfoManager().getModulationRoutingsCopy();
-    modulationRoutingIndexBySlider.assign(allModulatableSliders.size(), -1);
+    modulationRoutesBySlider.assign(allModulatableSliders.size(), {});
 
     for (size_t sliderIndex = 0; sliderIndex < allModulatableSliders.size(); ++sliderIndex)
     {
@@ -3090,8 +3137,7 @@ void FireAudioProcessorEditor::refreshModulationSnapshot()
             if (routing.targetParameterID == slider->getParamID()
                 && processor.isModulationSourcePresent(routing.sourceLfoIndex))
             {
-                modulationRoutingIndexBySlider[sliderIndex] = routingIndex;
-                break;
+                modulationRoutesBySlider[sliderIndex].add(routing);
             }
         }
     }
@@ -3101,54 +3147,36 @@ void FireAudioProcessorEditor::refreshModulationSnapshot()
 
 void FireAudioProcessorEditor::applyModulationSnapshot()
 {
-    std::array<float, fire::mod_sources::sourceCount> lfoOutputs {};
-    for (int i = 0; i < static_cast<int>(lfoOutputs.size()); ++i)
-        lfoOutputs[static_cast<size_t>(i)] = processor.getLfoManager().getLfoOutput(i);
-
-    for (size_t sliderIndex = 0; sliderIndex < allModulatableSliders.size(); ++sliderIndex)
+    const auto presetLocks = processor.getPresetParameterLocks();
+    std::array<float, fire::mod_sources::sourceCount> values {};
+    std::array<bool, fire::mod_sources::sourceCount> present {};
+    for (int index = 0; index < fire::mod_sources::sourceCount; ++index)
     {
-        auto* slider = allModulatableSliders[sliderIndex];
-        if (slider == nullptr || slider->getParamID().isEmpty())
-            continue;
-
-        const ModulationRouting* matchedRouting = nullptr;
-        if (sliderIndex < modulationRoutingIndexBySlider.size())
-        {
-            const int routingIndex = modulationRoutingIndexBySlider[sliderIndex];
-            if (juce::isPositiveAndBelow(routingIndex, modulationRoutingSnapshot.size()))
-                matchedRouting = &modulationRoutingSnapshot.getReference(routingIndex);
-        }
-
-        const int sourceIndex = matchedRouting != nullptr
-                                    ? matchedRouting->sourceLfoIndex
-                                    : -1;
-        const bool isModulated = juce::isPositiveAndBelow(
-            sourceIndex, static_cast<int>(lfoOutputs.size())) && processor.isModulationSourcePresent(sourceIndex);
-        const float rawLfo = isModulated ? lfoOutputs[static_cast<size_t>(sourceIndex)] : 0.0f;
-        const double displayLfo = isModulated && matchedRouting->isBipolar
-                                      ? static_cast<double>(rawLfo * 2.0f - 1.0f)
-                                      : static_cast<double>(rawLfo);
-        const double depth = isModulated ? static_cast<double>(matchedRouting->depth) : 0.0;
-        const bool bipolar = isModulated ? matchedRouting->isBipolar : true;
-        const bool bypassed = isModulated && matchedRouting->isBypassed;
-
-        const bool changed = slider->isModulated != isModulated
-                             || slider->lfoSource != (isModulated ? sourceIndex + 1 : 0)
-                             || std::abs(slider->lfoAmount - depth) > 1.0e-6
-                             || std::abs(slider->lfoValue - displayLfo) > 1.0e-4
-                             || slider->isBipolar != bipolar
-                             || slider->isBypassed != bypassed;
-
-        slider->isModulated = isModulated;
-        slider->lfoSource = isModulated ? sourceIndex + 1 : 0;
-        slider->lfoAmount = depth;
-        slider->lfoValue = displayLfo;
-        slider->isBipolar = bipolar;
-        slider->isBypassed = bypassed;
-
-        if (changed && slider->isShowing())
-        {
-            slider->repaint();
-        }
+        values[static_cast<size_t>(index)] = processor.getLfoManager().getLfoOutput(index);
+        present[static_cast<size_t>(index)] = processor.isModulationSourcePresent(index);
+    }
+    for (size_t index = 0; index < allModulatableSliders.size(); ++index)
+    {
+        auto* slider = allModulatableSliders[index];
+        if (!slider || slider->getParamID().isEmpty() || index >= modulationRoutesBySlider.size()) continue;
+        const auto info = fire::ui::summariseModulation(modulationRoutesBySlider[index], slider->getParamID(), values, present);
+        const bool locked = presetLocks.contains(slider->getParamID());
+        const bool changed = slider->isPresetLocked != locked || slider->isModulated != info.isModulated || slider->lfoSource != info.sourceLfoIndex
+            || std::abs(slider->lfoAmount - info.depth) > 1.0e-6 || std::abs(slider->lfoValue - info.currentValue) > 1.0e-4
+            || slider->isBipolar != info.isBipolar || slider->isBypassed != info.isBypassed
+            || slider->modulationRouteCount != info.routeCount || slider->usesModulationSummary != info.usesMappedDisplay
+            || std::abs(slider->modulationOffsetMinimum - info.minimumOffset) > 1.0e-6
+            || std::abs(slider->modulationOffsetMaximum - info.maximumOffset) > 1.0e-6
+            || std::abs(slider->modulationOffsetCurrent - info.currentOffset) > 1.0e-4;
+        slider->isModulated = info.isModulated;
+        slider->isPresetLocked = locked;
+        slider->lfoSource = info.sourceLfoIndex;
+        slider->lfoAmount = info.depth; slider->lfoValue = info.currentValue;
+        slider->isBipolar = info.isBipolar; slider->isBypassed = info.isBypassed;
+        slider->modulationRouteCount = info.routeCount; slider->usesModulationSummary = info.usesMappedDisplay;
+        slider->modulationOffsetMinimum = info.minimumOffset;
+        slider->modulationOffsetMaximum = info.maximumOffset;
+        slider->modulationOffsetCurrent = info.currentOffset;
+        if (changed && slider->isShowing()) slider->repaint();
     }
 }

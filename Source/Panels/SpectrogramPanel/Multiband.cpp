@@ -1537,6 +1537,17 @@ juce::Rectangle<float> Multiband::getBandBounds(int index) const
                                                        static_cast<float>(getHeight()));
 }
 
+std::pair<float, float> Multiband::getBandFrequencyRange(int band) const
+{
+    const auto bounds = getBandBounds(band);
+    if (getWidth() <= 0 || bounds.isEmpty())
+        return { 20.0f, 20000.0f };
+
+    const auto width = static_cast<float>(getWidth());
+    return { transformFromLog(juce::jlimit(0.0f, 1.0f, bounds.getX() / width)),
+             transformFromLog(juce::jlimit(0.0f, 1.0f, bounds.getRight() / width)) };
+}
+
 void Multiband::mouseMove(const juce::MouseEvent& event)
 {
     juce::Component::SafePointer<Multiband> safeThis(this);

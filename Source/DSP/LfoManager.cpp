@@ -12,6 +12,9 @@
 
 #include "LfoManager.h"
 #include "../GUI/InterfaceDefines.h"
+#include "../Utility/ChannelModeParameters.h"
+#include "../Utility/DynamicEqParameters.h"
+#include "../Utility/ParallelChainParameters.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -21,11 +24,7 @@ namespace
 bool haveSameModulationRoutingState(const ModulationRouting& lhs,
                                     const ModulationRouting& rhs) noexcept
 {
-    return lhs.sourceLfoIndex == rhs.sourceLfoIndex
-        && lhs.targetParameterID == rhs.targetParameterID
-        && juce::exactlyEqual(lhs.depth, rhs.depth)
-        && lhs.isBipolar == rhs.isBipolar
-        && lhs.isBypassed == rhs.isBypassed;
+    return lhs.hasSameState(rhs);
 }
 } // namespace
 
@@ -39,6 +38,9 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
     // Stable slots retain their shape and timing identity across deletions.
     lfoData.resize(fire::lfo_bank::capacity);
     for (auto& generation : slotGenerations) generation.store(0u, std::memory_order_relaxed);
+    // Initialise identifier tables off the audio thread.
+    juce::ignoreUnused(fire::midi_mod::parameterIDs(), fire::lfo_playback::parameterIDs(),
+                      fire::channel_mode::parameterIDs());
     for (auto& phase : visualPhases) phase.store(-1.0f, std::memory_order_relaxed);
     // Define the string representations for synced LFO rates
     lfoRateSyncDivisions = {
@@ -47,6 +49,22 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
 
     for (size_t index = 0; index < auxiliaryParameters.size(); ++index)
         auxiliaryParameters[index] = treeState.getRawParameterValue(fire::mod_sources::ids[index]);
+    for (int envelope = 0; envelope < fire::envelope_params::count; ++envelope)
+        for (int field = 0; field < fire::envelope_params::fieldCount; ++field)
+            envelopeParameters[static_cast<size_t>(envelope)][static_cast<size_t>(field)] =
+                treeState.getRawParameterValue(fire::envelope_params::parameterID(envelope, field));
+    for (int slot = 0; slot < fire::midi_mod::count; ++slot)
+        for (int field = 0; field < fire::midi_mod::fieldCount; ++field)
+        {
+            auto& id = midiParameterIDs[static_cast<size_t>(slot)][static_cast<size_t>(field)];
+            id = fire::midi_mod::parameterID(slot, field);
+            midiParameters[static_cast<size_t>(slot)][static_cast<size_t>(field)] =
+                treeState.getRawParameterValue(id);
+            treeState.addParameterListener(id, this);
+        }
+    envelopeBandCountParameter = treeState.getRawParameterValue(NUM_BANDS_ID);
+    for (size_t index = 0; index < envelopeCrossoverParameters.size(); ++index)
+        envelopeCrossoverParameters[index] = treeState.getRawParameterValue(juce::String(FREQ_ID) + juce::String(index + 1));
     for (int i = 0; i < fire::lfo_bank::defaultCount; ++i)
         modulationRoutings.add({});
 
@@ -65,6 +83,10 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
             treeState.getRawParameterValue(fire::lfo_bank::presentParameterID(i))
         };
 
+        for (int field = 0; field < fire::lfo_playback::fieldCount; ++field)
+            lfoParameters[lfoIndex].playback[static_cast<size_t>(field)] =
+                treeState.getRawParameterValue(fire::lfo_playback::parameterID(i, field));
+
         if (const auto* smoothness = lfoParameters[lfoIndex].smoothness)
         {
             const float value = smoothness->load(std::memory_order_relaxed);
@@ -79,6 +101,25 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
     }
 }
 
+LfoManager::~LfoManager()
+{
+    for (const auto& slot : midiParameterIDs)
+        for (const auto& id : slot) treeState.removeParameterListener(id, this);
+}
+
+void LfoManager::parameterChanged(const juce::String& id, float)
+{
+    // Configuration can change away and back between two audio callbacks.
+    // Track those edits at their source, rather than comparing only snapshots.
+    for (size_t slot = 0; slot < midiParameterIDs.size(); ++slot)
+        for (const auto& parameter : midiParameterIDs[slot])
+            if (parameter == id)
+            {
+                midiConfigurationGenerations[slot].fetch_add(1u, std::memory_order_acq_rel);
+                return;
+            }
+}
+
 void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
 {
     for (auto& engine : lfoEngines)
@@ -91,14 +132,41 @@ void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
     // Keep the prepared capacity. Smaller blocks no longer resize this buffer on the audio thread.
     const auto safeMaximumBlockSize = static_cast<int>(std::min<uint64_t>(
         spec.maximumBlockSize, static_cast<uint64_t>(std::numeric_limits<int>::max())));
-    lfoOutputBuffer.setSize(fire::mod_sources::sourceCount, juce::jmax(1, safeMaximumBlockSize), false, true, false);
+    lfoOutputBuffer.setSize(fire::mod_sources::signalCount, juce::jmax(1, safeMaximumBlockSize), false, true, false);
+    aggregateTransitionSamples = juce::jmax(1, juce::roundToInt(preparedSampleRate * .020));
+    aggregateTransitions = {};
     auxiliary.prepare(preparedSampleRate);
+    for (auto& value : midiValues) { value.reset(preparedSampleRate, .005); value.setCurrentAndTargetValue(0); }
+    activeMidiConfig = {};
+    appliedMidiGeneration = midiStateGeneration.load(std::memory_order_acquire);
+    for (auto& initial : midiInitialValues) initial.store(0, std::memory_order_release);
+    midiLearnOwner.store(0, std::memory_order_release);
+    midiLearnRequest.store(0, std::memory_order_release);
+    midiLearnResult.store(0, std::memory_order_release);
+    for (auto& clock : performanceClocks) clock.reset();
+    advancedPlaybackActive.fill(false);
+    manualCounts.fill(0);
+    for (size_t i = 0; i < manualRequests.size(); ++i)
+        consumedManualRequests[i] = manualRequests[i].load(std::memory_order_acquire);
+    envelopeDetectors.prepare(preparedSampleRate);
+    for (auto& level : auxiliaryLevels) level.store(0, std::memory_order_relaxed);
     publishVisualState(nullptr);
 }
 
 void LfoManager::reset()
 {
     auxiliary.reset();
+    for (auto& value : midiValues) value.setCurrentAndTargetValue(0);
+    activeMidiConfig = {};
+    appliedMidiGeneration = midiStateGeneration.load(std::memory_order_acquire);
+    // A deferred DSP reset can run on the first callback after the user arms
+    // Learn or presses Trigger. These message-thread requests belong to the
+    // current configuration, so preserve them until that callback consumes
+    // them. prepare() and complete state replacement invalidate ownership.
+    for (auto& clock : performanceClocks) clock.reset();
+    advancedPlaybackActive.fill(false); manualCounts.fill(0);
+    envelopeDetectors.reset();
+    aggregateTransitions = {};
     for (auto& level : auxiliaryLevels) level.store(0, std::memory_order_relaxed);
     for (auto& engine : lfoEngines)
     {
@@ -193,6 +261,7 @@ void LfoManager::resetLfoSlot(int index)
     lfoEngines[slot].stageShape(lfoData[slot]);
     ++lfoDataRevisions[slot];
     slotGenerations[slot].fetch_add(1u, std::memory_order_relaxed);
+    performanceGenerations[slot].fetch_add(1u, std::memory_order_release);
     // Slot deletion/reuse invalidates popups even when no routes existed.
     advanceModulationRoutingRevisionLocked();
 }
@@ -230,10 +299,39 @@ LfoManager::captureAudioThreadParameterSnapshot() const noexcept
         destination.present = loadParameter(source.present,
             fire::lfo_bank::defaultPresent(static_cast<int>(index)) ? 1.0f : 0.0f) > 0.5f;
         destination.generation = slotGenerations[index].load(std::memory_order_relaxed);
+        destination.performanceGeneration = performanceGenerations[index].load(std::memory_order_acquire);
+        const auto loadPlayback = [&](int field) { return juce::roundToInt(juce::jlimit(
+            static_cast<float>(fire::lfo_playback::minimums[static_cast<size_t>(field)]),
+            static_cast<float>(fire::lfo_playback::maximums[static_cast<size_t>(field)]),
+            loadParameter(source.playback[static_cast<size_t>(field)], static_cast<float>(fire::lfo_playback::defaults[static_cast<size_t>(field)])))); };
+        destination.playback = {loadPlayback(0), loadPlayback(1), loadPlayback(2), loadPlayback(3), loadPlayback(4)};
     }
 
+    for (size_t index = 0; index < snapshot.midiCC.size(); ++index)
+    {
+        snapshot.midiCC[index].number = juce::roundToInt(juce::jlimit(-1.0f, 127.0f, loadParameter(midiParameters[index][0], -1)));
+        snapshot.midiCC[index].channel = juce::roundToInt(juce::jlimit(0.0f, 16.0f, loadParameter(midiParameters[index][1], 0)));
+    }
+    snapshot.midiGeneration = midiStateGeneration.load(std::memory_order_acquire);
     for (size_t index = 0; index < auxiliaryParameters.size(); ++index)
         snapshot.auxiliary[index] = loadParameter(auxiliaryParameters[index], fire::mod_sources::defaults[index]);
+    for (size_t index = 0; index < snapshot.envelopes.size(); ++index)
+    {
+        namespace ep = fire::envelope_params;
+        const auto load = [&](int field) { return loadParameter(envelopeParameters[index][static_cast<size_t>(field)], ep::defaults[static_cast<size_t>(field)]); };
+        auto& destination = snapshot.envelopes[index];
+        destination.source = juce::roundToInt(juce::jlimit(0.0f, 5.0f, load(ep::source)));
+        destination.highPassEnabled = load(ep::highPassEnabled) > .5f;
+        destination.lowPassEnabled = load(ep::lowPassEnabled) > .5f;
+        destination.highPassFrequency = load(ep::highPassFrequency);
+        destination.lowPassFrequency = load(ep::lowPassFrequency);
+        destination.attack = index == 0 ? snapshot.auxiliary[0] : load(ep::attack);
+        destination.release = index == 0 ? snapshot.auxiliary[1] : load(ep::release);
+        destination.sensitivity = index == 0 ? snapshot.auxiliary[2] : load(ep::sensitivity);
+    }
+    snapshot.envelopeBandCount = juce::roundToInt(juce::jlimit(1.0f, 4.0f, loadParameter(envelopeBandCountParameter, 1)));
+    for (size_t index = 0; index < snapshot.envelopeCrossovers.size(); ++index)
+        snapshot.envelopeCrossovers[index] = loadParameter(envelopeCrossoverParameters[index], snapshot.envelopeCrossovers[index]);
     return snapshot;
 }
 
@@ -302,8 +400,31 @@ void LfoManager::renderBlock(
         return;
     }
 
+    if (playheadSampleOffset == 0)
+        for (size_t index = 0; index < manualRequests.size(); ++index)
+        {
+            const auto request = manualRequests[index].load(std::memory_order_acquire);
+            const auto generation = static_cast<std::uint32_t>(request >> 32);
+            const auto prior = consumedManualRequests[index];
+            const bool matches = generation == parameterSnapshot.lfos[index].performanceGeneration
+                && parameterSnapshot.lfos[index].present;
+            manualCounts[index] = matches
+                ? static_cast<std::uint32_t>(request) - (static_cast<std::uint32_t>(prior >> 32) == generation ? static_cast<std::uint32_t>(prior) : 0u) : 0;
+            // A request may target a newly published slot while this callback
+            // still renders the last coherent snapshot. Keep it pending until
+            // that matching generation becomes audible.
+            if (matches) consumedManualRequests[index] = request;
+        }
     auxiliary.setParameters(parameterSnapshot.auxiliary);
-    std::array<float, fire::mod_sources::sourceCount> firstLfoValues {};
+    auto envelopeConfiguration = parameterSnapshot.envelopes;
+    // Preserve the public pre-bank snapshot contract and ENV 1 arithmetic.
+    // These three legacy parameter IDs remain its timing/sensitivity authority.
+    envelopeConfiguration[0].attack = parameterSnapshot.auxiliary[0];
+    envelopeConfiguration[0].release = parameterSnapshot.auxiliary[1];
+    envelopeConfiguration[0].sensitivity = parameterSnapshot.auxiliary[2];
+    envelopeDetectors.setParameters(envelopeConfiguration, parameterSnapshot.envelopeBandCount,
+                                   parameterSnapshot.envelopeCrossovers);
+    std::array<float, fire::mod_sources::signalCount> firstLfoValues {};
     const int channelsToCopy = juce::jmin(outputBuffer.getNumChannels(),
                                           lfoOutputBuffer.getNumChannels());
     int sampleOffset = 0;
@@ -319,104 +440,110 @@ void LfoManager::renderBlock(
                           playHead,
                           samplesInRange,
                           parameterSnapshot,
-                          playheadSampleOffset + sampleOffset);
+                          playheadSampleOffset + sampleOffset,
+                          midiBaseOffset + sampleOffset);
+        renderMidiCC(samplesInRange, midiBaseOffset + sampleOffset, parameterSnapshot.midiCC, parameterSnapshot.midiGeneration);
 
         for (int sample = 0; sample < samplesInRange; ++sample)
         {
             const auto inputSample = sampleOffset + sample;
-            const bool available = audioInput && audioInput->getNumChannels() > 0 && inputSample < audioInput->getNumSamples();
-            const bool stereo = available && audioInput->getNumChannels() > 1;
-            const auto values = auxiliary.next(available ? audioInput->getSample(0, inputSample) : 0,
-                stereo ? audioInput->getSample(1, inputSample) : 0, stereo);
+            const auto read = [](const juce::AudioBuffer<float>* input, juce::int64 position)
+            {
+                fire::dsp::EnvelopeDetectors::StereoFrame frame;
+                if (input == nullptr || input->getNumChannels() == 0 || position < 0 || position >= input->getNumSamples()) return frame;
+                frame.stereo = input->getNumChannels() > 1;
+                frame.left = input->getSample(0, static_cast<int>(position));
+                frame.right = frame.stereo ? input->getSample(1, static_cast<int>(position)) : frame.left;
+                return frame;
+            };
+            const auto detectors = envelopeDetectors.next(read(audioInput, inputSample),
+                read(externalAudioInput, static_cast<juce::int64>(externalAudioInputOffset) + inputSample));
+            const auto& envelope1 = detectors.filtered[0];
+            const auto values = auxiliary.next(envelope1.left, envelope1.right, envelope1.stereo);
             for (size_t index = 0; index < values.size(); ++index)
             {
                 lfoOutputBuffer.setSample(fire::mod_sources::envelope + static_cast<int>(index), sample, values[index]);
                 if (sample + 1 == samplesInRange) auxiliaryLevels[index].store(values[index], std::memory_order_relaxed);
             }
+            for (int envelope = 1; envelope < fire::envelope_params::count; ++envelope)
+            {
+                const auto source = fire::mod_sources::envelopeSource(envelope);
+                const auto value = detectors.levels[static_cast<size_t>(envelope)];
+                lfoOutputBuffer.setSample(source, sample, value);
+                if (sample + 1 == samplesInRange)
+                    auxiliaryLevels[static_cast<size_t>(source - fire::mod_sources::envelope)].store(value, std::memory_order_relaxed);
+            }
+            if (envelopeAuditionOutput != nullptr && inputSample < envelopeAuditionOutput->getNumSamples())
+            {
+                const auto frame = juce::isPositiveAndBelow(auditionEnvelopeIndex, fire::envelope_params::count)
+                    ? detectors.filtered[static_cast<size_t>(auditionEnvelopeIndex)]
+                    : fire::dsp::EnvelopeDetectors::StereoFrame{};
+                for (int channel = 0; channel < envelopeAuditionOutput->getNumChannels(); ++channel)
+                    envelopeAuditionOutput->setSample(channel, inputSample, channel == 0 ? frame.left : frame.right);
+            }
         }
 
-        if (sampleOffset == 0)
-            for (size_t channel = 0; channel < firstLfoValues.size(); ++channel)
-                firstLfoValues[channel] = lfoOutputBuffer.getSample(
-                    static_cast<int>(channel), 0);
+        renderAggregateSignals(samplesInRange, parameterSnapshot);
 
-        for (int channel = 0; channel < channelsToCopy; ++channel)
-            outputBuffer.copyFrom(channel,
-                                  sampleOffset,
-                                  lfoOutputBuffer,
-                                  channel,
-                                  0,
-                                  samplesInRange);
+        if (sampleOffset == 0)
+        {
+            for (int channel = 0; channel < fire::mod_sources::sourceCount; ++channel)
+                firstLfoValues[static_cast<size_t>(channel)] = lfoOutputBuffer.getSample(channel, 0);
+            for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
+            {
+                const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+                if (! runtimeTargets[slot].aggregate) continue;
+                const auto channel = fire::mod_sources::firstAggregateSignal + static_cast<int>(slot);
+                firstLfoValues[static_cast<size_t>(channel)] = lfoOutputBuffer.getSample(channel, 0);
+            }
+        }
+
+        for (int channel = 0; channel < juce::jmin(channelsToCopy, fire::mod_sources::sourceCount); ++channel)
+            outputBuffer.copyFrom(channel, sampleOffset, lfoOutputBuffer, channel, 0, samplesInRange);
+        for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
+        {
+            const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+            const int channel = fire::mod_sources::firstAggregateSignal + static_cast<int>(slot);
+            if (runtimeTargets[slot].aggregate && channel < channelsToCopy)
+                outputBuffer.copyFrom(channel, sampleOffset, lfoOutputBuffer, channel, 0, samplesInRange);
+        }
 
         sampleOffset += samplesInRange;
     }
 
     publishVisualState(&parameterSnapshot);
 
-    // 4. Iterate through all modulation routings to calculate final parameter values.
-    for (size_t routingIndex = 0; routingIndex < runtimeRoutingCount; ++routingIndex)
+    // Standalone callers may supply only the physical source channels.
+    // The first-sample representative still uses the internal aggregate bank.
+    for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
     {
-        const auto& routing = runtimeRoutings[routingIndex];
-        if (routing.parameter == nullptr || ! fire::mod_sources::validSource(routing.sourceLfoIndex)
-            || (fire::lfo_bank::validIndex(routing.sourceLfoIndex)
-                && ! parameterSnapshot.lfos[static_cast<size_t>(routing.sourceLfoIndex)].present))
-            continue;
-
-        // Use the first sample of the LFO output as the representative value for the whole block.
-        float lfoValue = firstLfoValues[
-            static_cast<size_t>(routing.sourceLfoIndex)];
-        if (! std::isfinite(lfoValue))
-            continue;
-
-        // The snapshot overload must not revisit APVTS. The legacy overload
-        // retains its live-base behaviour for standalone callers and tests.
-        const float rawBaseValue = readLiveRoutingBaseValues
-                                       ? routing.parameter->getValue()
-                                       : routing.normalisedBaseValue;
-        const float normalizedBaseValue = std::isfinite(rawBaseValue)
-                                              ? juce::jlimit(0.0f, 1.0f, rawBaseValue)
-                                              : routing.parameter->getDefaultValue();
-
-        // For bipolar mode, the effective modulation depth should be halved to match
-        // the perceived range of unipolar mode.
-        float effectiveDepth = routing.depth;
-
-        // Apply bipolar (-1 to 1) or unipolar (0 to 1) mapping to the LFO signal.
-        if (routing.isBipolar)
+        const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+        const auto& target = runtimeTargets[slot];
+        if (target.parameter == nullptr || target.firstRoute < 0) continue;
+        const auto& routing = runtimeRoutings[static_cast<size_t>(target.firstRoute)];
+        const float rawBaseValue = readLiveRoutingBaseValues ? routing.parameter->getValue()
+                                                            : routing.normalisedBaseValue;
+        const float base = std::isfinite(rawBaseValue) ? juce::jlimit(0.0f, 1.0f, rawBaseValue)
+                                                       : routing.parameter->getDefaultValue();
+        float amount = 0.0f;
+        if (target.aggregate)
+            amount = firstLfoValues[static_cast<size_t>(fire::mod_sources::firstAggregateSignal) + slot];
+        else
         {
-            lfoValue = lfoValue * 2.0f - 1.0f; // Map LFO from [0, 1] to [-1, 1]
-            effectiveDepth *= 0.5f; // Halve the depth for bipolar
+            if (fire::lfo_bank::validIndex(routing.sourceLfoIndex)
+                && ! parameterSnapshot.lfos[static_cast<size_t>(routing.sourceLfoIndex)].present) continue;
+            // Preserve the original single-source arithmetic and its order.
+            float value = firstLfoValues[static_cast<size_t>(routing.sourceLfoIndex)];
+            if (! std::isfinite(value)) continue;
+            float depth = routing.depth;
+            if (routing.isBipolar) { value = value * 2.0f - 1.0f; depth *= .5f; }
+            amount = value * depth;
         }
-
-        // The modulation amount is now a simple multiplication in the normalized space.
-        // The depth parameter scales the LFO output directly.
-        const float normalizedModulationAmount = lfoValue * effectiveDepth;
-
-        // If this parameter hasn't been touched yet in this block, initialize it with its base normalized value.
-        size_t valueIndex = 0;
-        while (valueIndex < modulatedValueCount
-               && modulatedValues[valueIndex].parameter != routing.parameter)
-            ++valueIndex;
-
-        if (valueIndex == modulatedValueCount)
-        {
-            if (modulatedValueCount >= modulatedValues.size())
-                continue;
-
-            modulatedValues[valueIndex] = { routing.parameter, normalizedBaseValue };
-            ++modulatedValueCount;
-        }
-
-        // Add the normalized modulation amount. This allows multiple LFOs to target the same parameter.
-        modulatedValues[valueIndex].normalisedValue += normalizedModulationAmount;
+        const auto value = base + amount;
+        modulatedValues[modulatedValueCount++] = { target.parameter,
+            std::isfinite(value) ? juce::jlimit(0.0f, 1.0f, value) : 0.0f };
     }
 
-    // 5. Final pass: clamp all calculated NORMALIZED values to the valid [0, 1] range.
-    for (size_t i = 0; i < modulatedValueCount; ++i)
-    {
-        auto& value = modulatedValues[i].normalisedValue;
-        value = std::isfinite(value) ? juce::jlimit(0.0f, 1.0f, value) : 0.0f;
-    }
 }
 
 float LfoManager::getModulatedValue(const juce::String& parameterID) const
@@ -457,20 +584,23 @@ bool LfoManager::getAudioThreadRoutingInfo(const juce::RangedAudioParameter* par
     // complete callback candidate without changing the currently audible
     // routes. Both arrays are fixed audio-thread storage; no UI container or
     // lock is touched by this lookup.
-    const auto& routings = runtimeStateCaptureInProgress
-                               ? candidateRuntimeRoutings
-                               : runtimeRoutings;
-    const auto routingCount = runtimeStateCaptureInProgress
-                                  ? candidateRuntimeRoutingCount
-                                  : runtimeRoutingCount;
-    for (size_t i = 0; i < routingCount; ++i)
+    const auto& targets = runtimeStateCaptureInProgress ? candidateRuntimeTargets : runtimeTargets;
+    const auto& routings = runtimeStateCaptureInProgress ? candidateRuntimeRoutings : runtimeRoutings;
+    const auto& activeSlots = runtimeStateCaptureInProgress ? candidateActiveTargetSlots : runtimeActiveTargetSlots;
+    const auto count = runtimeStateCaptureInProgress ? candidateActiveTargetCount : runtimeActiveTargetCount;
+    for (size_t index = 0; index < count; ++index)
     {
-        const auto& routing = routings[i];
-        if (routing.parameter == parameter)
+        const auto slot = static_cast<size_t>(activeSlots[index]);
+        const auto& target = targets[slot];
+        if (target.parameter != parameter || target.firstRoute < 0) continue;
+        if (target.aggregate)
+            result = { fire::mod_sources::firstAggregateSignal + static_cast<int>(slot), 1.0f, false, true };
+        else
         {
-            result = { routing.sourceLfoIndex, routing.depth, routing.isBipolar };
-            return true;
+            const auto& routing = routings[static_cast<size_t>(target.firstRoute)];
+            result = { routing.sourceLfoIndex, routing.depth, routing.isBipolar, false };
         }
+        return true;
     }
 
     return false;
@@ -505,7 +635,8 @@ bool LfoManager::beginAudioThreadStateCapture(
 
     candidateHasPublishedRouting = captureRuntimeRoutings(
         candidateRuntimeRoutings,
-        candidateRuntimeRoutingCount);
+        candidateRuntimeRoutingCount,
+        candidateRuntimeTargets, candidateActiveTargetSlots, candidateActiveTargetCount);
     runtimeStateCaptureInProgress = true;
     return true;
 }
@@ -522,6 +653,7 @@ bool LfoManager::finishAudioThreadStateCapture(bool commitCandidate) noexcept
     {
         runtimeRoutings = candidateRuntimeRoutings;
         runtimeRoutingCount = candidateRuntimeRoutingCount;
+        commitRuntimeTargets();
         hasPublishedRouting.store(candidateHasPublishedRouting,
                                   std::memory_order_relaxed);
         for (auto& engine : lfoEngines)
@@ -548,16 +680,136 @@ void LfoManager::abortAudioThreadStateCapture() noexcept
 // Private Helper Functions
 // =============================================================================
 
+ModulationRouting LfoManager::RuntimeRouting::mapping() const noexcept
+{
+    // Empty target string: the audio recipe owns only scalar configuration;
+    // this temporary never acquires or releases UI-owned text storage.
+    ModulationRouting result;
+    result.sourceLfoIndex = sourceLfoIndex;
+    result.depth = depth;
+    result.isBipolar = isBipolar;
+    result.customRange = customRange;
+    result.rangeStart = rangeStart;
+    result.rangeEnd = rangeEnd;
+    result.curve = curve;
+    result.depthMacro = depthMacro;
+    return result;
+}
+
+bool LfoManager::RuntimeRouting::sameMapping(const RuntimeRouting& other) const noexcept
+{
+    return sourceLfoIndex == other.sourceLfoIndex && depth == other.depth
+        && isBipolar == other.isBipolar && customRange == other.customRange
+        && rangeStart == other.rangeStart && rangeEnd == other.rangeEnd
+        && curve == other.curve && depthMacro == other.depthMacro;
+}
+
+void LfoManager::commitRuntimeTargets() noexcept
+{
+    for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
+    {
+        const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+        if (candidateRuntimeTargets[slot].parameter != runtimeTargets[slot].parameter)
+            aggregateTransitions[slot] = {};
+    }
+    for (size_t index = 0; index < candidateActiveTargetCount; ++index)
+    {
+        const auto slot = static_cast<size_t>(candidateActiveTargetSlots[index]);
+        const auto& target = candidateRuntimeTargets[slot];
+        auto& transition = aggregateTransitions[slot];
+        if (transition.parameter != target.parameter)
+        {
+            transition = {};
+            transition.parameter = target.parameter;
+        }
+        if (target.parameter == nullptr) continue;
+        if (transition.configuration != target.configuration && transition.initialised && target.aggregate)
+        {
+            transition.anchor = transition.lastOffset;
+            transition.remaining = aggregateTransitionSamples;
+        }
+        if (! target.aggregate) transition.remaining = 0;
+        transition.configuration = target.configuration;
+    }
+    runtimeTargets = candidateRuntimeTargets;
+    runtimeActiveTargetCount = candidateActiveTargetCount;
+    std::copy_n(candidateActiveTargetSlots.begin(), runtimeActiveTargetCount, runtimeActiveTargetSlots.begin());
+}
+
+void LfoManager::renderAggregateSignals(int samples, const AudioThreadParameterSnapshot& parameters) noexcept
+{
+    if (samples <= 0) return;
+    for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
+    {
+        const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+        if (runtimeTargets[slot].aggregate)
+            juce::FloatVectorOperations::clear(lfoOutputBuffer.getWritePointer(
+                fire::mod_sources::firstAggregateSignal + static_cast<int>(slot)), samples);
+    }
+
+    for (size_t index = 0; index < runtimeRoutingCount; ++index)
+    {
+        const auto& routing = runtimeRoutings[index];
+        if (routing.targetSlot < 0) continue;
+        if (fire::lfo_bank::validIndex(routing.sourceLfoIndex)
+            && ! parameters.lfos[static_cast<size_t>(routing.sourceLfoIndex)].present) continue;
+        const auto slot = static_cast<size_t>(routing.targetSlot);
+        const auto mapping = routing.mapping();
+        const auto* signal = lfoOutputBuffer.getReadPointer(routing.sourceLfoIndex);
+        const auto* macro = routing.depthMacro < 0 ? nullptr : lfoOutputBuffer.getReadPointer(
+            fire::mod_sources::firstMacro + routing.depthMacro);
+        if (! runtimeTargets[slot].aggregate)
+        {
+            auto& transition = aggregateTransitions[slot];
+            transition.lastOffset = mapping.offset(signal[samples - 1], macro ? macro[samples - 1] : 1.0f);
+            transition.initialised = true;
+            continue;
+        }
+        auto* destination = lfoOutputBuffer.getWritePointer(
+            fire::mod_sources::firstAggregateSignal + routing.targetSlot);
+        for (int sample = 0; sample < samples; ++sample)
+            destination[sample] += mapping.offset(signal[sample], macro ? macro[sample] : 1.0f);
+    }
+    for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
+    {
+        const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+        if (! runtimeTargets[slot].aggregate) continue;
+        auto& transition = aggregateTransitions[slot];
+        auto* signal = lfoOutputBuffer.getWritePointer(fire::mod_sources::firstAggregateSignal + static_cast<int>(slot));
+        for (int sample = 0; sample < samples; ++sample)
+        {
+            // Sum every contributor before clipping. Cancellation therefore
+            // works even when an individual contributor saturates the target.
+            const auto offset = juce::jlimit(-1.0f, 1.0f, signal[sample]);
+            float value = offset;
+            if (transition.initialised && transition.remaining > 0)
+            {
+                const auto blend = 1.0f - static_cast<float>(transition.remaining)
+                                            / static_cast<float>(aggregateTransitionSamples);
+                value = transition.anchor + blend * (offset - transition.anchor);
+                --transition.remaining;
+            }
+            transition.initialised = true;
+            transition.lastOffset = value;
+            signal[sample] = value;
+        }
+    }
+}
+
 bool LfoManager::captureRuntimeRoutings(
     std::array<RuntimeRouting, maximumModulationRoutings>& destination,
-    size_t& destinationCount) const
+    size_t& destinationCount,
+    std::array<RuntimeTarget, maximumModulationRoutings>& targets,
+    std::array<int, maximumModulationRoutings>& activeSlots,
+    size_t& activeCount) const
 {
     destinationCount = 0;
     bool hasAnyRouting = false;
 
     for (const auto& routing : modulationRoutings)
     {
-        if (routing.targetParameterID.isEmpty() || ! isModulationSourcePresent(routing.sourceLfoIndex))
+        if (routing.targetParameterID.isEmpty() || (fire::dynamic_eq::isParameterID(routing.targetParameterID) || fire::parallel_chain::isStructuralID(routing.targetParameterID) || fire::channel_mode::isParameterID(routing.targetParameterID) || fire::lfo_playback::isParameterID(routing.targetParameterID) || fire::midi_mod::isParameterID(routing.targetParameterID))
+            || ! isModulationSourcePresent(routing.sourceLfoIndex))
             continue;
 
         hasAnyRouting = true;
@@ -587,10 +839,68 @@ bool LfoManager::captureRuntimeRoutings(
             routing.sourceLfoIndex,
             depth,
             routing.isBipolar,
-            normalisedBaseValue
+            normalisedBaseValue,
+            routing.customRange,
+            std::isfinite(routing.rangeStart) ? juce::jlimit(-1.0f, 1.0f, routing.rangeStart) : 0.0f,
+            std::isfinite(routing.rangeEnd) ? juce::jlimit(-1.0f, 1.0f, routing.rangeEnd) : 1.0f,
+            juce::jlimit(0, 3, routing.curve),
+            juce::jlimit(-1, fire::mod_sources::macroCount - 1, routing.depthMacro),
+            -1
         };
     }
 
+    targets = {};
+    activeCount = 0;
+    // Reserve every surviving target's old slot before allocating new ones;
+    // adding/removing a row for another target never changes its channel ID.
+    for (size_t index = 0; index < runtimeActiveTargetCount; ++index)
+    {
+        const auto slot = static_cast<size_t>(runtimeActiveTargetSlots[index]);
+        for (size_t route = 0; route < destinationCount; ++route)
+            if (runtimeTargets[slot].parameter == destination[route].parameter)
+            {
+                targets[slot].parameter = destination[route].parameter;
+                activeSlots[activeCount++] = static_cast<int>(slot);
+                break;
+            }
+    }
+    for (size_t route = 0; route < destinationCount; ++route)
+    {
+        auto& routing = destination[route];
+        size_t index = 0;
+        while (index < activeCount && targets[static_cast<size_t>(activeSlots[index])].parameter != routing.parameter) ++index;
+        size_t slot = index < activeCount ? static_cast<size_t>(activeSlots[index]) : 0;
+        if (index == activeCount)
+        {
+            while (slot < targets.size() && targets[slot].parameter != nullptr) ++slot;
+            jassert(slot < targets.size());
+            if (slot == targets.size()) continue;
+            activeSlots[activeCount++] = static_cast<int>(slot);
+        }
+        auto& target = targets[slot];
+        target.parameter = routing.parameter;
+        routing.targetSlot = static_cast<int>(slot);
+        if (target.firstRoute < 0) target.firstRoute = static_cast<int>(route);
+        ++target.routeCount;
+        target.aggregate = target.routeCount > 1 || target.aggregate
+            || routing.customRange || routing.curve != 0 || routing.depthMacro >= 0;
+    }
+    for (size_t index = 0; index < activeCount; ++index)
+    {
+        const auto slot = static_cast<size_t>(activeSlots[index]);
+        auto& target = targets[slot];
+        if (target.parameter == nullptr) continue;
+        const auto& previous = runtimeTargets[slot];
+        bool equal = target.parameter == previous.parameter && target.routeCount == previous.routeCount;
+        size_t oldRoute = 0;
+        for (size_t route = 0; equal && route < destinationCount; ++route)
+        {
+            if (destination[route].targetSlot != static_cast<int>(slot)) continue;
+            while (oldRoute < runtimeRoutingCount && runtimeRoutings[oldRoute].targetSlot != static_cast<int>(slot)) ++oldRoute;
+            equal = oldRoute < runtimeRoutingCount && destination[route].sameMapping(runtimeRoutings[oldRoute++]);
+        }
+        target.configuration = equal ? previous.configuration : previous.configuration + 1;
+    }
     return hasAnyRouting;
 }
 
@@ -600,8 +910,12 @@ bool LfoManager::refreshRuntimeStateIfAvailable()
     if (! lock.isLocked())
         return false;
 
-    const bool hasAnyRouting = captureRuntimeRoutings(runtimeRoutings,
-                                                       runtimeRoutingCount);
+    const bool hasAnyRouting = captureRuntimeRoutings(candidateRuntimeRoutings,
+                                                       candidateRuntimeRoutingCount, candidateRuntimeTargets,
+                                                       candidateActiveTargetSlots, candidateActiveTargetCount);
+    runtimeRoutings = candidateRuntimeRoutings;
+    runtimeRoutingCount = candidateRuntimeRoutingCount;
+    commitRuntimeTargets();
     hasPublishedRouting.store(hasAnyRouting, std::memory_order_relaxed);
 
     for (size_t i = 0; i < lfoEngines.size(); ++i)
@@ -630,7 +944,8 @@ void LfoManager::generateLfoOutput(
     juce::AudioPlayHead* playHead,
     int numSamples,
     const AudioThreadParameterSnapshot& parameterSnapshot,
-    juce::int64 playheadSampleOffset)
+    juce::int64 playheadSampleOffset,
+    int midiRangeOffset)
 {
     const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
                                       ? sampleRate
@@ -701,6 +1016,8 @@ void LfoManager::generateLfoOutput(
                 lfoEngines[lfoIndex].setPhaseWithCorrection(0.0f);
             else
                 lfoEngines[lfoIndex].reset();
+            performanceClocks[lfoIndex].reset();
+            advancedPlaybackActive[lfoIndex] = false;
             appliedPhaseOffsets[lfoIndex] = 0.0f;
             phaseOffsetInitialised[lfoIndex] = false;
             timingSignatureInitialised[lfoIndex] = false;
@@ -711,6 +1028,11 @@ void LfoManager::generateLfoOutput(
                 lfoOutputBuffer.clear(i, 0, lfoOutputBuffer.getNumSamples());
         }
         if (! parameters.present) continue;
+        if (parameters.performanceGeneration != appliedPerformanceGenerations[lfoIndex])
+        {
+            performanceClocks[lfoIndex].reset();
+            appliedPerformanceGenerations[lfoIndex] = parameters.performanceGeneration;
+        }
         const float syncMode = std::isfinite(parameters.syncMode)
                                    ? parameters.syncMode
                                    : 1.0f;
@@ -755,6 +1077,70 @@ void LfoManager::generateLfoOutput(
         }
 
         auto& engine = lfoEngines[lfoIndex];
+        const auto& performance = parameters.playback;
+        const bool advanced = performance.playMode != fire::lfo_playback::loop
+            || performance.waveMode != fire::lfo_playback::shape;
+        if (advanced)
+        {
+            namespace fp = fire::lfo_performance;
+            auto& clock = performanceClocks[lfoIndex];
+            if (!advancedPlaybackActive[lfoIndex]) clock.reset();
+            advancedPlaybackActive[lfoIndex] = true;
+            clock.configure({static_cast<fp::Playback>(performance.playMode), static_cast<fp::Wave>(performance.waveMode),
+                static_cast<std::uint16_t>(performance.seed), phaseOffset});
+            clock.trigger(manualCounts[lfoIndex]);
+            manualCounts[lfoIndex] = 0;
+            std::optional<double> absoluteCycles;
+            if (performance.playMode == fire::lfo_playback::loop && transportIsPlaying && positionInfo)
+            {
+                if (isInSyncMode && syncCycleLengthInBeats > 0)
+                {
+                    if (const auto ppq = positionInfo->getPpqPosition(); ppq && std::isfinite(*ppq))
+                        absoluteCycles = (*ppq + timelineOffsetSeconds * currentBpm / 60.0) / syncCycleLengthInBeats;
+                }
+                else if (!isInSyncMode)
+                {
+                    if (const auto seconds = positionInfo->getTimeInSeconds(); seconds && std::isfinite(*seconds))
+                        absoluteCycles = (*seconds + timelineOffsetSeconds) * freqInHz;
+                }
+            }
+            const double increment = isInSyncMode
+                ? (syncCycleLengthInBeats > 0 ? currentBpm / (60.0 * safeSampleRate * syncCycleLengthInBeats) : 0)
+                : static_cast<double>(freqInHz) / safeSampleRate;
+            const auto& events = midiInput != nullptr ? *midiInput : emptyMidiInput;
+            auto event = events.findNextSamplePosition(midiRangeOffset);
+            const auto end = events.cend();
+            auto* writer = lfoOutputBuffer.getWritePointer(i);
+            for (int sample = 0; sample < numSamples; ++sample)
+            {
+                const auto absoluteSample = static_cast<juce::int64>(midiRangeOffset) + sample;
+                while (event != end && (*event).samplePosition <= absoluteSample)
+                {
+                    const auto metadata = *event; ++event;
+                    if (performance.playMode == fire::lfo_playback::loop
+                        || metadata.samplePosition < midiRangeOffset || metadata.numBytes != 3) continue;
+                    const auto* bytes = metadata.data;
+                    if ((bytes[0] & 0xf0u) == 0x90u && bytes[1] <= 127 && bytes[2] > 0 && bytes[2] <= 127
+                        && (performance.triggerNote < 0 || performance.triggerNote == bytes[1])
+                        && (performance.triggerChannel == 0 || performance.triggerChannel == (bytes[0] & 15) + 1))
+                        clock.trigger();
+                }
+                const auto frame = clock.next(increment, absoluteCycles
+                    ? std::optional<double>{*absoluteCycles + static_cast<double>(sample) * increment} : std::nullopt);
+                if (performance.waveMode == fire::lfo_playback::shape) writer[sample] = engine.processAtPhase(frame.shapePhase);
+                else { writer[sample] = frame.randomValue; engine.publishExternalSample(frame.shapePhase, frame.randomValue); }
+            }
+            continue;
+        }
+        manualCounts[lfoIndex] = 0;
+        if (advancedPlaybackActive[lfoIndex])
+        {
+            advancedPlaybackActive[lfoIndex] = false;
+            timingSignatureInitialised[lfoIndex] = false;
+            phaseOffsetInitialised[lfoIndex] = false;
+            usedAbsoluteTimelineLastBlock[lfoIndex] = false;
+            engine.setPhase(0);
+        }
         const bool phaseChanged = phaseOffsetInitialised[lfoIndex]
                                   && std::abs(phaseOffset
                                               - appliedPhaseOffsets[lfoIndex])
@@ -859,6 +1245,141 @@ void LfoManager::generateLfoOutput(
         for (int sample = 0; sample < numSamples; ++sample)
             writer[sample] = engine.process();
     }
+}
+
+std::uint32_t LfoManager::getLfoSlotGeneration(int index) const noexcept
+{
+    return fire::lfo_bank::validIndex(index) ? performanceGenerations[static_cast<size_t>(index)].load(std::memory_order_acquire) : 0;
+}
+
+bool LfoManager::requestLfoTrigger(int index, std::uint32_t expectedGeneration) noexcept
+{
+    if (!isLfoPresent(index) || getLfoSlotGeneration(index) != expectedGeneration) return false;
+    const auto slot = static_cast<size_t>(index);
+    const auto* mode = lfoParameters[slot].playback[0];
+    if (mode == nullptr || mode->load(std::memory_order_relaxed) < .5f) return false;
+    auto previous = manualRequests[slot].load(std::memory_order_acquire);
+    for (;;)
+    {
+        const auto count = static_cast<std::uint32_t>(previous >> 32) == expectedGeneration
+            ? static_cast<std::uint32_t>(previous) + 1u : 1u;
+        const auto request = (static_cast<std::uint64_t>(expectedGeneration) << 32) | count;
+        if (manualRequests[slot].compare_exchange_weak(previous, request, std::memory_order_acq_rel)) return true;
+    }
+}
+
+std::uint64_t LfoManager::beginMidiLearn(int slot) noexcept
+{
+    if (!fire::midi_mod::validSlot(slot)) return 0;
+    constexpr auto mask = (std::uint64_t{1} << 42) - 1;
+    auto token = (midiLearnCounter.fetch_add(1, std::memory_order_relaxed) + 1u) & mask;
+    if (token == 0) token = (midiLearnCounter.fetch_add(1, std::memory_order_relaxed) + 1u) & mask;
+    midiLearnOwner.store(token, std::memory_order_release);
+    midiLearnResult.store(0, std::memory_order_release);
+    midiLearnRequest.store((token << 3) | static_cast<std::uint64_t>(slot + 1), std::memory_order_release);
+    return token;
+}
+
+void LfoManager::cancelMidiLearn(std::uint64_t token) noexcept
+{
+    if (token == 0) return;
+    auto owner = token;
+    midiLearnOwner.compare_exchange_strong(owner, 0, std::memory_order_acq_rel);
+    auto request = midiLearnRequest.load(std::memory_order_acquire);
+    while ((request >> 3) == token)
+        if (midiLearnRequest.compare_exchange_weak(request, 0, std::memory_order_acq_rel)) break;
+    auto result = midiLearnResult.load(std::memory_order_acquire);
+    while ((result >> 22) == token)
+        if (midiLearnResult.compare_exchange_weak(result, 0, std::memory_order_acq_rel)) break;
+}
+
+std::optional<LfoManager::MidiLearnResult> LfoManager::pollMidiLearn(std::uint64_t token) noexcept
+{
+    if (!isMidiLearnActive(token)) return {};
+    auto result = midiLearnResult.load(std::memory_order_acquire);
+    if ((result >> 22) != token || !midiLearnResult.compare_exchange_strong(result, 0, std::memory_order_acq_rel)) return {};
+    return MidiLearnResult {static_cast<int>(result & 7u) - 1, static_cast<int>((result >> 3) & 127u),
+        static_cast<int>((result >> 10) & 31u), static_cast<float>((result >> 15) & 127u) / 127.0f};
+}
+
+float LfoManager::getMidiCCValue(int slot) const noexcept
+{
+    return fire::midi_mod::validSlot(slot)
+        ? auxiliaryLevels[static_cast<size_t>(fire::mod_sources::firstMidiCC + slot - fire::mod_sources::envelope)].load(std::memory_order_relaxed) : 0;
+}
+
+void LfoManager::stageMidiCCInitialValue(int slot, int number, int channel, float value) noexcept
+{
+    if (!fire::midi_mod::validSlot(slot) || number < 0 || number > 127 || channel < 0 || channel > 16) return;
+    const auto index = static_cast<size_t>(slot);
+    const auto revision = midiConfigurationGenerations[index].load(std::memory_order_acquire);
+    const auto safe = std::isfinite(value) ? juce::jlimit(0.0f, 1.0f, value) : 0;
+    // Learned controller values have precisely seven bits. Use the freed
+    // payload space to bind a full configuration revision into one atomic word.
+    auto packet = (static_cast<std::uint64_t>(revision) << 32) | (std::uint64_t{1} << 19)
+        | static_cast<std::uint64_t>(number) | (static_cast<std::uint64_t>(channel) << 7)
+        | (static_cast<std::uint64_t>(juce::roundToInt(safe * 127)) << 12);
+    midiInitialValues[index].store(packet, std::memory_order_release);
+    if (midiConfigurationGenerations[index].load(std::memory_order_acquire) != revision)
+        midiInitialValues[index].compare_exchange_strong(packet, 0, std::memory_order_acq_rel);
+}
+
+void LfoManager::renderMidiCC(int samples, int midiRangeOffset, const fire::midi_mod::Bank& configuration, std::uint32_t generation) noexcept
+{
+    if (generation != appliedMidiGeneration)
+    {
+        for (auto& value : midiValues) value.setCurrentAndTargetValue(0);
+        appliedMidiGeneration = generation;
+    }
+    for (size_t slot = 0; slot < midiValues.size(); ++slot)
+    {
+        const auto& config = configuration[slot];
+        auto& active = activeMidiConfig[slot];
+        if (config.number != active.number || config.channel != active.channel)
+        { midiValues[slot].setCurrentAndTargetValue(0); active = config; }
+        auto initial = midiInitialValues[slot].load(std::memory_order_acquire);
+        if (initial != 0 && static_cast<std::uint32_t>(initial >> 32)
+            != midiConfigurationGenerations[slot].load(std::memory_order_acquire))
+        {
+            midiInitialValues[slot].compare_exchange_strong(initial, 0, std::memory_order_acq_rel);
+            continue;
+        }
+        if (initial != 0 && static_cast<int>(initial & 127u) == config.number
+            && static_cast<int>((initial >> 7) & 31u) == config.channel
+            && midiInitialValues[slot].compare_exchange_strong(initial, 0, std::memory_order_acq_rel))
+            midiValues[slot].setTargetValue(static_cast<float>((initial >> 12) & 127u) / 127.0f);
+    }
+    const auto& events = midiInput != nullptr ? *midiInput : emptyMidiInput;
+    auto event = events.findNextSamplePosition(midiRangeOffset);
+    const auto end = events.cend();
+    for (int sample = 0; sample < samples; ++sample)
+    {
+        const auto absoluteSample = static_cast<juce::int64>(midiRangeOffset) + sample;
+        while (event != end && (*event).samplePosition <= absoluteSample)
+        {
+            const auto metadata = *event; ++event;
+            if (metadata.samplePosition < midiRangeOffset || metadata.numBytes != 3) continue;
+            const auto* bytes = metadata.data;
+            if ((bytes[0] & 0xf0u) != 0xb0u || bytes[1] > 127 || bytes[2] > 127) continue;
+            const int channel = (bytes[0] & 15) + 1, number = bytes[1];
+            const auto value = static_cast<float>(bytes[2]) / 127.0f;
+            auto learn = midiLearnRequest.load(std::memory_order_acquire);
+            if (learn != 0 && midiLearnRequest.compare_exchange_strong(learn, 0, std::memory_order_acq_rel))
+                midiLearnResult.store(((learn >> 3) << 22) | (learn & 7u)
+                    | (static_cast<std::uint64_t>(number) << 3) | (static_cast<std::uint64_t>(channel) << 10)
+                    | (static_cast<std::uint64_t>(bytes[2]) << 15), std::memory_order_release);
+            for (size_t slot = 0; slot < midiValues.size(); ++slot)
+                if (configuration[slot].number == number
+                    && (configuration[slot].channel == 0 || configuration[slot].channel == channel))
+                    midiValues[slot].setTargetValue(value);
+        }
+        for (size_t slot = 0; slot < midiValues.size(); ++slot)
+            lfoOutputBuffer.setSample(fire::mod_sources::firstMidiCC + static_cast<int>(slot), sample,
+                configuration[slot].number < 0 ? 0 : midiValues[slot].getNextValue());
+    }
+    for (size_t slot = 0; slot < midiValues.size(); ++slot)
+        auxiliaryLevels[static_cast<size_t>(fire::mod_sources::firstMidiCC - fire::mod_sources::envelope) + slot]
+            .store(configuration[slot].number < 0 ? 0 : midiValues[slot].getCurrentValue(), std::memory_order_relaxed);
 }
 
 float LfoManager::getSyncCycleLengthInQuarterNotes(int index,
@@ -975,6 +1496,7 @@ LfoManager::updateModulationRoutingIfRevisionMatches(
     const ModulationRouting& replacementRouting)
 {
     auto safeReplacement = replacementRouting;
+    if ((fire::dynamic_eq::isParameterID(safeReplacement.targetParameterID) || fire::parallel_chain::isStructuralID(safeReplacement.targetParameterID) || fire::channel_mode::isParameterID(safeReplacement.targetParameterID) || fire::lfo_playback::isParameterID(safeReplacement.targetParameterID) || fire::midi_mod::isParameterID(safeReplacement.targetParameterID))) return {};
     safeReplacement.sanitise();
     if (safeReplacement.sourceLfoIndex != expectedRouting.sourceLfoIndex
         || safeReplacement.targetParameterID
@@ -1019,7 +1541,8 @@ LfoManager::assignModulationRoutingIfRevisionMatches(
         return {};
 
     const int safeSourceIndex = juce::jlimit(0, fire::mod_sources::sourceCount - 1, sourceLfoIndex);
-    if (fire::mod_sources::isParameterID(targetParameterID)) return {};
+    if (fire::mod_sources::isParameterID(targetParameterID)
+        || (fire::dynamic_eq::isParameterID(targetParameterID) || fire::parallel_chain::isStructuralID(targetParameterID) || fire::channel_mode::isParameterID(targetParameterID) || fire::lfo_playback::isParameterID(targetParameterID) || fire::midi_mod::isParameterID(targetParameterID))) return {};
     const juce::ScopedLock lock(dataAccessLock);
     if (targetParameterID.isNotEmpty() && ! isModulationSourcePresent(safeSourceIndex)) return {};
     ModulationRoutingEditResult result;
@@ -1034,19 +1557,6 @@ LfoManager::assignModulationRoutingIfRevisionMatches(
         return result;
 
     result.accepted = true;
-    if (targetParameterID.isNotEmpty())
-    {
-        for (int i = 0; i < modulationRoutings.size(); ++i)
-        {
-            auto& candidate = modulationRoutings.getReference(i);
-            if (i != routingIndex
-                && candidate.targetParameterID == targetParameterID)
-            {
-                candidate.targetParameterID.clear();
-                result.changed = true;
-            }
-        }
-    }
 
     if (currentRouting.sourceLfoIndex != safeSourceIndex)
     {
@@ -1231,7 +1741,8 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
     const juce::String& targetParameterID)
 {
     if (! fire::mod_sources::validSource(sourceLfoIndex) || targetParameterID.isEmpty()
-        || fire::mod_sources::isParameterID(targetParameterID))
+        || fire::mod_sources::isParameterID(targetParameterID)
+        || (fire::dynamic_eq::isParameterID(targetParameterID) || fire::parallel_chain::isStructuralID(targetParameterID) || fire::channel_mode::isParameterID(targetParameterID) || fire::lfo_playback::isParameterID(targetParameterID) || fire::midi_mod::isParameterID(targetParameterID)))
     {
         jassertfalse;
         return AssignmentResult::invalidRequest;
@@ -1239,28 +1750,16 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
 
     const juce::ScopedLock sl(dataAccessLock);
     if (! isModulationSourcePresent(sourceLfoIndex)) return AssignmentResult::invalidRequest;
-    // 1. First, check if the target parameter is already being modulated.
-    //    If so, just update its LFO source.
-    for (auto& routing : modulationRoutings)
-    {
-        if (routing.targetParameterID == targetParameterID)
-        {
-            if (routing.sourceLfoIndex != sourceLfoIndex)
-            {
-                routing.sourceLfoIndex = sourceLfoIndex;
-                if (fire::mod_sources::isAuxiliary(sourceLfoIndex)) routing.isBipolar = false;
-                advanceModulationRoutingRevisionLocked();
-                return AssignmentResult::changed;
-            }
+    for (const auto& routing : modulationRoutings)
+        if (routing.targetParameterID == targetParameterID && routing.sourceLfoIndex == sourceLfoIndex)
             return AssignmentResult::unchanged;
-        }
-    }
 
     // 2. If the target is not modulated, find the first available empty slot.
     for (auto& routing : modulationRoutings)
     {
         if (routing.targetParameterID.isEmpty())
         {
+            routing = {};
             routing.sourceLfoIndex = sourceLfoIndex;
             if (fire::mod_sources::isAuxiliary(sourceLfoIndex)) routing.isBipolar = false;
             routing.targetParameterID = targetParameterID;
@@ -1293,75 +1792,45 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
 
 bool LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
 {
-    if (targetParameterID.isEmpty())
-        return false;
-
-    const juce::ScopedLock sl(dataAccessLock);
+    if (targetParameterID.isEmpty()) return false;
+    const juce::ScopedLock lock(dataAccessLock);
+    bool changed = false;
     for (auto& routing : modulationRoutings)
-    {
-        if (routing.targetParameterID == targetParameterID)
-        {
-            const auto previousRouting = routing;
-            // Unbind by clearing the target ID
-            routing.targetParameterID = juce::String();
-
-            // (Optional) Reset other parameters to their default values to maintain a clean state
-            routing.depth = 0.5f;
-            routing.isBipolar = true;
-            routing.isBypassed = false;
-            if (! haveSameModulationRoutingState(routing, previousRouting))
-                advanceModulationRoutingRevisionLocked();
-            return true; // Exit after finding and clearing
-        }
-    }
-
-    return false;
+        if (routing.targetParameterID == targetParameterID) { routing = {}; changed = true; }
+    if (changed) advanceModulationRoutingRevisionLocked();
+    return changed;
 }
 
 bool LfoManager::invertModulationDepth(const juce::String& targetParameterID)
 {
-    if (targetParameterID.isEmpty())
-        return false;
-
-    const juce::ScopedLock sl(dataAccessLock);
+    if (targetParameterID.isEmpty()) return false;
+    const juce::ScopedLock lock(dataAccessLock);
+    bool changed = false;
     for (auto& routing : modulationRoutings)
-    {
         if (routing.targetParameterID == targetParameterID)
         {
-            const float newDepth = std::isfinite(routing.depth)
-                                       ? juce::jlimit(-1.0f, 1.0f,
-                                                      -routing.depth)
-                                       : -0.5f;
-            if (! juce::exactlyEqual(routing.depth, newDepth))
-            {
-                routing.depth = newDepth;
-                advanceModulationRoutingRevisionLocked();
-                return true;
-            }
-            return false;
+            const auto depth = std::isfinite(routing.depth) ? juce::jlimit(-1.0f, 1.0f, -routing.depth) : -.5f;
+            if (! juce::exactlyEqual(routing.depth, depth)) { routing.depth = depth; changed = true; }
         }
-    }
-
-    return false;
+    if (changed) advanceModulationRoutingRevisionLocked();
+    return changed;
 }
 
 bool LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
 {
-    if (targetParameterID.isEmpty())
-        return false;
-
-    const juce::ScopedLock sl(dataAccessLock);
-    for (auto& routing : modulationRoutings)
-    {
+    if (targetParameterID.isEmpty()) return false;
+    const juce::ScopedLock lock(dataAccessLock);
+    bool found = false, anyActive = false;
+    for (const auto& routing : modulationRoutings)
         if (routing.targetParameterID == targetParameterID)
-        {
-            routing.isBypassed = ! routing.isBypassed;
-            advanceModulationRoutingRevisionLocked();
-            return true; // Assuming one routing per target for now
-        }
-    }
-
-    return false;
+        { found = true; anyActive = anyActive || ! routing.isBypassed; }
+    if (! found) return false;
+    // A partially enabled target bypasses all; an entirely bypassed target
+    // enables all. One user action publishes one coherent routing revision.
+    for (auto& routing : modulationRoutings)
+        if (routing.targetParameterID == targetParameterID) routing.isBypassed = anyActive;
+    advanceModulationRoutingRevisionLocked();
+    return true;
 }
 
 std::uint64_t LfoManager::setLfoData(int index, const LfoData& newData)
@@ -1445,6 +1914,10 @@ bool LfoManager::replaceLfoDataAndRoutings(
 {
     if (newRoutings.size() > maximumModulationRoutings)
         return false;
+    for (const auto& routing : newRoutings)
+        if (fire::dynamic_eq::isParameterID(routing.targetParameterID) || fire::parallel_chain::isStructuralID(routing.targetParameterID)
+            || fire::lfo_playback::isParameterID(routing.targetParameterID)
+            || fire::midi_mod::isParameterID(routing.targetParameterID)) return false;
 
     auto safeLfoData = newLfoData;
     for (size_t i = 0; i < safeLfoData.size(); ++i)
@@ -1475,9 +1948,15 @@ bool LfoManager::replaceLfoDataAndRoutings(
             // replacement so a delayed menu cannot write the previous state
             // back over it.
             ++lfoDataRevisions[i];
+            performanceGenerations[i].fetch_add(1u, std::memory_order_release);
         }
 
         modulationRoutings = std::move(newRoutings);
+        midiStateGeneration.fetch_add(1u, std::memory_order_release);
+        midiLearnOwner.store(0, std::memory_order_release);
+        midiLearnRequest.store(0, std::memory_order_release);
+        midiLearnResult.store(0, std::memory_order_release);
+        for (auto& initial : midiInitialValues) initial.store(0, std::memory_order_release);
         // A complete state replacement is a new routing identity even when
         // every serialised field is byte-for-byte identical.
         advanceModulationRoutingRevisionLocked();

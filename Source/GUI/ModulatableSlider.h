@@ -12,6 +12,7 @@
 
 #include "GuardedSliderAccessibility.h"
 #include "../Utility/LfoBankParameters.h"
+#include "../Utility/ModulationSources.h"
 #include "InterfaceDefines.h"
 #include "PrimaryButton.h"
 #include "juce_gui_basics/juce_gui_basics.h"
@@ -35,7 +36,8 @@ public:
         clearModulation,
         invertDepth,
         togglePolarity,
-        toggleBypass
+        toggleBypass,
+        editModulation
     };
 
     ModulatableSlider();
@@ -94,7 +96,17 @@ public:
     {
         return modulationHandlePressAnimation;
     }
+    // Message-thread display summary. Zero keeps standalone/legacy callers
+    // on the original single-route rendering path until a snapshot arrives.
+    int modulationRouteCount = 0;
+    bool usesModulationSummary = false;
+    double modulationOffsetMinimum = 0.0, modulationOffsetMaximum = 0.0, modulationOffsetCurrent = 0.0;
+    bool needsMatrixEditing() const noexcept { return modulationRouteCount > 1 || usesModulationSummary; }
+    std::function<void(const juce::String&)> onEditModulationRequested;
+    std::function<int(const juce::String&)> getModulationRouteCount;
     bool isModulated = false;
+    bool isPresetLocked = false;
+    std::function<void(const juce::String&, bool)> onPresetLockChanged;
     bool isBipolar = true;
     bool isBypassed = false;
     juce::String parameterID;
@@ -112,10 +124,13 @@ public:
     {
         std::uint32_t presentMask = (1u << fire::lfo_bank::defaultCount) - 1u;
         std::uint64_t revision = 0;
+        std::array<juce::String, fire::mod_sources::macroCount> macroNames {};
+        bool presetLockAvailable = false, presetLockEnabled = false;
 
         bool contains(int index) const noexcept
         {
-            return fire::lfo_bank::validIndex(index) && (presentMask & (1u << index)) != 0;
+            return fire::mod_sources::isAuxiliary(index)
+                || (fire::lfo_bank::validIndex(index) && (presentMask & (1u << index)) != 0);
         }
     };
     // Capture stable slot identities and a routing revision when opening a menu.
@@ -172,7 +187,10 @@ private:
     float readoutOpacity = 1.0f;
     void valueChanged() override;
     friend struct ModulatableSliderTestAccess;
+    friend struct MultiSourceModulationUiTestAccess;
     friend struct LfoBankUiTestAccess;
+    friend struct PresetExperienceUiTestAccess;
+    friend struct ChainRoutingUiTestAccess;
     friend struct ModulatableSliderInteractionTestAccess;
 
     enum class PointerGesture

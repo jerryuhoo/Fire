@@ -3,6 +3,9 @@
 #include "ContextAwareComboBox.h"
 #include "EqControlsPanel.h"
 #include "HardwareColourPanel.h"
+#include "GranularMediaControls.h"
+#include "InsertOttSpectrum.h"
+#include "../Panels/ControlPanel/Graph Components/OttGraph.h"
 #include "../DSP/ChordResonator.h"
 #include <atomic>
 #include "../Utility/CloudsParameters.h"
@@ -27,6 +30,9 @@ public:
         freezeButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::granular.withAlpha(0.25f));
         freezeButton.setColour(juce::TextButton::textColourOffId, fire::ui::paletteFor(*this).textSecondary);
         freezeButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::whiteHot);
+        addChildComponent(sampleButton);sampleButton.setButtonText("Sample");sampleButton.setComponentID("granular_sample_tools");
+        sampleButton.setTitle("Granular audio import and export");sampleButton.setTooltip("Choose an audio window to import and freeze, or export captured frozen audio as WAV.");
+        sampleButton.onClick=[safe=juce::Component::SafePointer<InsertEffectControls>(this)]{if(safe)safe->showMedia();};
         for (auto* menu : {&rootMenu, &chordMenu})
         {
             addChildComponent(menu);
@@ -106,6 +112,37 @@ public:
     void setAnalogDriveControl(ModulatableSlider& control) {analogDriveKnob = &control; addChildComponent(control);}
     bool usesExpandedLayout() const noexcept
     { return type == fire::effects::Type::granular; }
+    bool usesOttGraph() const noexcept { return type == fire::effects::Type::ott; }
+    void setOttSpectrum(const float* magnitudes,int bins,float binWidth,const float* reference,float lowHz,float highHz)
+    { if(usesOttGraph()) ottSpectrum.update(magnitudes,bins,binWidth,reference,lowHz,highHz); }
+    void resetOttGraph(OttGraph& graph)
+    {
+        graph.setLevels(-120.0f,0.0f);graph.resetVisuals();ottSpectrum.reset();
+        lastOttBinding=lastOttTypeGeneration=std::numeric_limits<std::uint64_t>::max();
+        lastOttSequence=0;lastOttTimeMs=-1;
+    }
+    void updateOttGraph(OttGraph& graph,float dt)
+    {
+        if(!usesOttGraph() || !graph.isShowing()){resetOttGraph(graph);return;}
+        const auto state=processor.getInsertOttVisualState(scope,slot);
+        if(lastOttBinding!=bindingGeneration || lastOttTypeGeneration!=state.typeGeneration)
+        {
+            resetOttGraph(graph);lastOttBinding=bindingGeneration;lastOttTypeGeneration=state.typeGeneration;
+        }
+        const auto now=juce::Time::getMillisecondCounterHiRes();
+        if(state.valid && state.renderSequence!=lastOttSequence)
+        {lastOttSequence=state.renderSequence;lastOttTimeMs=now;}
+        const bool fresh=state.valid && lastOttTimeMs>=0 && now-lastOttTimeMs<=250.0;
+        graph.setLevels(fresh?state.inputLevelDb:-120.0f,fresh?state.gainChangeDb:0.0f,fresh?state.dynamicsActivityDb:0.0f);
+        const auto& definitions=fire::effects::controls(fire::effects::Type::ott);
+        if(sliders[2] && sliders[3])graph.setThresholds(definitions[2].fromNormalised(static_cast<float>(sliders[2]->getValue())),
+            definitions[3].fromNormalised(static_cast<float>(sliders[3]->getValue())));
+        const auto spectrum=ottSpectrum.advance(dt);graph.setSpectrum(spectrum.profile,spectrum.centroid);
+        bool reading=false;int preview=0;
+        for(size_t i=0;i<sliders.size();++i)if(sliders[i] && sliders[i]->isValueReadoutRequested())
+        {reading=true;if(i==2)preview|=1;if(i==3)preview|=2;}
+        graph.advanceVisuals(dt,reading,preview);
+    }
     bool usesFullWidthLayout() const noexcept
     { return usesExpandedLayout() || type == fire::effects::Type::lofi || type == fire::effects::Type::eq || usesAnalogLayout(); }
     bool usesAnalogLayout() const noexcept {return type == fire::effects::Type::shape && processor.getShapeMode(scope, slot) >= fire::analog::legacyCount;}
@@ -148,6 +185,7 @@ public:
         {
             auto* slider = sliders[i];
             if (! slider) continue;
+            slider->valueConstraint={};
             const auto id = fire::effects::parameterID(targetScope, targetSlot, static_cast<int>(i));
             slider->parameterID = id;
             auto attachment = std::make_unique<SliderAttachment>(processor.treeState, id, *slider);
@@ -157,6 +195,8 @@ public:
                             type == fire::effects::Type::delay && i == 4,
                             usesExpandedLayout() && i == 1,
                             (modulationEffect && i == 0) || (usesChordSelectors() && i == 3));
+            if (! isCurrent()) return;
+            if(type==fire::effects::Type::ott && (i==2 || i==3))slider->setLabel(i==2?"Up":"Down",colour);
             if (! isCurrent()) return;
             if (modulationEffect)
             {
@@ -322,6 +362,8 @@ public:
             reverbModelAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, id, reverbModelMenu);
             if (!isCurrent()) return;
         }
+        if(usesOttGraph())bindOttThresholds(request);
+        if (! isCurrent()) return;
         updateVisibility();
         if (! isCurrent()) return;
         resized();
@@ -334,6 +376,10 @@ public:
         const juce::Component::SafePointer<InsertEffectControls> safe(this);
         if (scope >= 0 && slot >= 0) bind(scope, slot);
         if (!safe) return;
+        refreshOttThresholds();
+        if (!safe) return;
+        if(mediaPopover && (!mediaPopover->isVisible() || (mediaSession && !mediaSession->content->hasValidOwner())))
+        {closeMedia();if(!safe)return;}
         if (type == fire::effects::Type::eq) eqControls.animationTick(1.0f / 60.0f);
         if (!safe) return;
         if (hardwareColour.isShowing())
@@ -348,6 +394,7 @@ public:
     {
         const juce::Component::SafePointer<InsertEffectControls> safe(this);
         choiceGeneration.fetch_add(1, std::memory_order_release);
+        closeMedia();if(!safe)return;sampleButton.dismissPointerGesture();if(!safe)return;
         rootMenu.dismissTransientInteraction();
         if (! safe) return;
         chordMenu.dismissTransientInteraction();
@@ -486,8 +533,9 @@ public:
                 area.removeFromLeft(gap);
             }
             const auto buttonHeight = juce::jmin(size, juce::roundToInt(28.0f * scale));
-            freezeButton.setBounds(area.withSizeKeepingCentre(
-                juce::jmin(area.getWidth(), size * 2 + gap), buttonHeight));
+            auto buttons=area.withSizeKeepingCentre(juce::jmin(area.getWidth(),juce::roundToInt(204*scale)),buttonHeight);
+            const int sampleWidth=juce::jmin(juce::roundToInt(88*scale),juce::jmax(1,(buttons.getWidth()-gap)/2));
+            sampleButton.setBounds(buttons.removeFromRight(sampleWidth));buttons.removeFromRight(gap);freezeButton.setBounds(buttons);
         }
         else if (type == fire::effects::Type::lofi)
         {
@@ -500,12 +548,13 @@ public:
         }
         else
         {
+            const std::array<size_t,6> order=usesOttGraph()?std::array<size_t,6>{0,1,5,2,3,4}:std::array<size_t,6>{0,1,2,3,4,5};
             for (size_t row = 0; row < 2; ++row)
             {
                 auto strip = area.removeFromTop(height); area.removeFromTop(gap);
                 for (size_t column = 0; column < 3; ++column)
                 {
-                    if (auto* slider = sliders[row * 3 + column]) slider->setBounds(strip.removeFromLeft(size));
+                    if (auto* slider = sliders[order[row * 3 + column]]) slider->setBounds(strip.removeFromLeft(size));
                     strip.removeFromLeft(gap);
                 }
             }
@@ -519,8 +568,73 @@ public:
         }
     }
     std::function<void()> onLayoutChanged;
+    void lookAndFeelChanged()override
+    {if(mediaSession && mediaPopover){fire::ui::setSkin(*mediaSession->content,fire::ui::skinFor(*this));mediaSession->content->sendLookAndFeelChange();mediaSession->content->styleCallout(*mediaPopover);}}
 
 private:
+    void bindOttThresholds(std::uint64_t request)
+    {
+        const juce::Component::SafePointer<InsertEffectControls> safe(this);
+        for(size_t index:{size_t{2},size_t{3}})if(sliders[index])
+            sliders[index]->valueConstraint=[safe,request,index](double value)
+            {
+                if(!safe || safe->bindingGeneration!=request || !safe->usesOttGraph())return value;
+                const auto& definitions=fire::effects::controls(fire::effects::Type::ott);
+                auto physical=definitions[index].fromNormalised(static_cast<float>(value));
+                if(index==2)
+                {
+                    const auto* down=safe->processor.treeState.getRawParameterValue(fire::effects::parameterID(safe->scope,safe->slot,3));
+                    if(down)physical=juce::jmin(physical,definitions[3].fromNormalised(down->load())-6.f);
+                }
+                else if(safe->sliders[2])physical=juce::jmax(physical,definitions[2].fromNormalised(static_cast<float>(safe->sliders[2]->getValue()))+6.f);
+                return static_cast<double>(definitions[index].toNormalised(physical));
+            };
+        refreshOttThresholds();
+    }
+    void refreshOttThresholds()
+    {
+        if(!usesOttGraph() || !sliders[2] || !sliders[3] || sliders[2]->hasActiveInteraction() || sliders[3]->hasActiveInteraction())return;
+        const auto* up=processor.treeState.getRawParameterValue(fire::effects::parameterID(scope,slot,2));
+        const auto* down=processor.treeState.getRawParameterValue(fire::effects::parameterID(scope,slot,3));
+        if(!up || !down)return;
+        const auto& definitions=fire::effects::controls(fire::effects::Type::ott);
+        const float upper=definitions[3].fromNormalised(down->load());
+        const float lower=juce::jmin(definitions[2].fromNormalised(up->load()),upper-6.f);
+        const juce::Component::SafePointer<InsertEffectControls> safe(this);
+        sliders[2]->setValue(definitions[2].toNormalised(lower),juce::dontSendNotification);
+        if(safe)sliders[3]->setValue(down->load(),juce::dontSendNotification);
+    }
+    fire::ui::InsertOttSpectrum ottSpectrum;
+    std::uint64_t lastOttBinding=std::numeric_limits<std::uint64_t>::max(),lastOttTypeGeneration=std::numeric_limits<std::uint64_t>::max(),lastOttSequence=0;
+    double lastOttTimeMs=-1;
+    friend struct GranularMediaUiTestAccess;
+    void showMedia()
+    {
+        if(!active || !isShowing() || !isEnabled() || type!=fire::effects::Type::granular)return;
+        const juce::Component::SafePointer<InsertEffectControls> safe(this);
+        if(mediaPopover){const bool visible=mediaPopover->isVisible();closeMedia();if(!safe || visible)return;}
+        const auto target=processor.getGranularAudioTarget(scope,slot);if(!target)return;
+        const auto binding=bindingGeneration,choice=choiceGeneration.load(std::memory_order_acquire);
+        auto session=std::make_unique<MediaSession>();
+        session->content=std::make_unique<fire::ui::GranularMediaControls>(processor,*target,[safe,binding,choice,scope=scope,slot=slot,epoch=target->slotGeneration]
+        {
+            if(!safe || !safe->isShowing() || !safe->isEnabled() || !safe->active || safe->bindingGeneration!=binding
+                || safe->choiceGeneration.load(std::memory_order_acquire)!=choice || safe->scope!=scope || safe->slot!=slot)return false;
+            const auto current=safe->processor.getGranularAudioTarget(scope,slot);
+            return current && current->slotGeneration==epoch;
+        });
+        fire::ui::setSkin(*session->content,fire::ui::skinFor(*this));session->content->sendLookAndFeelChange();
+        auto* parent=getTopLevelComponent();session->content->setSize(juce::jmax(1,juce::jmin(630,parent->getWidth()-60)),juce::jmax(1,juce::jmin(420,parent->getHeight()-60)));
+        session->callout=std::make_unique<juce::CallOutBox>(*session->content,parent->getLocalArea(&sampleButton,sampleButton.getLocalBounds()),parent);
+        if(!safe)return;
+        session->content->styleCallout(*session->callout);session->callout->setDismissalMouseClicksAreAlwaysConsumed(true);
+        mediaPopover=session->callout.get();mediaSession=std::move(session);mediaPopover->enterModalState(true,nullptr,false);
+    }
+    void closeMedia()
+    {
+        auto session=std::move(mediaSession);mediaPopover=nullptr;
+        if(session){session->content->dismiss();if(session->callout){session->callout->exitModalState(0);session->callout->setVisible(false);session->callout->setLookAndFeel(nullptr);}}
+    }
     bool usesChordSelectors() const noexcept { return type == fire::effects::Type::chordResonator; }
     void unobserveType()
     {
@@ -685,6 +799,7 @@ private:
             if (! current()) return;
         }
         freezeButton.setVisible(active && usesExpandedLayout());
+        if(!current())return;sampleButton.setVisible(active && usesExpandedLayout());
         if (current()) eqControls.setVisible(active && type == fire::effects::Type::eq);
         if (!current()) return;
         coreMode.setVisible(active && type == fire::effects::Type::shape);
@@ -718,6 +833,11 @@ private:
     std::array<ModulatableSlider*, fire::effects::controlCount> sliders {};
     std::array<ModulatableSlider*, cloudsExtraCount> cloudsSliders {};
     PrimaryTextButton freezeButton;
+    PrimaryTextButton sampleButton;
+    struct MediaSession
+    {std::unique_ptr<fire::ui::GranularMediaControls> content;std::unique_ptr<juce::CallOutBox> callout;};
+    std::unique_ptr<MediaSession> mediaSession;
+    juce::Component::SafePointer<juce::CallOutBox> mediaPopover;
     ContextAwareComboBox rootMenu, chordMenu;
     juce::Label rootLabel, chordLabel, chordNotes;
     std::array<juce::RangedAudioParameter*, 3> observedTypes {};

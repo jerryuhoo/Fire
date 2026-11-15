@@ -2,8 +2,8 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Blue Wings Music"
               aaxIdentifier="com.bluewingsmusic.Fire" bundleIdentifier="com.bluewingsmusic.Fire"
-              version="2.0.1" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
-              jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
+              version="2.1.0" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
+              jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion" pluginCharacteristicsValue="pluginWantsMidiIn"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="23" defines="JUCE_MODAL_LOOPS_PERMITTED=1"
               pluginManufacturerCode="Wing" pluginCode="Fire" useAppConfig="0"
               companyWebsite="www.bluewingsmusic.com" companyName="Blue Wings Music"
@@ -121,6 +121,45 @@
         <FILE id="factoryPreset01" name="FactoryPresets.h" compile="0" resource="0" file="Source/Utility/FactoryPresets.h"/>
         <FILE id="analogDriveScene01" name="AnalogDrivePresets.h" compile="0" resource="0" file="Source/Utility/AnalogDrivePresets.h"/>
         <FILE id="modSourceParams01" name="ModulationSources.h" compile="0" resource="0" file="Source/Utility/ModulationSources.h"/>
+        <FILE id="modStateValidation01" name="ModulationStateValidation.h" compile="0" resource="0" file="Source/Utility/ModulationStateValidation.h"/>
+        <FILE id="modSummary01" name="ModulationSummary.h" compile="0" resource="0" file="Source/Utility/ModulationSummary.h"/>
+        <FILE id="lfoPerformanceClock21" name="LfoPerformanceClock.h" compile="0" resource="0" file="Source/DSP/LfoPerformanceClock.h"/>
+        <FILE id="presetLockGlyph21" name="PresetLockGlyph.h" compile="0" resource="0" file="Source/GUI/PresetLockGlyph.h"/>
+        <FILE id="presetLockControls21" name="PresetLockControls.h" compile="0" resource="0" file="Source/GUI/PresetLockControls.h"/>
+        <FILE id="presetMetadataControls21" name="PresetMetadataControls.h" compile="0" resource="0" file="Source/GUI/PresetMetadataControls.h"/>
+        <FILE id="performanceUiHelpers21" name="PerformanceControlHelpers.h" compile="0" resource="0" file="Source/GUI/PerformanceControlHelpers.h"/>
+        <FILE id="lfoPlaybackUi21" name="LfoPlaybackControls.h" compile="0" resource="0" file="Source/GUI/LfoPlaybackControls.h"/>
+        <FILE id="midiUi21" name="MidiControls.h" compile="0" resource="0" file="Source/GUI/MidiControls.h"/>
+        <FILE id="channelModeDSP21" name="ChannelModeProcessor.h" compile="0" resource="0" file="Source/DSP/ChannelModeProcessor.h"/>
+        <FILE id="chainSnapshot21" name="ChainSnapshot.h" compile="0" resource="0" file="Source/Utility/ChainSnapshot.h"/>
+        <FILE id="chainCodecHeader21" name="ChainSnapshotCodec.h" compile="0" resource="0" file="Source/Utility/ChainSnapshotCodec.h"/>
+        <FILE id="chainCodecSource21" name="ChainSnapshotCodec.cpp" compile="1" resource="0" file="Source/Utility/ChainSnapshotCodec.cpp"/>
+        <FILE id="moduleMappingHeader21" name="ModuleSnapshotMapping.h" compile="0" resource="0" file="Source/Utility/ModuleSnapshotMapping.h"/>
+        <FILE id="moduleMappingSource21" name="ModuleSnapshotMapping.cpp" compile="1" resource="0" file="Source/Utility/ModuleSnapshotMapping.cpp"/>
+        <FILE id="chainOperations21" name="ChainOperations.cpp" compile="1" resource="0" file="Source/Utility/ChainOperations.cpp"/>
+        <FILE id="envParams21" name="EnvelopeParameters.h" compile="0" resource="0" file="Source/Utility/EnvelopeParameters.h"/>
+        <FILE id="channelModeParams21" name="ChannelModeParameters.h" compile="0" resource="0" file="Source/Utility/ChannelModeParameters.h"/>
+        <FILE id="channelModeState21" name="ChannelModeStateValidation.h" compile="0" resource="0" file="Source/Utility/ChannelModeStateValidation.h"/>
+        <FILE id="midiModParams21" name="MidiModulationParameters.h" compile="0" resource="0" file="Source/Utility/MidiModulationParameters.h"/>
+        <FILE id="lfoPlaybackParams21" name="LfoPlaybackParameters.h" compile="0" resource="0" file="Source/Utility/LfoPlaybackParameters.h"/>
+        <FILE id="midiState21" name="MidiStateValidation.h" compile="0" resource="0" file="Source/Utility/MidiStateValidation.h"/>
+        <FILE id="midiActions21" name="MidiControlActions.cpp" compile="1" resource="0" file="Source/Utility/MidiControlActions.cpp"/>
+        <FILE id="presetMetadata21" name="PresetMetadata.h" compile="0" resource="0" file="Source/Utility/PresetMetadata.h"/>
+        <FILE id="presetLocksHeader21" name="PresetParameterLocks.h" compile="0" resource="0" file="Source/Utility/PresetParameterLocks.h"/>
+        <FILE id="presetLocksSource21" name="PresetParameterLocks.cpp" compile="1" resource="0" file="Source/Utility/PresetParameterLocks.cpp"/>
+        <FILE id="parallelChainParams21" name="ParallelChainParameters.h" compile="0" resource="0" file="Source/Utility/ParallelChainParameters.h"/>
+        <FILE id="parallelChainLayout21" name="ParallelChainParameterLayout.h" compile="0" resource="0" file="Source/Utility/ParallelChainParameterLayout.h"/>
+        <FILE id="parallelChainState21" name="ParallelChainStateValidation.h" compile="0" resource="0" file="Source/Utility/ParallelChainStateValidation.h"/>
+        <FILE id="parallelChainActions21" name="ParallelChainActions.cpp" compile="1" resource="0" file="Source/Utility/ParallelChainActions.cpp"/>
+        <FILE id="granularMediaActions21" name="GranularMediaActions.cpp" compile="1" resource="0" file="Source/Utility/GranularMediaActions.cpp"/>
+        <FILE id="granularAudioIOHeader21" name="GranularAudioIO.h" compile="0" resource="0" file="Source/Utility/GranularAudioIO.h"/>
+        <FILE id="granularAudioIOSource21" name="GranularAudioIO.cpp" compile="1" resource="0" file="Source/Utility/GranularAudioIO.cpp"/>
+        <FILE id="dynamicEqHelper210" name="DynamicEqParameters.h" compile="0" resource="0" file="Source/Utility/DynamicEqParameters.h"/>
+        <FILE id="dynamicEqHelper211" name="DynamicEqParameterLayout.h" compile="0" resource="0" file="Source/Utility/DynamicEqParameterLayout.h"/>
+        <FILE id="dynamicEqHelper212" name="DynamicEqStateValidation.h" compile="0" resource="0" file="Source/Utility/DynamicEqStateValidation.h"/>
+        <FILE id="dynamicEqHelper213" name="DynamicEqActions.cpp" compile="1" resource="0" file="Source/Utility/DynamicEqActions.cpp"/>
+        <FILE id="envState21" name="EnvelopeStateValidation.h" compile="0" resource="0" file="Source/Utility/EnvelopeStateValidation.h"/>
+        <FILE id="envDsp21" name="EnvelopeDetectors.h" compile="0" resource="0" file="Source/DSP/EnvelopeDetectors.h"/>
       </GROUP>
       <GROUP id="{A397A229-19FD-F110-6940-6CC5C037D4D0}" name="GUI">
         <FILE id="fireMacroBar" name="MacroBar.h" compile="0" resource="0" file="Source/GUI/MacroBar.h"/>
@@ -129,11 +168,18 @@
         <FILE id="brandMarks" name="BrandMarks.h" compile="0" resource="0" file="Source/GUI/BrandMarks.h"/>
         <FILE id="logoMotion" name="FireLogoMotion.h" compile="0" resource="0" file="Source/GUI/FireLogoMotion.h"/>
         <FILE id="modSourceUi01" name="ModulationSourceControls.h" compile="0" resource="0" file="Source/GUI/ModulationSourceControls.h"/>
+        <FILE id="chainBlendBinding21" name="ChainBlendAttachment.h" compile="0" resource="0" file="Source/GUI/ChainBlendAttachment.h"/>
+        <FILE id="chainRoutingUi21" name="ChainRoutingControls.h" compile="0" resource="0" file="Source/GUI/ChainRoutingControls.h"/>
+        <FILE id="dynamicEqUi21" name="DynamicEqControls.h" compile="0" resource="0" file="Source/GUI/DynamicEqControls.h"/>
         <FILE id="eqUI1" name="EqControlsPanel.h" compile="0" resource="0" file="Source/GUI/EqControlsPanel.h"/>
         <FILE id="ottVis1" name="OttVisuals.h" compile="0" resource="0" file="Source/GUI/OttVisuals.h"/>
         <FILE id="moduleDrag" name="ModuleDragButton.h" compile="0" resource="0" file="Source/GUI/ModuleDragButton.h"/>
+        <FILE id="chainClipboardUI21" name="ChainClipboardUI.h" compile="0" resource="0" file="Source/GUI/ChainClipboardUI.h"/>
         <FILE id="insertUi1" name="EffectRackNavigation.h" compile="0" resource="0" file="Source/GUI/EffectRackNavigation.h"/>
         <FILE id="insertUi2" name="InsertEffectControls.h" compile="0" resource="0" file="Source/GUI/InsertEffectControls.h"/>
+        <FILE id="granularMediaUi21" name="GranularMediaControls.h" compile="0" resource="0" file="Source/GUI/GranularMediaControls.h"/>
+        <FILE id="granularMediaWorker21" name="GranularMediaWorker.h" compile="0" resource="0" file="Source/GUI/GranularMediaWorker.h"/>
+        <FILE id="insertOttSpectrum21" name="InsertOttSpectrum.h" compile="0" resource="0" file="Source/GUI/InsertOttSpectrum.h"/>
         <FILE id="cACb01" name="ContextAwareComboBox.cpp" compile="1" resource="0"
               file="Source/GUI/ContextAwareComboBox.cpp"/>
         <FILE id="cACb02" name="ContextAwareComboBox.h" compile="0" resource="0"
@@ -173,6 +219,8 @@
         <FILE id="analogSupply01" name="AnalogPowerSupply.h" compile="0" resource="0" file="Source/DSP/AnalogPowerSupply.h"/>
         <FILE id="analogMagnetics01" name="AnalogMagnetics.h" compile="0" resource="0" file="Source/DSP/AnalogMagnetics.h"/>
         <FILE id="analogTape01" name="AnalogTape.h" compile="0" resource="0" file="Source/DSP/AnalogTape.h"/>
+        <FILE id="parallelChainDsp21" name="ParallelChainProcessor.h" compile="0" resource="0" file="Source/DSP/ParallelChainProcessor.h"/>
+        <FILE id="dynamicEqDsp21" name="DynamicEqDetector.h" compile="0" resource="0" file="Source/DSP/DynamicEqDetector.h"/>
         <FILE id="eqDsp1" name="EqProcessor.h" compile="0" resource="0" file="Source/DSP/EqProcessor.h"/>
         <FILE id="eqDsp2" name="EqCoefficients.h" compile="0" resource="0" file="Source/DSP/EqCoefficients.h"/>
         <GROUP id="cloudsDspGroup" name="Clouds">
@@ -229,6 +277,7 @@
         <FILE id="resParams" name="ResonatorParameters.h" compile="0" resource="0" file="Source/Utility/ResonatorParameters.h"/>
         <FILE id="driveCompParams" name="DriveCompensationParameters.h" compile="0" resource="0" file="Source/Utility/DriveCompensationParameters.h"/>
         <FILE id="clapTail" name="ClapTail.h" compile="0" resource="0" file="Source/Utility/ClapTail.h"/>
+        <FILE id="clapGuiScaling" name="ClapGuiScaling.h" compile="0" resource="0" file="Source/Utility/ClapGuiScaling.h"/>
         <FILE id="moduleOrder1" name="ModuleOrder.h" compile="0" resource="0" file="Source/Utility/ModuleOrder.h"/>
         <FILE id="y9Kac2" name="SampleAccurateCompressor.h" compile="0" resource="0"
               file="Source/DSP/SampleAccurateCompressor.h"/>

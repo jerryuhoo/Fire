@@ -1,3 +1,4 @@
+#include "LegacyEnvelopeFixture.h"
 #include <PluginEditor.h>
 #include <Utility/DriveCompensationParameters.h>
 #include <catch2/catch_approx.hpp>
@@ -55,9 +56,24 @@ void removeHostParameter(juce::XmlElement& xml, const juce::String& id)
 }
 void stripFamily(juce::XmlElement& xml)
 {
+    fire::test::stripEnvelopePresetFamily(xml);
     xml.removeAttribute(marker);
     for (const auto& id : comp::parameterIDs()) xml.removeAttribute(id);
 }
+void stripAdvancedRoutingSchema(juce::XmlElement& xml)
+{
+    // A real pre-v3 preset predates both the routing schema marker and the
+    // advanced mapping attributes; lowering only its outer version produces
+    // an invalid mixed-generation document rather than a legacy fixture.
+    if (auto* routes = xml.getChildByName("MODULATION_STATE"))
+    {
+        routes->removeAttribute("schemaVersion");
+        for (auto* route : routes->getChildIterator())
+            for (const auto* field : {"customRange", "rangeStart", "rangeEnd", "curve", "depthMacro"})
+                route->removeAttribute(field);
+    }
+}
+
 void setModes(FireAudioProcessor& processor, float value)
 {
     for (int band = 0; band < 4; ++band) setPlain(processor, comp::parameterID(band), value);
@@ -102,7 +118,7 @@ TEST_CASE("Modern Drive compensation is appended while Link keeps its historical
           "[drive-comp][state][parameters][compatibility]")
 {
     FireAudioProcessor processor;
-    REQUIRE(processor.getParameters().size() == 1047 + fire::core_modules::parameterCount + fire::analog_params::parameterCount + fire::reverb_params::parameterCount);
+    REQUIRE(processor.getParameters().size() == 1047 + fire::core_modules::parameterCount + fire::analog_params::parameterCount + fire::reverb_params::parameterCount + fire::envelope_params::parameterCount + fire::channel_mode::parameterCount + fire::midi_mod::parameterCount + fire::lfo_playback::parameterCount + fire::dynamic_eq::parameterCount + fire::parallel_chain::parameterCount);
     auto* previousLast = processor.treeState.getParameter("bandFx8Resonator4");
     REQUIRE(previousLast != nullptr);
     CHECK(previousLast->getParameterIndex() == 1035);
@@ -160,6 +176,7 @@ TEST_CASE("Absent Drive compensation families retain legacy Link on active and a
     source.stateAB.copyAB(false); source.stateAB.toggleAB();
     configure(source, 1);
     auto legacyHost = host(source);
+    fire::test::stripEnvelopeHostFamily(legacyHost);
     legacyHost.removeAttribute(marker);
     for (const auto& id : comp::parameterIDs()) removeHostParameter(legacyHost, id);
     auto* ab = legacyHost.getChildByName("AB_STATE"); REQUIRE(ab != nullptr);
@@ -171,6 +188,7 @@ TEST_CASE("Absent Drive compensation families retain legacy Link on active and a
         auto candidate = legacyPreset;
         if (version < 0) candidate.removeAttribute("presetFormatVersion");
         else candidate.setAttribute("presetFormatVersion", version);
+        stripAdvancedRoutingSchema(candidate);
         setModes(restored, 1.0f);
         REQUIRE(state::loadStateFromXml(candidate, restored));
         checkSoundSettings(restored, 0, true);

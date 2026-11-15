@@ -9,6 +9,13 @@
 */
 
 #pragma once
+#include "Utility/ModulationSummary.h"
+#include "Utility/ChainSnapshot.h"
+#include "Utility/PresetParameterLocks.h"
+#include "Utility/ChannelModeParameters.h"
+#include "DSP/ChannelModeProcessor.h"
+#include "Utility/ParallelChainParameters.h"
+#include "DSP/ParallelChainProcessor.h"
 #include "DSP/InsertRack.h"
 #include "DSP/LoudnessMatchState.h"
 #include "DSP/DriveCompensation.h"
@@ -23,6 +30,7 @@
 #include "Utility/LfoBankParameters.h"
 #include "DSP/EqCoefficients.h"
 #include "DSP/EqProcessor.h"
+#include "DSP/DynamicEqDetector.h"
 
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "DSP/WidthProcessor.h"
@@ -43,6 +51,7 @@
 #include <cstdint>
 #include <memory>
 #include <limits>
+#include <optional>
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 #include <functional>
 #endif
@@ -55,6 +64,7 @@ namespace fire::state { class EditHistory; }
 //==============================================================================
 struct BandProcessingParameters
 {
+    int channelMode = 0;
     // Main process parameters
     bool isBandEnabled { true };
     int mode { 0 };
@@ -79,6 +89,9 @@ struct BandProcessingParameters
     OttProcessor::Parameters ott;
     fire::effects::RackParameters inserts;
     fire::module_order::Order moduleOrder = fire::module_order::bandDefault;
+    fire::parallel_chain::Routing parallelRouting;
+    ModulatedValueProvider parallelBlend;
+    int parallelBlendLfoSourceIndex = -1;
     float width { 0.5f };
     ModulatedValueProvider widthValProvider;
     float pan { 0.0f };
@@ -129,6 +142,7 @@ struct OutputGainTransitionState
         int sourceIndex = -1;
         float modulationDepth = 0.0f;
         bool isBipolar = true;
+        bool signalIsOffset = false;
         bool isLinked = false;
     };
 
@@ -166,6 +180,7 @@ struct CompressorRecipeTransitionState
         int sourceIndex = -1;
         float modulationDepth = 0.0f;
         bool isBipolar = true;
+        bool signalIsOffset = false;
     };
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
@@ -190,6 +205,7 @@ struct ShapeControlRecipeTransitionState
         int sourceIndex = -1;
         float modulationDepth = 0.0f;
         bool isBipolar = true;
+        bool signalIsOffset = false;
     };
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
@@ -215,6 +231,7 @@ struct DriveControlTransitionState
         int sourceIndex = -1;
         float modulationDepth = 0.0f;
         bool isBipolar = true;
+        bool signalIsOffset = false;
         bool isExtremeModeOn = false;
     };
 
@@ -367,6 +384,8 @@ private:
     juce::AudioBuffer<float> safePeakEnvelopeBuffer;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran>
         sharedBandDryDelay { 2048 };
+    fire::dsp::ChannelModeProcessor channelModeProcessor;
+    fire::dsp::ParallelChainProcessor parallelProcessor;
     float safePeakEnvelope = 0.0f;
     float safePeakReleaseCoefficient = 0.0f;
     int safePeakHoldSamples = 1;
@@ -435,6 +454,17 @@ public:
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
     fire::effects::Type getInsertEffectType(int scope, int slot) const;
+    // An asynchronous file operation may only publish to the original module.
+    // The slot generation also rejects host-automated type-away/type-back ABA.
+    struct GranularAudioTarget
+    {
+        int scope = -1, slot = -1;
+        std::uint64_t revision = 0, slotGeneration = 0;
+    };
+    std::optional<GranularAudioTarget> getGranularAudioTarget(int scope, int slot) const;
+    bool isGranularAudioTargetCurrent(const GranularAudioTarget&) const noexcept;
+    juce::Result applyImportedGranularAudio(const GranularAudioTarget&, const fire::effects::FrozenRecordingPtr&);
+    juce::Result captureGranularAudioForExport(const GranularAudioTarget&, fire::effects::FrozenRecordingPtr&) const;
     int getInsertEffectOrder(int scope, int slot) const;
     int addInsertEffect(int scope, fire::effects::Type type);
     void removeInsertEffect(int scope, int slot);
@@ -484,6 +514,8 @@ private:
     // StatePresets) are still under construction. Keep that constructor path
     // on the LFO/APVTS-only snapshot until the full main model is alive.
     mutable juce::CriticalSection macroNamesLock;
+    mutable juce::CriticalSection presetLocksMutex;
+    juce::StringArray presetParameterLocks;
     fire::macro_names::Names macroDisplayNames = fire::macro_names::defaults();
     std::atomic<std::uint64_t> macroNamesRevision { 0 };
     std::atomic<bool> serializableMainStateReady { false };
@@ -492,15 +524,36 @@ public:
 
     std::vector<LfoData> getLfoData() const { return lfoManager->getLfoDataCopy(); }
 
-    struct ModulationInfo
-    {
-        bool isModulated = false;
-        int sourceLfoIndex = 0; // Will be 1-based for the UI
-        float depth = 0.0f;
-        float currentValue = 0.0f; // The current LFO output, bipolar [-1, 1]
-        bool isBipolar = true;
-        bool isBypassed = false;
-    };
+    std::uint64_t beginEnvelopeAudition(int envelopeIndex) noexcept;
+    void endEnvelopeAudition(std::uint64_t token) noexcept;
+    int getEnvelopeAuditionIndex() const noexcept;
+    std::uint32_t getLfoSlotGeneration(int index) const noexcept;
+    bool triggerLfo(int index, std::uint32_t expectedGeneration) noexcept;
+    std::uint64_t beginMidiLearn(int slot);
+    void endMidiLearn(std::uint64_t token) noexcept;
+    bool isMidiLearnActive(std::uint64_t token) const noexcept;
+    bool applyMidiLearn(std::uint64_t token);
+    float getMidiCCValue(int slot) const noexcept;
+    using LockablePresetParameter = fire::preset_locks::Entry;
+    bool isPresetParameterLocked(const juce::String& id) const;
+    bool setPresetParameterLocked(const juce::String& id, bool locked);
+    void clearPresetParameterLocks();
+    juce::StringArray getPresetParameterLocks() const;
+    std::vector<LockablePresetParameter> getLockableParameters() const;
+
+    using ModulationInfo = fire::ui::ModulationSummary;
+
+    juce::Result captureModuleSnapshot(int scope, int node, bool includeRouting, fire::chain::Snapshot&) const;
+    juce::Result captureChainSnapshot(int scope, bool includeRouting, fire::chain::Snapshot&) const;
+    juce::Result pasteModuleSnapshot(int scope, int afterNode, const fire::chain::Snapshot&, int& newNode);
+    juce::Result pasteChainSnapshot(int scope, const fire::chain::Snapshot&);
+    int getChainRoutingMode(int scope) const noexcept;
+    bool setChainRoutingMode(int scope, int mode, std::uint64_t* committedRevision = nullptr);
+    int getModuleBranch(int scope, int node) const noexcept;
+    bool setModuleBranch(int scope, int node, int branch, std::uint64_t* committedRevision = nullptr);
+    float getParallelBlend(int scope) const noexcept;
+    std::uint64_t getChainEditRevision() const noexcept
+    { return multibandTopologyResetGeneration.load(std::memory_order_acquire); }
 
     // New public method for the editor to call
     ModulationInfo getModulationInfoForParameter(const juce::String& parameterID) const;
@@ -606,6 +659,8 @@ public:
         ModulatedFilterValues& values,
         std::uint64_t requiredCaptureEpoch = 0);
     std::uint64_t requestFreshModulatedFilterValuesEpoch() noexcept;
+    fire::dynamic_eq::VisualState getDynamicEqVisualState(int node, int scope = -1, int slot = -1) const noexcept;
+    OttProcessor::VisualState getInsertOttVisualState(int scope, int slot) const noexcept;
     fire::eq::NodeState getEqNodeState(int slot, int fxScope = -1, int fxSlot = -1) const;
     int addEqNode(float frequency, float gainDb,
                   fire::eq::Type type = fire::eq::Type::bell, int fxScope = -1, int fxSlot = -1);
@@ -833,6 +888,7 @@ private:
         GlobalFilterCallbackSnapshot globalFilter;
         ModulatedParameterSnapshot globalOutput;
         ModulatedParameterSnapshot globalMix;
+        ModulatedParameterSnapshot parallelBlend;
         ModulatedParameterSnapshot downsampleRate;
         ModulatedParameterSnapshot bitDepth;
         ModulatedParameterSnapshot jitter;
@@ -853,6 +909,8 @@ private:
         std::uint32_t publicationSequence = 0;
         std::uint32_t dspResetSequence = 0;
         bool independentShapeBudget = false;
+        int masterChannelMode = 0;
+        fire::parallel_chain::Routing masterParallelRouting;
         int numBands = 1;
     };
 
@@ -889,9 +947,21 @@ private:
         fire::dsp::LoudnessMatchState::Settings loudnessMatch;
         fire::effects::FrozenRecordings frozenAudio;
         fire::macro_names::Names macroNames = fire::macro_names::defaults();
+        juce::StringArray presetLocks;
     };
 
     void initialiseParameterCache();
+    struct GranularSlotGeneration final : juce::AudioProcessorParameter::Listener
+    {
+        static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
+        std::atomic<std::uint64_t> value { 0 };
+        std::array<juce::RangedAudioParameter*, 4> parameters {};
+        void parameterValueChanged(int, float) override { value.fetch_add(1, std::memory_order_release); }
+        void parameterGestureChanged(int, bool) override {}
+    };
+    std::array<std::array<GranularSlotGeneration, fire::effects::slotCount>, fire::effects::scopeCount> granularSlotGenerations;
+    void initialiseGranularSlotGenerations();
+    void detachGranularSlotGenerations();
     void moveInsertEffectInternal(int scope, int slot, int position, bool relative);
     void writeModuleOrder(int scope, const fire::module_order::Order& order);
     std::vector<int> visibleModuleOrder(int scope) const;
@@ -927,7 +997,36 @@ private:
     FilterParameterCache filterParameterCache;
     std::array<std::array<CachedParameter, fire::eq::fieldCount>, fire::eq::maxNodes> eqParameterCache;
     std::array<std::atomic<std::uint32_t>, fire::eq::maxNodes> eqNodeGenerations {};
+    std::array<std::array<std::array<std::atomic<std::uint32_t>, fire::eq::maxNodes>, fire::effects::slotCount>, fire::effects::scopeCount> insertEqNodeGenerations {};
     fire::eq::Processor eqProcessor;
+    using DynamicEqParameterCache = std::array<CachedParameter, fire::dynamic_eq::fieldCount>;
+    using DynamicEqModuleCache = std::array<DynamicEqParameterCache, fire::eq::maxNodes>;
+    DynamicEqModuleCache nativeDynamicEqParameters;
+    std::array<std::array<DynamicEqModuleCache, fire::effects::slotCount>, fire::effects::scopeCount> insertDynamicEqParameters;
+    static fire::dynamic_eq::Configuration readDynamicEqConfiguration(const DynamicEqParameterCache&) noexcept;
+    fire::dynamic_eq::Detector legacyPeakDetector;
+    float legacyPeakDynamicGain = 0, legacyPeakAppliedGainChange = 0;
+    int legacyPeakDynamicRemaining = 0;
+    std::uint32_t legacyPeakDynamicGeneration = 0;
+    struct DynamicEqMeter
+    {
+        std::atomic<std::uint64_t> sequence {0};
+        std::atomic<float> gainChange {0}, effectiveGain {0};
+        std::atomic<bool> active {false};
+    };
+    std::array<std::array<DynamicEqMeter, fire::eq::maxNodes>, 1 + fire::effects::scopeCount * fire::effects::slotCount> dynamicEqMeters;
+    struct InsertOttMeter
+    {
+        std::atomic<std::uint64_t> sequence {0}, typeGeneration {0};
+        std::atomic<float> inputLevelDb {-120.0f}, gainChangeDb {0}, dynamicsActivityDb {0};
+        std::atomic<bool> valid {false}, mixModulated {false};
+    };
+    std::array<std::array<InsertOttMeter, fire::effects::slotCount>, fire::effects::scopeCount> insertOttMeters;
+    std::uint64_t dynamicEqRenderSequence = 0; // Audio-thread owned, also advances for oversized sub-blocks.
+    void publishDynamicEqMeters() noexcept;
+    void resetDynamicEqMeters() noexcept;
+    void resetDynamicEqNodeParameters(int node, int scope, int slot);
+
     CachedParameter numBandsParameter;
     CachedParameter hqParameter;
     CachedParameter globalOutputParameter;
@@ -947,6 +1046,12 @@ private:
     std::unique_ptr<fire::effects::RackPreparationWorker> insertPreparationWorker;
     void synchroniseInsertPreparation() noexcept;
     std::array<std::array<CachedParameter, fire::module_order::capacity>, fire::effects::scopeCount> moduleOrderParameters;
+    std::array<CachedParameter, fire::effects::scopeCount> channelModeParameters {};
+    std::array<CachedParameter, fire::effects::scopeCount> parallelModeParameters {}, parallelBlendParameters {};
+    std::array<std::array<CachedParameter, fire::module_order::capacity>, fire::effects::scopeCount> parallelBranchParameters {};
+    fire::parallel_chain::Routing readParallelRouting(int scope) const noexcept;
+    void resetModuleBranchParameter(int scope, int node);
+    std::atomic<std::uint64_t> midiLearnStartRevision { 0 };
     std::array<std::array<CachedParameter, 5>, fire::effects::scopeCount> modulePresenceParameters;
     std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> shapeModelParameters;
     std::array<std::array<CachedParameter, fire::effects::slotCount>, fire::effects::scopeCount> analogDriveParameters;
@@ -955,6 +1060,8 @@ private:
     fire::module_order::Transition masterOrderTransition;
     juce::AudioBuffer<float> masterOrderDry;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> masterOrderDryDelay{256};
+    fire::dsp::ChannelModeProcessor masterChannelModeProcessor;
+    fire::dsp::ParallelChainProcessor masterParallelProcessor;
     fire::dsp::LoudnessMatchState loudnessMatch;
     juce::AudioBuffer<float> loudnessReference;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran> loudnessReferenceDelay;
@@ -1172,6 +1279,15 @@ private:
     // wet audio buffer
     juce::AudioBuffer<float> mWetBuffer;
     juce::AudioBuffer<float> hostBypassWetBuffer;
+    const juce::AudioBuffer<float>* externalModulationInput = nullptr;
+    juce::AudioBuffer<float> envelopeAuditionBuffer;
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran> envelopeAuditionDelay;
+    juce::SmoothedValue<float> envelopeAuditionMix;
+    std::atomic<std::uint64_t> envelopeAuditionRequest {0}, envelopeAuditionCounter {0};
+    int renderedEnvelopeAudition = -1;
+    int envelopeAuditionWarmup = 0;
+    void processEnvelopeAudition(juce::AudioBuffer<float>&);
+
     juce::AudioBuffer<float> lfoOutputBuffer;
     juce::AudioBuffer<float> lofiDryBuffer;
     juce::AudioBuffer<float> globalMixAlignedDryBuffer;

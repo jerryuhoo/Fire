@@ -263,6 +263,8 @@ public:
         } clouds;
         Type type = Type::none;
         std::uint32_t publicationSequence = 0;
+        // Identity only: prevents a UI meter surviving a slot type replacement.
+        std::uint64_t typeGeneration = 0;
         bool enabled = true;
         bool normalised = false;
         bool highQuality = false, fixedShapeLatency = false;
@@ -327,8 +329,8 @@ public:
     }
     FrozenRecordingPtr copyFrozenRecording() const
     {const std::lock_guard<std::mutex> lock(preparationLock); return cloudsEngine.copyFrozenRecording();}
-    void stageFrozenRecording(const FrozenRecordingPtr& recording, std::uint32_t publication)
-    {const std::lock_guard<std::mutex> lock(preparationLock); cloudsEngine.stageFrozenRecording(recording, publication);}
+    void stageFrozenRecording(const FrozenRecordingPtr& recording, std::uint32_t publication, bool smoothReplacement = false)
+    {const std::lock_guard<std::mutex> lock(preparationLock); cloudsEngine.stageFrozenRecording(recording, publication, smoothReplacement);}
     int getProcessingLatency() const noexcept
     {return currentType == Type::shape && fixedShapeLatencyActive && core ? core->getShapeLatency() : 0;}
     void process(juce::dsp::AudioBlock<float> block, const Parameters& parameters, int offset = 0,
@@ -459,6 +461,26 @@ public:
             if (right) right[sample] = juce::jmap(mix, dryR, std::isfinite(wetR) ? wetR : 0.0f);
         }
     }
+    /** Audio thread only. The outer processor owns any cross-thread publication. */
+    dynamic_eq::VisualState getDynamicEqVisualState(int node) const noexcept
+    {
+        return currentType == Type::eq && core != nullptr && !dormant && gate.getTargetValue() > 0
+            ? core->getDynamicEqVisualState(node) : dynamic_eq::VisualState{};
+    }
+    /** Audio thread only. Includes this insert's outer Mix/power bridge. */
+    OttProcessor::VisualState getOttVisualState() const noexcept
+    {
+        if (currentType != Type::ott || core == nullptr || dormant || gate.getTargetValue() <= 0)
+            return {};
+        auto result = core->getOttVisualState();
+        const auto amount = gate.getCurrentValue() * lastValues[5] * 0.01f;
+        const auto wetGain = juce::Decibels::decibelsToGain(result.gainChangeDb);
+        result.gainChangeDb = juce::Decibels::gainToDecibels(1.0f + amount * (wetGain - 1.0f), -120.0f);
+        result.dynamicsActivityDb *= amount;
+        result.typeGeneration = coreLastParameters.typeGeneration;
+        result.mixModulated = routes[5].routed;
+        return result;
+    }
 private:
     enum : std::uint32_t {historyFamily = 1, tapeFamily = 2, reverbFamily = 4,
         cloudsFamily = 8, chordFamily = 16, coreFamily = 32, allFamilies = 63};
@@ -576,7 +598,7 @@ private:
         juce::SmoothedValue<float> blend;
         float anchor = 0.0f, depth = 0.0f;
         int source = -1;
-        bool initialised = false, routed = false, bipolar = true;
+        bool initialised = false, routed = false, bipolar = true, signalIsOffset = false;
     };
     void updateControlTargets(const Parameters& parameters,
                               const std::array<int, controlCount>* sourceIndices,
@@ -597,7 +619,8 @@ private:
             if (route.initialised && (route.routed != routed
                 || (routed && (route.source != source
                     || ! juce::exactlyEqual(route.depth, depth)
-                    || route.bipolar != provider.isBipolar))))
+                    || route.bipolar != provider.isBipolar
+                                   || route.signalIsOffset != provider.signalIsOffset))))
             {
                 route.anchor = lastValues[i];
                 route.blend.setCurrentAndTargetValue(0.0f);
@@ -608,6 +631,7 @@ private:
             route.source = source;
             route.depth = depth;
             route.bipolar = provider.isBipolar;
+            route.signalIsOffset = provider.signalIsOffset;
         }
         if (currentType == Type::granular)
             for (size_t i = 0; i < cloudsBases.size(); ++i)
@@ -620,7 +644,8 @@ private:
                 const auto depth = std::isfinite(provider.modulationDepth)
                     ? juce::jlimit(-1.0f, 1.0f, provider.modulationDepth) : 0.0f;
                 if (route.initialised && (route.routed != routed || (routed && (route.source != source
-                    || ! juce::exactlyEqual(route.depth, depth) || route.bipolar != provider.isBipolar))))
+                    || ! juce::exactlyEqual(route.depth, depth) || route.bipolar != provider.isBipolar
+                                   || route.signalIsOffset != provider.signalIsOffset))))
                 {
                     route.anchor = lastCloudsValues[i];
                     route.blend.setCurrentAndTargetValue(0.0f);
@@ -628,6 +653,7 @@ private:
                 }
                 route.initialised = true; route.routed = routed; route.source = source;
                 route.depth = depth; route.bipolar = provider.isBipolar;
+                route.signalIsOffset = provider.signalIsOffset;
             }
     }
     void resetMemory(bool preserveFrozen = true) noexcept

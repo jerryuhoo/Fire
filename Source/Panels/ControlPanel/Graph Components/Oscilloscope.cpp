@@ -121,7 +121,7 @@ void Oscilloscope::timerCallback()
         return;
     }
 
-    const bool nextMonoChannel = processor.getTotalNumInputChannels() == 1;
+    const bool nextMonoChannel = processor.getMainBusNumInputChannels() == 1;
     if (! processor.copyHistorySnapshot(historyScratch)
         || historyScratch.sourceToken != historySourceToken
         || processor.getHistorySourceToken() != historySourceToken)

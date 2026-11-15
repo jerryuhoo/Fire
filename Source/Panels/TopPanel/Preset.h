@@ -18,7 +18,10 @@
 #include "../../GUI/PrimaryButton.h"
 #include "../../GUI/LoudnessMatchControls.h"
 #include "../../GUI/SettingsComponent.h"
+#include "../../GUI/PresetLockGlyph.h"
 #include "../../Utility/VersionInfo.h"
+#include "../../Utility/PresetMetadata.h"
+#include "../../Utility/PresetParameterLocks.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <atomic>
@@ -37,6 +40,7 @@ struct StateComponentPresetBoxTestAccess;
 struct StateComponentSaveChooserTestAccess;
 struct StateComponentSaveErrorAlertTestAccess;
 struct StateComponentSessionBoundaryTestAccess;
+struct PresetExperienceUiTestAccess;
 #endif
 
 namespace state
@@ -46,7 +50,8 @@ namespace state
     void saveStateToXml(const juce::AudioProcessor& processor, juce::XmlElement& xml);
     bool canLoadStateFromXml(const juce::XmlElement& xml, const juce::AudioProcessor& processor);
     bool loadStateFromXml(const juce::XmlElement& xml, juce::AudioProcessor& processor,
-                          bool preserveLoudnessComparison = false);
+                          bool preserveLoudnessComparison = false,
+                          const fire::preset_locks::Values* lockedBaseValues = nullptr);
     // Called after format validation, and by preset-equivalence checks.
     // Upgrades only the former Granular controls and reserved engine fields.
     // Returns true only when an actual Legacy Granular slot was converted.
@@ -127,7 +132,14 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         {
             juce::String tag, key, name, category, description;
             bool factory = false, favourite = false, removed = false;
+            juce::StringArray tags;
         };
+        using Metadata = fire::preset_metadata::Metadata;
+        using PresetMetadata = Metadata;
+        juce::Result readPresetMetadata(const juce::String& key, Metadata& out) const;
+        juce::Result writePresetMetadata(const juce::String& key, const Metadata& metadata,
+                                        const juce::String& expectedRevision);
+        juce::Result resetFactoryMetadata(const juce::String& key, const juce::String& expectedRevision);
         std::vector<BrowserEntry> getBrowserEntries(bool includeRemoved = false) const;
         bool setPresetFavourite(const juce::String& key, bool favourite);
         bool removeBrowserPreset(const juce::String& key);
@@ -272,6 +284,8 @@ PluginProcessor).
         void synchronisePresetSelectionFromManager();
         void synchroniseABButtonFromManager();
         void updateLoudnessMatchState();
+        void updatePresetLockIndicator();
+        void lookAndFeelChanged() override;
         StatePresets* getProcStatePresets();
         StateAB* getProcStateAB();
         juce::TextButton* getCopyABButton();
@@ -293,6 +307,7 @@ PluginProcessor).
         friend struct ::StateComponentSaveChooserTestAccess;
         friend struct ::StateComponentSaveErrorAlertTestAccess;
         friend struct ::StateComponentSessionBoundaryTestAccess;
+        friend struct ::PresetExperienceUiTestAccess;
 #endif
 
         class PresetComboBox final : public FocusAwareComboBox
@@ -415,6 +430,9 @@ PluginProcessor).
         fire::ui::LoudnessMatchControls loudnessMatchControls;
         PresetComboBox presetBox;
         PrimaryTextButton browserButton;
+        fire::ui::PresetLocksButton presetLocksButton;
+        juce::Component::SafePointer<juce::DialogWindow> presetLocksDialog;
+        int displayedPresetLockCount = -1;
         PrimaryTextButton previousButton;
         PrimaryTextButton nextButton;
         PrimaryTextButton savePresetButton;
@@ -432,6 +450,8 @@ PluginProcessor).
         void timerCallback() override;
 
         void refreshPresetBox();
+        void showPresetLocks();
+        void dismissPresetLocks() noexcept;
         void deletePresetAndRefresh();
         void savePresetAlertWindow();
         std::function<void(const juce::File&)>

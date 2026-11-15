@@ -369,12 +369,25 @@ std::vector<juce::ModifierKeys> rejectedPointerModifiers()
     return modifiers;
 }
 
-void checkPanelButtons(juce::Component& panel, int expectedButtonCount)
+void checkPanelButtons(juce::Component& panel, int expectedButtonCount,
+                       int expectedEqPanelCount)
 {
     auto buttons = collectDirectButtons(panel);
     REQUIRE(buttons.size() == static_cast<size_t>(expectedButtonCount));
-    // The insert page now owns one additional PrimaryTextButton for Clouds
-    // Freeze. Keep it in the same rejected-gesture checks as every old button.
+    const auto countByID = [&buttons](const juce::String& id)
+    {
+        return std::count_if(buttons.begin(), buttons.end(), [&id](const auto* button)
+        {
+            return button->getComponentID() == id;
+        });
+    };
+    // Keep every 2.1 entry point in the same rejected-gesture checks as the
+    // existing controls. Master owns both native and inserted EQ editors.
+    REQUIRE(countByID("bandChainTools") + countByID("masterChainTools") == 1);
+    REQUIRE(countByID("chain_routing_summary") == 1);
+    REQUIRE(countByID("granular_sample_tools") == 1);
+    REQUIRE(countByID("eq_dynamic_settings") == expectedEqPanelCount);
+    // Clouds Freeze remains covered independently of the new Sample button.
     REQUIRE(std::count_if(buttons.begin(), buttons.end(), [](const auto* button)
     {
         return button->getButtonText() == "Freeze";
@@ -411,19 +424,26 @@ TEST_CASE("Control-panel buttons reject popup and auxiliary pointer gestures",
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
     processor.hasUpdateCheckBeenPerformed = true;
+    // Chain tools, channel/parallel routing, and Granular Sample are shared;
+    // each EQ editor additionally contributes its Dynamic settings button.
+    constexpr int sharedNewButtons = 3;
 
     SECTION("band controls")
     {
         BandPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
-        checkPanelButtons(panel, 17 + EqControlsPanel::capacity + 6);
+        constexpr int eqPanels = 1;
+        checkPanelButtons(panel, 17 + EqControlsPanel::capacity + 6
+                                   + sharedNewButtons + eqPanels, eqPanels);
     }
 
     SECTION("global controls")
     {
         GlobalPanel panel(processor, {}, {}, {}, {}, {});
         panel.setBounds(0, 0, 1000, 500);
-        checkPanelButtons(panel, 10 + 3 + EqControlsPanel::capacity * 2 + 6);
+        constexpr int eqPanels = 2;
+        checkPanelButtons(panel, 10 + 3 + EqControlsPanel::capacity * 2 + 6
+                                   + sharedNewButtons + eqPanels, eqPanels);
     }
 }
 

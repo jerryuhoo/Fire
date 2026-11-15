@@ -1,4 +1,4 @@
-# Fire (Version 2.0.1 — in development) [![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
+# Fire (Version 2.1.0 — in development) [![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
 
 ![Fire 2.0 Vintage skin with a sound-reactive Warm Triode tube and three-band processing](Fire1.png)
 
@@ -175,6 +175,15 @@ state/audio smoke host, are documented in [Validation](docs/releasing/VALIDATION
 
 ## 3. User Manual
 
+The detailed illustrated **Fire 2.1 User Manual** is available in
+[English](docs/manual/Fire-2.1-User-Manual.md),
+[简体中文](docs/manual/Fire-2.1-User-Manual-zh-CN.md),
+[日本語](docs/manual/Fire-2.1-User-Manual-ja.md),
+[Français](docs/manual/Fire-2.1-User-Manual-fr.md), and
+[Español](docs/manual/Fire-2.1-User-Manual-es.md). It covers the current development
+edition, with genuine interface screenshots and step-by-step workflows.
+To export a PDF locally, follow the [authoring instructions](docs/manual/authoring/README.md).
+
 『Fire』has a top panel, a spectrogram, four graph visualizers, band effect, and global effect.
 
 ### 3.1. Top panel
@@ -348,11 +357,20 @@ The main LFO display allows you to create complex modulation shapes. It has two 
 
 #### Modulation Matrix
 
-- **Envelope / Macros**: Open these controls from the matrix header. Envelope
-  follows the raw plug-in input's linked stereo energy, with Attack, Release and
-  Sensitivity controls and a live level display. Opposite-polarity stereo input
-  does not cancel the detector. Choose **Envelope** as a routing source to make
-  Drive, filters, effects or Mix react to the incoming performance.
+- **Envelope / Macros**: Open these controls from the matrix header. Choose
+  ENV 1–4, each with independent Attack, Release and Sensitivity. The detector
+  can listen to the main input, an external sidechain, or one of four input
+  frequency bands. Band detection uses independent 24 dB/oct filters at the
+  current crossover boundaries, before effects, solo and output gains; an
+  inactive band or disconnected sidechain supplies silence. Stereo energy
+  detection remains sensitive to opposite-polarity input.
+  High-pass and low-pass detector filters have explicit power switches and
+  start bypassed, preserving existing Envelope sounds. Hold **Listen** (or
+  Space/Return while focused) to hear the selected filtered detector signal;
+  releasing, hiding or closing the window ends listening. Listening is a local
+  preview and is not saved in presets, undo history or DAW automation.
+  To use an external source, route another track to Fire's Sidechain input in
+  your DAW and choose External sidechain in this panel.
 - **Macro 1–4**: Four automatable 0–100% controls can each drive several
   destinations. Choose a macro in each matrix row, then set its depth and
   polarity. Their values ramp over 20 ms. Factory scenes preassign them to
@@ -382,6 +400,19 @@ field, Down moves keyboard focus into the results. Highlight a target with the
 arrow keys and choose **Show control** to close the matrix, open its Band or
 Master module and focus the corresponding knob. Revealing a control does not
 insert a module or enable processing; unavailable destinations stay unavailable.
+
+Multiple matrix rows can target the same parameter. Contributions are summed
+before the final parameter-range clamp; assigning another source adds a route.
+Each row offers **From / To** offsets, **Curve** and **Depth via Macro**. Offsets
+are percentages of the target's normalised range relative to its base knob;
+Depth scales both endpoints. For example, From −20% to +30% spans those offsets
+at 100% Depth. Editing an endpoint enables a custom range; Bi/Uni restores the
+standard −50%…+50% or 0%…100% range. Curve offers Linear, Ease in, Ease out and
+S curve. Depth via Macro multiplies that route's Depth by the selected macro.
+A multi-route or custom-mapping knob badge opens its routes in the matrix;
+its range and moving marker show their combined result. Existing single-source
+presets keep their original mapping. New detector presets use format 4 and
+require Fire 2.1 or later; formats 0–3 remain readable.
 
 Assigned knobs use a translucent source-coloured range band. A bright outlined
 dot shows the current modulated value, while the neutral inner notch marks the
@@ -423,7 +454,39 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ## 6. Update Notes
 
-### 2.0.1 (in development)
+### 2.1.0 (in development)
+
+- Fix Windows CLAP editor cropping at fractional display scales such as 125%
+  by avoiding duplicate JUCE 9 native DPI scaling (issue #101).
+- Use the same LIFT / PRESS view and knob arrangement for native Band OTT and
+  independently inserted Band / Master OTT, with each insert's own dynamics meters.
+- Import audio into Granular with a selectable start position, waveform preview
+  and optional normalization; export frozen material as a sample-exact WAV.
+- Implement serial / parallel A-B routing per Band and Master, with modulatable
+  Blend and portable routing presets.
+- Add per-point Dynamic EQ for Bell and Shelf filters, with linked frequency
+  detection, signed gain range and live gain-change readouts in every EQ module.
+- Restore valid project parameters at floating-point range endpoints, including
+  0.1 ms attack, without relaxing discrete-value or malformed-state checks.
+- Add per-parameter locks for preset browsing and editable preset tags / notes,
+  with local Factory metadata overrides and protection against stale edits.
+- Add four MIDI CC modulation sources, note-triggered and one-shot LFOs, and
+  seeded Random Hold / Random Glide modulation. Existing source IDs and
+  automation parameter indices remain unchanged.
+- Add independent Stereo, Mid and Side processing for every Band and Master
+  chain, with channel modes saved in presets, projects, A/B and chain files.
+- Add module copy, duplicate and cross-chain paste, plus portable `.firechain`
+  files. Optional routing uses the destination's existing modulation sources;
+  incompatible conversions are rejected before any sound is changed.
+- Add four independent envelope detectors, external sidechain input, selectable
+  input bands, detection filters and momentary listening. Historical Envelope
+  and Macro IDs remain unchanged; new detector parameters append after them.
+
+- Add multi-source modulation, per-route offset ranges, response curves and
+  macro-controlled depth, with combined knob feedback and expanded matrix rows.
+- Preserve older single-source presets and append no changes to their parameter IDs.
+
+### 2.0.1 (unreleased)
 
 - Add stereo-aware spectrum modes and avoid unnecessary display collection when
   the editor is closed.
@@ -696,6 +759,124 @@ continuous reel animation and signal-driven tube illumination.
 
 Use **CHAIN → +** in either **Master Lab** or **Band Lab** to select a DSP module. Both workspaces share Drive, Shape, Compressor, OTT, Stereo, EQ, Lo-Fi, Chorus, Flanger, Phaser, Delay, Reverb, Granular and Chord Resonator. Every row, including the initial modules, can be bypassed, moved or removed with its **−** button. Removed modules can be added again, and each chain supports up to eight additional independent instances. Master Analysis is a removable display page. The module rail keeps five fixed-height rows visible and scrolls as more effects are added. The selected module scrolls into view automatically.
 
+**Copy modules and reuse chains.** Right-click a module, or focus its row and
+press **Shift+F10**, to choose **Copy settings**, **Copy with routing**,
+**Duplicate settings**, or **Paste … after**. Duplicate inserts a settings-only
+copy immediately after the source. To paste into an empty chain, use the copied
+module item at the bottom of **+**. Module and chain clipboards are separate and
+can be used between Band and Master chains and between Fire instances of the
+same plug-in format in one process.
+
+The **…** button beside **+** opens the chain tools. **Copy chain settings** and
+**Copy chain with routing** capture the current audio modules in order.
+**Paste chain** replaces only the destination chain; it keeps the other bands,
+Master, crossover points, Output/Mix controls, and global modulation sources.
+An empty copied chain clears the destination audio modules. Master Analysis is
+a display page and is excluded from the copy. Duplicate, paste and chain
+replacement each form one Undo step.
+
+Open the compact **Routing** button beside **CHAIN** (showing Stereo, Mid or
+Side) to choose a processing channel and signal path. Each Band and Master has
+its own **Stereo / Mid / Side** selector in this panel. Stereo runs
+the full stereo signal through its modules. Mid processes the centre signal;
+Side processes the difference between left and right, retaining the other
+component. This is an audio-processing choice, independent of the spectrum
+analyser's display mode. Band Output, Mix and Enable, and Master Output, act
+on the selected component. Stereo effect outputs are averaged back into that
+component, so it cannot spill into the untouched component. On a mono input
+Mid behaves like Stereo and Side passes the input through with the same
+latency. The choice is host-automatable (not an LFO modulation target) and is saved
+with whole-plugin presets, projects and A/B snapshots. Chain copy/save also
+captures it; replacing a chain restores it in the same Undo step. Copying or
+duplicating a single module leaves the destination chain's mode unchanged.
+Older presets, projects and version 1 chain files open in Stereo.
+
+**Parallel A/B chains.** In Routing, **Serial** keeps the original module path.
+**Parallel A/B** sends the same input through two branches. Use **To A / To B**
+in the panel, or **Move to Branch A/B** in a module's menu, to assign a module.
+Use Up/Down to reorder within a branch. Analysis remains a display page.
+
+**Blend** is the percentage of Branch B: 0% B gives A only, 100% B gives B only.
+The mix is linear, so identical branches retain unity gain. An empty branch
+passes dry input. Both branches keep running at either endpoint, preserving
+current delay and reverb tails. Branches are delay-compensated before merging;
+the existing scope Output/Mix follows the merge. Stereo/Mid/Side processing
+wraps the complete chain. Legacy Drive Link still controls the final Band Output
+and therefore affects both branches; modern Drive Comp stays inside Drive.
+
+Blend supports LFOs, envelopes, macros, MIDI CC, host automation and preset
+parameter locks. Find it under **Routing / Blend** in the modulation matrix.
+Serial retains these settings for later Parallel use. Routing mode and branch
+assignments support host automation but are structural settings, so they cannot
+be internally modulated or preset-locked. Module copies retain their branch
+without changing the destination's routing mode or Blend. Whole-chain presets
+restore mode, Blend, branches and, when requested, Blend's modulation routes.
+Older sounds and chain files open in Serial. In Parallel, disabled or removed
+modules pass through; the original native Shape transitions smoothly to dry
+while retaining its HQ timing. Serial keeps its established processing behavior.
+
+**MIDI modulation and triggered LFOs.** Four **MIDI CC** sources can receive a
+controller number on a specific MIDI channel or **Omni**; **Off** disables the
+slot. Use Learn to bind an incoming controller, then assign that source in the
+modulation matrix like an Envelope or LFO. The existing mapping ranges, curves
+and multi-source routing also apply to CC input. The source configuration is
+saved with the sound; incoming controller positions are live performance data.
+
+An LFO's **Loop** mode preserves its existing free-running or host-synchronised
+behaviour. **Retrigger** restarts its cycle on a matching note; **One-shot** runs
+one cycle and holds its final value. Choose a note and channel, or Any note and
+Omni, and use **Trigger** to fire it manually. **Shape** uses the drawn curve;
+**Random Hold** and **Random Glide** use a saved **Seed** for repeatable random
+motion. Drawing a new curve does not change these playback settings.
+
+MIDI configurations, playback choices and seeds are saved in presets, projects
+and A/B snapshots. Old sounds open with MIDI CC slots Off and LFOs in Loop /
+Shape. Copying a chain's routes uses the destination's current MIDI source
+configuration. A host must route MIDI into Fire to use external controllers;
+the existing AU component identity is retained, so MIDI delivery in AU depends
+on the host. Use VST3 or CLAP in hosts that do not send MIDI to an AU effect.
+
+**Preset locks and notes.** Parameter locks keep selected **base values** when
+browsing or stepping through whole-plugin presets. Modulation routes and source
+definitions still follow the incoming preset. No parameters are locked by
+default. Structural settings such as band count, crossover points, module
+presence and chain order cannot be locked. Lock preferences belong to the
+instance's project state, not to saved `.fire` sounds. A/B, Undo/Redo and host
+project restoration restore the complete sound regardless of locks. A sound
+that differs from its preset because of retained values shows the normal
+modified marker.
+
+Edit a preset's tags and description in the library to make it easier to find.
+Up to 16 tags of 32 characters and a 2048-character description are supported,
+including Chinese text. User notes travel with the `.fire` file; editing notes
+preserves its sound and frozen recordings. Saving over that file keeps its
+notes, and Save As inherits the selected preset's notes. Factory edits are local
+library overrides; restore the official notes to remove an override. Favourites
+and hidden status are independent. Archived user presets retain their notes and
+must be restored before editing. If a file or its notes changed while the editor
+was open, reopen the editor before saving rather than overwriting a newer edit.
+
+**Save chain preset…** stores a settings-only `.firechain` file; choose
+**Save chain preset with routing…** to include its mappings. These files live in
+**Chains** inside the preset folder and are separate from whole-plugin `.fire`
+presets. **Load chain preset — replace…** loads a file into the current chain.
+Module settings include model choices, EQ points and frozen granular audio.
+
+**With routing** copies the module's destination mappings, including route
+ranges, response curves and macro depth assignments. Routing uses the
+**destination instance's current LFOs, envelopes and macros**; their shapes,
+detector configuration, names and values are not overwritten. For a complete
+sound with its source definitions, use a whole-plugin preset.
+
+Pasting checks that the complete chain fits into compatible slots before
+changing anything. It can reuse the original core slots and up to eight insert
+slots. When a conversion cannot preserve the module's settings and routing, it
+reports the reason and leaves the destination unchanged. In particular,
+original Master Lo-Fi uses a different engine and stays in its original Master
+slot; a Drive using **Legacy Link** needs a compatible original Drive slot or
+must first be changed to **Drive Comp**. Different parameter ranges or steps may
+also require the same module representation, or a settings-only copy.
+
 | Effect | Controls |
 | --- | --- |
 | Chorus | Rate, Depth, Delay, Feedback, Width, Mix. |
@@ -726,6 +907,32 @@ their previous empty-buffer capture behaviour. With an empty recording, Freeze
 captures fresh audio before holding it.
 Spread, Feedback and Reverb support host automation and LFO modulation.
 
+**Import and export.** Open **Sample** beside Freeze to choose an audio file.
+Select the start of the excerpt and preview the audio that will be imported.
+The recording holds up to **1.02175 seconds** (32,696 stereo frames at 32 kHz);
+longer files require choosing an excerpt. Mono is duplicated to both channels.
+Supported source rates are 8–384 kHz, with band-limited conversion to 32 kHz.
+**Normalize** is off by default; enabling it sets the shared stereo peak to
+−1 dBFS. Hot audio can clip when normalization is off.
+
+**Import and Freeze** replaces only the selected Granular recording, enables
+Freeze, and creates one Undo step. Importing during playback fades that module's
+wet audio while the recording changes; other modules keep their buffers and
+tails. Undo restores an earlier frozen recording and its settings. If the module
+was previously recording live, Undo restores live mode but cannot reconstruct
+its past rolling audio. The imported excerpt is embedded in presets, projects,
+A/B snapshots and portable module/chain files; the source file is not required
+after import. Closing the editor or replacing the target module cancels a pending
+import rather than applying it to a different sound.
+
+**Export frozen WAV** captures the current frozen recording before asking for a
+destination. It writes stereo 16-bit / 32 kHz WAV in chronological order, without
+normalization or the grain, pitch, feedback, reverb and Mix processing. Later
+parameter edits do not change that captured export. Enable Freeze and capture
+some audio first if no frozen recording is available. File decoding, resampling
+and writing run off the audio and interface threads. An existing destination is
+replaced only after confirmation and a complete temporary WAV has been written.
+
 The Clouds core runs at the original 32 kHz, stereo/16-bit quality, with
 band-limited conversion to and from the host sample rate. Its wet bandwidth and
 intentional granular texture follow that design. Fire retains its transparent
@@ -747,7 +954,7 @@ indices do not move; they cannot select another engine.
 
 **Lo-Fi** is available in both workspaces, including multiple instances. Rate, Bits, Jitter and Mix sit above Tape, Wow and Flutter. Tape adds saturation and a softer high-frequency response; Wow introduces slow pitch drift and Flutter adds faster pitch variation. Zero Jitter/Tape/Wow/Flutter preserves the previous insert processing.
 
-Built-in modules and insert effects run in the same freely reorderable list, before the chain's Output/Mix controls. Drag any module, including Drive, Shape, Compressor, Stereo, OTT, Master EQ and Lo-Fi, to change its processing position. Analysis is a movable display page and does not process audio. Older presets retain their original audio order (OTT before Stereo, and Master Lo-Fi before EQ); the list now displays that order. Drive and Shape retain their legacy combined processing when adjacent in that order, and run as separate stages when moved apart. Hover any module to reveal its **−** remove button, or drag its name/body to reorder it. A floating preview and insertion line indicate the destination; holding near the list edges scrolls to offscreen effects. The new order is committed once on release. Escape, dropping outside the list or changing workspace/band cancels the drag. Removing the selected effect selects its nearest remaining neighbour. The power button bypasses each effect, and the context menu also provides move/remove actions. Reordering retains that slot's parameters and LFO assignments. New effect values fade in while editing; the waveform shows the selected band's output or the master output.
+Built-in modules and insert effects run in the same freely reorderable list, before the chain's Output/Mix controls. Drag any module, including Drive, Shape, Compressor, Stereo, OTT, Master EQ and Lo-Fi, to change its processing position. Analysis is a movable display page and does not process audio. Older presets retain their original audio order (OTT before Stereo, and Master Lo-Fi before EQ); the list now displays that order. Drive and Shape retain their legacy combined processing when adjacent in that order, and run as separate stages when moved apart. Hover any module to reveal its **−** remove button, or drag its name/body to reorder it. A floating preview and insertion line indicate the destination; holding near the list edges scrolls to offscreen effects. The new order is committed once on release. Escape, dropping outside the list or changing workspace/band cancels the drag. Removing the selected effect selects its nearest remaining neighbour. The power button bypasses each effect, and the context menu provides copy/duplicate/paste as well as move/remove actions. Reordering retains that slot's parameters and LFO assignments. New effect values fade in while editing; the waveform shows the selected band's output or the master output.
 
 Every insert retains its six normalized host controls with effect-specific labels and units in Fire's UI; Clouds adds a separately versioned set of controls. LFO modulation, presets, host state, A/B comparisons and band copying include the new controls. New host parameters are appended with a newer AU version hint, and older projects load empty insert racks with Tape/Wow/Flutter at zero. Empty slots prepare only lightweight timing state. Effect buffers are prepared on demand outside the audio callback; generic host type automation requests a background preparation worker, and the slot smoothly stays dry until its engine is ready. Previously used effect families are retained for quick switching. The plug-in reserves a fixed delay budget for independently insertable Shape stages. In legacy-only recipes the unused budget is placed at the output, preserving the original DSP/sample clocks and Lo-Fi sound; when independent Shapes are present, the rack uses that budget to align its slots. Independently added Shape uses this budget for its HQ oversampler and aligned module Mix; other modules use a pure delay. The host receives one fixed PDC value across HQ automation and module insertion/removal (83 samples, about 1.7 ms at 48 kHz). Band Mix, Global Mix and host bypass retain aligned dry paths. Delay, pitch modulation, granular playback and reverb additionally create their intended time offsets and tails in the wet signal. Tail reporting reserves conservative bounds so hosts do not cut long echoes prematurely; a frozen Clouds buffer or maximum feedback reports an infinite tail.
 
@@ -777,6 +984,24 @@ including the cut filters' gain/Q shaping. New points occupy fixed parameter
 slots: deleting a neighbour does not move automation or LFO assignments. EQ points
 and routing are saved in presets, A/B states and host projects. Adding/removing
 an EQ point leaves other effects' delay tails and Clouds Freeze recordings intact.
+
+**Dynamic EQ**: choose a Bell, Low Shelf or High Shelf point, then open
+**Dynamic** in the existing point header. Enable it and set Threshold, Ratio,
+Range, Attack and Release. The detector follows the EQ module's original input,
+filtered around that point's frequency and linked by the stronger left/right
+peak. Negative Range reduces gain above Threshold; positive Range adds gain.
+Ratio 1:1 produces no dynamic change. The combined base and dynamic gain is
+limited to ±24 dB.
+
+The panel shows the actual gain change and effective gain. The original Master
+EQ's live spectrum curve includes that change, while its draggable point and
+Gain knob retain their base value. Readouts and live curves fade back when the
+host stops sending audio. Dynamics are available in the original Master EQ and
+every inserted EQ. Frequency, Gain and Q retain their existing internal
+modulation; the six dynamics settings support host automation, parameter locks,
+presets, project state and chain copying. They do not accept internal modulation.
+Old presets open with dynamics disabled; deleting or reusing a point clears its
+dynamic settings. With dynamics disabled, the existing static EQ path is retained.
 
 ### LFO bank and control sizing
 

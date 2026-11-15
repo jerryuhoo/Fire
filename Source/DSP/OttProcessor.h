@@ -15,6 +15,14 @@ public:
     inline static constexpr std::array<float, controlCount> minimums { 0.0f, 10.0f, -72.0f, -36.0f, -24.0f, 0.0f };
     inline static constexpr std::array<float, controlCount> maximums { 1.0f, 400.0f, -6.0f, 0.0f, 24.0f, 1.0f };
 
+    struct VisualState
+    {
+        float inputLevelDb = -120.0f, gainChangeDb = 0.0f, dynamicsActivityDb = 0.0f;
+        std::uint64_t renderSequence = 0, typeGeneration = 0;
+        bool valid = false;
+        bool mixModulated = false;
+    };
+
     struct Parameters
     {
         bool enabled = false;
@@ -97,7 +105,8 @@ public:
             if (initialised && (route.routed != routed
                 || (routed && (route.source != parameters.sources[i]
                     || ! juce::exactlyEqual(route.depth, routeDepth)
-                    || route.bipolar != provider.isBipolar))))
+                    || route.bipolar != provider.isBipolar
+                                   || route.signalIsOffset != provider.signalIsOffset))))
             {
                 route.anchor = route.lastValue;
                 route.blend.setCurrentAndTargetValue(0.0f);
@@ -107,6 +116,7 @@ public:
             route.source = parameters.sources[i];
             route.depth = routeDepth;
             route.bipolar = provider.isBipolar;
+            route.signalIsOffset = provider.signalIsOffset;
             controlsAreStatic = controlsAreStatic && ! routed
                 && ! baseSmoothers[i].isSmoothing() && ! route.blend.isSmoothing();
         }
@@ -215,7 +225,7 @@ private:
         juce::SmoothedValue<float> blend;
         float anchor = 0.0f, lastValue = 0.0f, depth = 0.0f;
         int source = -1;
-        bool routed = false, bipolar = true;
+        bool routed = false, bipolar = true, signalIsOffset = false;
     };
     std::array<Route, controlCount> routes;
     std::array<juce::SmoothedValue<float>, controlCount> baseSmoothers;

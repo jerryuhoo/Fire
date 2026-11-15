@@ -18,6 +18,7 @@
 #include "../../Utility/Parameters.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <cstdint>
+#include <array>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -68,6 +69,7 @@ public:
 
 private:
     friend struct ModulationMatrixRoutingComboBoxTestAccess;
+    friend struct MultiSourceModulationUiTestAccess;
     friend struct LfoBankUiTestAccess;
 
     bool keyPressed(const juce::KeyPress& key) override;
@@ -182,9 +184,13 @@ public:
     void parentHierarchyChanged() override;
     void dismissTransientInteractions() noexcept;
     std::function<void(const juce::String&)> onRevealTarget;
+    const juce::String& getTargetParameterID() const noexcept { return expectedRouting.targetParameterID; }
+    void setTargetHighlight(bool highlighted) { targetHighlighted=highlighted; repaint(); }
+    void focusDestination() { destinationMenu.grabKeyboardFocus(); }
 
 private:
     friend struct ModulationMatrixRowTestAccess;
+    friend struct ChainRoutingUiTestAccess;
 
     class PrimaryButtonSlider final : public juce::Slider,
                                       private juce::Timer,
@@ -275,7 +281,10 @@ private:
         onDeleteCallback;
 
     ModulationMatrixRoutingComboBox sourceMenu;
-    PrimaryButtonSlider amountSlider;
+    PrimaryButtonSlider amountSlider, rangeStartSlider, rangeEndSlider;
+    ModulationMatrixRoutingComboBox curveMenu, depthMacroMenu;
+    std::array<juce::Label,4> mappingLabels;
+    bool targetHighlighted=false;
     ModulationMatrixPrimaryButton bipolarButton;
     ModulationMatrixPrimaryButton bypassButton;
     ModulationMatrixRoutingComboBox destinationMenu;
@@ -294,11 +303,11 @@ class ModulationMatrixPanel : public juce::Component,
 {
 public:
     static constexpr int preferredContentWidth = 800;
-    static constexpr int preferredContentHeight = 400;
+    static constexpr int preferredContentHeight = 480;
     static constexpr int minimumContentWidth = 620;
     static constexpr int minimumContentHeight = 300;
-    static constexpr int rowHeight = 56;
-    static constexpr int rowPitch = 64;
+    static constexpr int rowHeight = 104;
+    static constexpr int rowPitch = 112;
 
     ModulationMatrixPanel(FireAudioProcessor& p);
     ~ModulationMatrixPanel() override;
@@ -313,6 +322,7 @@ public:
     // Rebuilds the UI from the processor's data model
     void buildUiFromProcessorState();
     void requestUiRebuild();
+    void focusTarget(const juce::String& parameterID);
     bool isUiRebuildPending() const noexcept;
     std::function<void(const juce::String&)> onRevealTarget;
 
@@ -327,7 +337,7 @@ private:
     ModulationMatrixHeader header;
     std::vector<std::unique_ptr<ModulationMatrixRow>> rows;
     ModulationMatrixPrimaryButton addButton { "Add routing" };
-    ModulationMatrixPrimaryButton sourceControlsButton { "Envelope / Macros" };
+    ModulationMatrixPrimaryButton sourceControlsButton { "Envelopes / Macros" };
     juce::Component::SafePointer<juce::DialogWindow> sourceControlsDialog;
 
     juce::Viewport viewport;
@@ -336,5 +346,6 @@ private:
     juce::Rectangle<int> summaryArea;
     juce::Label emptyTitle, emptyDescription;
     int activeRouteCount = 0;
+    juce::String focusedTarget;
     std::shared_ptr<ModulationRoutingEditSession> routingEditSession;
 };

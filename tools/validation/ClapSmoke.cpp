@@ -103,17 +103,41 @@ struct Library
 struct Host
 {
     bool audioThread = false, callbackPending = false;
+#if defined(_WIN32)
+    HWND guiWindow = nullptr;
+    uint32_t requestedWidth = 0, requestedHeight = 0;
+#endif
     clap_host_t api { CLAP_VERSION, this, "Fire CLAP smoke host", "Blue Wings Music",
         "https://www.bluewingsmusic.com/fire.html", "1.0.0", extension,
         [](const clap_host_t*) {}, [](const clap_host_t*) {},
         [](const clap_host_t* h) { self(h).callbackPending = true; } };
     static Host& self(const clap_host_t* h) { return *static_cast<Host*>(h->host_data); }
-    static const void* CLAP_ABI extension(const clap_host_t*, const char* id)
+    static const void* CLAP_ABI extension(const clap_host_t* host, const char* id)
     {
         static const clap_host_thread_check_t threads {
             [](const clap_host_t* h) { return !self(h).audioThread; },
             [](const clap_host_t* h) { return self(h).audioThread; } };
         if (std::strcmp(id, CLAP_EXT_THREAD_CHECK) == 0) return &threads;
+#if defined(_WIN32)
+        static const clap_host_gui_t gui {
+            [](const clap_host_t*) {},
+            [](const clap_host_t* h, uint32_t width, uint32_t height)
+            {
+                auto& state = self(h);
+                state.requestedWidth = width; state.requestedHeight = height;
+                // Accept without calling plugin.set_size(), as CLAP permits.
+                return width > 0 && height > 0 && width <= 16000 && height <= 16000
+                    && SetWindowPos(state.guiWindow, nullptr, 0, 0,
+                        static_cast<int>(width), static_cast<int>(height),
+                        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) != 0;
+            },
+            [](const clap_host_t*) { return true; },
+            [](const clap_host_t*) { return true; },
+            [](const clap_host_t*, bool) {} };
+        if (self(host).guiWindow && std::strcmp(id, CLAP_EXT_GUI) == 0) return &gui;
+#else
+        (void) host;
+#endif
         return nullptr;
     }
     void dispatch(const clap_plugin_t* plugin)
@@ -147,6 +171,102 @@ struct Plugin
     }
 };
 
+#if defined(_WIN32)
+void checkGui(const clap_plugin_factory_t* factory, const char* id)
+{
+    struct DpiContext
+    {
+        using Setter = HANDLE (WINAPI*)(HANDLE);
+        Setter setter = reinterpret_cast<Setter>(GetProcAddress(GetModuleHandleW(L"user32.dll"),
+                                                               "SetThreadDpiAwarenessContext"));
+        HANDLE previous = setter ? setter(reinterpret_cast<HANDLE>(static_cast<intptr_t>(-4))) : nullptr;
+        ~DpiContext() { if (setter && previous) setter(previous); }
+    } dpi;
+    require(dpi.previous != nullptr, "per-monitor DPI awareness unavailable");
+    struct ParentWindow
+    {
+        HWND handle = CreateWindowExW(0, L"STATIC", L"Fire CLAP GUI smoke",
+            WS_POPUP | WS_CLIPCHILDREN, 0, 0, 1000, 500, nullptr, nullptr,
+            GetModuleHandleW(nullptr), nullptr);
+        ~ParentWindow() { if (handle) DestroyWindow(handle); }
+    } parent;
+    require(parent.handle != nullptr, "could not create CLAP test parent");
+    Plugin plugin;
+    plugin.host.guiWindow = parent.handle;
+    plugin.create(factory, id);
+    const auto* gui = static_cast<const clap_plugin_gui_t*>(plugin.api->get_extension(plugin.api, CLAP_EXT_GUI));
+    require(gui && gui->is_api_supported(plugin.api, CLAP_WINDOW_API_WIN32, false), "Win32 GUI unavailable");
+    const auto dispatch = [&]
+    {
+        MSG message {};
+        for (int iteration = 0; iteration < 10; ++iteration)
+        {
+            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+            { TranslateMessage(&message); DispatchMessageW(&message); }
+            plugin.host.dispatch(plugin.api);
+            Sleep(1);
+        }
+    };
+    const auto checkNative = [&](uint32_t width, uint32_t height)
+    {
+        dispatch();
+        uint32_t reportedWidth = 0, reportedHeight = 0;
+        require(gui->get_size(plugin.api, &reportedWidth, &reportedHeight)
+            && reportedWidth == width && reportedHeight == height, "GUI size drifted after native attachment/resize");
+        const auto child = GetWindow(parent.handle, GW_CHILD);
+        RECT bounds {};
+        require(child && GetClientRect(child, &bounds), "CLAP native child unavailable");
+        if (bounds.right - bounds.left != static_cast<LONG>(width)
+            || bounds.bottom - bounds.top != static_cast<LONG>(height))
+        {
+            std::cerr << "reported " << width << 'x' << height << ", native "
+                      << bounds.right - bounds.left << 'x' << bounds.bottom - bounds.top << '\n';
+            require(false, "CLAP native client differs from reported physical pixels");
+        }
+    };
+    for (const double initialScale : {1.0, 1.25, 1.5, 2.0})
+    {
+        require(gui->create(plugin.api, CLAP_WINDOW_API_WIN32, false), "CLAP GUI create failed");
+        struct GuiLifetime
+        {
+            const clap_plugin_t* plugin;
+            const clap_plugin_gui_t* gui;
+            ~GuiLifetime() { gui->destroy(plugin); }
+        } lifetime {plugin.api, gui};
+        require(gui->set_scale(plugin.api, initialScale), "initial GUI scale rejected");
+        uint32_t width = 1, height = 1;
+        require(gui->adjust_size(plugin.api, &width, &height), "GUI size adjustment failed");
+        require(width == static_cast<uint32_t>(std::lround(1000 * initialScale))
+            && height == static_cast<uint32_t>(std::lround(500 * initialScale)), "scaled minimum size incorrect");
+        require(gui->set_size(plugin.api, width, height), "initial GUI size rejected");
+        require(SetWindowPos(parent.handle, nullptr, 0, 0, static_cast<int>(width), static_cast<int>(height),
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) != 0, "test parent resize failed");
+        clap_window_t window {}; window.api = CLAP_WINDOW_API_WIN32; window.win32 = parent.handle;
+        require(gui->set_parent(plugin.api, &window) && gui->show(plugin.api), "CLAP GUI attachment failed");
+        checkNative(width, height);
+        for (const double scale : {1.25, 1.5, 2.0, 1.25, 1.0})
+        {
+            require(gui->set_scale(plugin.api, scale), "live GUI scale rejected");
+            width = static_cast<uint32_t>(std::lround(1000 * scale));
+            height = static_cast<uint32_t>(std::lround(500 * scale));
+            require(plugin.host.requestedWidth == width && plugin.host.requestedHeight == height,
+                    "GUI host resize request does not use physical pixels");
+            checkNative(width, height);
+            for (const uint32_t logicalHeight : {600u, 1000u, 500u})
+            {
+                auto w = static_cast<uint32_t>(std::lround(logicalHeight * 2 * scale));
+                auto h = static_cast<uint32_t>(std::lround(logicalHeight * scale));
+                const auto expectedW = w, expectedH = h;
+                require(gui->adjust_size(plugin.api, &w, &h) && w == expectedW && h == expectedH,
+                        "valid fractional-scale size was changed by adjust_size");
+                require(gui->set_size(plugin.api, w, h), "host GUI resize rejected");
+                checkNative(w, h);
+            }
+        }
+    }
+}
+#endif
+
 struct MemoryStream
 {
     std::vector<uint8_t> bytes;
@@ -177,11 +297,99 @@ const clap_input_events_t emptyInput { nullptr,
 const clap_output_events_t discardOutput { nullptr,
     [](const clap_output_events_t*, const clap_event_header_t*) { return true; } };
 
+// This fixture edits only the XML returned through the public CLAP state ABI.
+// No Fire or JUCE implementation is linked into this host.
+void checkMidi(const clap_plugin_factory_t* factory, const char* id)
+{
+    Plugin reference, driven;
+    reference.create(factory, id); driven.create(factory, id);
+    const auto* notes = static_cast<const clap_plugin_note_ports_t*>(driven.api->get_extension(driven.api, CLAP_EXT_NOTE_PORTS));
+    clap_note_port_info_t notePort {};
+    require(notes && notes->count(driven.api, true) > 0 && notes->get(driven.api,0,true,&notePort)
+        && (notePort.supported_dialects & CLAP_NOTE_DIALECT_MIDI) != 0, "CLAP MIDI input port missing");
+    const auto* audioPorts = static_cast<const clap_plugin_audio_ports_t*>(reference.api->get_extension(reference.api, CLAP_EXT_AUDIO_PORTS));
+    require(audioPorts != nullptr, "CLAP audio ports missing");
+    const auto inputPortCount = audioPorts->count(reference.api, true);
+    require(inputPortCount >= 1 && inputPortCount <= 2, "invalid MIDI fixture audio ports");
+    const auto* state = static_cast<const clap_plugin_state_t*>(reference.api->get_extension(reference.api, CLAP_EXT_STATE));
+    MemoryStream fixture;
+    require(state && state->save(reference.api,&fixture.output) && fixture.bytes.size()>9, "MIDI fixture state unavailable");
+    std::string xml(reinterpret_cast<const char*>(fixture.bytes.data()+8),fixture.bytes.size()-9);
+    require(xml.find("<state") != std::string::npos, "unexpected state encoding for MIDI fixture");
+    const auto set = [&](const std::string& parameter, const std::string& value)
+    {
+        const auto at=xml.find("id=\""+parameter+"\"");
+        require(at!=std::string::npos,"MIDI fixture parameter missing");
+        const auto begin=xml.rfind("<PARAM ",at), end=xml.find('>',at);
+        require(begin!=std::string::npos && end!=std::string::npos,"invalid MIDI fixture parameter");
+        const auto position=xml.find("value=\"",begin);
+        require(position<end,"MIDI fixture parameter value missing");
+        const auto finish=xml.find('"',position+7);
+        require(finish<end,"invalid MIDI fixture value");
+        xml.replace(position+7,finish-position-7,value);
+    };
+    set("midiCC1Number","1"); set("midiCC1Channel","0"); set("output","-12");
+    const auto begin=xml.find("<MODULATION_STATE"), openingEnd=xml.find('>',begin);
+    require(begin!=std::string::npos && openingEnd!=std::string::npos,"MIDI routing section missing");
+    const auto finish=xml[openingEnd-1]=='/' ? openingEnd+1 : xml.find("</MODULATION_STATE>",openingEnd)+19;
+    require(finish>begin && finish<=xml.size(),"invalid MIDI routing section");
+    xml.replace(begin,finish-begin,
+        R"(<MODULATION_STATE schemaVersion="2"><ROUTING source="24" target="output" depth="0.1" bipolar="0" bypassed="0" customRange="0" rangeStart="0" rangeEnd="1" curve="0" depthMacro="-1"/></MODULATION_STATE>)");
+    fixture.bytes.resize(xml.size()+9);
+    const auto length=static_cast<uint32_t>(xml.size());
+    for(int i=0;i<4;++i) fixture.bytes[static_cast<size_t>(4+i)]=static_cast<uint8_t>(length>>(8*i));
+    std::memcpy(fixture.bytes.data()+8,xml.data(),xml.size()); fixture.bytes.back()=0;
+    for(auto* plugin : {&reference,&driven})
+    {
+        const auto* loader=static_cast<const clap_plugin_state_t*>(plugin->api->get_extension(plugin->api,CLAP_EXT_STATE));
+        fixture.offset=0; require(loader && loader->load(plugin->api,&fixture.input),"MIDI fixture load failed");
+        plugin->host.dispatch(plugin->api);
+        require(plugin->api->activate(plugin->api,48000,256,256),"MIDI activation failed"); plugin->active=true;
+        plugin->host.audioThread=true; require(plugin->api->start_processing(plugin->api),"MIDI processing failed"); plugin->processing=true;
+    }
+    clap_event_midi_t cc {};
+    cc.header={sizeof(cc),17,CLAP_CORE_EVENT_SPACE_ID,CLAP_EVENT_MIDI,0};
+    cc.port_index=0; cc.data[0]=0xb0; cc.data[1]=1; cc.data[2]=127;
+    const clap_input_events_t inputEvents {&cc,
+        [](const clap_input_events_t*)->uint32_t{return 1;},
+        [](const clap_input_events_t* list,uint32_t index)->const clap_event_header_t*
+        {return index==0?&static_cast<const clap_event_midi_t*>(list->ctx)->header:nullptr;} };
+    double energies[2]{};
+    for(int which=0;which<2;++which)
+    {
+        auto& plugin=which==0?reference:driven;
+        std::array<std::array<float,256>,6> data{};
+        float* in[]{data[0].data(),data[1].data()}, *out[]{data[2].data(),data[3].data()}, *aux[]{data[4].data(),data[5].data()};
+        clap_audio_buffer_t inputs[]{{in,nullptr,2,0,0},{aux,nullptr,2,0,0}}, output{out,nullptr,2,0,0};
+        for(int block=0;block<80;++block)
+        {
+            for(int i=0;i<256;++i) data[0][i]=data[1][i]=.1f*std::sin((block*256+i)*.04f);
+            clap_process_t process{}; process.frames_count=256; process.steady_time=block*256;
+            process.audio_inputs=inputs; process.audio_inputs_count=inputPortCount;
+            process.audio_outputs=&output; process.audio_outputs_count=1;
+            process.in_events=which==1 && block==0?&inputEvents:&emptyInput; process.out_events=&discardOutput;
+            require(plugin.api->process(plugin.api,&process)!=CLAP_PROCESS_ERROR,"MIDI process error");
+            for(int channel=2;channel<4;++channel) for(float value:data[static_cast<size_t>(channel)])
+            { require(std::isfinite(value),"MIDI output not finite"); if(block>=40) energies[which]+=value*value; }
+        }
+        plugin.api->stop_processing(plugin.api); plugin.processing=false; plugin.host.audioThread=false;
+        plugin.api->deactivate(plugin.api); plugin.active=false; plugin.host.dispatch(plugin.api);
+    }
+    require(energies[0]>1e-6 && energies[1]>energies[0]*1.2,"CLAP MIDI CC did not reach the modulation/audio path");
+}
+
 void checkAudio(Plugin& plugin)
 {
     const auto* ports = static_cast<const clap_plugin_audio_ports_t*>(plugin.api->get_extension(plugin.api, CLAP_EXT_AUDIO_PORTS));
-    require(ports && ports->count(plugin.api, true) == 1 && ports->count(plugin.api, false) == 1,
-            "expected one main input and output bus");
+    require(ports && ports->count(plugin.api, true) >= 1 && ports->count(plugin.api, true) <= 2
+            && ports->count(plugin.api, false) == 1, "expected main buses and optional sidechain");
+    const auto inputPortCount = ports->count(plugin.api, true);
+    if (inputPortCount == 2)
+    {
+        clap_audio_port_info_t sidechain {};
+        require(ports->get(plugin.api,1,true,&sidechain) && sidechain.channel_count == 2
+                && (sidechain.flags & CLAP_AUDIO_PORT_IS_MAIN) == 0, "invalid sidechain port");
+    }
     clap_audio_port_info_t inputInfo {}, outputInfo {};
     require(ports->get(plugin.api, 0, true, &inputInfo) && ports->get(plugin.api, 0, false, &outputInfo)
         && inputInfo.channel_count == 2 && outputInfo.channel_count == 2, "expected stereo main buses");
@@ -191,11 +399,13 @@ void checkAudio(Plugin& plugin)
         {
             require(plugin.api->activate(plugin.api, rate, block, block), "CLAP activation failed");
             plugin.active = true;
-            std::array<std::vector<float>, 4> buffers;
+            std::array<std::vector<float>, 6> buffers;
             for (auto& b : buffers) b.resize(block);
             float* inputChannels[] {buffers[0].data(), buffers[1].data()};
             float* outputChannels[] {buffers[2].data(), buffers[3].data()};
-            clap_audio_buffer_t input { inputChannels, nullptr, 2, 0, 0 };
+            float* sidechainChannels[] {buffers[4].data(),buffers[5].data()};
+            clap_audio_buffer_t inputs[] {{ inputChannels, nullptr, 2, 0, 0 },
+                                         { sidechainChannels, nullptr, 2, 0, 0 }};
             clap_audio_buffer_t output { outputChannels, nullptr, 2, 0, 0 };
             double energy = 0;
             plugin.host.audioThread = true;
@@ -209,14 +419,18 @@ void checkAudio(Plugin& plugin)
                     buffers[0][i] = static_cast<float>(0.12 * std::sin(t * 440.0 * 6.283185307179586));
                     buffers[1][i] = static_cast<float>(0.10 * std::sin(t * 701.0 * 6.283185307179586));
                     buffers[2][i] = buffers[3][i] = 0;
+                    buffers[4][i] = .03f; buffers[5][i] = -.03f;
                 }
                 clap_process_t process {};
                 process.steady_time = iteration * block;
                 process.frames_count = block;
-                process.audio_inputs = &input; process.audio_inputs_count = 1;
+                process.audio_inputs = inputs; process.audio_inputs_count = inputPortCount;
                 process.audio_outputs = &output; process.audio_outputs_count = 1;
                 process.in_events = &emptyInput; process.out_events = &discardOutput;
                 require(plugin.api->process(plugin.api, &process) != CLAP_PROCESS_ERROR, "CLAP process failed");
+                if (inputPortCount == 2)
+                    for (uint32_t i=0;i<block;++i)
+                        require(buffers[4][i] == .03f && buffers[5][i] == -.03f, "sidechain input was overwritten");
                 for (const auto channel : {2, 3})
                     for (const auto sample : buffers[channel])
                     {
@@ -238,7 +452,8 @@ int main(int argc, char** argv)
 {
     try
     {
-        require(argc == 3, "usage: FireClapSmoke <plugin.clap> <expected-version>");
+        const bool guiOnly = argc == 4 && std::strcmp(argv[3], "--gui") == 0;
+        require(argc == 3 || guiOnly, "usage: FireClapSmoke <plugin.clap> <expected-version> [--gui]");
         const auto path = absolutePath(argv[1]);
         Library library(path);
         require(library.entry && clap_version_is_compatible(library.entry->clap_version), "missing or incompatible clap_entry");
@@ -248,6 +463,16 @@ int main(int argc, char** argv)
         require(factory && factory->get_plugin_count(factory) == 1, "expected one CLAP plug-in");
         const auto* descriptor = factory->get_plugin_descriptor(factory, 0);
         require(descriptor && std::strcmp(descriptor->version, argv[2]) == 0, "CLAP version differs from VERSION");
+        if (guiOnly)
+        {
+#if defined(_WIN32)
+            checkGui(factory, descriptor->id);
+            std::cout << "CLAP Win32 GUI: physical size, 100/125/150/200% scale, resize and reopen passed\n";
+            return 0;
+#else
+            require(false, "native Win32 GUI validation requires Windows");
+#endif
+        }
         Plugin original;
         original.create(factory, descriptor->id);
         const auto* parameters = static_cast<const clap_plugin_params_t*>(original.api->get_extension(original.api, CLAP_EXT_PARAMS));
@@ -307,8 +532,9 @@ int main(int argc, char** argv)
                     "CLAP state roundtrip changed a parameter");
         }
         checkAudio(restored);
+        checkMidi(factory, descriptor->id);
         std::cout << "CLAP " << descriptor->version << ": fresh-instance state roundtrip, " << count
-                  << " parameters, finite stereo audio at 44.1/48/96 kHz and 64/512 samples passed\n";
+                  << " parameters, MIDI CC audio response, finite stereo audio at 44.1/48/96 kHz and 64/512 samples passed\n";
         return 0;
     }
     catch (const std::exception& error)

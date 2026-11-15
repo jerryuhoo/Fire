@@ -12,7 +12,14 @@
 #include "../../Utility/FrozenAudioState.h"
 #include "../../PluginProcessor.h"
 #include "../../Utility/FactoryPresets.h"
+#include "../../GUI/PresetLockControls.h"
 #include "../../Utility/StrictNumberParser.h"
+#include "../../Utility/ModulationStateValidation.h"
+#include "../../Utility/EnvelopeStateValidation.h"
+#include "../../Utility/ChannelModeStateValidation.h"
+#include "../../Utility/MidiStateValidation.h"
+#include "../../Utility/DynamicEqStateValidation.h"
+#include "../../Utility/ParallelChainStateValidation.h"
 #include "../../Utility/LfoBankParameters.h"
 #include "../../Utility/DriveCompensationParameters.h"
 #include <algorithm>
@@ -57,7 +64,8 @@ bool writeBrowserPreferences(const juce::File& directory, const juce::XmlElement
     for (auto* item = compact.getFirstChildElement(); item;)
     {
         auto* next = item->getNextElement();
-        if (!item->getBoolAttribute("favourite") && !item->getBoolAttribute("hidden") && item->getStringAttribute("archive").isEmpty())
+        if (!item->getBoolAttribute("favourite") && !item->getBoolAttribute("hidden") && item->getStringAttribute("archive").isEmpty()
+            && !item->getBoolAttribute("hasMetadataOverride"))
             compact.removeChildElement(item, true);
         item = next;
     }
@@ -75,6 +83,60 @@ bool hasSymbolicPresetPath(const juce::File& file, const juce::File& root)
     for (auto path = file; path != root; path = path.getParentDirectory())
         if (path.isSymbolicLink()) return true;
     return false;
+}
+
+juce::String metadataRevision(const void* data,size_t size)
+{
+    // Two independent 64-bit content hashes plus byte count. Revisions are
+    // optimistic edit tokens, not authentication or filesystem timestamps.
+    std::uint64_t a=14695981039346656037ULL,b=7809847782465536322ULL;
+    const auto* bytes=static_cast<const unsigned char*>(data);
+    for(size_t i=0;i<size;++i){a=(a^bytes[i])*1099511628211ULL;b=(b+bytes[i]+1)*0x9e3779b185ebca87ULL;b^=b>>29;}
+    return juce::String::toHexString(static_cast<juce::int64>(a))+":"
+        +juce::String::toHexString(static_cast<juce::int64>(b))+":"+juce::String(static_cast<juce::int64>(size));
+}
+juce::String metadataRevision(const juce::String& text)
+{return metadataRevision(text.toRawUTF8(),text.getNumBytesAsUTF8());}
+struct MetadataFile
+{
+    juce::MemoryBlock bytes;
+    std::unique_ptr<juce::XmlElement> xml;
+    juce::String revision;
+};
+juce::Result readMetadataFile(const juce::File& file,MetadataFile& output)
+{
+    juce::FileInputStream input(file);
+    if(!input.openedOk())return juce::Result::fail("The preset file could not be opened.");
+    juce::MemoryOutputStream content;
+    if(content.writeFromInputStream(input,maximumPresetFileBytes+1)<=0 || input.getStatus().failed()
+        || content.getDataSize()>maximumPresetFileBytes)return juce::Result::fail("The preset file is empty, unreadable or too large.");
+    MetadataFile next;next.bytes.append(content.getData(),content.getDataSize());
+    const auto text=juce::String::fromUTF8(static_cast<const char*>(next.bytes.getData()),static_cast<int>(next.bytes.getSize()));
+    if(text.containsIgnoreCase("<!DOCTYPE") || text.containsIgnoreCase("<!ENTITY"))
+        return juce::Result::fail("The preset contains unsupported XML declarations.");
+    next.xml=juce::XmlDocument::parse(text);
+    if(!next.xml || !next.xml->hasTagName("WINGSFIRE"))return juce::Result::fail("This is not a valid user preset file.");
+    next.revision=metadataRevision(next.bytes.getData(),next.bytes.getSize());output=std::move(next);return juce::Result::ok();
+}
+const fire::factory::Definition* metadataFactoryDefinition(const juce::String& key)
+{
+    for(const auto& definition:fire::factory::definitions)
+        if(key=="@factory/"+definition.key)return &definition;
+    return nullptr;
+}
+juce::Result readFactoryMetadata(const juce::String& key,juce::XmlElement& preferences,fire::preset_metadata::Metadata& output)
+{
+    const auto* definition=metadataFactoryDefinition(key);
+    if(!definition)return juce::Result::fail("This factory preset is no longer available.");
+    fire::preset_metadata::Metadata next;next.factory=true;next.description=definition->description;
+    auto* item=browserPreference(preferences,key);
+    juce::XmlElement revision("METADATA");revision.setAttribute("key",key);revision.setAttribute("officialDescription",definition->description);
+    if(item && item->getBoolAttribute("hasMetadataOverride"))
+    {
+        if(auto result=fire::preset_metadata::readAttributes(*item,next);result.failed())return result;
+        next.hasOverride=true;revision.setAttribute("hasOverride",true);fire::preset_metadata::writeAttributes(revision,next);
+    }
+    next.revision=metadataRevision(revision.toString());output=std::move(next);return juce::Result::ok();
 }
 constexpr int maximumPresetFolderDepth = 16;
 constexpr int maximumPresetCount = 4096;
@@ -133,7 +195,7 @@ bool readSupportedPresetFormatVersion(const juce::XmlElement& xml,
     version = 0;
     return ! xml.hasAttribute("presetFormatVersion")
         || (readStrictIntegerAttribute(xml, "presetFormatVersion", version)
-            && version >= 0 && version <= 2);
+            && version >= 0 && version <= fire::modulation_state::presetFormatVersion);
 }
 
 bool isStrictNumberInRange(const juce::XmlElement& xml,
@@ -207,9 +269,11 @@ bool isValidLfoState(const juce::XmlElement& lfoState, bool legacyBank) noexcept
 
 bool isValidRoutingState(const juce::XmlElement& routingState,
                          const juce::AudioProcessor& processor,
-                         bool legacyBank, bool auxiliarySources = false) noexcept
+                         bool legacyBank, bool auxiliarySources = false, bool advancedMapping = false,
+                         bool expandedEnvelopes = false, bool midiSources = false) noexcept
 {
     if (! routingState.hasTagName("MODULATION_STATE")
+        || ! fire::modulation_state::hasSchema(routingState, advancedMapping)
         || routingState.getNumChildElements()
                > LfoManager::maximumModulationRoutings)
         return false;
@@ -219,15 +283,26 @@ bool isValidRoutingState(const juce::XmlElement& routingState,
     {
         int source = -1;
         if (! routing->hasTagName("ROUTING")
-            || ! readStrictIntegerAttribute(*routing, "source", source)
-            || ! juce::isPositiveAndBelow(source, auxiliarySources ? fire::mod_sources::sourceCount : legacyBank ? fire::lfo_bank::defaultCount
+            || !(advancedMapping ? fire::modulation_state::readStrictIntegerAttribute(*routing, "source", source)
+                                 : readStrictIntegerAttribute(*routing, "source", source))
+            || ! juce::isPositiveAndBelow(source, auxiliarySources ? (midiSources ? fire::mod_sources::sourceCount
+                                                      : expandedEnvelopes ? fire::mod_sources::envelopeSourceCount
+                                                        : fire::mod_sources::firstMacro + fire::mod_sources::macroCount)
+                                                     : legacyBank ? fire::lfo_bank::defaultCount
                                                              : fire::lfo_bank::capacity)
             || ! isStrictNumberInRange(*routing, "depth", -1.0, 1.0)
             || routing->getNumChildElements() != 0)
             return false;
 
+        if (advancedMapping && (!routing->hasAttribute("target")
+            || !fire::modulation_state::hasStrictBooleanAttribute(*routing, "bipolar")
+            || !fire::modulation_state::hasStrictBooleanAttribute(*routing, "bypassed")
+            || !fire::modulation_state::hasValidMapping(*routing))) return false;
+
         const auto target = routing->getStringAttribute("target");
-        if (fire::mod_sources::isParameterID(target)) return false;
+        if (fire::mod_sources::isParameterID(target) || fire::envelope_params::isParameterID(target)
+            || fire::channel_mode::isParameterID(target) || fire::dynamic_eq::isParameterID(target)
+            || fire::parallel_chain::isStructuralID(target)) return false;
         if (target.isEmpty())
             continue; // Empty preallocated routing slots are part of Init.
 
@@ -240,7 +315,7 @@ bool isValidRoutingState(const juce::XmlElement& routingState,
                 break;
             }
 
-        if (! isKnownTarget || seenTargets.contains(target))
+        if (! isKnownTarget || (!advancedMapping && seenTargets.contains(target)))
             return false;
         seenTargets.add(target);
     }
@@ -310,6 +385,20 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         || ! readSupportedPresetFormatVersion(snapshot, formatVersion))
         return false;
 
+    bool legacyWithoutEnvelopes = false;
+    if (!fire::envelope_state::validatePreset(snapshot, processor, formatVersion >= 4, legacyWithoutEnvelopes))
+        return false;
+    bool legacyWithoutChannelMode = false;
+    if (!fire::channel_mode_state::validate(snapshot, processor, formatVersion >= 5, false, legacyWithoutChannelMode))
+        return false;
+    bool legacyWithoutMidi=false,legacyWithoutPlayback=false;
+    if (!fire::midi_state::validateFamily(snapshot,processor,formatVersion>=6,false,false,legacyWithoutMidi)
+        || !fire::midi_state::validateFamily(snapshot,processor,formatVersion>=6,false,true,legacyWithoutPlayback)) return false;
+    bool legacyWithoutDynamicEq=false;
+    if(!fire::dynamic_eq_state::validate(snapshot,processor,formatVersion>=7,false,legacyWithoutDynamicEq))return false;
+    bool legacyWithoutParallel=false;
+    if(!fire::parallel_chain_state::validate(snapshot,processor,formatVersion>=8,false,legacyWithoutParallel))return false;
+
     bool legacyWithoutOtt = false;
     if (! validateParameterFamily(snapshot, processor, legacyWithoutOtt))
         return false;
@@ -352,7 +441,7 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
                                   fire::core_modules::isParameterID, fire::core_modules::schemaVersion)) return false;
     bool legacyWithoutAuxiliary = false;
     if (!validateParameterFamily(snapshot, processor, legacyWithoutAuxiliary, "modulationSourcesSchemaVersion",
-                                  fire::mod_sources::isParameterID)) return false;
+                                  fire::mod_sources::isLegacyParameterID)) return false;
 
     int expectedParameterCount = 0;
     std::map<juce::String, juce::String> attributes;
@@ -381,7 +470,13 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
             continue;
         if (legacyWithoutLfoBank && fire::lfo_bank::isAppendedParameterID(parameterWithID->paramID))
             continue;
-        if (legacyWithoutAuxiliary && fire::mod_sources::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutAuxiliary && fire::mod_sources::isLegacyParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutEnvelopes && fire::envelope_params::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutChannelMode && fire::channel_mode::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutMidi && fire::midi_mod::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutPlayback && fire::lfo_playback::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutDynamicEq && fire::dynamic_eq::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutParallel && fire::parallel_chain::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutReverbModels && fire::reverb_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutAnalogShapes && fire::analog_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutCoreModules && fire::core_modules::isParameterID(parameterWithID->paramID)) continue;
@@ -412,7 +507,8 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
         else if (child->hasTagName("MODULATION_STATE") && ! hasRoutingState)
         {
             hasRoutingState = true;
-            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank, !legacyWithoutAuxiliary))
+            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank, !legacyWithoutAuxiliary, formatVersion >= 3,
+                                      formatVersion >= 4 && !legacyWithoutEnvelopes, !legacyWithoutMidi))
                 return false;
         }
         else
@@ -471,17 +567,46 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
                                   fire::core_modules::isParameterID, fire::core_modules::schemaVersion)) return false;
     bool legacyWithoutAuxiliary = false;
     if (!validateParameterFamily(xml, processor, legacyWithoutAuxiliary, "modulationSourcesSchemaVersion",
-                                  fire::mod_sources::isParameterID)) return false;
+                                  fire::mod_sources::isLegacyParameterID)) return false;
     // Unversioned and v1 files predate complete model snapshots. Preserve
-    // their historical default/migration behaviour. A v2 document is an
-    // explicit complete snapshot, so accepting a sparse or truncated one
+    // their historical default/migration behaviour. Version 2 and later are
+    // explicit complete snapshots, so accepting a sparse or truncated one
     // would silently reset every omitted parameter, LFO, and routing.
     int formatVersion = 0;
     if (! readSupportedPresetFormatVersion(xml, formatVersion))
         return false;
 
+    bool legacyWithoutEnvelopes = false;
+    if (!fire::envelope_state::validatePreset(xml, processor, formatVersion >= 4, legacyWithoutEnvelopes))
+        return false;
+    bool legacyWithoutChannelMode = false;
+    if (!fire::channel_mode_state::validate(xml, processor, formatVersion >= 5, false, legacyWithoutChannelMode))
+        return false;
+    bool legacyWithoutMidi=false,legacyWithoutPlayback=false;
+    if (!fire::midi_state::validateFamily(xml,processor,formatVersion>=6,false,false,legacyWithoutMidi)
+        || !fire::midi_state::validateFamily(xml,processor,formatVersion>=6,false,true,legacyWithoutPlayback)) return false;
+    bool legacyWithoutDynamicEq=false;
+    if(!fire::dynamic_eq_state::validate(xml,processor,formatVersion>=7,false,legacyWithoutDynamicEq))return false;
+    bool legacyWithoutParallel=false;
+    if(!fire::parallel_chain_state::validate(xml,processor,formatVersion>=8,false,legacyWithoutParallel))return false;
+
     if (formatVersion < 2)
+    {
+        // Keep sparse historical presets and their first-target-wins migration,
+        // but never interpret a new mapping schema under an old format marker.
+        for (const auto* child : xml.getChildIterator())
+            if (child->hasTagName("MODULATION_STATE"))
+            {
+                if (!fire::modulation_state::hasSchema(*child, false)) return false;
+                for (const auto* route : child->getChildIterator())
+                    if (route->getIntAttribute("source", -1) >= fire::mod_sources::firstMacro + fire::mod_sources::macroCount
+                        || fire::mod_sources::isParameterID(route->getStringAttribute("target"))
+                        || fire::channel_mode::isParameterID(route->getStringAttribute("target"))
+                        || fire::dynamic_eq::isParameterID(route->getStringAttribute("target"))
+                        || fire::parallel_chain::isStructuralID(route->getStringAttribute("target"))) return false;
+            }
         return true;
+    }
 
     int parameterCount = 0;
     std::map<juce::String, juce::String> attributes;
@@ -510,7 +635,13 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
             continue;
         if (legacyWithoutLfoBank && fire::lfo_bank::isAppendedParameterID(parameterWithID->paramID))
             continue;
-        if (legacyWithoutAuxiliary && fire::mod_sources::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutAuxiliary && fire::mod_sources::isLegacyParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutEnvelopes && fire::envelope_params::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutChannelMode && fire::channel_mode::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutMidi && fire::midi_mod::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutPlayback && fire::lfo_playback::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutDynamicEq && fire::dynamic_eq::isParameterID(parameterWithID->paramID)) continue;
+        if (legacyWithoutParallel && fire::parallel_chain::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutReverbModels && fire::reverb_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutAnalogShapes && fire::analog_params::isParameterID(parameterWithID->paramID)) continue;
         if (legacyWithoutCoreModules && fire::core_modules::isParameterID(parameterWithID->paramID)) continue;
@@ -541,7 +672,8 @@ bool isLoadablePresetState(const juce::XmlElement& xml,
         else if (child->hasTagName("MODULATION_STATE") && ! hasRoutingState)
         {
             hasRoutingState = true;
-            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank, !legacyWithoutAuxiliary))
+            if (! isValidRoutingState(*child, processor, legacyWithoutLfoBank, !legacyWithoutAuxiliary, formatVersion >= 3,
+                                      formatVersion >= 4 && !legacyWithoutEnvelopes, !legacyWithoutMidi))
                 return false;
         }
         else
@@ -565,13 +697,19 @@ void writeSerializablePresetSnapshotToXml(
 {
     xml.deleteAllChildElements();
     fire::macro_names::write(xml, snapshot.macroNames);
-    xml.setAttribute("presetFormatVersion", 2);
+    xml.setAttribute("presetFormatVersion", fire::modulation_state::presetFormatVersion);
     xml.setAttribute("ottSchemaVersion", 1);
     xml.setAttribute("insertEffectsSchemaVersion", 1);
     xml.setAttribute("modulationEffectsSchemaVersion", fire::modulation_fx::schemaVersion);
     xml.setAttribute("resonatorSchemaVersion", fire::resonator_params::schemaVersion);
     xml.setAttribute("driveCompSchemaVersion", fire::drive_comp::schemaVersion);
     xml.setAttribute("modulationSourcesSchemaVersion", fire::mod_sources::schemaVersion);
+    xml.setAttribute(fire::envelope_state::marker, fire::envelope_params::schemaVersion);
+    xml.setAttribute(fire::channel_mode_state::marker, fire::channel_mode::schemaVersion);
+    xml.setAttribute(fire::midi_state::ccMarker,fire::midi_mod::schemaVersion);
+    xml.setAttribute(fire::midi_state::playbackMarker,fire::lfo_playback::schemaVersion);
+    xml.setAttribute(fire::dynamic_eq_state::marker,fire::dynamic_eq::schemaVersion);
+    xml.setAttribute(fire::parallel_chain_state::marker,fire::parallel_chain::schemaVersion);
     xml.setAttribute("moduleOrderSchemaVersion", 1);
     xml.setAttribute("eqSchemaVersion", 1);
     xml.setAttribute("coreModulesSchemaVersion", fire::core_modules::schemaVersion);
@@ -610,6 +748,7 @@ void writeSerializablePresetSnapshotToXml(
     }
 
     auto* modMatrixState = xml.createNewChildElement("MODULATION_STATE");
+    modMatrixState->setAttribute("schemaVersion", fire::modulation_state::schemaVersion);
     for (const auto& routing : snapshot.routings)
     {
         if (! routing.targetParameterID.isEmpty())
@@ -690,10 +829,15 @@ namespace state
     }
 
     bool loadStateFromXml(const juce::XmlElement& incomingXml, juce::AudioProcessor& proc,
-                          bool preserveLoudnessComparison)
+                          bool preserveLoudnessComparison,
+                          const fire::preset_locks::Values* lockedBaseValues)
     {
         if (! canLoadStateFromXml(incomingXml, proc))
             return false;
+        if(lockedBaseValues != nullptr)
+            for(const auto& [id,value]:*lockedBaseValues)
+                if(!std::isfinite(value) || value<0 || value>1
+                    || !fire::preset_locks::isLockableParameter(proc,id)) return false;
 
         juce::XmlElement xml(incomingXml);
         fire::effects::FrozenRecordings frozenAudio;
@@ -746,11 +890,15 @@ namespace state
                         || fire::clouds_params::isParameterID(p->paramID)
                         || fire::resonator_params::isParameterID(p->paramID)
                         || fire::drive_comp::isParameterID(p->paramID)
+                        || fire::envelope_params::isParameterID(p->paramID)
                         || fire::lfo_bank::isPresentParameterID(p->paramID))
                         if (auto* ranged = fireProc.treeState.getParameter(p->paramID))
                             valueToLoad = ranged->convertTo0to1(
                                 ranged->convertFrom0to1(valueToLoad));
 
+                    if (lockedBaseValues != nullptr)
+                        if (const auto found=lockedBaseValues->find(p->paramID);found!=lockedBaseValues->end())
+                            valueToLoad=found->second;
                     p->setValueNotifyingHost(valueToLoad);
                 }
             }
@@ -760,8 +908,11 @@ namespace state
         std::array<bool, fire::lfo_bank::capacity> loadedSmoothnessParameter {};
         std::array<bool, fire::lfo_bank::capacity> loadedLfoIndices {};
         for (int i = 0; i < static_cast<int>(loadedSmoothnessParameter.size()); ++i)
-            loadedSmoothnessParameter[static_cast<size_t>(i)] = xml.hasAttribute(
-                ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i));
+        {
+            const auto id=ParameterIDAndName::getIDString(LFO_SMOOTH_ID,i);
+            loadedSmoothnessParameter[static_cast<size_t>(i)]=xml.hasAttribute(id)
+                || (lockedBaseValues != nullptr && lockedBaseValues->contains(id));
+        }
 
         if (auto* lfoState = xml.getChildByName("LFO_STATE"))
         {
@@ -813,6 +964,7 @@ namespace state
         }
 
         juce::Array<ModulationRouting> routingsToLoad;
+        const bool advancedMapping = xml.getIntAttribute("presetFormatVersion", 0) >= 3;
         if (auto* modMatrixState = xml.getChildByName("MODULATION_STATE"))
         {
             for (auto* routingXml : modMatrixState->getChildIterator())
@@ -822,14 +974,20 @@ namespace state
                            >= LfoManager::maximumModulationRoutings)
                     continue;
 
-                auto routing = ModulationRouting::readFromXml(*routingXml);
+                auto routing = advancedMapping ? ModulationRouting::readFromXml(*routingXml)
+                                               : fire::modulation_state::readLegacy(*routingXml);
                 // Legacy snapshots had exactly four source identities. New
                 // snapshots keep all fixed slots and never retarget a missing source.
                 const bool extendedBank = xml.hasAttribute("lfoBankSchemaVersion")
                     || xml.hasAttribute(fire::lfo_bank::presentParameterID(0));
                 const bool auxiliarySources = xml.hasAttribute("modulationSourcesSchemaVersion") || xml.hasAttribute("macro1");
-                const int sourceLimit = auxiliarySources ? fire::mod_sources::sourceCount : extendedBank ? fire::lfo_bank::capacity
-                                                      : fire::lfo_bank::defaultCount;
+                const bool expandedEnvelopes = xml.getIntAttribute("presetFormatVersion", 0) >= 4
+                    && xml.hasAttribute(fire::envelope_state::marker);
+                const bool midiSources=xml.hasAttribute(fire::midi_state::ccMarker);
+                const int sourceLimit = auxiliarySources ? (midiSources ? fire::mod_sources::sourceCount
+                    : expandedEnvelopes ? fire::mod_sources::envelopeSourceCount
+                    : fire::mod_sources::firstMacro + fire::mod_sources::macroCount)
+                    : extendedBank ? fire::lfo_bank::capacity : fire::lfo_bank::defaultCount;
                 routing.sourceLfoIndex = juce::jlimit(0, sourceLimit - 1, routing.sourceLfoIndex);
                 routing.depth = std::isfinite(routing.depth) ? juce::jlimit(-1.0f, 1.0f, routing.depth) : 0.5f;
 
@@ -841,9 +999,13 @@ namespace state
                         break;
                     }
 
-                if (! targetAlreadyUsed
+                if ((advancedMapping || !targetAlreadyUsed)
                     && routing.targetParameterID.isNotEmpty()
                     && !fire::mod_sources::isParameterID(routing.targetParameterID)
+                    && !fire::envelope_params::isParameterID(routing.targetParameterID)
+                    && !fire::channel_mode::isParameterID(routing.targetParameterID)
+                    && !fire::dynamic_eq::isParameterID(routing.targetParameterID)
+                    && !fire::parallel_chain::isStructuralID(routing.targetParameterID)
                     && fireProc.treeState.getParameter(routing.targetParameterID) != nullptr)
                     routingsToLoad.add(std::move(routing));
             }
@@ -1640,9 +1802,16 @@ namespace state
                     auto* preference = preferences ? browserPreference(*preferences, key) : nullptr;
                     const bool hidden = factory && preference && preference->getBoolAttribute("hidden");
                     if (!hidden || includeRemoved)
-                        result.push_back({child->getTagName(), key, child->getStringAttribute("presetName"),
+                    {
+                        BrowserEntry entry{child->getTagName(), key, child->getStringAttribute("presetName"),
                             child->getStringAttribute("presetCategory", factory ? folder : "User"), child->getStringAttribute("presetDescription"),
-                            factory, preference && preference->getBoolAttribute("favourite"), hidden});
+                            factory, preference && preference->getBoolAttribute("favourite"), hidden};
+                        Metadata metadata;
+                        const auto read=factory && preferences ? readFactoryMetadata(key,*preferences,metadata)
+                                                               : fire::preset_metadata::readAttributes(*child,metadata);
+                        if(read.wasOk()){entry.description=metadata.description;entry.tags=metadata.tags;}
+                        result.push_back(std::move(entry));
+                    }
                 }
             }
         };
@@ -1654,10 +1823,77 @@ namespace state
                 if (!item->hasTagName("ITEM") || archive.isEmpty() || archive.containsAnyOf("/\\")
                     || !archive.endsWith(".fire-trash")) continue;
                 if (presetFile.getChildFile(".fire-recycle").getChildFile(archive).existsAsFile())
-                    result.push_back({{}, item->getStringAttribute("key"), item->getStringAttribute("name"), "User",
-                        item->getStringAttribute("description"), false, item->getBoolAttribute("favourite"), true});
+                {
+                    BrowserEntry entry{{},item->getStringAttribute("key"),item->getStringAttribute("name"),"User",
+                        item->getStringAttribute("description"),false,item->getBoolAttribute("favourite"),true};
+                    Metadata metadata;if(fire::preset_metadata::readAttributes(*item,metadata).wasOk())entry.tags=metadata.tags;
+                    result.push_back(std::move(entry));
+                }
             }
         return result;
+    }
+
+    juce::Result StatePresets::readPresetMetadata(const juce::String& key,Metadata& out) const
+    {
+        const juce::ScopedLock lock(browserPreferencesLock());
+        auto preferences=readBrowserPreferences(presetFile);
+        if(!preferences)return juce::Result::fail("The library preferences could not be read.");
+        if(key.startsWith("@factory/"))return readFactoryMetadata(key,*preferences,out);
+        if(normalisePresetKey(key)!=key || key.isEmpty())return juce::Result::fail("Invalid preset location.");
+        if(auto* item=browserPreference(*preferences,key);item && item->getStringAttribute("archive").isNotEmpty())
+            return juce::Result::fail("Restore this preset before editing its notes.");
+        const auto file=presetFile.getChildFile(key);
+        if(!file.hasFileExtension("fire") || hasSymbolicPresetPath(file,presetFile))return juce::Result::fail("Invalid preset location.");
+        MetadataFile source;if(auto result=readMetadataFile(file,source);result.failed())return result;
+        Metadata next;if(auto result=fire::preset_metadata::readAttributes(*source.xml,next);result.failed())return result;
+        next.revision=source.revision;out=std::move(next);return juce::Result::ok();
+    }
+
+    juce::Result StatePresets::writePresetMetadata(const juce::String& key,const Metadata& input,const juce::String& expectedRevision)
+    {
+        Metadata edited;if(auto result=fire::preset_metadata::canonicalise(input,edited);result.failed())return result;
+        const juce::ScopedLock lock(browserPreferencesLock());
+        Metadata current;if(auto result=readPresetMetadata(key,current);result.failed())return result;
+        if(expectedRevision.isEmpty() || expectedRevision!=current.revision)
+            return juce::Result::fail("This preset changed while its notes were open. Reopen the editor before saving.");
+        if(edited.tags==current.tags && edited.description==current.description)return juce::Result::ok();
+        if(current.factory)
+        {
+            auto preferences=readBrowserPreferences(presetFile);if(!preferences)return juce::Result::fail("The library preferences could not be read.");
+            Metadata latest;if(auto result=readFactoryMetadata(key,*preferences,latest);result.failed())return result;
+            if(latest.revision!=expectedRevision)return juce::Result::fail("The preset notes changed. Reopen the editor before saving.");
+            auto* item=browserPreference(*preferences,key,true);item->setAttribute("hasMetadataOverride",true);
+            fire::preset_metadata::writeAttributes(*item,edited);
+            return writeBrowserPreferences(presetFile,*preferences)?juce::Result::ok():juce::Result::fail("The library notes could not be saved.");
+        }
+        const auto file=presetFile.getChildFile(key);
+        MetadataFile source;if(auto result=readMetadataFile(file,source);result.failed())return result;
+        if(source.revision!=expectedRevision)return juce::Result::fail("The preset file changed. Reopen the editor before saving.");
+        if(!file.hasWriteAccess())return juce::Result::fail("The preset file is read-only.");
+        fire::preset_metadata::writeAttributes(*source.xml,edited);
+        const auto encoded=source.xml->toString();
+        if(encoded.getNumBytesAsUTF8()>maximumPresetFileBytes)return juce::Result::fail("The preset file would exceed the size limit.");
+        juce::TemporaryFile temporary(file);
+        if(!temporary.getFile().replaceWithText(encoded))return juce::Result::fail("The preset notes could not be written.");
+        MetadataFile latest;if(auto result=readMetadataFile(file,latest);result.failed())return result;
+        if(latest.revision!=expectedRevision || hasSymbolicPresetPath(file,presetFile))
+            return juce::Result::fail("The preset file changed. Reopen the editor before saving.");
+        if(!temporary.overwriteTargetFileWithTemporary())return juce::Result::fail("The preset notes could not be saved.");
+        scanAllPresets();return juce::Result::ok();
+    }
+
+    juce::Result StatePresets::resetFactoryMetadata(const juce::String& key,const juce::String& expectedRevision)
+    {
+        const juce::ScopedLock lock(browserPreferencesLock());
+        if(!key.startsWith("@factory/"))return juce::Result::fail("Only factory presets have official notes to restore.");
+        auto preferences=readBrowserPreferences(presetFile);if(!preferences)return juce::Result::fail("The library preferences could not be read.");
+        Metadata current;if(auto result=readFactoryMetadata(key,*preferences,current);result.failed())return result;
+        if(expectedRevision.isEmpty() || expectedRevision!=current.revision)
+            return juce::Result::fail("The preset notes changed. Reopen the editor before restoring.");
+        if(!current.hasOverride)return juce::Result::ok();
+        if(auto* item=browserPreference(*preferences,key))
+        {item->removeAttribute("hasMetadataOverride");item->removeAttribute("presetTags");item->removeAttribute("presetDescription");}
+        return writeBrowserPreferences(presetFile,*preferences)?juce::Result::ok():juce::Result::fail("The official notes could not be restored.");
     }
 
     bool StatePresets::setPresetFavourite(const juce::String& key, bool favourite)
@@ -1689,6 +1925,8 @@ namespace state
         if (!source.moveFileTo(archive)) return false;
         item->setAttribute("archive", archive.getFileName()); item->setAttribute("name", found->name);
         item->setAttribute("description", found->description);
+        Metadata archivedMetadata;archivedMetadata.description=found->description;archivedMetadata.tags=found->tags;
+        fire::preset_metadata::writeAttributes(*item,archivedMetadata);
         if (!writeBrowserPreferences(presetFile, *preferences))
         {archive.moveFileTo(source); return false;}
         {
@@ -1731,18 +1969,9 @@ namespace state
 
     juce::String StatePresets::getCurrentPresetDescription() const
     {
-        const juce::ScopedLock lock(identityLock);
-        std::function<juce::String(const juce::XmlElement&)> find = [&](const juce::XmlElement& root) -> juce::String
-        {
-            for (auto* child : root.getChildIterator())
-            {
-                if (child->getStringAttribute("presetKey") == currentPresetKey && currentPresetKey.isNotEmpty())
-                    return child->getStringAttribute("presetDescription");
-                if (child->hasTagName("FOLDER")) if (auto description = find(*child); description.isNotEmpty()) return description;
-            }
-            return {};
-        };
-        return find(mPresetXml);
+        const auto key=getCurrentPresetKey();
+        if(key.isNotEmpty())for(const auto& entry:getBrowserEntries())if(entry.key==key)return entry.description;
+        return {};
     }
 
     juce::String StatePresets::savePreset(juce::File savePath, bool overwriteAlreadyConfirmed)
@@ -1766,9 +1995,24 @@ namespace state
         presetXmlSingle.removeAllAttributes(); // Clear all first.
         presetXmlSingle.deleteAllChildElements();
         presetXmlSingle.setAttribute("presetName", presetName); // Set preset name.
-        presetXmlSingle.setAttribute("presetFormatVersion", 2);
+        presetXmlSingle.setAttribute("presetFormatVersion", fire::modulation_state::presetFormatVersion);
         presetXmlSingle.setAttribute("pluginVersion", VERSION);
         saveStateToXml(pluginProcessor, presetXmlSingle);
+
+        // Saving a changed sound must not discard notes already attached to
+        // that user file. Save As inherits the selected scene's displayed notes.
+        if(userPresetFile.existsAsFile())
+        {
+            MetadataFile existing;
+            if(!userPresetFile.isSymbolicLink() && readMetadataFile(userPresetFile,existing).wasOk())
+                for(const auto* field:{"presetTags","presetDescription"})
+                    if(existing.xml->hasAttribute(field))presetXmlSingle.setAttribute(field,existing.xml->getStringAttribute(field));
+        }
+        else
+        {
+            Metadata metadata;
+            if(readPresetMetadata(getCurrentPresetKey(),metadata).wasOk())fire::preset_metadata::writeAttributes(presetXmlSingle,metadata);
+        }
 
         const bool isSaved = writeXmlElementToFile(presetXmlSingle,
                                                    userPresetFile,
@@ -1824,7 +2068,8 @@ namespace state
                         fireProc.requestMultibandTopologyReset();
                     } };
 
-                    if (! loadStateFromXml(*expanded, pluginProcessor))
+                    const auto lockedValues=fire::preset_locks::captureValues(pluginProcessor,fireProc.getPresetParameterLocks());
+                    if (! loadStateFromXml(*expanded, pluginProcessor, false, &lockedValues))
                         return false;
                     {
                         const juce::ScopedLock lock(identityLock);
@@ -2595,6 +2840,9 @@ namespace state
         browserButton.setTooltip("Open the full-page sound library"); browserButton.setButtonText("- Init -");
         browserButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
         browserButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textPrimary);
+        addChildComponent(presetLocksButton);
+        presetLocksButton.onClick = [safe = juce::Component::SafePointer<StateComponent>(this)] { if (safe) safe->showPresetLocks(); };
+        updatePresetLockIndicator();
         browserButton.onClick = [safe = juce::Component::SafePointer<StateComponent>(this)]
         {if (safe && safe->onBrowserRequested) safe->onBrowserRequested();};
 
@@ -2716,6 +2964,7 @@ namespace state
 
     void StateComponent::timerCallback()
     {
+        updatePresetLockIndicator();
         const auto shownName = presetBox.getText().isEmpty() ? juce::String("- Init -") : presetBox.getText();
         if (browserButton.getButtonText() != shownName) browserButton.setButtonText(shownName);
         if (dirtyUpdatePending.exchange(false, std::memory_order_acq_rel))
@@ -3014,7 +3263,50 @@ namespace state
         placeRight(previousButton, compactWidth);
         presetBox.setBounds(r);
         browserButton.setBounds(r);
+        const auto lockWidth = displayedPresetLockCount > 0 ? juce::roundToInt(46.0f * uiScale) : 0;
+        browserButton.getProperties().set("firePresetLockSpace",lockWidth);
+        if (lockWidth > 0)
+        {
+            presetLocksButton.setBounds(r.removeFromRight(juce::jmin(lockWidth,r.getWidth())));
+            presetLocksButton.toFront(false);
+            presetBox.setBounds(r);
+        }
     }
+
+    void StateComponent::updatePresetLockIndicator()
+    {
+        const int count=static_cast<FireAudioProcessor&>(procStatePresets.getProcessor()).getPresetParameterLocks().size();
+        if(count==displayedPresetLockCount) return;
+        displayedPresetLockCount=count; presetLocksButton.setCount(count); presetLocksButton.setVisible(count>0);
+        resized(); browserButton.repaint();
+    }
+
+    void StateComponent::lookAndFeelChanged()
+    {
+        if(auto dialog=presetLocksDialog)
+            if(auto* content=dialog->getContentComponent())
+            {fire::ui::setSkin(*content,fire::ui::skinFor(*this));content->sendLookAndFeelChange();}
+    }
+
+    void StateComponent::showPresetLocks()
+    {
+        if(!isShowing() || !isEnabled()) return;
+        if(presetLocksDialog) {presetLocksDialog->toFront(true); return;}
+        const juce::Component::SafePointer<StateComponent> safe(this);
+        const auto generation=interactionSessionGeneration;
+        juce::DialogWindow::LaunchOptions options;
+        options.content.setOwned(new fire::ui::PresetLockControls(static_cast<FireAudioProcessor&>(procStatePresets.getProcessor())));
+        fire::ui::setSkin(*options.content,fire::ui::skinFor(*this));options.content->sendLookAndFeelChange();
+        options.dialogTitle="Preset parameter locks"; options.dialogBackgroundColour=fire::ui::paletteFor(*this).canvas;
+        options.escapeKeyTriggersCloseButton=true;options.useNativeTitleBar=true;options.resizable=false;
+        auto* launched=options.launchAsync();
+        if(!safe || safe->interactionSessionGeneration!=generation || !safe->isShowing())
+        {juce::Component::SafePointer<juce::DialogWindow> orphan(launched);deleteDialogSynchronously(orphan);return;}
+        safe->presetLocksDialog=launched;
+    }
+
+    void StateComponent::dismissPresetLocks() noexcept
+    {auto dialog=presetLocksDialog;presetLocksDialog=nullptr;deleteDialogSynchronously(dialog);}
 
     void StateComponent::visibilityChanged()
     {
@@ -3731,6 +4023,8 @@ namespace state
         auto& processor = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());
         presetMenu.addItem(7, "Undo", processor.canUndoEdit());
         presetMenu.addItem(8, "Redo", processor.canRedoEdit());
+        presetMenu.addItem(30, "Preset parameter locks...", true);
+        presetMenu.addItem(31, "Unlock all preset parameters", !processor.getPresetParameterLocks().isEmpty());
         presetMenu.addSeparator();
         presetMenu.addItem(1, "Init", true);
         presetMenu.addItem(2, "Open Preset Folder", true);
@@ -3798,6 +4092,8 @@ namespace state
 
     void StateComponent::handlePresetMenuResult(int result)
     {
+        if(result==30) {showPresetLocks();return;}
+        if(result==31) {static_cast<FireAudioProcessor&>(procStatePresets.getProcessor()).clearPresetParameterLocks();return;}
         if (result >= 9 && result < 9 + static_cast<int>(fire::ui::skins.size()))
         {
             const juce::Component::SafePointer<StateComponent> safe(this);
@@ -4088,6 +4384,11 @@ namespace state
         safeThis->menuButton.dismissPointerGesture();
         if (safeThis == nullptr)
             return;
+
+        safeThis->presetLocksButton.dismissPointerGesture();
+        if (!safeThis) return;
+        safeThis->dismissPresetLocks();
+        if (!safeThis) return;
 
         safeThis->dismissSettingsDialog();
     }

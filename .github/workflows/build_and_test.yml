@@ -59,7 +59,7 @@ jobs:
     steps:
       - name: Set up Clang (Linux)
         if: runner.os == 'Linux'
-        uses: egor-tensin/setup-clang@v1
+        uses: egor-tensin/setup-clang@v2
 
       # The hosted image already includes LLVM. setup-clang upgrades it through
       # Chocolatey, making every build depend on another large release download.

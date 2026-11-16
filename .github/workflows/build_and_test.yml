@@ -193,7 +193,7 @@ jobs:
 
       - name: Upload test diagnostics
         if: ${{ !cancelled() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ matrix.name }}
           retention-days: 14
@@ -259,7 +259,7 @@ jobs:
 
       - name: Upload AU validation diagnostics
         if: ${{ !cancelled() && (steps.au_validation.outcome == 'success' || steps.au_validation.outcome == 'failure') }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: au-validation-macOS
           retention-days: 14
@@ -304,13 +304,13 @@ jobs:
 
       - name: Upload notarization receipt
         if: ${{ matrix.name == 'macOS' && startsWith(github.ref, 'refs/tags/v') && vars.FIRE_MACOS_NOTARIZE == 'true' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: macOS-notarization-receipt
           path: "${{ env.ARTIFACTS_PATH }}/notarization-receipt.json"
 
       - name: Upload Zip
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ARTIFACT_NAME }}.zip
           path: "${{ env.ARTIFACTS_PATH }}/${{ env.ARTIFACT_NAME }}.zip"
@@ -341,7 +341,7 @@ jobs:
             --output-dir "$RUNNER_TEMP/fire-release-manuals"
 
       - name: Upload manuals
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: Fire-User-Manuals
           retention-days: 14

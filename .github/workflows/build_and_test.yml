@@ -131,7 +131,7 @@ jobs:
           xcode-version: latest-stable
 
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
           lfs: true
@@ -321,7 +321,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout manual sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -357,7 +357,7 @@ jobs:
 
     steps:
       - name: Checkout release notes and asset validator
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Get Artifacts
         uses: actions/download-artifact@v7
